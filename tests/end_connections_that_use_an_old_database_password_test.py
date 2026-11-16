@@ -24,7 +24,7 @@ def shell_task(source, task):
 
 class Rotation(unittest.TestCase):
     def run_gate(self, task='check_the_current_password_with_a_database_login', dryrun=False, **settings):
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary)
             binary=root/'bin';binary.mkdir()
             psql=binary/'psql'
@@ -100,7 +100,7 @@ class PgBouncerClients(unittest.TestCase):
     """end_the_pgbouncer_clients_older_than_the_oldest_container: a run ends the app's old clients, a dryrun only counts them."""
 
     def run_task(self, dryrun):
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary)
             binary=root/'bin';binary.mkdir()
             log=root/'psql.log'

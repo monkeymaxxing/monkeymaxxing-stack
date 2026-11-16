@@ -56,7 +56,7 @@ if name == "stat":
     sys.exit(0)
 if name == "mktemp":
     import tempfile
-    descriptor, path = tempfile.mkstemp(dir=os.environ["TMPDIR"])
+    descriptor, path = tempfile.mkstemp(dir=os.environ.get("TMPDIR"))
     os.close(descriptor)
     print(path)
     sys.exit(0)

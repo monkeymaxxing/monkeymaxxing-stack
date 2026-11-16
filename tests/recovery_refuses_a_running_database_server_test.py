@@ -44,7 +44,7 @@ INVENTORY_NODES = {
 
 class RecoveryRefusesARunningDatabaseServer(unittest.TestCase):
     def run_check(self, answers, monitor_nodes=''):
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary)
             binary = root / 'bin'
             binary.mkdir()

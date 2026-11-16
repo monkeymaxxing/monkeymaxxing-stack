@@ -171,7 +171,7 @@ class RestoreDrill(unittest.TestCase):
         """marker: None; 'from_start' or 'during_restore', MMHotline waiting and
         rewriting the marker every 0.05 s from the drill's start or from the
         restore's start; or 'stale', a marker left a minute ago."""
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary)
             flags = root / 'flags'; flags.mkdir()
             state = root / 'state'; state.mkdir()
@@ -395,7 +395,7 @@ class ScheduledServerSettingsComparison(unittest.TestCase):
         script='\n'.join(line[8:] for line in body.splitlines())
         if only_lock:
             script=script.split('changes=$(git status',1)[0]
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root=Path(temporary)
             (root/'systems_repository.lock').write_text(holder)
             (root/'systems_repository').mkdir()
@@ -463,7 +463,7 @@ class ScheduledServerSettingsComparison(unittest.TestCase):
         text=(TEMPLATE/'roles/util_server/main.yml').read_text().split('      name: check_for_a_leftover_restore01\n',1)[1]
         body=re.search(r'      script: \|\n(.*?)      env:',text,re.S)[1]
         script='\n'.join(line[8:] for line in body.splitlines())
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root=Path(temporary)
             (root/'systems_repository.lock').write_text('')
             repository=root/'systems_repository';(repository/'server_management_scripts').mkdir(parents=True)

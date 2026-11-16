@@ -183,7 +183,7 @@ class FirstBoot(unittest.TestCase):
             self.assertIn('input', result.stderr)
 
     def test_boot_closes_public_ssh_before_packages_and_keeps_key_for_mmx(self):
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary)
             etc = root/'etc'; (etc/'default').mkdir(parents=True); (etc/'cloud').mkdir()
             (etc/'default/ufw').write_text('IPV6=no\nMANAGE_BUILTINS=yes\n')
