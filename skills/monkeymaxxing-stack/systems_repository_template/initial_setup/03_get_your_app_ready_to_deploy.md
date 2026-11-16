@@ -450,6 +450,45 @@ app's code is the person's, and chooses how images are built.
 - **A Git host other than GitHub, without CI** (step 6): the registry host,
   the login command, and the token's name change; the steps do not.
 
+## An app you didn't write
+
+A ready-made program that the team runs as one of its apps, such as a
+newsletter tool, goes through the same steps, with these differences.
+
+- **A small repository of the team's own builds the image** (steps 1 and 6).
+  Its `Containerfile` starts from the program's published image, pinned by
+  its digest, such as
+  `FROM docker.io/listmonk/listmonk@sha256:DIGEST`, and adds only what the
+  steps below need. CI builds it with the installed skill's
+  `files_for_your_app/test_build_and_push_the_app_image.yml` and tags each
+  image with that repository's full commit. Reason: an image tag in
+  `deployed_image_tags` is a full commit, so one tag always names one image.
+  A new release of the program is a commit that changes the digest, and is
+  deployed and rolled back like any release.
+- **The program's settings keep the program's own names** (step 2). Put
+  its plain settings under the app's `env`, and its secrets in
+  `secrets_from_vault`. When the program wants a value of `DATABASE_URL` in
+  another form, such as a host, a port and a password, a short start script
+  in the image reads `DATABASE_URL` and sets the program's variables, then
+  starts the program.
+- **The database server** (step 5, the app's item ending in `_database_driver_finds_the_primary`,
+  such as `newsletter_database_driver_finds_the_primary`). When the program's driver takes
+  `DATABASE_URL` with its list of servers, as "Each language" in the
+  installed skill's `files_for_your_app/database_driver_finds_the_primary.md`
+  lists, the item is met. When the program takes only one
+  host and port, it reaches only the server that its start script names at
+  start: with one database server, `db01`, which is how a system starts.
+  Such a program does not follow a failover: after one, it keeps asking
+  the old primary until its containers start again. PgBouncer does not
+  change this, because PgBouncer runs on each database server, not in front
+  of them. Record the item as `deviated`, with this reason, so the team
+  decides about the program before
+  [adding a second database server](../operating_procedures/add_a_second_database_server.md).
+- **The checklist items the program cannot meet** (step 8), such as a seed
+  command or migrations that keep the running release working, are
+  `deviated` with the program's own reason: the team cannot change the
+  program's code.
+
 ## Why the chapter works this way
 
 **The desk only reads the app.** Reason: the clone only reads the code; an image can be published without a production private key or vault passphrase.
