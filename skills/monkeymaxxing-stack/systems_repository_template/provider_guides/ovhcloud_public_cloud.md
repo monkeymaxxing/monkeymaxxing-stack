@@ -414,22 +414,25 @@ done
 [ -n "$server_type" ] && [ -n "$location" ] || { echo "give --server-type and --location" >&2; exit 2; }
 flavors=$(ovhcloud_request GET "cloud/project/$ovhcloud_project_id/flavor?region=$location") ||
   { echo "OVHcloud does not offer the region $location to this project (or its flavors could not be read: see the line above)" >&2; exit 1; }
-plan=$(jq -r --arg t "$server_type" '[.[] | select(.name == $t) | .planCodes.monthly // empty] | unique | if length == 1 then .[0] else empty end' <<< "$flavors")
-[ -n "$plan" ] || { echo "OVHcloud lists no monthly plan for the flavor $server_type in $location" >&2; exit 1; }
+# The create script bills by the hour (monthlyBilling: false), so the price is the hourly plan's.
+plan=$(jq -r --arg t "$server_type" '[.[] | select(.name == $t) | .planCodes.hourly // empty] | unique | if length == 1 then .[0] else empty end' <<< "$flavors")
+[ -n "$plan" ] || { echo "OVHcloud lists no hourly plan for the flavor $server_type in $location" >&2; exit 1; }
 # The public catalog needs no credential and lies outside the project, so it
 # is read without one: util01's credential then needs no rule for it.
 catalog=$(curl --silent --show-error --fail --connect-timeout 10 --max-time 120 \
   "${ovhcloud_api_address}order/catalog/public/cloud?ovhSubsidiary=$ovhcloud_subsidiary") || { echo "OVHcloud's catalog did not answer" >&2; exit 1; }
-micro_cents=$(jq -r --arg plan "$plan" '[.addons[] | select(.planCode == $plan) | .pricings[] | select(.intervalUnit == "month") | .price] | first // empty' <<< "$catalog")
-[ -n "$micro_cents" ] || { echo "OVHcloud's catalog has no monthly price for $plan" >&2; exit 1; }
-echo "OVHcloud's catalog price for $ovhcloud_subsidiary, with the tax its locale states (0 on the US site); the public IPv4 address is priced apart and left out" >&2
+micro_cents=$(jq -r --arg plan "$plan" '[.addons[] | select(.planCode == $plan) | .pricings[] | .price] | first // empty' <<< "$catalog")
+[ -n "$micro_cents" ] || { echo "OVHcloud's catalog has no hourly price for $plan" >&2; exit 1; }
+echo "OVHcloud's catalog price for $ovhcloud_subsidiary, billed by the hour: the hourly price times 730 hours, with the tax its locale states (0 on the US site); the public IPv4 address is priced apart and left out" >&2
 jq --arg t "$server_type" --arg l "$location" --argjson price "$micro_cents" \
-  '{server_type: $t, location: $l, monthly_price: ($price / 100000000 * 100 | round / 100 | tostring), currency: .locale.currencyCode}' <<< "$catalog"
+  '{server_type: $t, location: $l, monthly_price: ($price / 100000000 * 730 * 100 | round / 100 | tostring), currency: .locale.currencyCode}' <<< "$catalog"
 ```
 
 The price script makes the [Prices](#region-image-and-network) paragraph's two requests below: the flavor's
-monthly plan code through the project, then the plan's monthly price in the public catalog, in micro-cents
-of the account's currency.
+hourly plan code through the project, then the plan's hourly price in the public catalog, in hundred-millionths
+of the account's currency, which it multiplies by 730 hours. The servers are billed by the hour, because the
+create script sets `monthlyBilling: false`: a replaced server or `restore01` lives for minutes, and a monthly
+plan charges the whole month and cannot be switched back.
 
 ## Region, image, and network
 
@@ -460,8 +463,10 @@ curl -sS 'https://api.us.ovhcloud.com/1.0/order/catalog/public/cloud?ovhSubsidia
 
 `price` is in micro-cents of the account's currency (100000000 is one unit, such as one dollar), and
 `description` says per what for the hourly plan ("hourly prices", with `intervalUnit` `none`). `tax` is the tax
-within `price`: 0 on the US site, whose catalog's `locale.taxRate` is 0, so show the price as before any tax. Use
-`planCodes.monthly` the same way for the monthly price, where `intervalUnit` is `month`. Show the person the
+within `price`: 0 on the US site, whose catalog's `locale.taxRate` is 0, so show the price as before any tax. The
+servers are billed by the hour (`monthlyBilling: false`), so show the person the hourly price and the hourly price
+times 730 hours as the monthly cost, not the cheaper monthly plan (`planCodes.monthly`), which the servers do not
+use. Show the person the
 public IPv4 charge too: the catalog's line `publicip.ip.hour.consumption`, which was 0 on a real project on
 2026-11-12, or OVHcloud's [price page](https://us.ovhcloud.com/public-cloud/prices/) when the catalog has no
 line for it.

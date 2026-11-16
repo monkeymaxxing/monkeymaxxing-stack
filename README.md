@@ -168,10 +168,12 @@ platform's own system. The Stack gives you a system of your own, and it is
 better in three ways:
 
 - **It costs far less.** For the same size of server, a platform charges 10
-  to 30 times more than a server provider. An always-on server with 2 vCPU
-  and 4 GB of memory costs about $5 to $7 a month at OVHcloud or Hetzner.
-  The same size costs $85 a month at Render and $150 a month at Heroku.
-  These prices are from each company's pricing page, read on 2026-11-13.
+  to 30 times more than a server provider such as Hetzner. An always-on
+  server with 2 vCPU and 4 GB of memory costs €5.99 a month at Hetzner, and
+  $18.69 at OVHcloud Public Cloud, billed by the hour. The same size costs
+  $85 a month at Render and $150 a month at Heroku. These prices are from
+  each company's pricing page or catalog, read between 2026-11-13 and
+  2026-11-17.
 - **You are not locked in.** The servers are plain Debian servers at a
   server provider that you choose, such as Hetzner or OVHcloud. If the
   provider raises its prices, your coding agent rebuilds the system at
@@ -301,20 +303,26 @@ Kubernetes existed.
 ## What it costs
 
 You pay the companies whose services you use, at their own prices. This
-example is the smallest system, at two server providers. The prices are
-from each company's pricing page, read on 2026-11-15.
+example is the smallest system, at two server providers, with the server
+types each provider's guide creates. Hetzner's prices are from its pricing
+page, read on 2026-11-15; OVHcloud's from its US public catalog, read on
+2026-11-17.
 
-| Machine | Size | OVHcloud VPS (US) | Hetzner Cloud (Europe) |
+| Machine | Size | Hetzner Cloud (Europe) | OVHcloud Public Cloud (US) |
 | --- | --- | --- | --- |
-| App server `app001` | 4 vCPU, 8 GB of memory | $8.50 (VPS-2) | €8.99 (CX33) |
-| Database server `db01` | 2 vCPU, 4 GB of memory | $4.54 (VPS-1) | €5.99 (CX23) |
-| Utility server `util01` | 2 vCPU, 4 GB of memory | $4.54 (VPS-1) | €5.99 (CX23) |
-| One systems desk | 2 vCPU, 4 GB of memory | $4.54 (VPS-1) | €5.99 (CX23) |
-| **Total each month** | | **$22.12** | **€26.96** |
+| App server `app001` | 4 vCPU, 8 GB of memory or more | €8.99 (CX33) | $121.40 (b2-15, 15 GB) |
+| Database server `db01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $18.69 (d2-4) |
+| Utility server `util01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $18.69 (d2-4) |
+| One systems desk | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $18.69 (d2-4) |
+| **Total each month** | | **€26.96** | **$177.47** |
 
-OVHcloud's prices are its "starting at" prices and include unlimited
-traffic. Hetzner's prices are without VAT and include each server's public
-address and 20 TB of traffic.
+Hetzner's prices are without VAT and include each server's public address
+and 20 TB of traffic. OVHcloud Public Cloud costs about six times as much:
+its servers are billed by the hour, so a replaced server or a restore
+server costs only the minutes it runs, and the monthly figure is the hourly
+price times 730 hours. OVHcloud's smallest server type with the app
+server's disk has 15 GB of memory. Your coding agent shows you each
+server's price before it creates one.
 
 The other costs:
 
@@ -336,8 +344,8 @@ The other costs:
 
 For comparison, Heroku lists $300 a month for its "Compute 4CPU-8GB" plan
 and $50 a month for its "Standard-0" Postgres plan with 4 GB of memory.
-Those two do the work of `app001` and `db01`, which cost $13.04 at
-OVHcloud above.
+Those two do the work of `app001` and `db01`, which cost €14.98 at
+Hetzner above.
 
 You decide about money at setup. Your coding agent shows you the servers'
 prices, and you set the largest number of servers in each pool. If you let

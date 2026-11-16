@@ -269,7 +269,7 @@ class OVHcloudProviderScripts(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn('exactly one --ssh-key-name', result.stderr)
 
-    def test_the_monthly_plan_of_a_flavor_from_the_public_catalog(self):
+    def test_the_hourly_plan_of_a_flavor_times_730_from_the_public_catalog(self):
         for bash in bash_programs():
             for signed in (False, True):
                 with self.subTest(bash=bash, signed=signed):
@@ -277,15 +277,17 @@ class OVHcloudProviderScripts(unittest.TestCase):
                     price = self.run_script(bash, 'read_the_monthly_price_at_the_provider', '--server-type', 'd2-4',
                                             '--location', 'US-EAST-VA-1', signed=signed)
                     self.assertEqual(price.returncode, 0, price.stderr)
-                    # 1100000000 micro-cents is 11 dollars.
+                    # The servers are billed by the hour: 2190000 hundred-millionths is 0.0219 dollars an hour,
+                    # times 730 hours is 15.987, not the monthly plan's 11 dollars.
                     self.assertEqual(json.loads(price.stdout), {'server_type': 'd2-4', 'location': 'US-EAST-VA-1',
-                                                                'monthly_price': '11', 'currency': 'USD'})
+                                                                'monthly_price': '15.99', 'currency': 'USD'})
+                    self.assertIn('billed by the hour', price.stderr)
                     self.assertEqual(self.stand_in.catalog_requests, [(None, 'ovhSubsidiary=US')],
                                      'the public catalog, never signed with util01\'s credential')
                     missing = self.run_script(bash, 'read_the_monthly_price_at_the_provider', '--server-type', 'b2-15',
                                               '--location', 'US-EAST-VA-1', signed=signed)
                     self.assertEqual((missing.returncode, missing.stdout), (1, ''))
-                    self.assertIn('OVHcloud lists no monthly plan for the flavor b2-15', missing.stderr)
+                    self.assertIn('OVHcloud lists no hourly plan for the flavor b2-15', missing.stderr)
                     nowhere = self.run_script(bash, 'read_the_monthly_price_at_the_provider', '--server-type', 'd2-4',
                                               '--location', 'NOWHERE-1', signed=signed)
                     self.assertEqual((nowhere.returncode, nowhere.stdout), (1, ''))
