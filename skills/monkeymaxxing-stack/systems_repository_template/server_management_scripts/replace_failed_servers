@@ -1,0 +1,366 @@
+#!/bin/bash
+# replace_failed_servers: creates a new server in place of each server that
+# stopped reporting, in the pools that
+# triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces
+# names, and puts the new server in the inventory in place of the failed one
+# with one signed commit on main. every_server then installs the new server,
+# and destroy_replaced_servers destroys the failed server once the new one
+# does its work. Runs as the mmhotline user on util01, from util01's copy of
+# the systems repository, after read_the_fleet_hub_for_server_replacement
+# (playbooks/replace_failed_servers.yml).
+#
+# A target is a server of a listed pool that:
+#   - the fleet hub calls silent, outside a whole-server maintenance window,
+#     or silent after a failed reboot by reboot_servers_after_updates
+#     (steps_for_replacing_failed_servers.bash says how the two differ); or
+#   - is the new server of a replacement that destroy_replaced_servers has
+#     not finished, and that the hub does not list or that fails
+#     check-that-this-server-does-its-work: a bad new server, replaced by the
+#     next try.
+# A server the hub does not list yet, such as one a desk's "Add a server" is
+# adding, is never a target.
+#
+# The program refuses, with exit 1, a line naming the reason, and nothing
+# created, when:
+#   - the lock-out is on (everyone_locked_out_except_desk);
+#   - more than half of the servers are silent at once, counting every server
+#     but util01, the systems desks and the restore servers. The reason: a
+#     bound, as the pools' growth limits are, so that a run never powers off
+#     and replaces most of a healthy fleet when util01 itself is cut off from
+#     the servers. With app001 and db01, app001 silent is 1 of 2 and is
+#     replaced; both silent is 2 of 2 and is refused;
+#   - a silent server is in a pool the triage agent does not replace, such as
+#     a database server: a person replaces it. The program replaces app
+#     servers, jobs servers and load-balancer servers, the pools whose
+#     servers hold no data and whose new server starts from the repository
+#     alone; a database server's replacement copies data and changes the
+#     failover formation, util01 runs MMX itself, and staging01 holds
+#     staging's database;
+#   - the pool holds more servers than growth_limits.POOL.largest_number_of_servers,
+#     or the failed server's server_type is not in the pool's server_types;
+#   - the replacement would be try number tries_to_replace_a_failed_server + 1;
+#   - destroy_replaced_servers finished a replacement in the pool within
+#     hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person;
+#   - the provider's list, or the Git host, does not answer;
+#   - the pool has used every number up to 254, the last address of its block.
+# Every server but util01, the systems desks and the restore servers that
+# the hub calls silent counts for the bound.
+#
+# For each target, in order, and what a rerun does after a failure there:
+#   1. Power the failed server off at the provider, by its ID, without
+#      destroying it, so a server that only looks dead cannot keep its tunnel
+#      connection and serve errors once every_server drops it from the
+#      database servers' or the app servers' peers. A load-balancer server
+#      matters most: Cloudflare sends each request to the nearest connector
+#      of the tunnel, so one such server can take most requests. The disk stays
+#      for evidence until the new server does its work. A failed power-off is
+#      reported and does not stop the replacement. Rerun: a stopped server
+#      needs nothing.
+#   2. Pick the next unused name, above every number the pool used in the
+#      inventory's Git history and in the provider's list.
+#   3. Create the server with the failed server's server_type and location,
+#      as the restore drill does (steps_for_a_server_this_run_creates.bash):
+#      first-boot data with peers util01 and every systems desk, a runtime
+#      WireGuard peer on util01, the receipt, and the host key over
+#      WireGuard.
+#   4. Commit the inventory change in a clone of main of the run's own, with
+#      the Git trailers below, and push. When main moved, fetch and redo the
+#      change on the new main, up to 3 pushes; stop when the failed server
+#      left the inventory or the new name is taken there.
+#   5. A failure before the push destroys the created server by the receipt's
+#      ID and removes the runtime peer (the exit trap); nothing else is ever
+#      destroyed here. Rerun: the failed server is still silent and still in
+#      the inventory, so the run starts again from step 1, with a new name.
+# After the push, a rerun finds the replacement in the Git trailers: the new
+# server is no target while it does its work, and every_server installs it.
+#
+# The replacement commit's Git trailers, which the later runs read:
+#   Server-pool: app_servers
+#   Replaced-server: app001
+#   Replaced-server-provider-id: 12345678   (none when the provider did not list it)
+#   Replacement-server: app002
+#   Replacement-server-provider-id: 23456789
+#   Replacement-try: 1
+# The try is 1, or one more than the try of the replacement whose new server
+# is being replaced. `git log --grep '^Server-pool: '` lists every replacement.
+#
+# The last lines of the output say what exists at the provider and in the
+# inventory, and the new server's type and monthly price at the provider's
+# price now (read_the_monthly_price_at_the_provider; a price that cannot be
+# read is said so, and never stops the run): MMHotline gives the triage
+# agent the last 16 KiB of a run's output, and its reports name the cost.
+set -euo pipefail
+repository=$PWD
+. "$repository/server_management_scripts/steps_for_a_server_this_run_creates.bash"
+. "$repository/server_management_scripts/steps_for_replacing_failed_servers.bash"
+. "$repository/server_management_scripts/steps_for_reading_the_providers_list.bash"
+
+say() { printf '%s\n' "$*"; }
+# Every refusal comes before the run creates or powers off anything.
+refuse() {
+  trap - EXIT
+  [ -z "${work_dir:-}" ] || rm -rf -- "$work_dir"
+  say "replace_failed_servers refuses: $1"
+  say "nothing created, powered off or committed; a person decides"
+  exit 1
+}
+
+[ -z "$EVERYONE_LOCKED_OUT_EXCEPT_DESK" ] || refuse "the lock-out is on (everyone_locked_out_except_desk: $EVERYONE_LOCKED_OUT_EXCEPT_DESK)"
+
+work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
+clone=$work_dir/repository
+receipt=
+created_name=
+created_public_key=
+results=()
+
+finish() {
+  local result=$?
+  trap - EXIT
+  trap '' INT TERM HUP
+  local keep_the_attempt=
+  cd "$repository"
+  if [ -n "$created_name" ]; then
+    # A server this run created whose commit was not pushed: destroy it by the
+    # receipt's ID, and only it.
+    rm -f -- "$work_dir/first_boot_data.yml"
+    if destroy_the_owned_server "$receipt" "$created_name"; then
+      results+=("$created_name: created, then destroyed again, because its commit was not pushed")
+    else
+      results+=("$created_name: created and NOT destroyed: a person destroys it by the ID in $receipt, with server_management_scripts/destroy_a_server_at_the_provider --server-id ID")
+      keep_the_attempt=yes
+    fi
+    if [ -n "$created_public_key" ]; then
+      remove_the_runtime_peer_on_util01 "$created_public_key" || \
+        results+=("util01 keeps a runtime WireGuard peer for $created_name until util01's next every_server run")
+    fi
+    [ "$result" -ne 0 ] || result=1
+  fi
+  [ -n "$keep_the_attempt" ] || rm -rf -- "$work_dir"
+  if [ "${#results[@]}" -gt 0 ]; then
+    say "What exists now:"
+    printf '  %s\n' "${results[@]}"
+  fi
+  [ "$result" -eq 0 ] || say "replace_failed_servers failed: request it again only after the cause above is fixed or understood"
+  exit "$result"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
+clone_main "$clone" || refuse "the Git host did not answer a fetch of main"
+history=$(replacement_history "$clone")
+pending=$(pending_replacements "$history")
+now=$(date +%s)
+
+# One line for each inventory server the run judges, with its pool and the
+# hub's class: every server but util01, the systems desks and the restore
+# servers.
+servers=$(jq -c --argjson nodes "$INVENTORY_NODES" --argjson groups "$INVENTORY_GROUPS" --argjson now "$now" \
+  --argjson pending "$pending" "$fleet_classes_jq"'
+  (.nodes | map({key: .name, value: .}) | from_entries) as $hub |
+  ($groups | to_entries | map(select(.key | IN("util_server", "systems_desks", "database_restore_servers") | not))) as $pools |
+  [$pools[] | .key as $pool | .value[] | . as $name |
+    {name: $name, pool: $pool, vars: $nodes[$name].vars,
+     hub: (if $hub[$name] then $hub[$name] | class($now) else {class: "not_in_the_hub"} end),
+     newest_replacement: ([$pending[] | select(.replacement == $name)] | first),
+     is_replaced_again: ([$pending[] | select(.replaced == $name)] | length > 0)}]' "$fleet_file")
+
+silent=$(jq '[.[] | select(.hub.class | startswith("silent"))] | length' <<< "$servers")
+counted=$(jq length <<< "$servers")
+if [ $((silent * 2)) -gt "$counted" ]; then
+  refuse "$silent of $counted servers are silent at once, more than half: the bound of this playbook, which never replaces most of the servers at once"
+fi
+
+# The targets: the hub's silent servers, and the new servers of unfinished
+# replacements that the hub does not list or that do not do their work.
+targets=()
+while IFS= read -r server; do
+  name=$(jq -r .name <<< "$server")
+  class=$(jq -r .hub.class <<< "$server")
+  case $class in
+    silent|silent_after_a_failed_reboot)
+      targets+=("$server") ;;
+    silent_in_planned_maintenance)
+      say "$name is silent in planned maintenance ($(jq -r .hub.reason <<< "$server")): not a target" ;;
+    silent_during_its_reboot)
+      say "$name is silent during its reboot by reboot_servers_after_updates; its reboot counts as failed at $(jq -r '.hub.counts_as_failed_at | strftime("%H:%M:%S UTC")' <<< "$server"): request replace_failed_servers again then" ;;
+    *)
+      if jq -e '.newest_replacement != null and (.is_replaced_again | not)' <<< "$server" > /dev/null; then
+        address=$(jq -r .vars.private_ip <<< "$server")
+        if [ "$class" = not_in_the_hub ]; then
+          say "$name, the new server of an unfinished replacement, has not joined the fleet hub: a bad new server"
+          targets+=("$server")
+        elif ! the_server_does_its_work "$clone" "$address"; then
+          say "$name, the new server of an unfinished replacement, does not do its work: a bad new server"
+          targets+=("$server")
+        fi
+      elif [ "$class" = not_in_the_hub ]; then
+        say "$name is not in the fleet hub yet, as while a desk adds a server: not a target"
+      fi ;;
+  esac
+done < <(jq -c '.[]' <<< "$servers")
+
+if [ "${#targets[@]}" -eq 0 ]; then
+  say "nothing to replace: every server of $(jq -r '.pools_whose_failed_servers_the_triage_agent_replaces | join(", ")' <<< "$SERVER_WORK") reports"
+  exit 0
+fi
+
+# Every refusal is decided before anything is created or powered off.
+provider_servers=$(server_management_scripts/list_the_servers_at_the_provider) || refuse "the provider's list failed"
+jq -e '.servers | type == "array"' <<< "$provider_servers" > /dev/null || refuse "the provider's list is not a list of servers"
+the_provider_list_holds_util01 "$provider_servers" || refuse "$not_this_systems_list"
+tries=$(jq -r .tries_to_replace_a_failed_server <<< "$SERVER_WORK")
+hours=$(jq -r .hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person <<< "$SERVER_WORK")
+plans=()
+for server in "${targets[@]}"; do
+  name=$(jq -r .name <<< "$server")
+  pool=$(jq -r .pool <<< "$server")
+  jq -e --arg pool "$pool" '.pools_whose_failed_servers_the_triage_agent_replaces | index($pool)' <<< "$SERVER_WORK" > /dev/null || \
+    refuse "$name of $pool stopped reporting, and the triage agent replaces failed servers only in $(jq -r '.pools_whose_failed_servers_the_triage_agent_replaces | join(", ")' <<< "$SERVER_WORK") (triage_agent_server_work in mmx_project_settings.yml): a person replaces $name with operating_procedures/replace_a_server.md"
+  case $pool in
+    app_servers|jobs_servers|load_balancer_servers) ;;
+    *) refuse "$name of $pool stopped reporting, and replace_failed_servers replaces only app servers, jobs servers and load-balancer servers: a person replaces $name with operating_procedures/replace_a_server.md" ;;
+  esac
+  # The new name follows the failed server's own: its letters, and as many
+  # digits, such as app001, jobs001 or lb01 (AGENTS.md, "Server names and
+  # private addresses"). The three pools differ in nothing else here.
+  prefix=${name%%[0-9]*}
+  digits=$(( ${#name} - ${#prefix} ))
+  in_pool=$(jq -r --arg pool "$pool" '.[$pool] | length' <<< "$INVENTORY_GROUPS")
+  largest=$(jq -r --arg pool "$pool" '.[$pool].largest_number_of_servers' <<< "$GROWTH_LIMITS")
+  [ "$in_pool" -le "$largest" ] || refuse "$pool holds $in_pool servers, more than its largest number, $largest (growth_limits in mmx_project_settings.yml)"
+  server_type=$(jq -r .vars.server_type <<< "$server")
+  location=$(jq -r .vars.location <<< "$server")
+  jq -e --arg pool "$pool" --arg type "$server_type" '.[$pool].server_types | index($type)' <<< "$GROWTH_LIMITS" > /dev/null || \
+    refuse "$name has the server type $server_type, which is not in growth_limits.$pool.server_types in mmx_project_settings.yml"
+  try=$(jq -r '(.newest_replacement.try // 0) + 1' <<< "$server")
+  [ "$try" -le "$tries" ] || \
+    refuse "replacing $name would be try $try, and tries_to_replace_a_failed_server is $tries: the new servers failed one after another, a cause a new server does not reach"
+  if [ "$hours" -gt 0 ]; then
+    finished=$(jq -r --arg pool "$pool" --argjson since "$((now - hours * 3600))" \
+      '[.[] | select(.trailers["Destroyed-server"] and .trailers["Server-pool"][0] == $pool and .time >= $since)] | first | .commit // empty' <<< "$history")
+    [ -z "$finished" ] || \
+      refuse "$pool failed again: a replacement in $pool finished within the last $hours hours (commit $finished), so the cause is one a new server does not fix (hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person)"
+  fi
+  plans+=("$(jq -c --arg prefix "$prefix" --argjson digits "$digits" --argjson try "$try" \
+    --arg server_type "$server_type" --arg location "$location" \
+    '. + {prefix: $prefix, digits: $digits, try: $try, server_type: $server_type, location: $location}' <<< "$server")")
+done
+
+# The names, decided before anything is created.
+names_given_in_this_run=
+for index in "${!plans[@]}"; do
+  plan=${plans[$index]}
+  prefix=$(jq -r .prefix <<< "$plan")
+  number=$(( $(highest_number_used "$clone" "$prefix" "$provider_servers" "$history" "$names_given_in_this_run") + 1 ))
+  [ "$number" -le 254 ] || refuse "$(jq -r .pool <<< "$plan") has used every number up to 254, the last address of its block: a person decides"
+  new_name=$(printf '%s%0*d' "$prefix" "$(jq -r .digits <<< "$plan")" "$number")
+  names_given_in_this_run+="$new_name"$'\n'
+  plans[$index]=$(jq -c --arg new_name "$new_name" --arg address "$(address_of "$new_name" "$(jq -r .pool <<< "$plan")")" \
+    '. + {new_name: $new_name, address: $address}' <<< "$plan")
+  # The inventory change applies to main before anything is created.
+  (cd "$clone" && change_the_pool_in_the_inventory "$(jq -r .name <<< "$plan")" "$new_name" \
+    "$(jq -r .pool <<< "$plan")" "$(jq -r .address <<< "${plans[$index]}")" 192.0.2.1 "$UTIL01_WIREGUARD_PUBLIC_KEY" stand-in stand-in && git checkout --quiet -- inventories/servers.yml) || \
+    refuse "the inventory on main has no node block or one-line nodes list for $(jq -r .name <<< "$plan") to change"
+done
+
+# The peers of every new server: util01 and every systems desk.
+peers=$(jq -c --arg port "$(wireguard_listen_port)" --argjson nodes "$INVENTORY_NODES" --argjson groups "$INVENTORY_GROUPS" --argjson util01 "$(util01_as_a_peer)" '
+  [$util01] + [($groups.systems_desks // [])[] | $nodes[.].vars |
+    {public_key: .wireguard_public_key, allowed_ips: [.private_ip + "/32"],
+     endpoint: (.public_ipv4_address + ":" + $port), persistent_keepalive: 25}]' <<< null)
+
+for plan in "${plans[@]}"; do
+  name=$(jq -r .name <<< "$plan")
+  pool=$(jq -r .pool <<< "$plan")
+  new_name=$(jq -r .new_name <<< "$plan")
+  address=$(jq -r .address <<< "$plan")
+  server_type=$(jq -r .server_type <<< "$plan")
+  location=$(jq -r .location <<< "$plan")
+  try=$(jq -r .try <<< "$plan")
+
+  # 1. Power off. A server that was itself a new server has its ID in the
+  # trailers; any other is matched in the provider's list by name and
+  # public address together.
+  old_id=$(jq -r '.newest_replacement.replacement_id // empty' <<< "$plan")
+  if [ -z "$old_id" ]; then
+    old_id=$(jq -r --arg name "$name" --arg address "$(jq -r .vars.public_ipv4_address <<< "$plan")" \
+      '[.servers[] | select(.name == $name and .public_ipv4_address == $address) | .id] | if length == 1 then .[0] else empty end' <<< "$provider_servers")
+  fi
+  power_state=$(jq -r --arg id "$old_id" '[.servers[] | select(.id == $id) | .power_state][0] // "not listed"' <<< "$provider_servers")
+  if [ -z "$old_id" ] || [ "$power_state" = "not listed" ]; then
+    old_id=none
+    power_line="the provider does not list $name"
+  elif [ "$power_state" = stopped ]; then
+    power_line="the provider reported $name (ID $old_id) as stopped already"
+  elif server_management_scripts/power_off_a_server_at_the_provider --server-id "$old_id" > /dev/null; then
+    power_line="the provider reported $name (ID $old_id) as $power_state; powered off, disk kept for evidence"
+  else
+    power_line="the provider reported $name (ID $old_id) as $power_state; the power-off FAILED: $name may still run"
+  fi
+  say "$power_line"
+
+  # 3. Create.
+  receipt=$work_dir/created_server_$new_name.json
+  created_name=$new_name
+  umask 077
+  write_the_first_boot_data "$address" "$peers" "$work_dir/first_boot_data.yml" "$work_dir/wireguard_public_key_$new_name"
+  umask 022
+  created_public_key=$(cat "$work_dir/wireguard_public_key_$new_name")
+  (cd "$repository" && add_a_runtime_peer_on_util01 "$created_public_key" "$address")
+  create_the_owned_server "$new_name" "$server_type" "$location" "$address" "$created_public_key" \
+    "$work_dir/first_boot_data.yml" "$receipt" > /dev/null
+  rm -f -- "$work_dir/first_boot_data.yml"
+  new_id=$(jq -er '.id | strings | select(length > 0)' "$receipt")
+  public_ipv4_address=$(jq -er '.public_ipv4_address | strings | select(length > 0)' "$receipt")
+  say "created $new_name (ID $new_id, $server_type in $location) at $address"
+  (cd "$clone" && accept_the_host_key_over_wireguard "$address") || { say "$new_name did not answer SSH over WireGuard within 5 minutes"; exit 1; }
+  grep "^$address " "$clone/ssh/known_hosts" > "$work_dir/host_key_lines_$new_name"
+
+  # 4. Commit and push.
+  make_the_replacement_commit() {
+    cd "$clone"
+    change_the_pool_in_the_inventory "$name" "$new_name" "$pool" "$address" "$public_ipv4_address" \
+      "$created_public_key" "$server_type" "$location" || \
+      { say "main changed: $name left the inventory, or $new_name is there already"; cd "$repository"; return 1; }
+    grep -q "^$address " ssh/known_hosts || cat "$work_dir/host_key_lines_$new_name" >> ssh/known_hosts
+    # mmx validate refuses an unfinished one-time playbook that names a server
+    # missing from the inventory.
+    local playbook
+    for playbook in $(grep -lw "$name" one_time_playbooks/*.yml 2>/dev/null || true); do
+      git mv "$playbook" one_time_playbooks/completed/
+    done
+    mmx validate > "$work_dir/validate_output" 2>&1 || { cat "$work_dir/validate_output"; cd "$repository"; return 1; }
+    git add inventories/servers.yml ssh/known_hosts
+    git commit --quiet -F - <<MESSAGE
+Replace $name with $new_name
+
+replace_failed_servers on util01 created $new_name with $name's server
+type and location. $power_line.
+every_server installs $new_name; destroy_replaced_servers destroys $name
+once $new_name does its work.
+
+Server-pool: $pool
+Replaced-server: $name
+Replaced-server-provider-id: $old_id
+Replacement-server: $new_name
+Replacement-server-provider-id: $new_id
+Replacement-try: $try
+MESSAGE
+    cd "$repository"
+  }
+  push_to_main "$clone" make_the_replacement_commit || { say "the commit that puts $new_name in the inventory was not pushed"; exit 1; }
+  commit=$(git -C "$clone" rev-parse HEAD)
+  created_name=
+  created_public_key=
+  results+=("$name: still at the provider, powered off, until destroy_replaced_servers ($power_line)")
+  results+=("$new_name: at the provider (ID $new_id), and in the inventory in place of $name since commit $commit, try $try of $tries")
+  results+=("$(monthly_price_line "$new_name" "$server_type" "$location")")
+done
+
+say "What exists now:"
+printf '  %s\n' "${results[@]}"
+results=()
+say "replaced $(printf '%s ' "${plans[@]}" | jq -rs '[.[] | .name + " with " + .new_name] | join(", ")')"
+say "next: request playbooks/every_server.yml, which installs the new server, then playbooks/destroy_replaced_servers.yml"

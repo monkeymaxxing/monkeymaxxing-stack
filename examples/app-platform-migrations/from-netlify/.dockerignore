@@ -1,0 +1,10 @@
+node_modules
+.env*
+*.env
+migration-export*
+*.dump
+tests
+
+secrets
+exports
+*.eml

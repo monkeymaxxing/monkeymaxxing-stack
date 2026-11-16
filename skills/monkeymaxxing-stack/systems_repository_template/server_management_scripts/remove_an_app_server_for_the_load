@@ -1,0 +1,166 @@
+#!/bin/bash
+# remove_an_app_server_for_the_load: the two parts of playbooks/remove_server.yml,
+# run without server_name, that remove the app server the load no longer
+# needs. Runs as the mmhotline user on util01, from util01's copy of the
+# systems repository.
+#
+#   remove_an_app_server_for_the_load choose
+#     after read_the_fleet_hub_for_server_replacement and
+#     read_the_app_pool_load --remove. Writes the server to remove, or
+#     nothing, to /var/lib/replace_failed_servers/server_to_remove. The load
+#     decides, by check-whether-the-load-changes-the-app-pool: the newest
+#     app server, when the smaller pool would have carried the busiest
+#     readings of days_of_low_load_before_an_app_server_is_removed with a
+#     server to spare, never below growth_limits.app_servers.smallest_number_of_servers.
+#     With "none", nothing to remove: exit 0. Refuses, with exit 1 and
+#     nothing changed, when the lock-out is on, the decision names a bound
+#     (a pool of mixed types), an app server does not report to the fleet
+#     hub (silent, rebooting, in maintenance or not joined), or a
+#     replacement in app_servers is unfinished.
+#
+#   remove_an_app_server_for_the_load finish SERVER
+#     after remove_server's stages took SERVER out of service: out of the
+#     tunnel, out of every Caddy list, its containers stopped. Then:
+#       1. Checks over SSH that SERVER's tunnel connector is stopped and that
+#          every other app server passes check-that-this-server-does-its-work.
+#          Otherwise nothing is committed or destroyed, exit 1:
+#          every_server puts SERVER back in service.
+#          The provider's list must answer and hold util01
+#          (steps_for_reading_the_providers_list.bash), so the ID to destroy
+#          is never missed in a partial list.
+#       2. Commits, in a clone of main of the run's own, SERVER's removal from
+#          the inventory and ssh/known_hosts, with every unfinished one-time
+#          playbook that names it moved to one_time_playbooks/completed/,
+#          and these Git trailers:
+#            Server-pool: app_servers
+#            Removed-server: app004
+#            Removed-server-provider-id: 34567890   (none when not listed)
+#          A refused push is redone on the new main, up to 3 pushes.
+#       3. Destroys SERVER at the provider by the ID of the provider's entry
+#          that matches both its name and its public address, only after the
+#          push: the pool serves without it. A destroy that fails is
+#          reported with the ID; the daily leftover check warns about it.
+#     The last lines say what exists, the monthly price that stops, and the
+#     next request: every_server, which takes SERVER out of the peers and
+#     the firewall, and the fleet hub forgets it.
+set -euo pipefail
+repository=$PWD
+. "$repository/server_management_scripts/steps_for_replacing_failed_servers.bash"
+. "$repository/server_management_scripts/steps_for_reading_the_providers_list.bash"
+
+say() { printf '%s\n' "$*"; }
+refuse() {
+  say "remove_server refuses: $1"
+  say "nothing removed, committed or destroyed; a person decides"
+  exit 1
+}
+pool=app_servers
+choice=$state_dir/server_to_remove
+
+choose() {
+  rm -f -- "$choice"
+  [ -z "$EVERYONE_LOCKED_OUT_EXCEPT_DESK" ] || refuse "the lock-out is on (everyone_locked_out_except_desk: $EVERYONE_LOCKED_OUT_EXCEPT_DESK)"
+  local load why server not_reporting work_dir unfinished
+  load=$(cat "$state_dir/app_pool_for_the_load.json")
+  why=$(jq -r .why <<< "$load")
+  case $(jq -r .decision <<< "$load") in
+    remove) server=$(jq -r .server_to_remove <<< "$load"); say "$why" ;;
+    stopped_by_a_bound) refuse "$why" ;;
+    *) say "nothing to remove: $why"; : > "$choice"; return 0 ;;
+  esac
+  jq -e --arg pool "$pool" --arg server "$server" '.[$pool] | index($server)' <<< "$INVENTORY_GROUPS" > /dev/null || \
+    refuse "$server is not in the inventory's $pool"
+  not_reporting=$(jq -r --argjson groups "$INVENTORY_GROUPS" --arg pool "$pool" '
+    (.nodes | map({key: .name, value: .state}) | from_entries) as $hub |
+    [$groups[$pool][] | select($hub[.] != "reporting") | . + " is " + ($hub[.] // "not in the fleet hub")] | join(", ")' "$fleet_file")
+  [ -z "$not_reporting" ] || refuse "$not_reporting: no app server is removed while another one does not report"
+  work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
+  trap 'rm -rf -- "'"$work_dir"'"' EXIT
+  clone_main "$work_dir/repository" || refuse "the Git host did not answer a fetch of main"
+  unfinished=$(pending_replacements "$(replacement_history "$work_dir/repository")" | \
+    jq -r --arg pool "$pool" '[.[] | select(.pool == $pool) | .replaced + " by " + .replacement] | join(", ")')
+  [ -z "$unfinished" ] || refuse "the replacement of $unfinished in $pool is unfinished: destroy_replaced_servers comes first"
+  printf '%s\n' "$server" > "$choice"
+  say "remove_server takes $server out of service next"
+}
+
+finish() {
+  local server=$1 work_dir clone address public_ipv4_address server_type location provider_servers server_id name failing=
+  jq -e --arg pool "$pool" --arg server "$server" '.[$pool] | index($server)' <<< "$INVENTORY_GROUPS" > /dev/null || \
+    refuse "$server is not in the inventory's $pool"
+  work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
+  trap 'rm -rf -- "'"$work_dir"'"' EXIT
+  clone=$work_dir/repository
+  clone_main "$clone" || refuse "the Git host did not answer a fetch of main; $server is out of service: request every_server to put it back"
+  address=$(jq -r --arg name "$server" '.[$name].vars.private_ip' <<< "$INVENTORY_NODES")
+  public_ipv4_address=$(jq -r --arg name "$server" '.[$name].vars.public_ipv4_address' <<< "$INVENTORY_NODES")
+  server_type=$(jq -r --arg name "$server" '.[$name].vars.server_type' <<< "$INVENTORY_NODES")
+  location=$(jq -r --arg name "$server" '.[$name].vars.location' <<< "$INVENTORY_NODES")
+
+  # 1. The pool serves without the server.
+  if (cd "$clone" && ssh -F ssh/config -o ConnectTimeout=10 "root@$address" systemctl is-active --quiet cloudflared < /dev/null); then
+    refuse "$server's tunnel connector still runs, so $server may still take requests: request every_server to put it back in service"
+  fi
+  for name in $(jq -r --arg pool "$pool" --arg server "$server" '.[$pool][] | select(. != $server)' <<< "$INVENTORY_GROUPS"); do
+    the_server_does_its_work "$clone" "$(jq -r --arg name "$name" '.[$name].vars.private_ip' <<< "$INVENTORY_NODES")" || failing+="${failing:+, }$name"
+  done
+  [ -z "$failing" ] || \
+    refuse "$failing does not do its work, so the pool may not carry the load without $server: request every_server to put $server back in service"
+
+  # 2. The provider's ID, by the name and the public address together.
+  provider_servers=$(server_management_scripts/list_the_servers_at_the_provider) || \
+    refuse "the provider's list failed; $server is out of service: request every_server to put it back, or remove_server again"
+  # A partial list would leave the server running at the provider, still
+  # paid for, with no ID to destroy it by.
+  the_provider_list_holds_util01 "$provider_servers" || \
+    refuse "$not_this_systems_list; $server is out of service: request every_server to put it back, or remove_server again"
+  server_id=$(jq -r --arg name "$server" --arg address "$public_ipv4_address" \
+    '[.servers[] | select(.name == $name and .public_ipv4_address == $address) | .id] | if length == 1 then .[0] else "none" end' <<< "$provider_servers")
+
+  make_the_removal_commit() {
+    cd "$clone"
+    change_the_pool_in_the_inventory "$server" "" "$pool" "" "" "" "" "" || \
+      { say "main changed: $server left the inventory already"; cd "$repository"; return 1; }
+    grep -v "^$address " ssh/known_hosts > "$work_dir/known_hosts" || true
+    cat "$work_dir/known_hosts" > ssh/known_hosts
+    local playbook
+    for playbook in $(grep -lw "$server" one_time_playbooks/*.yml 2>/dev/null || true); do
+      git mv "$playbook" one_time_playbooks/completed/
+    done
+    mmx validate > "$work_dir/validate_output" 2>&1 || { cat "$work_dir/validate_output"; cd "$repository"; return 1; }
+    git add inventories/servers.yml ssh/known_hosts
+    git commit --quiet -F - <<MESSAGE
+Remove $server from $pool: the load no longer needs it
+
+remove_server on util01 took $server out of service: out of the tunnel,
+out of every Caddy list, its containers stopped; every other app server
+does its work. $server is destroyed at the provider by its ID next.
+
+Server-pool: $pool
+Removed-server: $server
+Removed-server-provider-id: $server_id
+MESSAGE
+    cd "$repository"
+  }
+  push_to_main "$clone" make_the_removal_commit || \
+    refuse "the commit that removes $server from the inventory was not pushed; $server is out of service: request every_server to put it back"
+  say "committed $(git -C "$clone" rev-parse HEAD): $server left the inventory"
+
+  # 3. The destroy, by the ID only.
+  say "What exists now:"
+  if [ "$server_id" = none ]; then
+    say "  $server: out of the inventory; the provider lists no server with its name and public address $public_ipv4_address, so nothing was destroyed: a person checks the provider's list"
+  elif server_management_scripts/destroy_a_server_at_the_provider --server-id "$server_id" > /dev/null; then
+    say "  $server: destroyed at the provider (ID $server_id)"
+  else
+    say "  $server: out of the inventory, and its destroy at the provider FAILED: a person destroys it with server_management_scripts/destroy_a_server_at_the_provider --server-id $server_id"
+  fi
+  say "  $pool holds $(( $(jq -r --arg pool "$pool" '.[$pool] | length' <<< "$INVENTORY_GROUPS") - 1 )) servers; what stops: $(monthly_price_line "$server" "$server_type" "$location")"
+  say "next: request playbooks/every_server.yml, which takes $server out of the peers and the firewall; the fleet hub forgets it"
+}
+
+case ${1:-} in
+  choose) choose ;;
+  finish) [ -n "${2:-}" ] || { say "usage: remove_an_app_server_for_the_load finish SERVER"; exit 4; }; finish "$2" ;;
+  *) say "usage: remove_an_app_server_for_the_load choose | finish SERVER"; exit 4 ;;
+esac

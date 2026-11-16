@@ -1,0 +1,571 @@
+# Takes an app server, a database replica, a jobs server, or a load-balancer
+# server out of service without dropping requests, writes, or jobs (requests
+# and jobs in flight get up to 30 seconds to finish):
+#
+#   ./server_management_scripts/run_mmx_on_util01 run remove_server --var server_name=app002
+#   ./server_management_scripts/run_mmx_on_util01 run remove_server --var server_name=db02
+#   ./server_management_scripts/run_mmx_on_util01 run remove_server --var server_name=jobs002
+#   ./server_management_scripts/run_mmx_on_util01 run remove_server --var server_name=lb01
+#
+# Without server_name, remove_server removes the app server the load no
+# longer needs, and finishes the removal itself, because no person is there
+# for the steps after it: the triage agent requests it this way when util01's
+# check app_servers_to_remove_for_the_load/no_app_server_waits_to_be_removed
+# warns, and MMHotline runs it after its warning unless someone presses Stop
+# (triage_agent_rules.md, "Adding and removing app servers with the load"):
+#
+#   ./server_management_scripts/run_mmx_on_util01 run remove_server
+#
+# The first stage decides by check-whether-the-load-changes-the-app-pool, the
+# same program as util01's check: the newest app server, when the smaller
+# pool would have carried the busiest readings of
+# triage_agent_server_work.days_of_low_load_before_an_app_server_is_removed
+# with a server to spare, and never below
+# growth_limits.app_servers.smallest_number_of_servers. "Nothing to remove"
+# ends the run with nothing changed. server_management_scripts/remove_an_app_server_for_the_load
+# holds the refusals (the lock-out, a pool of mixed types, an app server
+# that does not report, an unfinished replacement). The app server's
+# stages below then take it out of service, as for a person, and the last
+# stage commits its removal from the inventory, signed by util01's mmhotline
+# user, and destroys it at the provider by its ID, once every other app
+# server does its work. The next run is every_server.
+#
+# An app server, and never the last app server:
+# 1. cloudflared on the app server being removed stops, so Cloudflare sends
+#    requests for the stopped connector to the remaining connectors.
+#    Once only the load-balancer servers run the tunnel connector, the app
+#    server being removed runs no connector, so stopping cloudflared changes
+#    nothing.
+# 2. Caddy on the remaining app servers and the load-balancer servers stops
+#    sending requests to the removed app server's web containers.
+#    The app servers' Caddy instances change only while Caddy runs there.
+# 3. The removed app server's containers stop, each with up to 30 seconds to
+#    finish work.
+#
+# A jobs server: while only the jobs servers run the job containers, MMX
+# refuses to remove the last jobs server.
+# While only jobs servers run job containers, MMX also checks that every
+# remaining jobs server runs each app's job container before removal.
+# The removed jobs server's job containers stop. Each job container gives
+# workers up to 30 seconds to finish current jobs.
+# Workers on the remaining servers take waiting jobs from the queue in
+# Postgres.
+#
+# A load-balancer server:
+# 1. While only the load-balancer servers run the tunnel connector and
+#    Caddy, MMX refuses to remove the only load-balancer server.
+#    While only load-balancer servers bring requests in, MMWatchdog's
+#    tunnel connector and Caddy checks must pass on every remaining
+#    load-balancer server (mmwatchdog check-now).
+#    If a check fails, the load-balancer server being removed stays in the
+#    tunnel. Until
+#    tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers
+#    is true, the app servers also bring requests in.
+# 2. cloudflared on the load-balancer server being removed stops, with up to
+#    30 seconds for requests in flight, and leaves the tunnel.
+#    Cloudflare sends every request to the remaining load-balancer servers.
+#
+# A database server, only a replica:
+# 1. The database replica being removed goes into maintenance, so the
+#    primary stops waiting for the replica (synchronous replication), and
+#    writes go on. pg_auto_failover_node
+#    refuses maintenance on the server the failover monitor has made the
+#    primary, before anything changes. First make a remaining replica the
+#    primary with switch_database_primary, then run remove_server again.
+# 2. The database replica being removed leaves the production formation,
+#    and Postgres on the removed replica stops.
+#    The removed replica's data stays on the removed replica's disk until
+#    the replica's server is destroyed.
+#
+# Then delete the server selected for removal from inventories/servers.yml
+# and delete the selected server's lines from ssh/known_hosts. Commit and
+# push: util01 runs every_server, so no WireGuard peer list or firewall rule
+# names the removed server any more. Destroy the removed server with
+# ./server_management_scripts/destroy_a_server_at_the_provider (operating_procedures/remove_a_server.md, "Remove a server").
+#
+# A database server that is gone for good, such as a primary that failed, needs no
+# remove_server: delete it from the inventory, and util01's next run drops
+# it from the formation.
+command_line_vars:
+  # The server to remove, such as app002, db02, jobs002, or lb01. Without
+  # it, the app server the load no longer needs, or none.
+  server_name:
+    type: string
+    default: ""
+
+fleet_stages:
+  # The one source of the server's name for every later stage: the person's
+  # server_name, or, without it, the app server the load no longer needs, or
+  # "" when the load needs every app server; then every later stage skips.
+  - id: find_the_server_to_remove
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      # As root: only root may ask the fleet hub.
+      - id: read_the_fleet_hub
+        when: {equals: ["{{ .vars.server_name }}", ""]}
+        time_limit: 30m
+        shell:
+          script: server_management_scripts/read_the_fleet_hub_for_server_replacement
+          dryrun: printf 'would read the fleet hub into /var/lib/replace_failed_servers/fleet.json\n'
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          changed_when: false
+      - id: read_the_app_pool_load
+        when: {equals: ["{{ .vars.server_name }}", ""]}
+        time_limit: 10m
+        shell:
+          script: server_management_scripts/read_the_app_pool_load --remove
+          dryrun: printf 'would decide from the app servers CPU readings whether the pool can spare a server\n'
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          changed_when: false
+          env:
+            GROWTH_LIMITS: "{{ .vars.growth_limits }}"
+            SERVER_WORK: "{{ .vars.triage_agent_server_work }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+      - id: choose_the_app_server_the_load_no_longer_needs
+        when: {equals: ["{{ .vars.server_name }}", ""]}
+        time_limit: 5m
+        shell:
+          script: server_management_scripts/remove_an_app_server_for_the_load choose < /dev/null
+          dryrun: printf 'would choose the app server the load no longer needs\n'
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          output_holds_no_secret: true
+          changed_when: false
+          env:
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+            EVERYONE_LOCKED_OUT_EXCEPT_DESK: "{{ .vars.everyone_locked_out_except_desk }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+      - id: name_the_server_to_remove
+        shell:
+          # A dryrun names only the person's server_name: the choice of a
+          # run without it is made when the run reads the readings.
+          script: bash -c "$PROGRAM"
+          dryrun: >-
+            jq -nc --arg name "$SERVER_NAME" 'if $name == "" then {server_name: $name, servers_to_remove: []} else {server_name: $name, servers_to_remove: [$name]} end'
+          env:
+            PROGRAM: >-
+              name=$SERVER_NAME;
+              [ -n "$name" ] || [ ! -f /var/lib/replace_failed_servers/server_to_remove ] || name=$(cat /var/lib/replace_failed_servers/server_to_remove);
+              jq -nc --arg name "$name" 'if $name == "" then {server_name: $name, servers_to_remove: []} else {server_name: $name, servers_to_remove: [$name]} end'
+            SERVER_NAME: "{{ .vars.server_name }}"
+          changed_when: false
+    outputs:
+      server_name: "{{ .node_tasks.name_the_server_to_remove.stdout_json.server_name }}"
+      # The same name as a list, empty when nothing is to be removed: a
+      # node selection may not name "", but an empty list selects no node.
+      servers_to_remove: "{{ .node_tasks.name_the_server_to_remove.stdout_json.servers_to_remove }}"
+
+  # The only app server is never removed: the site would stop. Before
+  # MMWatchdog maintenance suspends alerts, as for the jobs and
+  # load-balancer servers below.
+  - id: refuse_the_only_app_server
+    nodes: app_servers
+    when: {equals: ["{{ .node.name }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: refuse_to_remove_the_only_app_server
+        assert:
+          that:
+            not: {equals: ["{{ .inventory.groups.app_servers }}", ["{{ .outputs.find_the_server_to_remove.util01.server_name }}"]]}
+          message: >-
+            {{ .outputs.find_the_server_to_remove.util01.server_name }} is the only app server, so removing it
+            would stop every app. To replace it, add the new app server first
+            (operating_procedures/add_a_server.md), and remove
+            {{ .outputs.find_the_server_to_remove.util01.server_name }} once the new one serves.
+
+  - id: refuse_util01_and_staging01
+    nodes: [util_server, staging_server]
+    when: {equals: ["{{ .node.name }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    on_node_failure: stop_run
+    node_tasks:
+      - assert:
+          that: false
+          message: >-
+            {{ .outputs.find_the_server_to_remove.util01.server_name }} is the only server of its kind, so it is
+            replaced, never removed (operating_procedures/rebuild_the_utility_server_util01.md; operating_procedures/replace_staging01.md).
+            remove_server removes app servers, database replicas, jobs
+            servers, and load-balancer servers.
+
+  # Once only the jobs servers run the job containers, the last jobs server
+  # runs every configured app's jobs. Removing the last jobs server would
+  # stop every configured app's jobs.
+  # refuse_the_last_jobs_server runs before MMWatchdog maintenance suspends
+  # alerts, so a refused jobs server keeps sending alerts.
+  # Before jobs servers are added, jobs_servers can be empty.
+  - id: refuse_the_last_jobs_server
+    nodes: jobs_servers
+    skip_when_no_nodes_are_selected: true     # no jobs servers yet
+    when: {equals: ["{{ .node.name }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: refuse_while_only_the_jobs_servers_run_the_jobs
+        when: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+        assert:
+          that:
+            not: {equals: ["{{ .inventory.groups.jobs_servers }}", ["{{ .outputs.find_the_server_to_remove.util01.server_name }}"]]}
+          message: >-
+            {{ .outputs.find_the_server_to_remove.util01.server_name }} is the only jobs server, and only the jobs
+            servers run the job containers, so removing it would stop every
+            job. To replace it, add the new jobs server first. To move the
+            jobs back to the app servers, set
+            job_containers_run_only_on_the_jobs_servers back to false in
+            mmx_project_settings.yml and push first (operating_procedures/add_jobs_servers.md, "Adding jobs
+            servers").
+
+  # Once only the load-balancer servers run the tunnel connector and Caddy,
+  # the last load-balancer server is the only way in for requests.
+  # refuse_the_only_load_balancer_server runs before MMWatchdog maintenance
+  # suspends alerts, so a refused load-balancer server keeps sending alerts.
+  # Before load-balancer servers are added, load_balancer_servers can be
+  # empty.
+  - id: refuse_the_only_load_balancer_server
+    nodes: load_balancer_servers
+    skip_when_no_nodes_are_selected: true     # no load-balancer servers yet
+    when: {equals: ["{{ .node.name }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: refuse_while_only_the_load_balancer_servers_bring_the_requests_in
+        when: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+        assert:
+          that:
+            not: {equals: ["{{ .inventory.groups.load_balancer_servers }}", ["{{ .outputs.find_the_server_to_remove.util01.server_name }}"]]}
+          message: >-
+            {{ .outputs.find_the_server_to_remove.util01.server_name }} is the only load-balancer server, and the
+            app servers no longer run the tunnel connector, so nothing else
+            would bring the requests in. Add its replacement first, and remove
+            {{ .outputs.find_the_server_to_remove.util01.server_name }} once the new one carries the requests
+            (operating_procedures/replace_a_server.md, "Replacing a server").
+
+  # A database replica, step 1. In maintenance, the primary no longer waits
+  # for the database replica being removed.
+  # put_the_replica_into_maintenance runs before MMWatchdog maintenance
+  # suspends alerts, so a refused primary keeps sending alerts.
+  - id: put_the_replica_into_maintenance
+    nodes: database_servers
+    when: {equals: ["{{ .node.name }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    on_node_failure: stop_run
+    node_tasks:
+      - role: database_server
+        inputs:
+          set_up_the_server: false
+          pg_auto_failover_node_state: in_maintenance
+          restart_postgresql_for_new_settings: never     # a server that leaves needs no restart
+          private_ip: "{{ .vars.private_ip }}"
+          monitor_host_name: "{{ .inventory.nodes.util01.vars.private_ip }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+          replication_password: "{{ .secrets.pg_auto_failover_replication_password }}"
+          apps: "{{ .vars.apps }}"
+
+  # MMWatchdog on the server being removed would alert on what the removal
+  # stops.
+  # The maintenance lasts an hour, the time the person has to destroy the
+  # server (operating_procedures/remove_a_server.md); without server_name,
+  # the last stage destroys it within minutes.
+  - id: hold_the_alerts_of_the_server
+    nodes: "{{ .outputs.find_the_server_to_remove.util01.servers_to_remove }}"
+    skip_when_no_nodes_are_selected: true     # the load needs every app server: nothing to remove
+    node_tasks:
+      - id: start_maintenance_on_the_server
+        shell:
+          script: /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 1h --reason "remove_server"
+
+  # A database replica, step 2. The replica being removed leaves the
+  # formation: MMX stops pgautofailover.service and deletes the systemd unit
+  # file on the removed replica. The monitor removes the replica's
+  # registration from the formation.
+  # The monitor keeps the removed replica's name in its history and refuses
+  # the name again, so a new database server takes the next number.
+  - id: take_the_replica_out_of_the_formation
+    nodes: database_servers
+    when: {equals: ["{{ .node.name }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: leave_the_production_formation
+        pg_auto_failover_node:
+          data_directory: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_node"
+          state: absent
+        time_limit: 20m
+
+  # An app server. ----------------------------------------------------------
+  # The loop goes over the app servers and runs only for the server to
+  # remove, so its stages never start for any other kind of server.
+  - id: take_the_app_server_out_of_service
+    for_each_node: app_servers
+    as: app_server
+    when: {equals: ["{{ .app_server }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    fleet_stages:
+      # 1. cloudflared lets the requests in flight finish and leaves the
+      # tunnel. cloudflared does not restart when the app server being
+      # removed reboots or when Caddy restarts on the app server being
+      # removed.
+      - id: leave_the_tunnel
+        nodes: "{{ .app_server }}"
+        requires:
+          all_nodes: [hold_the_alerts_of_the_server]
+        node_tasks:
+          - id: stop_cloudflared
+            systemd_service:
+              name: cloudflared
+              state: stopped
+              start_at_boot: false
+
+      # 2. Find the live and new web container ports on the remaining app
+      # servers, so Caddy's new list can use the remaining containers.
+      # The loop also has an iteration for an inventory's only app server,
+      # where this stage selects no node; refuse_the_only_app_server stops
+      # the run before the loop when that server is the one to remove.
+      - id: find_the_live_and_new_web_ports_on_the_other_app_servers
+        nodes: app_servers
+        except_nodes: "{{ .app_server }}"
+        skip_when_no_nodes_are_selected: true
+        requires:
+          all_nodes: [leave_the_tunnel]
+        node_tasks:
+          - id: install_the_program_that_finds_the_live_web_ports
+            file:
+              path: /usr/local/sbin/find_live_web_ports
+              source: roles/app_server/files/find_live_web_ports
+              owner: root
+              group: root
+              permissions_mode: "0755"
+          - id: find_the_live_and_new_web_ports
+            shell:
+              script: /usr/local/sbin/find_live_web_ports
+              dryrun: /usr/local/sbin/find_live_web_ports
+              env:
+                APPS: "{{ .vars.apps }}"
+                DEPLOYED_IMAGE_TAGS: "{{ .vars.deployed_image_tags.production }}"
+              changed_when: false
+        outputs:
+          private_ip: "{{ .vars.private_ip }}"
+          live_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.live_web_containers }}"
+          new_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.new_web_containers }}"
+
+      # Caddy on the remaining app servers and load-balancer servers reloads
+      # at once, with a list of web container addresses excluding the app
+      # server being removed. Requests already sent to the removed app
+      # server finish, and new requests go to the remaining app servers.
+      # The tunnel_connector_and_caddy role changes Caddy only where Caddy
+      # runs, so an app server behind the load-balancer servers changes
+      # nothing.
+      - id: take_the_server_out_of_every_caddy_list
+        nodes: [app_servers, load_balancer_servers]
+        except_nodes: "{{ .app_server }}"
+        skip_when_no_nodes_are_selected: true
+        requires:
+          all_nodes: [find_the_live_and_new_web_ports_on_the_other_app_servers]
+        node_tasks:
+          - role: tunnel_connector_and_caddy
+            inputs:
+              send_app_requests_to_the_status_page: "{{ .vars.send_app_requests_to_the_status_page }}"
+              status_page_host_name: "{{ .vars.status_page_host_name }}"
+              set_up_the_server: false
+              requests_go_to_the_new_release: false
+              apps: "{{ .vars.apps }}"
+              public_host_names: "{{ .vars.public_host_names.production }}"
+              app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports_on_the_other_app_servers }}"
+
+      # 3. Each web or job container on the app server being removed gets
+      # the stop signal and up to 30 seconds to finish.
+      # StopTimeout sets the 30-second limit in each container's Quadlet
+      # file, the Podman file that defines the container's systemd service.
+      - id: stop_the_containers_of_the_server
+        nodes: "{{ .app_server }}"
+        requires:
+          all_nodes: [take_the_server_out_of_every_caddy_list]
+        node_tasks:
+          - id: stop_the_job_container_of_each_app
+            loop: "{{ .vars.apps }}"
+            as: app
+            podman_quadlet:
+              name: "{{ .app.key }}-jobs.container"
+              state: file_and_service_removed_named_volumes_kept
+          - id: stop_the_web_container_on_the_first_web_port_of_each_app
+            loop: "{{ .vars.apps }}"
+            as: app
+            podman_quadlet:
+              name: "{{ .app.key }}-web-{{ .app.value.web_ports[0] }}.container"
+              state: file_and_service_removed_named_volumes_kept
+          - id: stop_the_web_container_on_the_second_web_port_of_each_app
+            loop: "{{ .vars.apps }}"
+            as: app
+            podman_quadlet:
+              name: "{{ .app.key }}-web-{{ .app.value.web_ports[1] }}.container"
+              state: file_and_service_removed_named_volumes_kept
+
+  # A jobs server. ----------------------------------------------------------
+  # Only for the server to remove, when it is a jobs server. A removal
+  # refused by check_that_the_other_jobs_servers_run_the_job_containers
+  # leaves the selected jobs server's alerts suspended for the hour.
+  # Running mmwatchdog maintenance off --every-check-group on the selected
+  # jobs server ends the suspension of alerts.
+  - id: take_the_jobs_server_out_of_service
+    for_each_node: jobs_servers
+    skip_when_no_nodes_are_selected: true     # no jobs servers yet
+    as: jobs_server
+    when: {equals: ["{{ .jobs_server }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    fleet_stages:
+      # 1. While only jobs servers run job containers, MMX checks that every
+      # remaining jobs server already runs each app's job container.
+      # Workers on the remaining jobs servers can then take the removed
+      # jobs server's jobs.
+      #
+      # A new jobs server without a WireGuard key in the inventory cannot
+      # take jobs, because the workers cannot reach Postgres.
+      #
+      # check_that_the_job_container_of_each_app_runs runs only when
+      # job_containers_run_only_on_the_jobs_servers is true.
+      # When job_containers_run_only_on_the_jobs_servers is false,
+      # app servers run the job containers.
+      #
+      # To move jobs back to app servers, jobs servers are removed in turn
+      # while the removed jobs servers remain in the inventory.
+      #
+      # If the selected jobs server is the only jobs server, no servers are
+      # selected for
+      # check_that_the_other_jobs_servers_run_the_job_containers.
+      # refuse_the_last_jobs_server has allowed removal because
+      # job_containers_run_only_on_the_jobs_servers is false.
+      - id: check_that_the_other_jobs_servers_run_the_job_containers
+        nodes: jobs_servers
+        except_nodes: "{{ .jobs_server }}"
+        skip_when_no_nodes_are_selected: true
+        requires:
+          all_nodes: [hold_the_alerts_of_the_server]
+        node_tasks:
+          - id: check_that_the_job_container_of_each_app_runs
+            when:
+              all:
+                - "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+                - not: {equals: ["{{ .app.value.jobs_command }}", ""]}     # an app with no jobs has no job container
+            loop: "{{ .vars.apps }}"
+            as: app
+            shell:
+              # The same read-only program runs in a run and in a dryrun.
+              script: bash -c "$PROGRAM"
+              dryrun: bash -c "$PROGRAM"
+              env:
+                PROGRAM: >-
+                  systemctl is-active --quiet "$UNIT" ||
+                  { printf '%s does not run here, so this server would not take the jobs of the server that leaves\n' "$UNIT" >&2; exit 1; }
+                UNIT: "{{ .app.key }}-jobs.service"
+              changed_when: false
+
+      # 2. Each job container gets the stop signal and up to 30 seconds for
+      # workers to finish current jobs (StopTimeout in the container's
+      # Quadlet file). A job whose worker did not finish runs again on
+      # another server.
+      - id: stop_the_job_containers_of_the_server
+        nodes: "{{ .jobs_server }}"
+        requires:
+          all_nodes: [check_that_the_other_jobs_servers_run_the_job_containers]
+        node_tasks:
+          - id: stop_the_job_container_of_each_app
+            loop: "{{ .vars.apps }}"
+            as: app
+            podman_quadlet:
+              name: "{{ .app.key }}-jobs.container"
+              state: file_and_service_removed_named_volumes_kept
+
+  # A load-balancer server. -------------------------------------------------
+  # Only for the server to remove, when it is a load-balancer server. A
+  # removal refused by
+  # check_that_the_other_load_balancer_servers_carry_the_requests leaves
+  # the selected load-balancer server's alerts suspended for the hour.
+  # Running mmwatchdog maintenance off --every-check-group on the selected
+  # load-balancer server ends the suspension of alerts.
+  - id: take_the_load_balancer_server_out_of_service
+    for_each_node: load_balancer_servers
+    skip_when_no_nodes_are_selected: true     # no load-balancer servers yet
+    as: load_balancer_server
+    when: {equals: ["{{ .load_balancer_server }}", "{{ .outputs.find_the_server_to_remove.util01.server_name }}"]}
+    fleet_stages:
+      # 1. While only load-balancer servers bring requests in, each
+      # remaining load-balancer server must pass MMWatchdog's checks of
+      # the tunnel connector and Caddy before removal can continue.
+      # Passing the checks shows that each remaining load-balancer server
+      # could take every request now.
+      #
+      # run_the_checks_of_the_tunnel_connector_and_caddy_now runs only when
+      # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers
+      # is true. When
+      # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers
+      # is false, app servers bring requests in.
+      #
+      # To move the tunnel connector and Caddy back to app servers,
+      # load-balancer servers are removed in turn while the removed
+      # load-balancer servers remain in the inventory.
+      #
+      # If the selected load-balancer server is the only load-balancer
+      # server, no servers are selected for
+      # check_that_the_other_load_balancer_servers_carry_the_requests.
+      # refuse_the_only_load_balancer_server has allowed removal because
+      # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers
+      # is false.
+      - id: check_that_the_other_load_balancer_servers_carry_the_requests
+        nodes: load_balancer_servers
+        except_nodes: "{{ .load_balancer_server }}"
+        skip_when_no_nodes_are_selected: true
+        requires:
+          all_nodes: [hold_the_alerts_of_the_server]
+        node_tasks:
+          - id: run_the_checks_of_the_tunnel_connector_and_caddy_now
+            when: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+            shell:
+              script: /usr/local/bin/mmwatchdog check-now tunnel_connector_and_caddy
+              dryrun: /usr/local/bin/mmwatchdog check-now tunnel_connector_and_caddy
+              changed_when: false
+
+      # 2. cloudflared lets the requests in flight finish and leaves the
+      # tunnel. cloudflared does not restart when the load-balancer server
+      # being removed reboots or when Caddy restarts on the load-balancer
+      # server being removed.
+      - id: take_the_load_balancer_server_out_of_the_tunnel
+        nodes: "{{ .load_balancer_server }}"
+        requires:
+          all_nodes: [check_that_the_other_load_balancer_servers_carry_the_requests]
+        node_tasks:
+          - id: stop_cloudflared_on_the_load_balancer_server
+            systemd_service:
+              name: cloudflared
+              state: stopped
+              start_at_boot: false
+
+  # Without server_name only: the removal of the app server the load no
+  # longer needs ends here, with no person. Once every other app server does
+  # its work, the server leaves the inventory with one commit signed by
+  # util01's mmhotline user, and is destroyed at the provider by its ID
+  # (server_management_scripts/remove_an_app_server_for_the_load, finish).
+  # With server_name, a person does both, as operating_procedures/remove_a_server.md
+  # says.
+  - id: finish_the_removal_for_the_load
+    nodes: util_server
+    on_node_failure: stop_run
+    when:
+      all:
+        - {equals: ["{{ .vars.server_name }}", ""]}
+        - not: {equals: ["{{ .outputs.find_the_server_to_remove.util01.server_name }}", ""]}
+    node_tasks:
+      - id: commit_the_removal_and_destroy_the_server
+        # 30 minutes, fixed, as for destroy_replaced_servers: a destroy
+        # waits for the provider, usually under a minute; the limit keeps a
+        # stuck run well inside MMHotline's one-hour limit for a run.
+        time_limit: 30m
+        shell:
+          script: server_management_scripts/remove_an_app_server_for_the_load finish "$SERVER_NAME" < /dev/null
+          dryrun: printf 'would commit the removal of %s from the inventory and destroy it at the provider by its ID\n' "$SERVER_NAME"
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          output_holds_no_secret: true
+          env:
+            SERVER_NAME: "{{ .outputs.find_the_server_to_remove.util01.server_name }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+            PRIVATE_IP_RANGES: "{{ .vars.private_ip_ranges }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+            UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inventory.nodes.util01.vars.public_ipv4_address }}"
+            SERVER_PROVIDER_API_TOKEN: "{{ .secrets.util01_provider_api_token }}"

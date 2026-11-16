@@ -1,0 +1,63 @@
+#!/bin/bash
+# Read {private_key, private_ip, peers} as JSON on stdin; print cloud-config.
+# peers is a list of validated objects, never wg-quick text or hooks.
+# Keep private keys in pipes and memory. Never enable shell tracing here.
+set -euo pipefail
+# Each value may hold only the characters its kind uses, so no value can
+# carry a newline, an "=", or a wg-quick hook. wg-quick checks the address
+# syntax itself when wg0 starts.
+settings=$(jq -ces '
+  def require_field($field; $valid):
+    if $valid then . else error("first-boot input: invalid " + $field) end;
+  def only_fields($path; $fields):
+    (keys_unsorted - $fields) as $extra |
+    if ($extra | length) == 0 then .
+    else error("first-boot input: unknown " + $path + $extra[0]) end;
+  def matches($pattern): type == "string" and test($pattern);
+  def wireguard_key: matches("\\A[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=\\z");
+  require_field("input (exactly one JSON object)"; length == 1) | .[0] |
+  require_field("input"; type == "object") |
+  only_fields(""; ["private_key", "private_ip", "peers"]) |
+  require_field("private_key"; .private_key | wireguard_key) |
+  require_field("private_ip (IPv4 in 10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16)";
+    .private_ip | matches("\\A[0-9]{1,3}(\\.[0-9]{1,3}){3}\\z") and
+    (split(".") | map(tonumber) |
+      all(.[]; . <= 255) and
+      (.[0] == 10 or (.[0] == 172 and .[1] >= 16 and .[1] <= 31) or
+       (.[0] == 192 and .[1] == 168)))) |
+  require_field("peers"; .peers | type == "array" and length > 0) |
+  .peers |= (to_entries | map(
+    ("peers[" + (.key | tostring) + "]") as $path | .value |
+    require_field($path; type == "object") |
+    only_fields($path + "."; ["public_key", "allowed_ips", "endpoint", "persistent_keepalive"]) |
+    require_field($path + ".public_key"; .public_key | wireguard_key) |
+    require_field($path + ".allowed_ips"; .allowed_ips | type == "array" and length > 0 and
+      all(.[]; matches("\\A[0-9A-Fa-f.:]+/[0-9]{1,3}\\z"))) |
+    if has("endpoint") then
+      require_field($path + ".endpoint"; .endpoint | matches("\\A([0-9.]+|\\[[0-9A-Fa-f.:]+\\]):[0-9]{1,5}\\z"))
+    else . end |
+    if has("persistent_keepalive") then
+      require_field($path + ".persistent_keepalive"; .persistent_keepalive |
+        type == "number" and . == floor and . >= 0 and . <= 65535)
+    else . end
+  ))
+')
+private_key=$(jq -r .private_key <<< "$settings")
+private_ip=$(jq -r .private_ip <<< "$settings")
+peers=$(jq -r '.peers[] |
+  "[Peer]\nPublicKey = " + .public_key + "\nAllowedIPs = " + (.allowed_ips | join(", ")) +
+  (if has("endpoint") then "\nEndpoint = " + .endpoint else "" end) +
+  (if has("persistent_keepalive") then "\nPersistentKeepalive = " + (.persistent_keepalive | tostring) else "" end) + "\n"
+' <<< "$settings")
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# The port WireGuard listens on is the inventory's wireguard_listen_port, the
+# same value every_server and the systems desk use.
+listen_port=$(sed -nE 's/^  wireguard_listen_port: *([0-9]+) *(#.*)?$/\1/p' "$script_dir/../inventories/servers.yml")
+[[ $listen_port =~ ^[0-9]+$ ]] || { echo 'first-boot input: inventories/servers.yml has no vars.wireguard_listen_port written as a number' >&2; exit 1; }
+# Only validated values enter wg-quick; no caller can supply directives or hooks.
+config=$(printf '[Interface]\nPrivateKey = %s\nAddress = %s/16\nListenPort = %s\n\n%s\n' "$private_key" "$private_ip" "$listen_port" "$peers" | base64 | tr -d '\n')
+cloud_config=$(cat "$script_dir/server_first_boot.cloud-config.yml")
+cloud_config=${cloud_config//@@WIREGUARD_PRIVATE_KEY@@/$private_key}
+cloud_config=${cloud_config//@@WIREGUARD_CONFIG_BASE64@@/$config}
+cloud_config=${cloud_config//@@WIREGUARD_LISTEN_PORT@@/$listen_port}
+printf '%s\n' "$cloud_config"

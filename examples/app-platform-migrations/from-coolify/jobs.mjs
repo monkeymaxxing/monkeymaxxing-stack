@@ -1,0 +1,28 @@
+import { pool, transaction } from './database.mjs';
+import { pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
+import {runScheduledCleanup} from './schedule.mjs';
+export async function runJob() {
+ return transaction(async client=>{
+  const controls=await client.query('SELECT jobs_paused FROM controls WHERE id=1');
+  if(controls.rows[0].jobs_paused) return null;
+  const result=await client.query("SELECT id,owner_id FROM report_jobs WHERE state='PENDING' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
+  if(!result.rowCount) return null;
+  const job=result.rows[0];
+  const count=await client.query('SELECT count(*)::integer AS count FROM records WHERE owner_id=$1',[job.owner_id]);
+  await client.query("UPDATE report_jobs SET state='COMPLETED',output=$2,completed_at=now() WHERE id=$1",[job.id,`record_count=${count.rows[0].count}\n`]);
+  return job.id;
+ });
+}
+if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
+ let stopping=false,nextCleanup=0; for(const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>{stopping=true;});
+ try { do {
+  const id=await runJob();if(id) console.log('Completed report '+id);
+  if(process.argv.includes('--once'))break;
+  if(Date.now()>=nextCleanup){
+   if(!(await pool.query('SELECT jobs_paused FROM controls WHERE id=1')).rows[0].jobs_paused){await runScheduledCleanup();nextCleanup=Date.now()+60000;}
+  }
+  if(!stopping)await delay(1000);
+ } while(!stopping); }
+ finally {await pool.end();}
+}

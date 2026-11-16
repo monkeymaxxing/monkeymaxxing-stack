@@ -1,0 +1,12 @@
+fleet_stages:
+  - id: portal_schedule
+    # Exactly one inventory node belongs to this group.
+    nodes: portal_schedule_server
+    node_tasks:
+      - id: archive_completed_reports
+        systemd_scheduled_job:
+          name: portal-archive-completed-reports
+          run_as_user_account: root
+          systemd_calendar_schedule: "{{ .vars.portal_archive_calendar }}"
+          run_missed_job_after_downtime: false
+          script: /usr/bin/podman exec portal-jobs node schedule.mjs

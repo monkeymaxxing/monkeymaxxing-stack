@@ -1,0 +1,96 @@
+#!/usr/bin/python3
+"""check-whether-a-reboot-may-run-now: may this server reboot for installed updates now?
+
+Exits 0 and prints why when the reboot may run now, 1 and prints when the
+server waits for the weekly maintenance window, and 2 for wrong arguments.
+The one place of the rule, read by MMWatchdog's check
+no_reboot_waits_that_may_run_now (mmwatchdog_checks/every_server.yml) and by
+playbooks/reboot_servers_after_updates.yml, so the check that starts the
+triage agent and the playbook that reboots cannot disagree.
+
+A reboot may run now when one of these holds:
+  - another server of the pool carries the work: the pool has 2 servers or more;
+  - the server is a jobs server: its jobs wait in the queue for about 20 seconds;
+  - the server is staging01: no user reaches it;
+  - the public site checks do not run yet (public_site_checks_run false): the
+    site is not live, so nobody uses it;
+  - a person allows it for this run (--a-person-allows-it);
+  - the clock is inside the weekly maintenance window, in UTC.
+Otherwise the users see the reboot, so it waits for the window.
+
+The window starts every week on --weekday at --starts-at (UTC) and lasts
+--length-minutes. A window may run past midnight, and the week's last day
+into the next week: sunday 23:30 for 60 minutes is open until monday 00:30.
+--at gives the time to decide for, such as 2026-11-17T21:30:00Z; without it,
+now. The arithmetic counts minutes since monday 00:00 UTC, modulo one week.
+"""
+import argparse
+import datetime
+import sys
+
+WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+MINUTES_IN_A_WEEK = 7 * 24 * 60
+
+
+def minute_of_the_week(moment):
+    return moment.weekday() * 24 * 60 + moment.hour * 60 + moment.minute
+
+
+def describe(moment):
+    return moment.strftime('%A %Y-%m-%d %H:%M UTC').lower().replace(' utc', ' UTC')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    parser.add_argument('--pool', required=True, help="the inventory group of the server's pool, such as app_servers")
+    parser.add_argument('--servers-in-the-pool', required=True, type=int)
+    parser.add_argument('--public-site-checks-run', required=True, choices=['true', 'false'])
+    parser.add_argument('--weekday', required=True, choices=WEEKDAYS)
+    parser.add_argument('--starts-at', required=True)
+    parser.add_argument('--length-minutes', required=True, type=int)
+    parser.add_argument('--a-person-allows-it', action='store_true')
+    parser.add_argument('--at')
+    arguments = parser.parse_args()
+
+    try:
+        hour, minute = (int(part) for part in arguments.starts_at.split(':'))
+        if not (0 <= hour <= 23 and 0 <= minute <= 59 and len(arguments.starts_at) == 5):
+            raise ValueError
+    except ValueError:
+        parser.error(f'--starts-at is "{arguments.starts_at}": use a UTC time as HH:MM, such as 21:00')
+    if not 1 <= arguments.length_minutes <= MINUTES_IN_A_WEEK:
+        parser.error('--length-minutes must be from 1 to one week')
+    if arguments.at:
+        moment = datetime.datetime.fromisoformat(arguments.at.replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
+    else:
+        moment = datetime.datetime.now(datetime.timezone.utc)
+    moment = moment.replace(second=0, microsecond=0)
+
+    window_start = WEEKDAYS.index(arguments.weekday) * 24 * 60 + hour * 60 + minute
+    minutes_since_the_window_started = (minute_of_the_week(moment) - window_start) % MINUTES_IN_A_WEEK
+    inside_the_window = minutes_since_the_window_started < arguments.length_minutes
+
+    if arguments.servers_in_the_pool >= 2:
+        reason = f'another server of {arguments.pool} carries the work'
+    elif arguments.pool == 'jobs_servers':
+        reason = 'a jobs server: the jobs wait in the queue during the reboot'
+    elif arguments.pool == 'staging_server':
+        reason = 'staging01 serves no users'
+    elif arguments.public_site_checks_run == 'false':
+        reason = 'the site is not live yet (public_site_checks_run is false)'
+    elif arguments.a_person_allows_it:
+        reason = 'a person allowed the reboot outside the maintenance window for this run'
+    elif inside_the_window:
+        window_end = moment + datetime.timedelta(minutes=arguments.length_minutes - minutes_since_the_window_started)
+        reason = f'inside the maintenance window, which ends {describe(window_end)}'
+    else:
+        next_start = moment + datetime.timedelta(minutes=MINUTES_IN_A_WEEK - minutes_since_the_window_started)
+        print(f'waits for the maintenance window: {describe(next_start)}, for {arguments.length_minutes} minutes; '
+              f'the only server of {arguments.pool} serves the users')
+        return 1
+    print(f'may reboot now: {reason}')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

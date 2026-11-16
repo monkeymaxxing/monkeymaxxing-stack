@@ -1,0 +1,558 @@
+# Everything an app server runs, and staging01 for staging: each app's web
+# and job containers. Podman runs the containers. Quadlet describes each
+# container as an ordinary systemd service. The tunnel connector and Caddy,
+# which bring the requests to the web containers, are
+# roles/tunnel_connector_and_caddy's.
+#
+# Two playbooks call this role:
+# - every_server sets the server up (set_up_the_server: true) and keeps the
+#   release each app runs: only a deploy changes a release.
+# - deploy calls the app_server role once for each deploy step, on every
+#   app server of the environment at once.
+# Only every_server sets the server up, so only it passes the secrets.
+#
+# Each app has two web ports and uses them in turn. Before the role's calls,
+# the playbook's stage find_the_live_and_new_web_ports gives, for each app on
+# each server, the live web container (the one Caddy sends requests to: its
+# port, and the image it runs) and the new one (the other port, with the
+# image that deployed_image_tags names). What runs at each release_step,
+# and where every Caddy of the environment sends the requests once that step
+# of the deploy is done:
+#
+# release_step                          web containers  Caddy sends to  job container runs
+# keep_the_running_release              live            live            the live release
+# start_the_new_release_beside_the_old  live and new    live            the live release
+# send_requests_to_the_new_release      live and new    new             the live release
+# stop_the_old_release                  new             new             the new release
+#
+# Each app's job container always runs on staging01. In production, job
+# containers run on the app servers until
+# job_containers_run_only_on_the_jobs_servers in mmx_project_settings.yml
+# is true. Then only the jobs servers run production's job containers
+# (roles/jobs_server), and every_server removes the production app servers'
+# job containers. deploy's calls change a job container only where one runs.
+inputs:
+  database_moving_in: {type: mapping, default: {}}
+  nightly_work_starts_at:                   # vars.nightly_work_starts_at: UTC "HH:MM"; the jobs' order and spacing follow from it
+    type: string
+    required: false
+  weekly_work_day:                          # vars.weekly_work_day: the full backup, the restore drill, the image cleanup
+    type: string
+    required: false
+  set_up_the_server:                        # true only from every_server: packages, programs, settings and secrets
+    type: boolean
+    required: true
+  # A release_step value from the four rows in the table above.
+  release_step:
+    type: string
+    required: true
+  apps:                                     # vars.apps from mmx_project_settings.yml
+    type: mapping
+    required: true
+  # Each app's host name from the inventory: production's for app servers,
+  # or staging's for staging01.
+  public_host_names:
+    type: mapping
+    required: true
+  app_servers_of_the_environment:           # the outputs of find_the_live_and_new_web_ports: each server's private_ip, live_web_containers, and new_web_containers
+    type: mapping
+    required: true
+  container_registry_username:              # the read-only login the servers pull the apps' images with
+    type: string
+    required: true
+  container_registry_password:
+    type: string
+    required: true
+    secret: true
+  # Only with set_up_the_server: true.
+  # Production's setting from mmx_project_settings.yml. Always false on
+  # staging01, which runs each app's staging job container.
+  job_containers_run_only_on_the_jobs_servers:
+    type: boolean
+    required: false
+  database_servers:                         # the servers each app's DATABASE_URL lists
+    type: list
+    required: false
+  # Production's setting for app servers, or staging's for staging01.
+  # PgBouncer lets many app connections share fewer Postgres connections.
+  # When true, DATABASE_URL and DATABASE_READ_URL name PgBouncer's port,
+  # 6432, on each database server, in place of Postgres's port, 5432.
+  apps_connect_through_pgbouncer:
+    type: boolean
+    required: false
+  app_secrets:                              # <database_name>_database_password, and <app>_<VARIABLE> for each name in an app's secrets_from_vault
+    type: mapping
+    required: false
+    secret: true
+
+node_tasks:
+  - id: check_the_release_step
+    assert:
+      that:
+        any:
+          - {equals: ["{{ .inputs.release_step }}", keep_the_running_release]}
+          - {equals: ["{{ .inputs.release_step }}", start_the_new_release_beside_the_old]}
+          - {equals: ["{{ .inputs.release_step }}", send_requests_to_the_new_release]}
+          - {equals: ["{{ .inputs.release_step }}", stop_the_old_release]}
+      message: "release_step is {{ .inputs.release_step }}, which is none of the four in roles/app_server/main.yml"
+
+  # work_out_what_runs_at_this_release_step uses release_step and the table
+  # above to set three answers: does the live release run, does the new
+  # release run, and does Caddy send requests to the new release?
+  # The tasks below read live_release_runs, new_release_runs, and
+  # requests_go_to_the_new_release.
+  - id: work_out_what_runs_at_this_release_step
+    set_vars:
+      live_release_runs:
+        not: {equals: ["{{ .inputs.release_step }}", stop_the_old_release]}
+      new_release_runs:
+        not: {equals: ["{{ .inputs.release_step }}", keep_the_running_release]}
+      requests_go_to_the_new_release:
+        any:
+          - {equals: ["{{ .inputs.release_step }}", send_requests_to_the_new_release]}
+          - {equals: ["{{ .inputs.release_step }}", stop_the_old_release]}
+
+  # The port that Caddy sends each app's requests to is recorded in
+  # /var/lib/monkeymaxxing-stack/live_web_ports/<app>. This role works from
+  # the ports its find stage read at the start of the run. A deploy that ran
+  # in between (the desk's button takes no lock on util01) switched the port,
+  # and this role would switch Caddy's port back, start the old image, and
+  # record it as live. So before anything changes, the recorded port must
+  # still be the one the find stage read: the live port, or at the last
+  # release step (stop_the_old_release), after send_requests_to_the_new_release
+  # recorded it, the new port. No file yet (a new server) is fine.
+  - id: the_recorded_port_is_the_live_one_before_the_last_release_step
+    when: "{{ .vars.live_release_runs }}"
+    set_vars:
+      containers_of_the_recorded_ports: "{{ .inputs.app_servers_of_the_environment[.node.name].live_web_containers }}"
+  - id: the_recorded_port_is_the_new_one_at_the_last_release_step
+    when: {not: "{{ .vars.live_release_runs }}"}
+    set_vars:
+      containers_of_the_recorded_ports: "{{ .inputs.app_servers_of_the_environment[.node.name].new_web_containers }}"
+  - id: check_that_the_live_web_port_is_still_the_one_the_run_started_with
+    loop: "{{ .vars.containers_of_the_recorded_ports }}"
+    as: web_container
+    shell:
+      script: |
+        file="/var/lib/monkeymaxxing-stack/live_web_ports/$APP_NAME"
+        [ -e "$file" ] || exit 0
+        recorded=$(cat "$file")
+        if [ "$recorded" != "$EXPECTED_PORT" ]; then
+          printf 'the live port of %s changed during this run: %s now, %s when the run started. Another run, such as a deploy, switched it. Nothing changed. Wait for that run to end, then run this again.\n' "$APP_NAME" "$recorded" "$EXPECTED_PORT" >&2
+          exit 1
+        fi
+      dryrun: |
+        file="/var/lib/monkeymaxxing-stack/live_web_ports/$APP_NAME"
+        [ -e "$file" ] || exit 0
+        [ "$(cat "$file")" = "$EXPECTED_PORT" ]
+      env:
+        APP_NAME: "{{ .web_container.key }}"
+        EXPECTED_PORT: "{{ .web_container.value.web_port }}"
+      changed_when: false
+
+  # Setting the server up, from every_server. -------------------------------
+
+  # The containers run as root's system containers, on the server's own
+  # network (Network=host in their Quadlet files), so Podman needs none of
+  # its packages for pods, the containers of ordinary accounts, or networks
+  # of its own. curl checks the containers' health URLs.
+  - id: install_podman_and_curl
+    when: "{{ .inputs.set_up_the_server }}"
+    apt_package:
+      packages:
+        - {name: podman, version: newest_when_first_installed}
+        - {name: curl, version: newest_when_first_installed}
+
+  # Two programs the deploy uses, installed ahead of it: one fills a web
+  # container's asset directory (asset bridging), one runs an app's
+  # migrations in a one-off container.
+  - id: install_the_program_that_fills_web_asset_directories
+    when: "{{ .inputs.set_up_the_server }}"
+    file:
+      path: /usr/local/sbin/fill_web_asset_directory
+      source: files/fill_web_asset_directory
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: install_the_program_that_runs_app_migrations
+    when: "{{ .inputs.set_up_the_server }}"
+    file:
+      path: /usr/local/sbin/run_app_migrations
+      source: files/run_app_migrations
+      owner: root
+      group: root
+      permissions_mode: "0755"
+
+  # /var/lib/monkeymaxxing-stack/live_web_ports/<app> holds the port Caddy
+  # sends the app's requests to; web_assets/<container> holds the asset
+  # files each web container mounts.
+  - id: create_the_state_directory_of_the_stack
+    when: "{{ .inputs.set_up_the_server }}"
+    directory:
+      path: /var/lib/monkeymaxxing-stack
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_directory_of_the_live_web_ports
+    when: "{{ .inputs.set_up_the_server }}"
+    directory:
+      path: /var/lib/monkeymaxxing-stack/live_web_ports
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_directory_of_the_web_assets
+    when: "{{ .inputs.set_up_the_server }}"
+    directory:
+      path: /var/lib/monkeymaxxing-stack/web_assets
+      owner: root
+      group: root
+      permissions_mode: "0755"
+
+  # Each app's containers and migrations read two files:
+  # - /etc/<app>/<app>_settings.env: the plain settings.
+  # - /etc/<app>/<app>.env: the secrets.
+  # The migrations also read
+  # /etc/<app>/<app>_database_direct_to_postgres.env, with database settings
+  # for a direct Postgres connection. The job container reads the direct
+  # database settings when the app's jobs_connect_directly_to_postgres is
+  # true.
+  #
+  # A whole Postgres session keeps the client's Postgres connection between
+  # transactions, for example to keep a session-level lock. PgBouncer's
+  # transaction mode does not keep the connection between transactions, so
+  # work that needs a whole session connects directly to Postgres.
+  #
+  # The role configures an app server or staging01. A change to any of the
+  # three files restarts the app's live web container in place. If the app's
+  # job container runs on the server being configured, the file change also
+  # restarts the job container in place. every_server works on one app
+  # server at a time, so on a pool of two or more, Caddy sends requests to
+  # the remaining servers meanwhile.
+  #
+  # The templates live in files_used_by_several_roles/ because
+  # roles/jobs_server also writes /etc/<app>/<app>_settings.env,
+  # /etc/<app>/<app>.env, and
+  # /etc/<app>/<app>_database_direct_to_postgres.env.
+  - id: create_the_settings_directory_of_each_app
+    when: "{{ .inputs.set_up_the_server }}"
+    loop: "{{ .inputs.apps }}"
+    as: app
+    directory:
+      path: "/etc/{{ .app.key }}"
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: settings_and_secrets_of_each_app
+    when: "{{ .inputs.set_up_the_server }}"
+    loop: "{{ .inputs.apps }}"
+    as: app
+    key: "{{ .app.key }}"
+    task_block:
+      id: settings_and_secrets
+      changes:
+        - id: write_the_plain_settings
+          file:
+            path: "/etc/{{ .app.key }}/{{ .app.key }}_settings.env"
+            template: ../../files_used_by_several_roles/app_settings.env
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: write_the_secrets
+          file:
+            path: "/etc/{{ .app.key }}/{{ .app.key }}.env"
+            template: ../../files_used_by_several_roles/app_secrets.env
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: write_the_database_settings_direct_to_postgres
+          file:
+            path: "/etc/{{ .app.key }}/{{ .app.key }}_database_direct_to_postgres.env"
+            template: ../../files_used_by_several_roles/app_database_direct_to_postgres.env
+            owner: root
+            group: root
+            permissions_mode: "0600"
+      activate:
+        - id: restart_the_live_web_container
+          systemd_service:
+            name: "{{ .app.key }}-web-{{ .inputs.app_servers_of_the_environment[.node.name].live_web_containers[.app.key].web_port }}.service"
+            state: do_not_start_or_stop
+        - id: restart_the_job_container
+          systemd_service:
+            name: "{{ .app.key }}-jobs.service"
+            state: do_not_start_or_stop
+
+  # The web containers, at every call. --------------------------------------
+
+  - id: live_web_container_of_each_app
+    when: "{{ .vars.live_release_runs }}"
+    loop: "{{ .inputs.app_servers_of_the_environment[.node.name].live_web_containers }}"
+    as: web_container
+    key: "{{ .web_container.key }}"
+    task_block:
+      id: live_web_container
+      changes:
+        - id: pull_the_image_of_the_live_release
+          podman_image:
+            image: "{{ .web_container.value.image }}"
+            pull_image: when_missing
+            registry_username: "{{ .inputs.container_registry_username }}"
+            registry_password: "{{ .inputs.container_registry_password }}"
+        # On a server that runs no web container of the app yet, such as a
+        # new one, the asset directory gets the image's own files. A filled
+        # directory stays as it is: after a deploy it also holds the
+        # previous release's files.
+        - id: fill_the_asset_directory_of_the_first_web_container
+          shell:
+            script: /usr/local/sbin/fill_web_asset_directory
+            env:
+              CONTAINER_NAME: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}"
+              ASSET_DIRECTORY: "{{ .inputs.apps[.web_container.key].asset_directory }}"
+              IMAGE: "{{ .web_container.value.image }}"
+              PREVIOUS_IMAGE: ""
+            skip_if_this_path_exists: "/var/lib/monkeymaxxing-stack/web_assets/{{ .web_container.key }}-web-{{ .web_container.value.web_port }}"
+            success_exit_codes: [0, 2]
+            changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+        # The first start of a release on a server, as on a new system or for
+        # a new app, runs the app's migrations first, as a deploy does. On a
+        # server that joins a pool, the app's migrations find nothing to do.
+        - id: run_the_migrations_before_the_first_start
+          when:
+            all:
+              - "{{ .inputs.set_up_the_server }}"
+              - not: {path_exists: "/etc/containers/systemd/{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.container"}
+          shell:
+            script: set -f; /usr/local/sbin/run_app_migrations "$APP_NAME" "$IMAGE" $MIGRATION_COMMAND
+            env:
+              APP_NAME: "{{ .web_container.key }}"
+              IMAGE: "{{ .web_container.value.image }}"
+              MIGRATION_COMMAND: "{{ .inputs.apps[.web_container.key].migration_command }}"
+        - id: install_the_quadlet_file_of_the_live_web_container
+          podman_quadlet:
+            name: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.container"
+            template: files/web_container.container
+      activate:
+        - id: run_the_live_web_container
+          systemd_service:
+            name: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.service"
+            state: running
+      verify:
+        # Request the health URL over HTTP at the server's private IP and
+        # the web container's port. As Caddy does, set Host to the app's
+        # public host name and X-Forwarded-Proto to https.
+        - id: wait_until_the_live_web_container_is_healthy
+          wait_for:
+            command_succeeds: >-
+              test "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5
+              --header "Host: $PUBLIC_HOST_NAME" --header 'X-Forwarded-Proto: https'
+              "http://$PRIVATE_IP:$WEB_PORT$HEALTH_URL_PATH")" = 200
+            env:
+              PUBLIC_HOST_NAME: "{{ .inputs.public_host_names[.web_container.key] }}"
+              PRIVATE_IP: "{{ .inputs.app_servers_of_the_environment[.node.name].private_ip }}"
+              WEB_PORT: "{{ .web_container.value.web_port }}"
+              HEALTH_URL_PATH: "{{ .inputs.apps[.web_container.key].health_url_path }}"
+            wait_at_most: 2m
+
+  - id: new_web_container_of_each_app
+    when: "{{ .vars.new_release_runs }}"
+    loop: "{{ .inputs.app_servers_of_the_environment[.node.name].new_web_containers }}"
+    as: web_container
+    key: "{{ .web_container.key }}"
+    task_block:
+      id: new_web_container
+      changes:
+        - id: pull_the_image_of_the_new_release
+          podman_image:
+            image: "{{ .web_container.value.image }}"
+            pull_image: when_missing
+            registry_username: "{{ .inputs.container_registry_username }}"
+            registry_password: "{{ .inputs.container_registry_password }}"
+        # The new release's asset files and the live release's, so a page
+        # the live release rendered still loads after the switch.
+        - id: fill_the_asset_directory_with_both_releases
+          shell:
+            script: /usr/local/sbin/fill_web_asset_directory
+            env:
+              CONTAINER_NAME: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}"
+              ASSET_DIRECTORY: "{{ .inputs.apps[.web_container.key].asset_directory }}"
+              IMAGE: "{{ .web_container.value.image }}"
+              PREVIOUS_IMAGE: "{{ .inputs.app_servers_of_the_environment[.node.name].live_web_containers[.web_container.key].image }}"
+            success_exit_codes: [0, 2]
+            changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+        - id: install_the_quadlet_file_of_the_new_web_container
+          podman_quadlet:
+            name: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.container"
+            template: files/web_container.container
+      activate:
+        - id: run_the_new_web_container
+          systemd_service:
+            name: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.service"
+            state: running
+      verify:
+        - id: wait_until_the_new_web_container_is_healthy
+          wait_for:
+            command_succeeds: >-
+              test "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5
+              --header "Host: $PUBLIC_HOST_NAME" --header 'X-Forwarded-Proto: https'
+              "http://$PRIVATE_IP:$WEB_PORT$HEALTH_URL_PATH")" = 200
+            env:
+              PUBLIC_HOST_NAME: "{{ .inputs.public_host_names[.web_container.key] }}"
+              PRIVATE_IP: "{{ .inputs.app_servers_of_the_environment[.node.name].private_ip }}"
+              WEB_PORT: "{{ .web_container.value.web_port }}"
+              HEALTH_URL_PATH: "{{ .inputs.apps[.web_container.key].health_url_path }}"
+            wait_at_most: 2m
+      # A new web container that fails to start or to become healthy is
+      # removed again; no Caddy ever sent it a request.
+      on_failure:
+        - id: remove_the_new_web_container_that_failed
+          when: {equals: ["{{ .inputs.release_step }}", start_the_new_release_beside_the_old]}
+          podman_quadlet:
+            name: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.container"
+            state: file_and_service_removed_named_volumes_kept
+
+  # The deploy's last step: each old web container gets the stop signal and
+  # up to 30 seconds to finish its requests (StopTimeout in its Quadlet
+  # file). Then MMX stops the old web container and removes the container's
+  # service and Quadlet file.
+  - id: stop_the_old_web_container_of_each_app
+    when: {not: "{{ .vars.live_release_runs }}"}
+    loop: "{{ .inputs.app_servers_of_the_environment[.node.name].live_web_containers }}"
+    as: web_container
+    podman_quadlet:
+      name: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.container"
+      state: file_and_service_removed_named_volumes_kept
+
+  # Outside a deploy, each app's port that Caddy does not send requests to
+  # runs no web container. The task
+  # remove_a_new_web_container_that_a_stopped_deploy_left removes a new web
+  # container left by a deploy that stopped before the Caddy switch.
+  - id: remove_a_new_web_container_that_a_stopped_deploy_left
+    when: {not: "{{ .vars.new_release_runs }}"}
+    loop: "{{ .inputs.app_servers_of_the_environment[.node.name].new_web_containers }}"
+    as: web_container
+    podman_quadlet:
+      name: "{{ .web_container.key }}-web-{{ .web_container.value.web_port }}.container"
+      state: file_and_service_removed_named_volumes_kept
+
+  # Each app's job container, <app>-jobs.service, runs the web containers'
+  # release on the app server being configured, or on staging01. The job
+  # container changes to the new release only after the old web containers
+  # stopped. The job container restarts, so the old worker finishes the
+  # current job, then the new worker starts. Jobs wait in the Postgres queue
+  # while the job container restarts.
+  #
+  # every_server runs job containers when the role input
+  # job_containers_run_only_on_the_jobs_servers is false. deploy changes a
+  # job container only where the job container already runs, so deploy does
+  # not need job_containers_run_only_on_the_jobs_servers.
+  - id: the_job_containers_run_the_live_release
+    when: "{{ .vars.live_release_runs }}"
+    set_vars:
+      job_containers: "{{ .inputs.app_servers_of_the_environment[.node.name].live_web_containers }}"
+  - id: the_job_containers_run_the_new_release
+    when: {not: "{{ .vars.live_release_runs }}"}
+    set_vars:
+      job_containers: "{{ .inputs.app_servers_of_the_environment[.node.name].new_web_containers }}"
+  - id: job_container_of_each_app
+    when:
+      all:
+        # An app whose jobs_command is "" has no background jobs and no job container.
+        - not: {equals: ["{{ .inputs.apps[.job_container.key].jobs_command }}", ""]}
+        - any:
+            - all:
+                - "{{ .inputs.set_up_the_server }}"
+                - not: "{{ .inputs.job_containers_run_only_on_the_jobs_servers }}"
+            - all:
+                - not: "{{ .inputs.set_up_the_server }}"
+                - path_exists: "/etc/containers/systemd/{{ .job_container.key }}-jobs.container"
+    loop: "{{ .vars.job_containers }}"
+    as: job_container
+    key: "{{ .job_container.key }}"
+    task_block:
+      id: job_container
+      changes:
+        - id: install_the_quadlet_file_of_the_job_container
+          podman_quadlet:
+            name: "{{ .job_container.key }}-jobs.container"
+            template: ../../files_used_by_several_roles/jobs_container.container
+      activate:
+        - id: run_the_job_container
+          systemd_service:
+            name: "{{ .job_container.key }}-jobs.service"
+            state: running
+
+  # Once only the jobs servers run production's job containers, MMX stops
+  # the job containers on the production app server being configured.
+  # Each job container gets the stop signal, then up to the app's
+  # seconds_a_job_gets_to_finish_when_stopped (30 by default) for the
+  # worker to finish the current job. A worker still running after
+  # that time is killed. MMX removes the job container's
+  # service and Quadlet file. The waiting jobs stay in the Postgres queue.
+  # The jobs servers' workers take the waiting jobs. A job whose worker did
+  # not finish runs again.
+  #
+  # The same task removes the job container of an app whose jobs_command is
+  # "" (no background jobs). An app that had jobs and was changed to have
+  # none must not keep its old worker running. For an app that never had a
+  # job container, the task changes nothing.
+  - id: remove_the_job_container_that_the_jobs_servers_run_or_the_app_does_not_need
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - any:
+            - "{{ .inputs.job_containers_run_only_on_the_jobs_servers }}"
+            - {equals: ["{{ .app.value.jobs_command }}", ""]}
+    loop: "{{ .inputs.apps }}"
+    as: app
+    podman_quadlet:
+      name: "{{ .app.key }}-jobs.container"
+      state: file_and_service_removed_named_volumes_kept
+
+  # The live web port of each app: the one Caddy sends its requests to, once
+  # this step's Caddy stage ran. The next run's stage
+  # find_the_live_and_new_web_ports reads the recorded live port number.
+  - id: record_the_live_web_port_of_each_app
+    when: {not: "{{ .vars.requests_go_to_the_new_release }}"}
+    loop: "{{ .inputs.app_servers_of_the_environment[.node.name].live_web_containers }}"
+    as: web_container
+    file:
+      path: "/var/lib/monkeymaxxing-stack/live_web_ports/{{ .web_container.key }}"
+      content: "{{ .web_container.value.web_port }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: record_the_new_web_port_as_the_live_one
+    when: "{{ .vars.requests_go_to_the_new_release }}"
+    loop: "{{ .inputs.app_servers_of_the_environment[.node.name].new_web_containers }}"
+    as: web_container
+    file:
+      path: "/var/lib/monkeymaxxing-stack/live_web_ports/{{ .web_container.key }}"
+      content: "{{ .web_container.value.web_port }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+
+  # Each deploy pulls a new image. Once a week, podman-image-cleanup.service
+  # deletes images that no container uses and that were made more than
+  # 7 days ago. A rollback to an older release pulls the older release's
+  # image again. The unit templates are shared because roles/jobs_server
+  # also uses files_used_by_several_roles/podman_image_cleanup.service and
+  # files_used_by_several_roles/podman_image_cleanup.timer.
+  - id: weekly_cleanup_of_unused_images
+    when: "{{ .inputs.set_up_the_server }}"
+    task_block:
+      id: podman_image_cleanup
+      changes:
+        - id: install_the_image_cleanup_service
+          systemd_unit:
+            name: podman-image-cleanup.service
+            template: ../../files_used_by_several_roles/podman_image_cleanup.service
+        - id: install_the_image_cleanup_timer
+          systemd_unit:
+            name: podman-image-cleanup.timer
+            template: ../../files_used_by_several_roles/podman_image_cleanup.timer
+      activate:
+        - id: run_the_image_cleanup_timer
+          systemd_service:
+            name: podman-image-cleanup.timer
+            state: running
+            start_at_boot: true

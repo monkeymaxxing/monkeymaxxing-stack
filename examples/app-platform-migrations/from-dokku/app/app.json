@@ -1,0 +1,20 @@
+{
+  "cron": [
+    {
+      "command": "node schedule.mjs",
+      "schedule": "0 0 * * *",
+      "concurrency_policy": "forbid"
+    }
+  ],
+  "env": {
+    "RUNTIME_SECRET": {
+      "generator": "secret",
+      "sync": true
+    }
+  },
+  "scripts": {
+    "dokku": {
+      "predeploy": "node migrate.mjs"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+# The lock-out's part on the person's own loopback-managed desk: the desk
+# playbook and the lock-out button both run it. Everything else on the desk
+# that keeps access, the coding agent, servers-mmx, the agent relay, the API
+# token proxy and Rex included, keeps working through a lock-out.
+# The desk playbook runs on every desk during a lock-out too: a desk manages
+# only itself, over loopback, and a cut-off desk reaches no server. Reason: a
+# new desk joins during a lock-out (operating_procedures/respond_to_a_break_in.md,
+# "With a teammate"). The lock-out button runs only
+# on the desk that keeps access (playbooks/lock_everyone_out.yml).
+node_tasks:
+  # The lock-out button ends the sessions of the team's private Cloudflare
+  # Access pages with it (playbooks/lock_everyone_out.yml).
+  - id: install_cloudflare_session_revocation
+    file:
+      path: /usr/local/sbin/revoke_cloudflare_access_sessions.py
+      source: files/revoke_cloudflare_access_sessions.py
+      owner: root
+      group: root
+      permissions_mode: "0700"

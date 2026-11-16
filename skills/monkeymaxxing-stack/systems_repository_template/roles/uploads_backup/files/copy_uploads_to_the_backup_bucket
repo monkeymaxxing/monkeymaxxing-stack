@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# Copies each app's uploaded files from its R2 bucket into the uploads' B2
+# bucket. util01 runs it as the mmhotline user, from the timer
+# copy_uploads_to_the_backup_bucket, every backups.uploads_copy_every_hours
+# hours, starting one hour after nightly_work_starts_at (every night at 02:00
+# UTC in the template) (roles/uploads_backup).
+#
+# - Each app's files go into a folder named after the app,
+#   uploads_backup:BUCKET/<app>/<the file's path in R2>. rclone sync makes the
+#   folder match the app's bucket: it uploads the new and changed files, and
+#   hides each file that is gone from R2, never deleting one. The bucket
+#   keeps every file's prior versions, a hidden file's too, for
+#   backups.keep_prior_file_versions_in_buckets_for_days, and Object Lock in
+#   compliance mode keeps each version for
+#   backups.lock_backups_against_deletion_for_days after it
+#   was written, from everyone, the B2 account's owner included. util01's B2
+#   key can't delete a version anyway: it has no deleteFiles capability.
+# - R2's own time of each file (--use-server-modtime) decides what changed:
+#   the apps' uploads carry no time of rclone's, and without the flag rclone
+#   would ask R2 for each file's metadata, one request per file, every night.
+#   The flag acts on the R2 side only (rclone's S3 backend); B2 keeps the
+#   time rclone gives each file it writes, here R2's, so an unchanged file
+#   compares equal. rclone's manual warns that the flag on a sync without
+#   --update uploads files again: that is when the destination, not the
+#   source, reports its server's time.
+# - A full copy, which uploads every file again (--ignore-times), runs when
+#   the last full copy passed more than 6 days ago, or never: then each
+#   file's newest version in B2 is at most a week old, and so under its lock,
+#   and no one can delete the copy of a file the apps still have. Copying
+#   only the changes would leave every file that hasn't changed for the lock's length
+#   unlocked. The cost: the bucket holds about three copies of the uploads,
+#   the newest and the prior versions, and once a week the whole of
+#   the uploads passes through util01's network.
+# - When every app's copy passed, it writes the copy's start time into
+#   /var/lib/uploads_backup/latest_passed_copy, and after a full copy into
+#   latest_passed_full_copy too. MMWatchdog's checks of util01 warn when the
+#   first is older than 26 hours or the second older than 8 days. A failed
+#   copy exits 1, so the failed unit warns through MMWatchdog's systemd
+#   check; journalctl -u copy_uploads_to_the_backup_bucket says why.
+# - Before each app's copy, a dry run of the same sync (--dry-run --combined -)
+#   lists what the copy will hide: files gone from R2 (-) and files changed
+#   in R2 (*), whose newest copy in B2 becomes a prior version. The dry run
+#   never uses --ignore-times, so a full copy is counted like any other. The
+#   copy prints both numbers to the journal, never a path. When the hidden
+#   files are more than WARN_WHEN_ONE_COPY_HIDES_MORE_THAN_PERCENT of the
+#   files the app's folder held before the copy, and the folder held at least
+#   WARN_ONLY_WHEN_AN_APP_HAS_AT_LEAST_FILES files, the copy writes a line for
+#   the app into apps_whose_latest_copy_hid_an_unusual_share in
+#   /var/lib/uploads_backup, which MMWatchdog's check
+#   uploads_backup/the_latest_copy_hid_no_unusual_share_of_an_apps_files reads.
+#   Every copy rewrites the file, empty when no app crossed the line, so the
+#   warning closes at the next copy.
+#
+# The copy streams each file from R2 to B2 through memory: util01 keeps no
+# customer file on its disk. Input, in environment variables: APPS, the apps
+# from mmx_project_settings.yml as JSON, UPLOADS_BACKUP_BUCKET, the B2
+# bucket, and the two settings of the hidden-files warning,
+# WARN_WHEN_ONE_COPY_HIDES_MORE_THAN_PERCENT and
+# WARN_ONLY_WHEN_AN_APP_HAS_AT_LEAST_FILES (backups in
+# mmx_project_settings.yml). rclone reads its two remotes, with their keys,
+# from /var/lib/mmhotline/uploads_backup_rclone.conf.
+
+set -euo pipefail
+
+rclone_settings_file=/var/lib/mmhotline/uploads_backup_rclone.conf
+latest_passed_copy_file=/var/lib/uploads_backup/latest_passed_copy
+latest_passed_full_copy_file=/var/lib/uploads_backup/latest_passed_full_copy
+unusual_share_file=/var/lib/uploads_backup/apps_whose_latest_copy_hid_an_unusual_share
+full_copy_after_seconds=$((6 * 24 * 60 * 60))
+
+# Read the inputs before starting a copy, including when no app has uploads.
+apps=$(jq -c 'to_entries | sort_by(.key)' <<< "$APPS")
+backup_bucket=$UPLOADS_BACKUP_BUCKET
+warn_percent=$WARN_WHEN_ONE_COPY_HIDES_MORE_THAN_PERCENT
+warn_from_files=$WARN_ONLY_WHEN_AN_APP_HAS_AT_LEAST_FILES
+started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+full_copy=true
+if [[ -e $latest_passed_full_copy_file ]]; then
+    now=$(date +%s)
+    last_full_copy=$(stat -c %Y "$latest_passed_full_copy_file")
+    if (( now - last_full_copy <= full_copy_after_seconds )); then full_copy=false; fi
+fi
+
+failed=''
+unusual=''
+why_rclone_failed() {
+    local status=$1
+    if (( status > 128 )); then
+        local signal_number=$((status - 128))
+        printf 'rclone was stopped by signal %s (SIG%s)' "$signal_number" "$(kill -l "$signal_number")"
+    else
+        printf 'rclone exit status %s' "$status"
+    fi
+}
+while IFS= read -r app; do
+    app_name=$(jq -r '.key' <<< "$app")
+    uploads_bucket=$(jq -r '.value.production_uploads_r2_bucket // ""' <<< "$app")
+    if [[ -z $uploads_bucket ]]; then
+        printf '%s keeps no uploads\n' "$app_name"
+        continue
+    fi
+    message="$app_name: copying uploads_r2:$uploads_bucket to uploads_backup:$backup_bucket/$app_name"
+    extra_arguments=()
+    if $full_copy; then
+        message+=', every file again: no full copy passed in the last 6 days'
+        extra_arguments+=(--ignore-times)
+    fi
+    printf '%s\n' "$message"
+    # The dry run's report names every file, so it stays in this variable.
+    status=0
+    report=$(rclone --config "$rclone_settings_file" sync --dry-run --combined - --log-level ERROR \
+        "uploads_r2:$uploads_bucket" "uploads_backup:$backup_bucket/$app_name" \
+        --use-server-modtime) || status=$?
+    if (( status != 0 )); then
+        failed+="${failed:+, }$app_name ($(why_rclone_failed "$status") in the dry run before the copy)"
+        continue
+    fi
+    # awk compares, so a setting written as a decimal, such as 12.5, works too.
+    read -r hidden held unusual_share < <(awk -v percent="$warn_percent" -v from_files="$warn_from_files" '
+        $1 == "-" || $1 == "*" { hidden++ }
+        $1 == "-" || $1 == "*" || $1 == "=" { held++ }
+        END { print hidden + 0, held + 0, (held + 0 >= from_files + 0 && (hidden + 0) * 100 > (held + 0) * percent ? "yes" : "no") }' <<< "$report")
+    printf '%s: the copy hides %s of the %s files in uploads_backup:%s/%s\n' \
+        "$app_name" "$hidden" "$held" "$backup_bucket" "$app_name"
+    if [[ $unusual_share == yes ]]; then
+        unusual+="$app_name: one copy hid $hidden of the $held files in uploads_backup:$backup_bucket/$app_name,"
+        unusual+=" more than $warn_percent percent: files deleted or replaced in R2 since the copy before."
+        unusual+=" If nobody did that on purpose, follow operating_procedures/restore_an_uploaded_file.md,"
+        unusual+=$' "Restore all of an app\'s uploaded files".\n'
+    fi
+    # Command substitution suppresses bash's signal message. rclone's
+    # errors and ten-minute progress reports still go straight to the journal.
+    status=0
+    output=$(rclone --config "$rclone_settings_file" sync \
+        "uploads_r2:$uploads_bucket" "uploads_backup:$backup_bucket/$app_name" \
+        --use-server-modtime "${extra_arguments[@]}" \
+        --stats 10m --stats-one-line --stats-log-level NOTICE) || status=$?
+    if [[ -n $output ]]; then printf '%s\n' "$output"; fi
+    if (( status != 0 )); then
+        failed+="${failed:+, }$app_name ($(why_rclone_failed "$status"))"
+    fi
+done < <(jq -c '.[]' <<< "$apps")
+
+printf '%s' "$unusual" > "$unusual_share_file.new"
+mv -fT -- "$unusual_share_file.new" "$unusual_share_file"
+if [[ -n $failed ]]; then
+    printf 'the copy of %s failed; the lines above say why\n' "$failed" >&2
+    exit 1
+fi
+write_time() {
+    printf '%s\n' "$started_at" > "$1.new"
+    mv -fT -- "$1.new" "$1"
+}
+write_time "$latest_passed_copy_file"
+message="every app's uploads were copied"
+if $full_copy; then
+    write_time "$latest_passed_full_copy_file"
+    message+=', every file again'
+fi
+printf '%s; the copy started at %s\n' "$message" "$started_at"

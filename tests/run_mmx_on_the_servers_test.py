@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Check the server button's CLI boundary without a guest or credentials."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+TEMPLATE = Path(__file__).resolve().parents[1] / 'skills/monkeymaxxing-stack/systems_repository_template'
+BUTTON = TEMPLATE / 'roles/systems_desk/files/run-mmx-on-the-servers'
+
+
+class ServersMmxTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        (self.root / 'systems_repository/.git').mkdir(parents=True)
+        (self.root / 'repository-remote').write_text('git@example.com:team/systems.git\n')
+        binary = self.root / 'bin'
+        binary.mkdir()
+        (binary / 'git').write_text('#!/bin/sh\ncase "$*" in *rev-parse*) echo 0123456789abcdef;; esac\n')
+        (binary / 'mmx').write_text('#!/usr/bin/env python3\nimport json,os,sys\nprint(json.dumps({"args":sys.argv[1:],"vault_file":os.environ.get("MMX_VAULT_PASSWORD_FILE"),"vault_password":os.environ.get("MMX_VAULT_PASSWORD")}))\n')
+        (binary / 'flock').write_text('#!/bin/sh\nexit 0\n')
+        for name in ['git', 'mmx', 'flock']:
+            (binary / name).chmod(0o755)
+        self.button = self.root / 'run-mmx-on-the-servers'
+        self.button.write_text(BUTTON.read_text()
+            .replace('/var/lib/servers-mmx', str(self.root))
+            .replace('/etc/systems-desk/repository-remote', str(self.root / 'repository-remote'))
+            .replace('/etc/systems-desk/everyone-locked-out', str(self.root / 'everyone-locked-out'))
+            .replace('export PATH=/usr/local/bin:/usr/bin:/bin', f'export PATH={binary}:/usr/bin:/bin')
+            .replace('/usr/local/bin/mmx', str(binary / 'mmx')))
+
+    def invoke(self, *arguments):
+        return subprocess.run(['bash', str(self.button), *arguments], text=True,
+                              capture_output=True, env={**os.environ, 'MMX_VAULT_PASSWORD': 'CALLER_VALUE'})
+
+    def args(self, *arguments):
+        result = self.invoke(*arguments)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout.splitlines()[-1])['args']
+
+    def test_every_server_learns_the_lock_out_button_s_record_on_this_desk(self):
+        # every_server applies a lock-out only where this equals the inventory,
+        # and its undo only where it is empty (playbooks/every_server.yml, the
+        # every_server stage).
+        for command in ['run', 'dryrun', 'explain', 'validate', 'nodes']:
+            with self.subTest(command=command):
+                self.assertEqual(self.args(command, 'every_server', '--connection', 'ssh_only'),
+                                 [command, '--inventory', 'servers', '--var', 'lock_out_button_record_on_this_desk=',
+                                  'every_server', '--connection', 'ssh_only'])
+        (self.root/'everyone-locked-out').write_text('desk01 10.20.9.1 KEY= ssh-ed25519 AAAA alex on desk01\nThe person pressed the lock-out button on this desk.\n')
+        for playbook in ['every_server', 'every_server.yml', 'playbooks/every_server.yml']:
+            with self.subTest(playbook=playbook):
+                self.assertEqual(self.args('run', playbook)[:4], ['run', '--inventory', 'servers', '--var'])
+                self.assertEqual(self.args('run', playbook)[4], 'lock_out_button_record_on_this_desk=desk01 10.20.9.1 KEY= ssh-ed25519 AAAA alex on desk01')
+        # Other playbooks do not declare the variable, which MMX would refuse.
+        self.assertEqual(self.args('run', 'deploy', '--var', 'app=shop'), ['run', '--inventory', 'servers', 'deploy', '--var', 'app=shop'])
+
+    def test_the_caller_cannot_say_that_the_lock_out_button_ran(self):
+        for arguments in [('run', 'every_server', '--var', 'lock_out_button_record_on_this_desk=desk01'),
+                          ('run', 'every_server', '--var=lock_out_button_record_on_this_desk=desk01')]:
+            with self.subTest(arguments=arguments):
+                result = self.invoke(*arguments)
+                self.assertEqual(result.returncode, 64)
+                self.assertIn('sets lock_out_button_record_on_this_desk itself', result.stderr)
+
+    def test_preserves_arguments_and_supplies_vault_and_inventory(self):
+        arguments = ['run', 'variable_proof', '--limit', 'app001', '--var', 'message=words with spaces']
+        result = self.invoke(*arguments)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        value = json.loads(result.stdout.splitlines()[-1])
+        self.assertEqual(value['args'], ['run', '--inventory', 'servers', *arguments[1:]])
+        self.assertEqual(value['vault_file'], '/etc/systems-desk/vault-passphrase')
+        self.assertIsNone(value['vault_password'])
+
+    def test_refuses_each_vault_source_spelling(self):
+        for option in ['-vault-password-file', '--vault-password-file', '-vault-password-file=/tmp/pass', '--vault-password-file=/tmp/pass']:
+            with self.subTest(option=option):
+                result = self.invoke('run', 'app', option, '/tmp/pass')
+                self.assertEqual(result.returncode, 64)
+                self.assertIn('own vault', result.stderr)
+
+    def test_refuses_desk_playbook_and_desk_variable(self):
+        for arguments in [('run', 'systems_desk'), ('explain', 'playbooks/systems_desk.yml'), ('run', 'app', '--var', 'desk_name=desk01'), ('run', 'app', '--var=desk_name=desk01')]:
+            with self.subTest(arguments=arguments):
+                self.assertEqual(self.invoke(*arguments).returncode, 64)
+
+    def test_refuses_inventory_replacements(self):
+        for option in ['-inventory', '--inventory']:
+            for arguments in [(option, '/tmp/desk.yml'), (option+'=/tmp/desk.yml',)]:
+                with self.subTest(arguments=arguments):
+                    self.assertEqual(self.invoke('run', 'app', *arguments).returncode, 64)
+
+    def test_command_delimiter_preserves_literal_command_options(self):
+        result = self.invoke('run-command', '--nodes', 'app001', '--', 'printf', '--vault-password-file=literal')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout.splitlines()[-1])['args'][-3:], ['--', 'printf', '--vault-password-file=literal'])
+
+    def test_local_commands_receive_no_invented_options(self):
+        for arguments in [('version',), ('describe-module', 'file', '--reference-only'), ('module-usage', '--module', 'file'), ('new-one-time-playbook', '--help')]:
+            with self.subTest(arguments=arguments):
+                result = self.invoke(*arguments)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout.splitlines()[-1])['args'], list(arguments))
+
+    def test_secrets_inventory_option_follows_the_action(self):
+        result = self.invoke('secrets', 'list-keys', '--json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout.splitlines()[-1])['args'], ['secrets', 'list-keys', '--inventory', 'servers', '--json'])
+
+    def test_accepts_the_repository_inventory(self):
+        self.assertEqual(self.invoke('nodes', '--inventory', 'servers').returncode, 0)
+
+
+if __name__ == '__main__':
+    unittest.main()

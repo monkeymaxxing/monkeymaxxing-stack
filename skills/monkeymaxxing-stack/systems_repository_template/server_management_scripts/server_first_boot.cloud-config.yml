@@ -1,0 +1,116 @@
+#cloud-config
+# render_server_first_boot replaces the three tokens before provider submission.
+# Use an image whose cloud-init network stage precedes ssh.service AND
+# ssh.socket. Prove the ordering and public-port closure on a disposable server.
+# The image must already have iptables and ip6tables for the early guard.
+# No SSH host keys are supplied: WireGuard authenticates the first SSH connection.
+ssh_pwauth: false
+disable_root: false
+# The early guard contains no secrets and runs before the configuration stage.
+bootcmd:
+  - [iptables, -I, INPUT, '1', '!', -i, wg0, -p, tcp, --dport, '22', -j, DROP]
+  - [ip6tables, -I, INPUT, '1', '!', -i, wg0, -p, tcp, --dport, '22', -j, DROP]
+# Cloud-init writes secrets directly to root-only files, never bash arguments.
+write_files:
+  - path: /etc/wireguard/wg0.private_key
+    owner: root:root
+    permissions: '0600'
+    content: |
+      @@WIREGUARD_PRIVATE_KEY@@
+  - path: /etc/wireguard/wg0.conf
+    owner: root:root
+    permissions: '0600'
+    encoding: b64
+    content: @@WIREGUARD_CONFIG_BASE64@@
+  # The redirect from UDP 443, where the outside world reaches WireGuard, to
+  # the port WireGuard listens on. The same text as
+  # files_used_by_several_roles/wireguard_udp_443_redirect.nft and its unit,
+  # so the server answers on UDP 443 from its first minute. The unit starts
+  # before wg-quick@wg0.service, which runcmd enables below.
+  - path: /etc/wireguard/wireguard_udp_443_redirect.nft
+    owner: root:root
+    permissions: '0644'
+    content: |
+      table inet stack_wireguard_port {}
+      flush table inet stack_wireguard_port
+      table inet stack_wireguard_port {
+          chain prerouting {
+              type nat hook prerouting priority dstnat; policy accept;
+              udp dport 443 redirect to :@@WIREGUARD_LISTEN_PORT@@
+          }
+      }
+  # The table that skips connection tracking between servers and desks, with
+  # an empty set: first boot knows no other server's address. The first
+  # every_server run, or the desk's first review, fills it. The same rules as
+  # files_used_by_several_roles/wireguard_notrack_between_servers_and_desks.nft.
+  - path: /etc/wireguard/wireguard_notrack_between_servers_and_desks.nft
+    owner: root:root
+    permissions: '0644'
+    content: |
+      table inet stack_wireguard_notrack {}
+      flush table inet stack_wireguard_notrack
+      table inet stack_wireguard_notrack {
+          set server_and_desk_public_addresses {
+              type ipv4_addr
+          }
+          chain prerouting {
+              type filter hook prerouting priority raw; policy accept;
+              ip saddr @server_and_desk_public_addresses udp dport @@WIREGUARD_LISTEN_PORT@@ notrack
+          }
+          chain output {
+              type filter hook output priority raw; policy accept;
+              ip daddr @server_and_desk_public_addresses udp sport @@WIREGUARD_LISTEN_PORT@@ notrack
+          }
+      }
+  - path: /etc/systemd/system/wireguard-udp-443-redirect.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Redirect UDP 443 to the port WireGuard listens on, and skip connection tracking between servers and desks
+      Before=wg-quick@wg0.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/nft -f /etc/wireguard/wireguard_udp_443_redirect.nft
+      ExecStart=/usr/sbin/nft -f /etc/wireguard/wireguard_notrack_between_servers_and_desks.nft
+
+      [Install]
+      WantedBy=multi-user.target
+runcmd:
+  - - bash
+    - -c
+    - |
+      set -euo pipefail
+      umask 077
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y wireguard-tools ufw nftables
+      chown root:root /etc/wireguard /etc/wireguard/wg0.private_key /etc/wireguard/wg0.conf
+      chmod 0700 /etc/wireguard
+      chmod 0600 /etc/wireguard/wg0.private_key /etc/wireguard/wg0.conf
+      # Enforce IPv6 filtering as well as IPv4 filtering.
+      sed -i 's/^IPV6=.*/IPV6=yes/; s/^MANAGE_BUILTINS=.*/MANAGE_BUILTINS=no/' /etc/default/ufw
+      # Keep the early INPUT guards while ufw enables its own chains.
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow @@WIREGUARD_LISTEN_PORT@@/udp
+      # First boot admits only the peers supplied at enrollment.
+      # WireGuard admits only those keys and addresses. The first MMX run
+      # replaces the first-boot firewall rules with the inventory's rules.
+      ufw allow in on wg0 to any port 22 proto tcp
+      ufw --force enable
+      # ufw now admits SSH only on wg0 and loopback. Remove the early guards:
+      # they also drop util01's SSH to its own private address, which uses loopback.
+      iptables -D INPUT '!' -i wg0 -p tcp --dport 22 -j DROP
+      ip6tables -D INPUT '!' -i wg0 -p tcp --dport 22 -j DROP
+      # The redirect is in place before WireGuard starts.
+      systemctl daemon-reload
+      systemctl enable --now wireguard-udp-443-redirect.service
+      systemctl enable --now wg-quick@wg0
+      # First-boot metadata contains the private key. Block HTTP on IPv4 and IPv6.
+      # Leave DNS reachable on metadata addresses.
+      ufw deny out to 169.254.169.254 port 80 proto tcp
+      ufw deny out to fd00:ec2::254 port 80 proto tcp
+      touch /etc/cloud/cloud-init.disabled

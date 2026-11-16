@@ -1,0 +1,20 @@
+{{- /*
+  Loads the redirect from UDP 443 to WireGuard's port, and the table that
+  skips connection tracking between servers and desks, before WireGuard
+  starts. Installed as wireguard-udp-443-redirect.service by roles/every_server
+  and roles/systems_desk, and by the first boot
+  (server_management_scripts/server_first_boot.cloud-config.yml).
+*/ -}}
+# Managed by MMX from files_used_by_several_roles/wireguard_udp_443_redirect.service in the systems repository.
+[Unit]
+Description=Redirect UDP 443 to the port WireGuard listens on, and skip connection tracking between servers and desks
+Before=wg-quick@wg0.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/wireguard/wireguard_udp_443_redirect.nft
+ExecStart=/usr/sbin/nft -f /etc/wireguard/wireguard_notrack_between_servers_and_desks.nft
+
+[Install]
+WantedBy=multi-user.target

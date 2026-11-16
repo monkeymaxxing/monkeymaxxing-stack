@@ -1,0 +1,37 @@
+import express from 'express';
+import {fileURLToPath} from 'node:url';
+import {randomUUID} from 'node:crypto';
+import {pool,storage,sha256,putObject,objectBytes,runJob,currentUser,login,register,sessionCookie,refuse,titleValue} from './backend.mjs';
+const app=express();app.disable('x-powered-by');
+if(!process.env.PUBLIC_ORIGIN)throw new Error('PUBLIC_ORIGIN is required');
+const origin=new URL(process.env.PUBLIC_ORIGIN).origin;
+app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');if(!['GET','HEAD'].includes(req.method)&&req.headers.origin!==origin)return res.status(403).json({error:'Request origin refused'});next();});
+app.use(express.json({limit:'32kb'}));
+app.get('/healthz',async(req,res)=>{await pool.query('select 1');res.json({ok:true});});
+for(const [path,fn] of [['login',login],['register',register]])app.post('/api/'+path,async(req,res)=>{const r=await fn(req.body.email,req.body.password);res.set('Set-Cookie',sessionCookie(r.token,604800)).json(r.user);});
+app.use('/api',async(req,res,next)=>{req.user=await currentUser(req);next();});
+app.get('/api/account',(req,res)=>res.json(req.user));
+app.post('/api/logout',async(req,res)=>{await pool.query('delete from sessions where user_id=$1',[req.user.id]);res.set('Set-Cookie',sessionCookie('',0)).json({logged_out:true});});
+app.get('/api/records',async(req,res)=>res.json((await pool.query('select * from records where owner_id=$1 order by created_at',[req.user.id])).rows));
+app.post('/api/records',async(req,res)=>{const title=titleValue(req.body.title);const description=req.body.description;
+ if(description!==undefined&&typeof description!=='string')refuse(400,'Description must be text');
+ // Title-only requests remain valid while migration 2 is applied.
+ const r=description===undefined?await pool.query('insert into records(owner_id,title) values($1,$2) returning *',[req.user.id,title]):await pool.query('insert into records(owner_id,title,description) values($1,$2,$3) returning *',[req.user.id,title,description]);res.status(201).json(r.rows[0]);});
+app.param('id',(req,res,next,id)=>{if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))refuse(400,'Invalid ID');next();});
+app.get('/api/records/:id',async(req,res)=>{const {rows:[r]}=await pool.query('select * from records where id=$1 and owner_id=$2',[req.params.id,req.user.id]);if(!r)refuse(404,'Record not found');res.json(r);});
+app.patch('/api/records/:id',async(req,res)=>{const title=titleValue(req.body.title);if(req.body.description!==undefined&&typeof req.body.description!=='string')refuse(400,'Description must be text');const {rows:[r]}=req.body.description===undefined?await pool.query('update records set title=$3 where id=$1 and owner_id=$2 returning *',[req.params.id,req.user.id,title]):await pool.query('update records set title=$3,description=$4 where id=$1 and owner_id=$2 returning *',[req.params.id,req.user.id,title,req.body.description]);if(!r)refuse(404,'Record not found');res.json(r);});
+app.delete('/api/records/:id',async(req,res)=>{const r=await pool.query('delete from records where id=$1 and owner_id=$2',[req.params.id,req.user.id]);if(!r.rowCount)refuse(404,'Record not found');res.json({deleted:true});});
+app.get('/api/documents',async(req,res)=>res.json((await pool.query('select * from documents where owner_id=$1',[req.user.id])).rows));
+app.post('/api/documents',express.raw({type:'application/octet-stream',limit:'50mb'}),async(req,res)=>{const name=req.headers['x-file-name'];if(!name||name.length>255||!Buffer.isBuffer(req.body))refuse(400,'File name and binary body required');const id=randomUUID(),key=`${req.user.id}/${id}/${name.replace(/[^A-Za-z0-9._-]/g,'_')}`,bytes=req.body;await putObject(key,bytes);
+ // On an uncertain database commit, retain the object. Deleting could destroy a committed document.
+ const r=await pool.query('insert into documents(id,owner_id,file_name,object_key,sha256,byte_length) values($1,$2,$3,$4,$5,$6) returning *',[id,req.user.id,name,key,sha256(bytes),bytes.length]);res.status(201).json(r.rows[0]);});
+app.get('/api/documents/:id/download',async(req,res)=>{const {rows:[d]}=await pool.query('select * from documents where id=$1 and owner_id=$2',[req.params.id,req.user.id]);if(!d)refuse(404,'Document not found');const bytes=await objectBytes(d.object_key);if(sha256(bytes)!==d.sha256||bytes.length!==Number(d.byte_length))refuse(503,'Stored document integrity check failed');res.type('application/octet-stream').set('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(d.file_name)).send(bytes);});
+app.get('/api/reports',async(req,res)=>res.json((await pool.query('select * from report_jobs where owner_id=$1 order by created_at',[req.user.id])).rows));
+app.get('/api/reports/:id',async(req,res)=>{const {rows:[j]}=await pool.query('select * from report_jobs where id=$1 and owner_id=$2',[req.params.id,req.user.id]);if(!j)refuse(404,'Report not found');res.json(j);});
+app.post('/api/reports',async(req,res)=>res.status(201).json((await pool.query('insert into report_jobs(owner_id) values($1) returning *',[req.user.id])).rows[0]));
+app.post('/api/reports/run',async(req,res)=>res.json(await runJob(req.user.id)));
+app.use('/api',(req,res)=>res.status(404).json({error:'Route not found'}));
+app.use(express.static(fileURLToPath(new URL('./dist',import.meta.url)),{index:'index.html'}));
+app.use((error,req,res,next)=>{const status=error.status|| (error.code==='23505'?409:503);if(status>=500)console.error('Request failed',error.code||error.name);res.status(status).json({error:error.status?error.message:status===409?'Account already exists':'Request failed. Check the result before trying again.'});});
+const server=app.listen(Number(process.env.PORT||8001),process.env.HOST||'0.0.0.0',()=>console.log('Portal listening'));
+const stop=()=>{server.close(async()=>{await pool.end();storage.destroy();process.exit(0);});};process.on('SIGTERM',stop);process.on('SIGINT',stop);

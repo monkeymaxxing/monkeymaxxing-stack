@@ -1,0 +1,225 @@
+{{- /*
+  MMWatchdog's check groups for every server, util01 included. This file is
+  an MMX template: MMX renders it on each server into
+  /etc/mmwatchdog/check_groups/every_server.yml. It reads the role inputs
+  is_database_server and is_staging_server, and the server's own facts. On
+  the servers that playbooks/reboot_servers_after_updates.yml reboots, it
+  also reads reboot_check_settings and inventory_groups for the check group
+  reboots_that_may_run_now.
+*/ -}}
+{{- /* Staging alerts go no higher than warn. */ -}}
+{{- $sos := "sos" -}}{{- if .inputs.is_staging_server -}}{{- $sos = "warn" -}}{{- end -}}
+{{- /* A database server installs PostgreSQL and kernel updates in the team's weekly window (maintenance_window in mmx_project_settings.yml). A weekly cadence is fixed: kernel and Postgres security fixes should not wait longer than a week, so 8 days is one week plus a day of slack. */ -}}
+{{- $updates_may_wait_for := "26h" -}}{{- if .inputs.is_database_server -}}{{- $updates_may_wait_for = "8d" -}}{{- end -}}
+{{- $raid_arrays := list -}}
+{{- range .node.storage.block_devices -}}{{- if eq .kind "raid_array" -}}{{- $raid_arrays = append $raid_arrays . -}}{{- end -}}{{- end -}}
+# Managed by MMX from mmwatchdog_checks/every_server.yml in the systems repository.
+# To be woken for a check, set that check's alert_severity to sos. warn tells
+# a person during the day; sos wakes the person on call, which a small team
+# turns on check by check. The checks a careful team raises first: the
+# backups, write-ahead log archiving, and the restore drill. Each value below
+# has its reason beside it; change a value only with a reason of your own.
+check_groups:
+  systemd_units:
+    check_every: 1m
+    time_limit_per_run: 30s
+    alert_after_failing_for: 2m
+    recovered_after_healthy_for: 1m
+    checks:
+      # Every service, the app's containers included: each runs as a systemd unit.
+      # Reason for warn: a failed unit is one service down, and the checks of users' view
+      # (the public sites) wake someone when users are hurt. 2 minutes ignores a restart in progress.
+      no_systemd_unit_has_failed:
+        every_systemd_unit:
+          fail_when: a_systemd_unit_has_failed
+          systemd_units_to_ignore: []
+        alert_severity: warn
+
+  disks:
+    check_every: 1m
+    time_limit_per_run: 30s
+    alert_after_failing_for: 5m
+    recovered_after_healthy_for: 5m
+    checks:
+      # Reason for 85%: it leaves days, normally, to free space or replace the server before the
+      # 95% check. Reason for warn: nothing has stopped yet.
+      every_filesystem_is_below_85_percent_full:
+        every_disk_and_network_filesystem:
+          filesystems_to_ignore: []
+        fail_when_measurement_above:
+          space_used_percent: 85
+          inodes_used_percent: 85
+        alert_severity: warn
+      # A full disk stops the server's services.
+      # Reason for sos (warn on staging01, whose alerts never wake anyone): services stop soon.
+      every_filesystem_is_below_95_percent_full:
+        every_disk_and_network_filesystem:
+          filesystems_to_ignore: []
+        fail_when_measurement_above:
+          space_used_percent: 95
+          inodes_used_percent: 95
+        alert_severity: {{ $sos }}
+{{- if $raid_arrays }}
+
+  # A dedicated server mirrors its drives with Linux software RAID. A mirror
+  # that lost a drive keeps the server running; replace the server.
+  software_raid:
+    check_every: 1m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 1m
+    recovered_after_healthy_for: 1m
+    checks:
+{{- range $raid_arrays }}
+      {{ .name }}_has_every_drive:
+        mdadm_array: {{ .path }}
+        alert_severity: warn
+{{- end }}
+{{- end }}
+
+  security_updates:
+    check_every: 1h
+    time_limit_per_run: 1m
+    # unattended-upgrades installs security updates within a day, except
+    # database-server updates held for the team's weekly maintenance period:
+    # PostgreSQL, pg_auto_failover, PgBouncer, and the kernel.
+    alert_after_failing_for: {{ $updates_may_wait_for }}
+    recovered_after_healthy_for: 0s
+    checks:
+      # Reason for warn: a waiting update is a risk, not an outage. The delay (set above)
+      # is longer than unattended-upgrades needs to install, so a longer wait means the install is stuck.
+      no_security_update_waits:
+        apt_security_updates:
+          fail_when: a_security_update_waits_to_be_installed
+        alert_severity: warn
+      # No server reboots by itself. During the team's weekly maintenance
+      # period, a person reboots each server that needs a reboot to use
+      # installed updates. On Debian, unattended-upgrades' kernel hook
+      # writes /var/run/reboot-required for a new kernel. Library and service
+      # restarts are needrestart's job. A reboot can therefore wait a week.
+      #
+      # no_reboot_waits warns after 8 days of needing a reboot, allowing
+      # time for the weekly maintenance period to pass without the reboot.
+      # MMWatchdog restarts the 8-day count when the daemon starts and when
+      # an MMWatchdog maintenance window starts or ends, so a missed reboot
+      # can warn later.
+      # The weekly review checks whether the weekly updates and reboots ran,
+      # using weekly_window_updates_and_reboots in
+      # monkeymaxxing_stack_checklist.yml. The checklist item becomes open
+      # again every 7 days.
+      #
+      # CISA, the US cybersecurity agency, lists flaws that attackers are
+      # known to exploit. known_exploited_flaws warns about an exploited
+      # running-kernel flaw without waiting for the 8-day reboot warning.
+      # The warning arrives within about 12 hours after the flaw enters
+      # CISA's list of known exploited vulnerabilities.
+      no_reboot_waits:
+        reboot_after_updates:
+          fail_when: the_node_must_reboot_to_use_installed_updates
+        alert_severity: warn
+        alert_after_failing_for: 8d
+      # The Stack supports a Debian release only while Debian's security
+      # team gives the release regular security support, which ends about
+      # one year after the next Debian release. The warning comes 180 days
+      # before that support ends: then move the servers to the next Debian
+      # release, as initial_setup/06_create_your_three_production_servers.md#the-server-image
+      # describes.
+      security_support_lasts_another_half_year:
+        distribution_release_security_support:
+          security_support: regular
+          fail_when_security_support_ends_within: 180d
+        alert_severity: warn
+
+  installed_packages:
+    # MMWatchdog checks installed packages by downloading CISA's list of
+    # known exploited vulnerabilities from raw.githubusercontent.com and
+    # asking api.osv.dev about the server's packages.
+    # Checking installed packages takes about 100 s, so installed_packages
+    # runs every 6 hours. The second failed run opens the incident.
+    check_every: 6h
+    time_limit_per_run: 5m
+    alert_after_failing_for: 5h
+    recovered_after_healthy_for: 0s
+    checks:
+      # known_exploited_flaws warns because the check cannot tell which
+      # flaws reach the company's servers. The triage agent reports a flaw
+      # that reaches the servers at sos, such as a flaw in OpenSSH, or a
+      # flaw in the running kernel that a waiting reboot fixes
+      # (triage_agent_rules.md, "Levels of vulnerability findings").
+      known_exploited_flaws:
+        known_exploited_vulnerabilities_in_installed_packages:
+          fail_when: an_installed_package_is_affected
+        alert_severity: warn
+
+  # Reason for warn and 10 minutes: a clock that drifts breaks logs, TLS, and phone codes,
+  # but only after a long drift; 10 minutes ignores the resync after a restart.
+  clock:
+    check_every: 1m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 10m
+    recovered_after_healthy_for: 1m
+    node_clock:
+      fail_when: the_clock_is_not_synchronized
+    alert_severity: warn
+
+  # Reason for warn: the kernel killed a process and the server runs on, so the server needs more memory,
+  # not an urgent repair.
+  out_of_memory_kills:
+    check_every: 1m
+    time_limit_per_run: 10s
+    recovered_after_healthy_for: 10m
+    out_of_memory_kills:
+      fail_when: the_kernel_kills_a_process_for_lack_of_memory
+    alert_severity: warn
+{{- /*
+  The server's pool: the inventory group that holds it. Every server is in
+  exactly one pool. On util01, whose role passes no inventory_groups, it
+  stays "".
+*/ -}}
+{{- $pool := "" -}}{{- $servers_in_the_pool := 0 -}}
+{{- range $group, $servers := .inputs.inventory_groups -}}{{- if has $.node.name $servers -}}{{- $pool = $group -}}{{- $servers_in_the_pool = len $servers -}}{{- end -}}{{- end -}}
+{{- /*
+  reboot_check_settings is {} on util01 and on a desk, which never get the
+  check: the pool test comes first, and and stops at the first false value,
+  so the settings are read only on the servers whose callers pass them.
+*/ -}}
+{{- $reboot_check := .inputs.reboot_check_settings | default dict -}}
+{{- if and $pool (not (has $pool (list "util_server" "database_servers" "database_restore_servers" "systems_desks"))) (eq ($reboot_check.what_the_triage_agent_may_do_without_a_person | default "") "routine_fixes_and_server_work") }}
+
+  # Only with what_the_triage_agent_may_do_without_a_person:
+  # routine_fixes_and_server_work, and only on the servers that
+  # reboot_servers_after_updates reboots: never on a database server, util01
+  # or a systems desk. Without it no check exists, so no triage agent starts
+  # for a reboot that only a person may run.
+  # The check fails when a reboot waits (/var/run/reboot-required) and may
+  # run now, by the rule of check-whether-a-reboot-may-run-now, which the
+  # playbook runs too: another server of the pool carries the work, a jobs
+  # server, staging01, before go-live, or inside the weekly maintenance
+  # window. The triage agent then requests reboot_servers_after_updates, and
+  # MMHotline runs it after its warning unless someone presses Stop.
+  # Reason for warn: a warn alert starts a triage session, and an info alert
+  # never does; a warn wakes nobody.
+  # Reason for check_every 1m: the only app server may reboot only inside
+  # the weekly maintenance window, so the check must see the window open
+  # within a minute. Reason for alert_after_failing_for 10m:
+  # unattended-upgrades finishes its batch of updates first, so one reboot
+  # takes them all.
+  reboots_that_may_run_now:
+    check_every: 1m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 10m
+    recovered_after_healthy_for: 1m
+    checks:
+      no_reboot_waits_that_may_run_now:
+        shell:
+          script: |
+            test -e /var/run/reboot-required || exit 0
+            status=0
+            why=$(/usr/local/bin/check-whether-a-reboot-may-run-now --pool {{ $pool }} --servers-in-the-pool {{ $servers_in_the_pool }} \
+              --public-site-checks-run {{ $reboot_check.public_site_checks_run }} --weekday {{ $reboot_check.maintenance_window.weekday }} \
+              --starts-at {{ $reboot_check.maintenance_window.starts_at }} --length-minutes {{ $reboot_check.maintenance_window.length_minutes }}) || status=$?
+            [ "$status" -eq 1 ] && exit 0
+            printf 'a reboot for installed updates waits: %s\n' "$why"
+            [ "$status" -eq 0 ] && exit 1
+            exit "$status"
+        alert_severity: warn
+{{- end }}

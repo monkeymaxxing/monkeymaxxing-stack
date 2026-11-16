@@ -1,0 +1,12 @@
+# Managed by MMX from inventories/servers.yml in the systems repository.
+127.0.0.1 localhost
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+# Every server of this system, at its private address on the WireGuard network.
+{{- range $name, $server := .inputs.inventory_nodes }}
+{{- if hasKey $server.vars "private_ip" }}
+{{ $server.vars.private_ip }} {{ $name }}
+{{- end }}
+{{- end }}

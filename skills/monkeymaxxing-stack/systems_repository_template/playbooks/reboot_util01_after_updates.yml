@@ -1,0 +1,124 @@
+# Reboots util01 when installed updates require a reboot to take effect, in
+# the team's weekly window, after reboot_servers_after_updates.
+# reboot_util01_after_updates runs from a systems desk:
+#
+#   sudo -n -u servers-mmx run-mmx-on-the-servers run reboot_util01_after_updates --connection ssh_only
+#
+# MMX never reboots the machine it runs on, and util01 runs every other
+# playbook. So util01's reboot has a separate playbook,
+# reboot_util01_after_updates, which runs from a systems desk over SSH.
+# When no reboot waits on util01 (/var/run/reboot-required is missing),
+# reboot_util01_after_updates changes nothing. Otherwise, in order:
+#   1. A deploy, a fix, or a restore drill on util01 holds util01's lock.
+#      While a run holds util01's lock, the desk's
+#      reboot_util01_after_updates run stops before changing anything.
+#      Run reboot_util01_after_updates again when the run on util01 ends.
+#      The desk's reboot_util01_after_updates run does not wait for the
+#      util01 lock, because MMX runs one job at a time on a server.
+#      A job from the systems desk waiting on util01 would make util01's own
+#      runs fail on util01 as busy.
+#   2. util01's MMWatchdog holds util01's own alerts, except the public site
+#      checks, which never pause, and the hub's alerts for servers that stop
+#      reporting. util01's reboot notice (warn) still goes out: only a
+#      window on every check group would hold it, and that window would
+#      pause the public site checks too.
+#   3. util01 reboots, and MMX waits until util01 is back.
+#   4. MMHotline and MMWatchdog run again, and util01's alerts go out again.
+# While util01 reboots, about a minute, MMHotline and MMWatchdog's fleet
+# hub are down. Each server keeps undelivered alerts and sends the alerts
+# once MMWatchdog's fleet hub runs again.
+# Automatic database failover waits until util01's failover monitor runs
+# again. When util01 is not back within 2 minutes, the hub-outage alerters on the
+# first app server and the first database server wake everyone who can be
+# on call, as the hub-outage alerters do whenever util01 stops.
+fleet_stages:
+  - id: find_whether_the_updates_of_util01_wait_for_a_reboot
+    nodes: util_server
+    node_tasks:
+      - id: a_reboot_waits
+        shell:
+          script: if [ -e /var/run/reboot-required ]; then echo true; else echo false; fi
+          dryrun: if [ -e /var/run/reboot-required ]; then echo true; else echo false; fi
+          changed_when: false
+    outputs:
+      a_reboot_waits: "{{ .node_tasks.a_reboot_waits.stdout_json }}"
+
+  # 1., 2., and 3.
+  - id: reboot_util01
+    nodes: util_server
+    when: "{{ .outputs.find_whether_the_updates_of_util01_wait_for_a_reboot[.node.name].a_reboot_waits }}"
+    node_tasks:
+      # The helper, server settings comparison, and restore drill hold the
+      # lock file for each run on util01, and write what holds the lock into
+      # the lock file.
+      - id: stop_while_a_run_holds_the_lock_of_util01
+        shell:
+          # The same read-only program runs in a run and in a dryrun.
+          script: bash -c "$PROGRAM"
+          dryrun: bash -c "$PROGRAM"
+          env:
+            PROGRAM: >-
+              flock --nonblock "$LOCK_FILE" true || {
+              echo "a run on util01 holds its lock ($(cat "$LOCK_FILE")); nothing changed: run this again when that run has ended" >&2;
+              exit 1; }
+            LOCK_FILE: /var/lib/mmhotline/systems_repository.lock
+          changed_when: false
+      # The alert pause of util01's own checks, and of the fleet hub's alerts
+      # for servers that stop reporting, but never of the public site checks
+      # (util01-alert-pause, roles/util_server/files/): util01's reboot does
+      # not stop the users' site, and those checks say when users cannot
+      # reach it. The pause lasts the longest the run waits for util01, plus
+      # a margin: util01's come-back wait, come_back_wait_after_a_reboot
+      # (3m by default, mmx_project_settings.yml), then the wait for
+      # MMHotline and MMWatchdog, 5m, plus 2m for the stages' start: 10m by
+      # default. tests/alert_pauses_test.py checks the sum. When the pause
+      # does not start fully, it ends again at once (on_failure) and the run
+      # stops before the reboot.
+      - id: the_come_back_wait_is_whole_minutes_from_1_to_45
+        assert:
+          that:
+            matches: ["{{ .vars.come_back_wait_after_a_reboot }}", '^([1-9]|[1-3][0-9]|4[0-5])m$']
+          message: >-
+            come_back_wait_after_a_reboot is "{{ .vars.come_back_wait_after_a_reboot }}" for
+            {{ .node.name }} (mmx_project_settings.yml, or the server's vars in
+            inventories/servers.yml). Use whole minutes from 1m to 45m, such as 3m:
+            MMHotline stops a run after one hour, and one server's turn takes the
+            wait plus 5 minutes. Nothing changed.
+      - task_block:
+          id: pause_the_alerts_of_util01
+          changes:
+            - id: hold_the_alerts_of_util01
+              shell:
+                script: /usr/local/bin/util01-alert-pause start --for "$(( ${COME_BACK_WAIT%m} + 7 ))m" --reason "reboot_util01_after_updates"
+                env:
+                  COME_BACK_WAIT: "{{ .vars.come_back_wait_after_a_reboot }}"
+          on_failure:
+            - id: end_the_alert_pause_that_did_not_start_fully
+              shell:
+                script: /usr/local/bin/util01-alert-pause end
+      # The come-back wait, come_back_wait_after_a_reboot: its comment in
+      # mmx_project_settings.yml gives the default and the measurement;
+      # util01 answered about 28 seconds after it stopped answering, in
+      # three reboots of a real util01.
+      - id: reboot_util01
+        reboot:
+          run_only_if_this_path_exists: /var/run/reboot-required
+          wait_at_most: "{{ .vars.come_back_wait_after_a_reboot }}"
+
+  # 4.
+  - id: wait_until_util01_operates_the_system_again
+    nodes: util_server
+    when: "{{ .outputs.find_whether_the_updates_of_util01_wait_for_a_reboot[.node.name].a_reboot_waits }}"
+    node_tasks:
+      # The pause ends in cleanup, whether MMHotline and MMWatchdog run or not.
+      - task_block:
+          id: wait_until_mmhotline_and_mmwatchdog_run_then_end_the_alert_pause
+          changes:
+            - id: wait_until_mmhotline_and_mmwatchdog_run
+              wait_for:
+                command_succeeds: systemctl is-active --quiet mmhotline.service && systemctl is-active --quiet mmwatchdog.service
+                wait_at_most: 5m
+          cleanup:
+            - id: release_the_alerts_of_util01
+              shell:
+                script: /usr/local/bin/util01-alert-pause end

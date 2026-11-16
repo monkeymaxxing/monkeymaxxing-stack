@@ -1,0 +1,421 @@
+# Restores a database from its backups in its Backblaze B2 bucket onto one
+# server, with pgBackRest, and runs each app's check queries on the restored
+# copy. Two restore modes:
+#
+# restore_mode=copy_on_restore01: production, onto restore01, outside the production
+# failover formation. weekly_database_restore_drill runs restore_database for
+# the weekly restore drill, and recover_rows_from_a_restored_copy runs it
+# with recover_to set to the minute before a bad change, to copy lost rows
+# back (operating_procedures/recover_rows_lost_to_a_bad_change.md,
+# "Restore a database copy and recover the missing rows"). Both run it in a
+# throwaway clone of util01's copy that alone holds restore01.
+#
+# restore_mode=recovery: restore production onto a new database server, such as db03,
+# after every database server is lost. The new server waits in
+# database_restore_servers until the restore_database run finishes restoring
+# the new server's data.
+# After the restore, the new server moves to database_servers in
+# inventories/servers.yml, and util01's next runs make the new server the
+# formation's primary
+# (operating_procedures/recover_when_every_database_server_is_lost.md,
+# "Every database server is lost"):
+#
+#   ./server_management_scripts/run_mmx_on_util01 run restore_database --var restore_mode=recovery --var server_name=db03 \
+#       --var recover_to=latest --var read_backup_bucket_as_of="2026-11-03 15:30:00+00"
+#
+# A copy and a recovery go onto a server in the inventory group
+# database_restore_servers, which every_server and every other playbook leave
+# alone, so only restore_database changes the destination server during
+# the restore.
+#
+# The steps:
+#   1. Refuse a server outside database_restore_servers. Also refuse a
+#      restore_mode that does not fit the destination. A copy goes only onto
+#      restore01. A recovery goes onto a new database server,
+#      which keeps the database server's name after joining the formation.
+#   2. A recovery only: refuse while the failover monitor on util01 reports
+#      any node of the formation production healthy, or while any server
+#      still in database_servers answers as a running Postgres. Then
+#      production still runs, and a second primary from the backups would
+#      split the data. A rebuilt util01's monitor knows no database server,
+#      so the monitor alone would pass beside a primary that still runs.
+#   3. For a copy or a recovery, MMX installs Postgres and pgBackRest on the
+#      destination server without creating a cluster. MMX configures the
+#      firewall to admit only SSH, from util01 and the systems desks, and
+#      writes pgBackRest's settings with the
+#      production bucket's read-only key.
+#   4. The restore. pg_autoctl manages database nodes for pg_auto_failover.
+#      The restored pg_autoctl settings name absolute paths, so a production
+#      copy or recovery uses the database servers' data directory path.
+#      pgBackRest's restore refuses a directory that holds anything, so a
+#      restore never writes over a database.
+#   5. MMX runs each app's check queries, from
+#      vars.apps.<app>.restore_drill_check_queries in
+#      mmx_project_settings.yml, read-only on the restored copy. Each query must
+#      answer true.
+#   6. A recovery: archiving goes back on at the cluster's next start, which
+#      is when util01's run makes the restored cluster the primary. Until
+#      the restored cluster becomes the primary, the restored cluster
+#      archives nothing, so production's bucket gets no second history of
+#      the lost production database.
+command_line_vars:
+  restore_mode:                             # copy_on_restore01 or recovery
+    type: string
+  server_name:                              # restore01 for a copy; the new database server, such as db03, for a recovery
+    type: string
+  recover_to:                               # latest, or a time with its time zone, such as "2026-11-03 14:01:00+00"
+    type: string
+  # pgBackRest reads the bucket as it stood at read_backup_bucket_as_of, such as
+  # "2026-11-03 15:30:00+00": the bucket keeps every version of its files and
+  # locks them, so files an attacker deleted or overwrote later don't count.
+  # Give the time the restore starts, or a time before anything could have
+  # changed the bucket's files.
+  read_backup_bucket_as_of:
+    type: string
+
+fleet_stages:
+  # 1. MMX selects the named server by its inventory name, so a server that
+  # is not in the inventory fails during MMX's server selection, before
+  # any connection.
+  - id: refuse_a_server_outside_database_restore_servers
+    nodes: all
+    except_nodes: [database_restore_servers, systems_desks]
+    when: {equals: ["{{ .node.name }}", "{{ .vars.server_name }}"]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: refuse_the_server
+        assert:
+          that: false
+          message: >-
+            {{ .vars.server_name }} isn't in database_restore_servers. restore_database
+            restores only onto a server in that group, which no other playbook
+            touches: restore01 for a copy, or a new database server for a
+            recovery (operating_procedures/run_the_weekly_database_restore_drill.md, "Restoring the database").
+
+  - id: refuse_a_use_that_does_not_fit_the_server
+    nodes: "{{ .vars.server_name }}"
+    except_nodes: systems_desks
+    on_node_failure: stop_run
+    node_tasks:
+      - id: refuse_a_use_that_does_not_fit
+        assert:
+          that:
+            any:
+              - all:
+                  - {equals: ["{{ .vars.restore_mode }}", copy_on_restore01]}
+                  - {equals: ["{{ .vars.server_name }}", restore01]}
+              - all:
+                  - {equals: ["{{ .vars.restore_mode }}", recovery]}
+                  - not: {equals: ["{{ .vars.server_name }}", restore01]}
+          message: >-
+            restore_mode={{ .vars.restore_mode }} onto {{ .vars.server_name }}: restore_mode is
+            copy_on_restore01, onto restore01; recovery, onto a new
+            database server such as db03, whose name stays when it joins
+            database_servers.
+
+  # 2. The monitor's own table: health is 1 while the monitor reaches the
+  # node's Postgres. A query that fails stops the run too.
+  # Then util01 asks each server still in database_servers, over WireGuard,
+  # whether a Postgres answers on port 5432, as the monitor itself would
+  # (the database servers' firewall admits util01 there). After a rebuild
+  # of util01 the monitor's table is empty
+  # (operating_procedures/rebuild_the_utility_server_util01.md, steps 5 to 7), so
+  # the table alone would pass while an old primary still runs.
+  # pg_isready exits 0 when a Postgres accepts connections and 1 when one
+  # answers but rejects them, such as while it starts: both refuse. 2, no
+  # answer within the time limit, counts as a lost server, as before.
+  - id: check_that_no_database_server_of_production_is_healthy
+    nodes: util_server
+    when: {equals: ["{{ .vars.restore_mode }}", recovery]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: read_the_formation_from_the_failover_monitor
+        shell:
+          script: |
+            set -e
+            nodes=$(psql -X -q -At -v ON_ERROR_STOP=1 -d pg_auto_failover \
+              -c "select nodename || ' ' || health from pgautofailover.node where formationid = 'production' order by nodename")
+            printf 'the formation production on the failover monitor: %s\n' "${nodes:-no node}"
+            healthy=$(printf '%s\n' "$nodes" | awk '$2 == 1 {print $1}')
+            if [ -n "$healthy" ]; then
+              printf 'refused: the monitor reaches the Postgres of %s, so production still runs. A recovery is for when every database server is lost; to look at an earlier state, restore a copy onto restore01 (restore_mode=copy_on_restore01).\n' "$(echo $healthy)" >&2
+              exit 1
+            fi
+            if printf '%s\n' "$nodes" | awk -v name="$SERVER_NAME" '$1 == name {found = 1} END {exit !found}'; then
+              printf 'refused: the formation production already has a node named %s; a recovery goes onto a new server with a new name.\n' "$SERVER_NAME" >&2
+              exit 1
+            fi
+            servers=$(jq -nr --argjson names "$DATABASE_SERVERS" --argjson nodes "$INVENTORY_NODES" '$names[] | "\(.) \($nodes[.].vars.private_ip)"')
+            while read -r name address; do
+              [ -n "$name" ] || continue
+              answer=0
+              pg_isready -q -h "$address" -p 5432 -t "$SECONDS_TO_WAIT_FOR_AN_ANSWER" || answer=$?
+              case $answer in
+                0|1)
+                  printf 'refused: %s (%s) answers as a running Postgres, so production may still run there. A recovery beside it would make two primaries and split the data. If %s holds production, it is not lost: add it back to the failover monitor (operating_procedures/rebuild_the_utility_server_util01.md, steps 5 to 7) and do not recover. If %s is lost for good, power it off at the provider, rerun this restore, and follow operating_procedures/recover_when_every_database_server_is_lost.md.\n' "$name" "$address" "$name" "$name" >&2
+                  exit 1 ;;
+                2) printf '%s (%s) does not answer on port 5432; counted as lost\n' "$name" "$address" ;;
+                *) printf 'refused: pg_isready could not ask %s (%s), exit %s; nothing was restored\n' "$name" "$address" "$answer" >&2
+                  exit 1 ;;
+              esac
+            done <<< "$servers"
+          dryrun: |
+            psql -X -q -At -v ON_ERROR_STOP=1 -d pg_auto_failover \
+              -c "select nodename || ' ' || health from pgautofailover.node where formationid = 'production' order by nodename"
+          run_as_user_account: postgres
+          env:
+            SERVER_NAME: "{{ .vars.server_name }}"
+            DATABASE_SERVERS: "{{ .inventory.groups.database_servers }}"   # each one's vars.private_ip, from INVENTORY_NODES
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            # A lost server never answers; 5 seconds is ample over WireGuard.
+            SECONDS_TO_WAIT_FOR_AN_ANSWER: "5"
+          changed_when: false
+
+  # 3. A copy or a recovery: install the Postgres major version used by the
+  # backed-up database. pgBackRest needs only pgBackRest's settings to reach
+  # the bucket, not pg_auto_failover. Preparation creates no cluster because
+  # pgBackRest restores the backed-up cluster into an empty data directory.
+  # The restored copy holds every customer's data on a server with a public
+  # address, so nothing but SSH reaches the restored copy: from util01, and
+  # from the systems desks' block, as on every other server. During a
+  # lock-out, util01 has lost admission at the servers, and a recovery runs
+  # from the desk that keeps access (operating_procedures/recover_when_every_database_server_is_lost.md,
+  # "A lock-out is on, or util01 may be compromised"). Without the desks'
+  # rule, MMX's ufw module refuses the change from a desk, because the rule set
+  # would block the desk's own SSH connection. restore01 peers only with
+  # util01 on WireGuard, so no desk reaches restore01 through the rule.
+  - id: set_up_postgres_and_pgbackrest
+    nodes: "{{ .vars.server_name }}"
+    except_nodes: systems_desks
+    node_tasks:
+      - id: install_ufw
+        apt_package:
+          packages:
+            - {name: ufw, version: newest_when_first_installed}
+      - id: set_the_shared_root_console_password
+        user:
+          name: root
+          create_home_directory: false
+          password_hash: "{{ .secrets.shared_root_console_password_hash }}"
+          apply_password_hash: on_every_run
+          password_locked: false
+      - id: admit_only_ssh
+        ufw:
+          default_incoming: deny
+          default_outgoing: allow
+          incoming_rules:
+            - {action: allow, port: 22, protocol: tcp, incoming_interface: wg0, from: "{{ .vars.private_ip_ranges.systems_desks }}"}
+            - {action: allow, port: 22, protocol: tcp, incoming_interface: wg0, from_inventory_group: {group: util_server, address_var: private_ip}}
+            - {action: allow, port: "{{ .vars.wireguard_listen_port }}", protocol: udp}
+          outgoing_rules:
+            # First-boot metadata holds the WireGuard key; block HTTP on IPv4 and IPv6.
+            - {action: deny, port: 80, protocol: tcp, to: 169.254.169.254}
+            - {action: deny, port: 80, protocol: tcp, to: "fd00:ec2::254"}
+          outgoing_rules_not_listed: remove
+          incoming_rules_not_listed: remove
+          enabled: true
+
+      # Installing postgresql-17 creates Debian's cluster main on port 5432
+      # unless /etc/postgresql-common/createcluster.conf says otherwise.
+      - id: create_the_postgresql_common_settings_directory
+        directory:
+          path: /etc/postgresql-common
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: create_no_cluster_when_postgres_is_installed
+        file:
+          path: /etc/postgresql-common/createcluster.conf
+          content: "create_main_cluster = false\n"
+          owner: root
+          group: root
+          permissions_mode: "0644"
+      - id: install_postgres_and_pgbackrest
+        apt_package:
+          packages:
+            - {name: "postgresql-{{ .vars.postgresql_major_version }}", version: newest_when_first_installed}
+            - {name: pgbackrest, version: newest_when_first_installed}
+      - id: create_the_directory_of_the_data_directory
+        directory:
+          path: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}"
+          owner: postgres
+          group: postgres
+          permissions_mode: "0755"
+
+      # The database servers' pgBackRest settings (files_used_by_several_roles/pgbackrest.conf),
+      # with the key that can only read the production bucket, and the
+      # passphrase that decrypts the backups.
+      - id: create_the_pgbackrest_settings_directory
+        directory:
+          path: /etc/pgbackrest
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: name_the_pgbackrest_settings_with_the_read_only_key
+        set_vars:
+          pgbackrest_settings:
+            b2_s3_endpoint: "{{ .vars.backups.b2_s3_endpoint }}"
+            b2_region: "{{ .vars.backups.b2_region }}"
+            bucket_name: "{{ .vars.backups.production_bucket }}"
+            bucket_key_id: "{{ .secrets.pgbackrest_b2_read_only_key_id }}"
+            bucket_application_key: "{{ .secrets.pgbackrest_b2_read_only_application_key }}"
+            repository_cipher_passphrase: "{{ .secrets.pgbackrest_repository_cipher_passphrase }}"
+            data_directory: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_node"
+            keep_database_backups_for_days: "{{ .vars.backups.keep_database_backups_for_days }}"
+            lock_backups_against_deletion_for_days: "{{ .vars.backups.lock_backups_against_deletion_for_days }}"
+            keep_prior_file_versions_in_buckets_for_days: "{{ .vars.backups.keep_prior_file_versions_in_buckets_for_days }}"
+      - id: write_the_pgbackrest_settings_with_the_read_only_key
+        file:
+          path: /etc/pgbackrest/pgbackrest.conf
+          template: files_used_by_several_roles/pgbackrest.conf
+          owner: root
+          group: postgres
+          permissions_mode: "0640"
+          secret_readable_by_group: true    # pgBackRest runs as postgres
+
+  # 4. MMX's pgbackrest_restore module restores the backup, then starts the
+  # restored cluster. pgbackrest_restore waits until the restored cluster's
+  # recovery ends, then leaves the cluster running with archive_mode off in
+  # the cluster's postgresql.auto.conf. A rerun finds the module's completed restore and changes nothing.
+  - id: restore_the_backup
+    nodes: "{{ .vars.server_name }}"
+    except_nodes: systems_desks
+    node_tasks:
+      - id: name_the_data_directory_of_a_copy_or_a_recovery
+        set_vars:
+          data_directory: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_node"
+      - id: restore_from_the_bucket
+        pgbackrest_restore:
+          stanza: main
+          config_file: /etc/pgbackrest/pgbackrest.conf
+          data_directory: "{{ .vars.data_directory }}"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          recover_to: "{{ .vars.recover_to }}"
+          read_repository_as_of: "{{ .vars.read_backup_bucket_as_of }}"   # MMX's input name; pgBackRest calls the bucket a repository
+          repository: 1
+        # No limit here: the weekly drill's own limit (restore_drill_time_limit_hours)
+        # bounds a drill, and a recovery by hand must not be cut off mid-restore.
+        time_limit: null
+
+  # 5. Each query runs as postgres in a read-only transaction, so no query
+  # changes the copy. For latest and a restore to a specified time,
+  # run_the_check_queries_of_each_app prints JSON fields for two times:
+  # when the copy answered the check queries, and when the newest replayed
+  # transaction committed.
+  #
+  # For recover_to=latest, seconds_of_writes_missing_at_most measures the
+  # seconds from the newest replayed transaction's commit to
+  # read_backup_bucket_as_of. A total loss at read_backup_bucket_as_of would lose
+  # at most the writes committed during the measured seconds. On a quiet
+  # database, seconds_of_writes_missing_at_most can overstate missing writes
+  # because the measured interval can contain no commits.
+  #
+  # A restore to a specified time misses no write before the target time,
+  # so seconds_of_writes_missing_at_most has no numeric estimate.
+  - id: check_the_restored_copy
+    nodes: "{{ .vars.server_name }}"
+    except_nodes: systems_desks
+    node_tasks:
+      - id: run_the_check_queries_of_each_app
+        shell:
+          script: |
+            python3 -I - <<'PYTHON'
+            import datetime, json, os, subprocess, sys
+
+            def ask(database, sql):
+                result = subprocess.run(
+                    ["psql", "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1", "-d", database, "-c", sql],
+                    capture_output=True, text=True,
+                    env={**os.environ, "PGOPTIONS": "-c default_transaction_read_only=on"},
+                )
+                if result.returncode != 0:
+                    return None, result.stderr.strip()
+                return result.stdout.strip(), None
+
+            def utc_text(moment):
+                return moment.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            def moment(text):
+                # Such as 2026-11-03 14:01:00+00, or 2026-11-03 14:01Z: the forms that
+                # pgbackrest_restore accepts for read_backup_bucket_as_of.
+                text = text.replace("Z", "+00:00")
+                if text[-3] in "+-":
+                    text += ":00"
+                return datetime.datetime.fromisoformat(text)
+
+            failures = []
+            for app_name, app in sorted(json.loads(os.environ["APPS"]).items()):
+                queries = app.get("restore_drill_check_queries") or []
+                if not queries:
+                    failures.append(f"apps.{app_name} in mmx_project_settings.yml has no restore_drill_check_queries")
+                for query in queries:
+                    answer, error = ask(app["database_name"], query["sql"])
+                    print(f"{app_name}, {query['name']}: {answer if error is None else error}", file=sys.stderr)
+                    if error is not None:
+                        failures.append(f"{app_name}'s query {query['name']} failed: {error}")
+                    elif answer != "t":
+                        failures.append(f"{app_name}'s query {query['name']} answered {answer!r}, not true")
+            answered_at = datetime.datetime.now(datetime.timezone.utc)
+            if failures:
+                sys.exit("the restored copy failed its check queries: " + "; ".join(failures))
+
+            newest, error = ask("postgres", "select extract(epoch from pg_last_xact_replay_timestamp())")
+            if error is not None:
+                sys.exit(f"reading pg_last_xact_replay_timestamp() failed: {error}")
+            newest_committed_at = None
+            seconds_of_writes_missing_at_most = None
+            if newest:
+                newest_committed_at = datetime.datetime.fromtimestamp(float(newest), datetime.timezone.utc)
+                if os.environ["RECOVER_TO"] == "latest":
+                    read_as_of = moment(os.environ["READ_BACKUP_BUCKET_AS_OF"])
+                    seconds_of_writes_missing_at_most = round((read_as_of - newest_committed_at).total_seconds())
+            print(json.dumps({
+                "answered_the_check_queries_at": utc_text(answered_at),
+                "newest_restored_transaction_committed_at": newest_committed_at and utc_text(newest_committed_at),
+                "seconds_of_writes_missing_at_most": seconds_of_writes_missing_at_most,
+            }))
+            PYTHON
+          dryrun: |
+            printf 'would run the check queries of each app on the restored copy\n' >&2
+            printf '{"answered_the_check_queries_at": null, "newest_restored_transaction_committed_at": null, "seconds_of_writes_missing_at_most": null}\n'
+          run_as_user_account: postgres
+          env:
+            APPS: "{{ .vars.apps }}"
+            RECOVER_TO: "{{ .vars.recover_to }}"
+            READ_BACKUP_BUCKET_AS_OF: "{{ .vars.read_backup_bucket_as_of }}"
+          changed_when: false
+    # weekly_database_restore_drill reads answered_the_check_queries_at,
+    # newest_restored_transaction_committed_at, and
+    # seconds_of_writes_missing_at_most from mmx results --json for the
+    # checklist.
+    outputs:
+      answered_the_check_queries_at: "{{ .node_tasks.run_the_check_queries_of_each_app.stdout_json.answered_the_check_queries_at }}"
+      newest_restored_transaction_committed_at: "{{ .node_tasks.run_the_check_queries_of_each_app.stdout_json.newest_restored_transaction_committed_at }}"
+      seconds_of_writes_missing_at_most: "{{ .node_tasks.run_the_check_queries_of_each_app.stdout_json.seconds_of_writes_missing_at_most }}"
+
+  # 6. For recovery, pgBackRest restored the cluster with archive_mode = off
+  # in the cluster's postgresql.auto.conf. restore_database removes
+  # archive_mode from postgresql.auto.conf. The database servers' setting
+  # archive_mode = on remains in pg_auto_failover_node's settings file
+  # (postgresql_settings in roles/database_server).
+  #
+  # Later, util01's run stops the restored cluster to make the restored
+  # cluster the formation's primary. pg_auto_failover's service starts the
+  # restored cluster again, so archive_mode = on takes effect and archiving
+  # resumes at the restart.
+  #
+  # Leaving archive_mode = off in postgresql.auto.conf would also fail
+  # util01's run that makes the restored cluster the primary. MMX's
+  # pg_auto_failover_node module manages archive_mode through
+  # postgresql_settings and refuses a setting repeated in
+  # postgresql.auto.conf.
+  - id: turn_archiving_back_on_at_the_next_start
+    nodes: "{{ .vars.server_name }}"
+    except_nodes: systems_desks
+    when: {equals: ["{{ .vars.restore_mode }}", recovery]}
+    node_tasks:
+      - id: reset_archive_mode_in_postgresql_auto_conf
+        shell:
+          script: psql -X -q -v ON_ERROR_STOP=1 -d postgres -c 'ALTER SYSTEM RESET archive_mode'
+          dryrun: printf 'would reset archive_mode in postgresql.auto.conf, for the next start\n'
+          run_as_user_account: postgres

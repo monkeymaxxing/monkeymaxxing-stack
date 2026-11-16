@@ -1,0 +1,62 @@
+{{- /*
+  MMWatchdog's check groups for the jobs servers, a later step: the triggers
+  that name the jobs pool's operating procedures, and each job container's readings. This
+  file is an MMX template: MMX renders it on each jobs server into
+  /etc/mmwatchdog/check_groups/jobs_servers.yml. It reads the role input
+  apps.
+*/ -}}
+# Managed by MMX from mmwatchdog_checks/jobs_servers.yml in the systems repository.
+# To be woken for a check, set that check's alert_severity to sos. warn tells
+# a person during the day; sos wakes the person on call, which a small team
+# turns on check by check. The checks a careful team raises first: the
+# backups, write-ahead log archiving, and the restore drill. Each value below
+# has its reason beside it; change a value only with a reason of your own.
+check_groups:
+  # Each reading covers the 5 minutes since the previous reading. A warning
+  # goes out after 15 minutes past a limit.
+  jobs_server_capacity:
+    check_every: 5m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 15m
+    recovered_after_healthy_for: 5m
+    checks:
+      # Operating procedure: add a jobs server. A full jobs server makes jobs
+      # wait in the queue, not a user's request. So the limit is 70% used:
+      # every pool keeps at least 30% of CPU unused as headroom, and the jobs
+      # servers need no extra room for a lost server, unlike the app pool.
+      cpu_is_below_70_percent:
+        node_resource: cpu
+        fail_when_measurement_above:
+          cpu_used_percent: 70
+        alert_severity: warn
+      # Operating procedure: add a jobs server, or bigger jobs servers.
+      # Reason for 75%: leaves room for a restart of the job containers. Reason for warn: jobs wait, users do not.
+      memory_is_below_75_percent:
+        node_resource: memory
+        fail_when_measurement_above:
+          memory_used_percent: 75
+        alert_severity: warn
+{{- /* An app whose jobs_command is "" has no job container, so it has no job check. */ -}}
+{{- $some_app_has_jobs := false -}}
+{{- range $app_name, $app := .inputs.apps }}{{ if ne $app.jobs_command "" }}{{ $some_app_has_jobs = true }}{{ end }}{{ end }}
+{{- if $some_app_has_jobs }}
+
+  # MMWatchdog records each job container's CPU readings without alerting.
+  # The triage agent reads the job containers' CPU readings to find which
+  # app's jobs use the jobs servers' CPU.
+  job_containers:
+    check_every: 5m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 15m
+    recovered_after_healthy_for: 5m
+    checks:
+{{- range $app_name, $app := .inputs.apps }}
+{{- if ne $app.jobs_command "" }}
+      {{ $app_name }}_jobs_cpu:
+        only_record_readings: true
+        systemd_unit_resource:
+          systemd_unit: {{ $app_name }}-jobs.service
+          resource: cpu
+{{- end }}
+{{- end }}
+{{- end }}

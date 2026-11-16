@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+case "${1:-}" in
+ web) exec node scripts/web.mjs ;;
+ migrate|jobs|seed-test-data) exec node scripts/manage.mjs "$@" ;;
+ *) echo 'Usage: bin/portal web|migrate|jobs|seed-test-data' >&2; exit 2 ;;
+esac

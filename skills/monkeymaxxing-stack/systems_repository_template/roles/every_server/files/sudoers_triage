@@ -1,0 +1,61 @@
+# Managed by MMX. The triage user may run exactly these commands as root,
+# each with exactly these arguments; sudo refuses any other argument. Each
+# one only reads, except mmwatchdog check-now --count-as-scheduled-run at
+# the end, and none starts a pager or another program. The triage user
+# reads the journal (journalctl), systemctl status, and the logs in
+# /var/log without sudo, through the groups systemd-journal and adm.
+#
+# Left out on purpose:
+# - journalctl as root: its options --vacuum-size and --cursor-file delete or
+#   write files.
+# - podman inspect: it shows a container's environment, which holds the
+#   app's secrets. The containers log to the journal, so podman logs is not
+#   needed either.
+
+# Listening and connected sockets, with the programs that hold them.
+triage ALL=(root) NOPASSWD: /usr/bin/ss -tulpn
+triage ALL=(root) NOPASSWD: /usr/bin/ss -tupn
+# The firewall's rules.
+triage ALL=(root) NOPASSWD: /usr/sbin/ufw status verbose
+# The WireGuard peers and their latest handshakes; private keys stay hidden.
+triage ALL=(root) NOPASSWD: /usr/bin/wg show
+# The containers and their state.
+triage ALL=(root) NOPASSWD: /usr/bin/podman ps --all
+# MMWatchdog's checks and recent events on this server.
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog status --json
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog events --json
+
+# After a fix: a check group's scheduled runs, now, whose results count, so
+# a fixed check's warning closes once the check has been healthy for its
+# recovered_after_healthy_for, instead of at its next scheduled run, up to
+# an hour later. It does nothing that MMWatchdog wouldn't do at those runs'
+# own time, such as a restart that a failing check asks for. One line for
+# each check group in mmwatchdog_checks/; MMWatchdog refuses a group that
+# this server doesn't have. Never --without-daemon or --config-dir, which
+# would run checks from any directory as root.
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now systemd_units --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now disks --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now software_raid --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now security_updates --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now reboots_that_may_run_now --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now installed_packages --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now clock --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now out_of_memory_kills --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now app_server_capacity --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now job_containers --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now database_server_capacity --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now postgres --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now pgbouncer --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now write_ahead_log_archiving --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now backups --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now jobs_server_capacity --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now load_balancer_server_capacity --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now tunnel_connector_and_caddy --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now util_server_capacity --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now public_sites --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now restore_drill --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now pinned_program_releases --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now mmhotline_backup --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now uploads_backup --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now app_servers_to_add_for_the_load --count-as-scheduled-run
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now app_servers_to_remove_for_the_load --count-as-scheduled-run

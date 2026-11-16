@@ -1,0 +1,10 @@
+# This file belongs to desk01. A second desk gets its own HostKeyAlias.
+Host *
+  HostKeyAlias desk01
+  User root
+  IdentityFile /root/.ssh/systems_desk_self_management_key
+  IdentityAgent none
+  IdentitiesOnly yes
+  ForwardAgent no
+  UserKnownHostsFile ssh/known_hosts
+  StrictHostKeyChecking yes

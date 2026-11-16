@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Makes MMWatchdog's fleet hub forget the servers that left the inventory.
+#
+# Managed by MMX from the systems repository (roles/util_server). The hub keeps
+# every server that ever reported to it, and alerts when one goes silent. A
+# server deleted from the inventory, because it was removed or lost, is gone on
+# purpose, so the hub forgets it.
+#
+# Reads the inventory's servers, as JSON with one key per server, from the
+# environment variable INVENTORY_NODES. Prints one line for each server it
+# forgets, and exits with:
+#
+#   0  the hub knows no server outside the inventory; nothing changed;
+#   2  it forgot at least one server;
+#   1  it failed, and says why.
+#
+# With --dryrun it changes nothing: it prints "would forget NAME" for each such
+# server, and exits with 2 when there is one.
+
+set -euo pipefail
+
+mmwatchdog=/usr/local/bin/mmwatchdog
+dryrun=false
+if [[ $# -eq 1 && ${1-} == --dryrun ]]; then dryrun=true; fi
+inventory_node_names=$(jq -c 'keys' <<< "$INVENTORY_NODES") || exit 1
+error_file=$(mktemp)
+trap 'rm -f "$error_file"' EXIT
+
+# Fleet statuses 1 and 3 still include the complete fleet JSON.
+status=0
+listed=$("$mmwatchdog" fleet --json 2> "$error_file") || status=$?
+case $status in
+    0|1|3) ;;
+    *)
+        error=$(< "$error_file")
+        error="${error#"${error%%[![:space:]]*}"}"
+        error="${error%"${error##*[![:space:]]}"}"
+        printf 'mmwatchdog fleet --json failed: %s\n' "$error" >&2
+        exit 1 ;;
+esac
+names_to_forget=$(jq -r --argjson inventory "$inventory_node_names" \
+    '[.nodes[].name] | unique - $inventory | .[]' <<< "$listed") || exit 1
+if [[ -z $names_to_forget ]]; then exit 0; fi
+while IFS= read -r name; do
+    if $dryrun; then
+        printf 'would forget %s\n' "$name"
+    else
+        "$mmwatchdog" fleet forget "$name" || exit 1
+        printf 'forgot %s\n' "$name"
+    fi
+done <<< "$names_to_forget"
+exit 2

@@ -1,0 +1,640 @@
+# What every server gets, whatever its pool: its name, SSH, the firewall,
+# the WireGuard network, journal size limits, security updates, the names of
+# the other servers, the read-only triage user, and the MMWatchdog release.
+# The server's firewall rules and WireGuard peers come from the role
+# work_out_who_this_server_talks_to, which reads
+# connections_between_server_pools in inventories/servers.yml and refuses
+# a server outside the server pools before anything changes.
+# The flags is_app_server, is_database_server, is_util_server,
+# is_staging_server, and is_jobs_server say which software and update
+# policy the server gets; is_load_balancer_server tells
+# check-that-this-server-does-its-work that the server must run the tunnel
+# connector.
+inputs:
+  everyone_locked_out_except_desk: {type: string, default: ""}
+  wireguard_listen_port: {type: integer, required: true}   # from inventories/servers.yml
+  database_moving_in: {type: mapping, default: {}}
+  # false on every server; files/unattended_upgrades.conf also serves the desk.
+  is_systems_desk: {type: boolean, default: false}
+  is_app_server:                            # true in app_servers
+    type: boolean
+    required: true
+  is_database_server:                       # true in database_servers
+    type: boolean
+    required: true
+  is_util_server:                           # true in util_server
+    type: boolean
+    required: true
+  is_staging_server:                        # true in staging_server
+    type: boolean
+    required: true
+  is_jobs_server:                           # true in jobs_servers
+    type: boolean
+    required: true
+  is_load_balancer_server:                  # true in load_balancer_servers
+    type: boolean
+    required: true
+  inventory_nodes:                          # every server of the inventory: its name, address, and vars
+    type: mapping
+    required: true
+  inventory_groups:                         # every inventory group and its servers
+    type: mapping
+    required: true
+  # The three outputs of work_out_who_this_server_talks_to for this server.
+  wireguard_peer_names:
+    type: list
+    required: true
+  incoming_firewall_rules:
+    type: list
+    required: true
+  peers_with_the_database_moving_in:
+    type: boolean
+    required: true
+  shared_root_console_password_hash:
+    type: string
+    secret: true
+    required: true
+  root_ssh_public_keys:
+    type: list
+    required: true
+  triage_ssh_public_key:
+    type: string
+    required: true
+  mmwatchdog_release:                       # version, download_url, and sha256
+    type: mapping
+    required: true
+  # From mmx_project_settings.yml and the inventory, for
+  # check-that-this-server-does-its-work: each app's health URL and
+  # jobs_command, and each environment's public host names.
+  apps:
+    type: mapping
+    required: true
+  public_host_names:
+    type: mapping
+    required: true
+
+node_tasks:
+  # MMWatchdog's apt_security_updates reads this successful-refresh stamp.
+  # Debian does not write the stamp by default. The hook must exist before
+  # any package task can refresh apt's lists.
+  - id: write_the_successful_package_list_refresh_stamp_hook
+    file:
+      path: /etc/apt/apt.conf.d/15update-stamp
+      content: |
+        APT::Update::Post-Invoke-Success {"touch /var/lib/apt/periodic/update-success-stamp 2>/dev/null || true";};
+      owner: root
+      group: root
+      permissions_mode: "0644"
+
+  # MMWatchdog's fleet view names each server by its host name, so the host
+  # name is the inventory name.
+  - id: set_the_host_name_to_the_inventory_name
+    hostname:
+      name: "{{ .node.name }}"
+
+  # Some providers' images run cloud-init at every boot.
+  # At the server's first boot, cloud-init makes SSH access possible.
+  # MMX configures the server after the first boot.
+  # MMX writes /etc/cloud/cloud-init.disabled to turn cloud-init off for
+  # every later boot.
+  # Because cloud-init no longer runs, cloud-init cannot rewrite /etc/hosts
+  # or the host name, or look for the network card under an old name at a
+  # later boot and leave cloud-init's units failed.
+  # The network settings cloud-init wrote at the first boot stay.
+  # A server without cloud-init never reads /etc/cloud/cloud-init.disabled.
+  - id: turn_cloud_init_off_after_the_first_boot
+    file:
+      path: /etc/cloud/cloud-init.disabled
+      content: |
+        # Written by MMX: cloud-init set this server up at its first boot;
+        # MMX sets it up from then on.
+      owner: root
+      group: root
+      permissions_mode: "0644"
+
+  # Every server's name, with its private address, from the inventory.
+  # The apps' database settings and every other server-to-server setting
+  # use the server names from inventories/servers.yml.
+  - id: write_the_names_of_every_server
+    file:
+      path: /etc/hosts
+      template: files/hosts
+      owner: root
+      group: root
+      permissions_mode: "0644"
+
+  # The shared console password permits root login at a provider console.
+  # set-up-outside-services secrets makes it and saves only its hash.
+  # SSH still refuses password authentication.
+  - id: set_the_shared_root_console_password
+    user:
+      name: root
+      create_home_directory: false
+      password_hash: "{{ .inputs.shared_root_console_password_hash }}"
+      apply_password_hash: on_every_run
+      password_locked: false
+
+  - task_block:
+      id: sshd_settings
+      changes:
+        - id: write_the_sshd_settings
+          file:
+            path: /etc/ssh/sshd_config.d/10-monkeymaxxing-stack.conf
+            content: |
+              # Managed by MMX. sshd keeps the first value it reads, and this
+              # file sorts before the distribution's and the provider's files.
+              PermitRootLogin prohibit-password
+              PasswordAuthentication no
+              KbdInteractiveAuthentication no
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      # If sshd -t rejects the SSH configuration, the block fails before
+      # sshd reloads. The running sshd keeps its settings, so an SSH
+      # configuration that sshd -t rejects never reaches the running sshd.
+      validate:
+        - id: check_the_whole_sshd_configuration
+          shell:
+            script: sshd -t
+            dryrun: sshd -t
+            changed_when: false
+      activate:
+        - id: reload_sshd
+          systemd_service:
+            name: ssh
+            state: running
+            refresh: reload
+
+  # Public TCP 22 is closed on IPv4 and IPv6. Only wg0 admits SSH,
+  # from systems desks and util01. wireguard_listen_port admits roaming peers;
+  # the redirect below turns UDP 443 into it.
+  # On the WireGuard interface wg0, the firewall allows only the service
+  # ports that connections_between_server_pools in inventories/servers.yml
+  # opens to this server's pool, from the servers that use each service.
+  # Nothing else reaches a server.
+  #
+  # MMX's HTTPS port 7443 listens on every interface, so MMX's firewall rule
+  # names wg0. util01 reaches util01's own ports without a firewall rule.
+  #
+  # The one ufw task below holds the server's whole rule set
+  # (incoming_rules_not_listed: remove), so a server that leaves the
+  # inventory loses its rules on every other server at the next run.
+  # The wg0 rules work before WireGuard exists because ufw matches an
+  # interface by name. MMX refuses a change that would leave SSH blocked.
+  - id: install_ufw
+    apt_package:
+      packages:
+        - {name: ufw, version: newest_when_first_installed}
+
+  # jq and Python 3, which the Stack's scripts use, come from the first fleet
+  # stage of playbooks/every_server.yml, install_jq_and_python3.
+
+  # check-that-this-server-does-its-work: the one check that a server does
+  # the work of its pool again, which reboot_servers_after_updates waits for
+  # after each reboot and the replacement playbooks run on a new server. The
+  # command reads what to check from the_work_of_this_server.json; the
+  # command's own comment lists the checks. A root command: it reads the live
+  # web ports and asks systemd about the job containers.
+  - id: create_the_settings_directory_of_the_stack
+    directory:
+      path: /etc/monkeymaxxing-stack
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: write_the_work_of_this_server
+    file:
+      path: /etc/monkeymaxxing-stack/the_work_of_this_server.json
+      template: files/the_work_of_this_server.json
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: install_check_that_this_server_does_its_work
+    file:
+      path: /usr/local/bin/check-that-this-server-does-its-work
+      source: files/check-that-this-server-does-its-work
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # check-whether-a-reboot-may-run-now: the one rule for when a server may
+  # reboot for installed updates, which reboot_servers_after_updates and
+  # MMWatchdog's check no_reboot_waits_that_may_run_now both run. Python 3
+  # does its weekly-window arithmetic in UTC.
+  - id: install_check_whether_a_reboot_may_run_now
+    file:
+      path: /usr/local/bin/check-whether-a-reboot-may-run-now
+      source: files/check-whether-a-reboot-may-run-now
+      owner: root
+      group: root
+      permissions_mode: "0755"
+
+
+  - role: everyone_locked_out
+    inputs:
+      everyone_locked_out_except_desk: "{{ .inputs.everyone_locked_out_except_desk }}"
+      inventory_nodes: "{{ .inputs.inventory_nodes }}"
+      inventory_groups: "{{ .inputs.inventory_groups }}"
+      wireguard_listen_port: "{{ .inputs.wireguard_listen_port }}"
+      wireguard_peer_names: "{{ .inputs.wireguard_peer_names }}"
+      root_ssh_public_keys: "{{ .inputs.root_ssh_public_keys }}"
+      triage_ssh_public_key: "{{ .inputs.triage_ssh_public_key }}"
+
+  # Load the app containers' policy before the app and jobs roles run.
+  # Debian's named crun profile is stacked with a no-new-privileges
+  # container. The policy allows signals to that full peer label while
+  # keeping the container's file, mount, and host-signal restrictions.
+  - id: confine_app_containers_with_apparmor
+    when:
+      any:
+        - "{{ .inputs.is_app_server }}"
+        - "{{ .inputs.is_jobs_server }}"
+        - "{{ .inputs.is_staging_server }}"
+    task_block:
+      id: app_container_apparmor
+      changes:
+        - id: install_apparmor
+          apt_package:
+            packages:
+              - {name: apparmor, version: newest_when_first_installed}
+        - id: run_apparmor_at_boot
+          systemd_service:
+            name: apparmor
+            state: running
+            start_at_boot: true
+        - id: write_the_app_container_profile
+          file:
+            path: /etc/apparmor.d/monkeymaxxing-app-containers
+            source: files/monkeymaxxing-app-containers
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: apparmor_parser --skip-kernel-load --skip-read-cache "$NEW_FILE"
+                dryrun: apparmor_parser --skip-kernel-load --skip-read-cache "$NEW_FILE"
+                env:
+                  NEW_FILE: "{{ .new_file.path }}"
+        # The app containers run with UserNS=auto: Podman gives each one its
+        # own unused, unprivileged range of user ids, so root inside a
+        # container is not root on the server. Podman takes those ids from
+        # the "containers" user's range in /etc/subuid and /etc/subgid.
+        # Debian ships no such range, and without it a container fails to
+        # start with "Cannot find mappings for user containers". The range
+        # starts at 2147483647 and holds 2147483648 ids, far above the ids
+        # of the server's own users. The other lines of both files stay.
+        - id: give_app_containers_a_range_of_user_ids
+          line:
+            path: /etc/subuid
+            match: '^containers:'
+            line: "containers:2147483647:2147483648"
+            insert_at_end_of_file: true
+        - id: give_app_containers_a_range_of_group_ids
+          line:
+            path: /etc/subgid
+            match: '^containers:'
+            line: "containers:2147483647:2147483648"
+            insert_at_end_of_file: true
+      activate:
+        # Restarting AppArmor's boot service loads every profile in
+        # /etc/apparmor.d again, ours included. MMX restarts the service
+        # only when the profile file changed, so a dryrun of an unchanged
+        # server proposes nothing. A plain shell command here ran, and a
+        # dryrun proposed it, on every run, so the daily server settings comparison could
+        # never find "no change".
+        - id: load_the_app_container_profile
+          systemd_service:
+            name: apparmor
+            state: running
+            refresh: restart
+
+  # WireGuard listens on wireguard_listen_port (inventories/servers.yml says
+  # why), and the outside world reaches it on UDP 443. The redirect and the
+  # firewall rule for the real port come before the wireguard_interface task
+  # below, which may change ListenPort: a peer that still sends to UDP 443
+  # then never meets a closed port. The unit loads the redirect before
+  # wg-quick@wg0.service on every boot.
+  - task_block:
+      id: wireguard_udp_443_redirect
+      changes:
+        - id: install_nftables
+          apt_package:
+            packages:
+              - {name: nftables, version: newest_when_first_installed}
+        - id: write_the_udp_443_redirect
+          file:
+            path: /etc/wireguard/wireguard_udp_443_redirect.nft
+            template: ../../files_used_by_several_roles/wireguard_udp_443_redirect.nft
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: nft --check --file "$NEW_FILE"
+                dryrun: nft --check --file "$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+        # Servers and desks reach each other on WireGuard's own port with no
+        # connection tracking (the file says why). It lists the public address
+        # of every inventory node, so a new server or desk joins with an
+        # ordinary run: every_server, and each desk's next desk review.
+        - id: write_the_wireguard_notrack_table
+          file:
+            path: /etc/wireguard/wireguard_notrack_between_servers_and_desks.nft
+            template: ../../files_used_by_several_roles/wireguard_notrack_between_servers_and_desks.nft
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: nft --check --file "$NEW_FILE"
+                dryrun: nft --check --file "$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+        - id: install_the_udp_443_redirect_unit
+          systemd_unit:
+            name: wireguard-udp-443-redirect.service
+            template: ../../files_used_by_several_roles/wireguard_udp_443_redirect.service
+        # MMX applies a changed ListenPort live, with systemctl reload. Linux
+        # picks NAT only for a flow's first packet, so a peer's keepalive flow
+        # to UDP 443 that began before the redirect stays unredirected and never
+        # recovers (seen on test servers). Forgetting those flows lets the next packet be
+        # redirected.
+        - id: install_conntrack
+          apt_package:
+            packages:
+              - {name: conntrack, version: newest_when_first_installed}
+        - id: forget_udp_443_flows_after_a_port_change
+          systemd_unit:
+            name: wg-quick@wg0.service
+            drop_in: forget_udp_443_flows_after_a_port_change.conf
+            content: |
+              # Managed by MMX. After WireGuard starts or reloads, forget the old
+              # UDP 443 flows (a flow keeps the NAT choice of its first packet).
+              # The leading "-" ignores exit 1 when no flow exists.
+              [Service]
+              ExecStartPost=-/usr/sbin/conntrack -D -p udp --orig-port-dst 443
+              ExecReload=-/usr/sbin/conntrack -D -p udp --orig-port-dst 443
+      activate:
+        - id: reload_the_systemd_units_for_the_wireguard_drop_in
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: run_the_udp_443_redirect
+          systemd_service:
+            name: wireguard-udp-443-redirect.service
+            state: running
+            start_at_boot: true
+            refresh: restart
+
+  # The rules come from work_out_who_this_server_talks_to: the rules every
+  # server gets, then the lines of connections_between_server_pools whose
+  # to_pool is this server's pool.
+  - id: firewall
+    ufw:
+      default_incoming: deny
+      default_outgoing: allow
+      incoming_rules: "{{ .inputs.incoming_firewall_rules }}"
+      outgoing_rules:
+        # First-boot metadata holds the WireGuard key; block HTTP on IPv4 and IPv6.
+        - {action: deny, port: 80, protocol: tcp, to: 169.254.169.254}
+        - {action: deny, port: 80, protocol: tcp, to: "fd00:ec2::254"}
+      outgoing_rules_not_listed: remove
+      incoming_rules_not_listed: remove
+      enabled: true
+
+  # The first boot supplied wg0.private_key; MMX reuses the existing key.
+  - id: install_the_wireguard_tools
+    apt_package:
+      packages:
+        - {name: wireguard-tools, version: newest_when_first_installed}
+  - id: join_the_wireguard_network
+    wireguard_interface:
+      name: wg0
+      template: files/wireguard_wg0.conf
+      restore_unless_controller_confirms_within: 2m
+
+  # The servers that run the apps' containers end a connection to a database
+  # server that lost power or dropped off the network within about a minute.
+  # A switchover stops Postgres, which ends Postgres's connections at once.
+  # A dead database server sends nothing, so connections to the dead
+  # database server end only when TCP gives up waiting.
+  # With the kernel's defaults, TCP waits 15 minutes for acknowledgement of
+  # a query sent after the database server died.
+  # For a query the database server received before dying, TCP waits until
+  # after 2 hours with keepalive on.
+  #
+  # Each app keeps a pool of reusable database connections.
+  # Until TCP ends the failed database connections, the app's connection
+  # pool keeps giving the failed connections to requests, and the app stops
+  # answering.
+  # The apps' containers use the server's own network (Network=host), so
+  # net.ipv4.tcp_keepalive_time, net.ipv4.tcp_keepalive_intvl,
+  # net.ipv4.tcp_keepalive_probes, and net.ipv4.tcp_retries2 below also apply
+  # to the containers.
+  # A container with a network of the container's own would start from
+  # the defaults.
+  #
+  # TCP keepalive sends probes to check whether the database server still
+  # answers. Unanswered probes let TCP detect an unreachable database server.
+  # TCP keepalive applies only to a connection whose driver turns keepalive
+  # on (the Monkeymaxxing Stack skill's
+  # files_for_your_app/database_driver_finds_the_primary.md).
+  - id: end_connections_to_a_dead_server_within_a_minute
+    when:
+      any:
+        - "{{ .inputs.is_app_server }}"
+        - "{{ .inputs.is_jobs_server }}"
+        - "{{ .inputs.is_staging_server }}"
+    loop:
+      # A connection that waits for an answer, or idles in a pool, gets its
+      # first keepalive probe after 30 seconds of silence, not 2 hours;
+      net.ipv4.tcp_keepalive_time: "30"
+      # then one every 10 seconds,
+      net.ipv4.tcp_keepalive_intvl: "10"
+      # The connection ends after 3 unanswered probes: 60 seconds after the
+      # database server's last packet. A loss of network connectivity shorter
+      # than the 30 seconds of probes ends nothing.
+      net.ipv4.tcp_keepalive_probes: "3"
+      # A connection whose sent data gets no acknowledgement, such as a query
+      # sent to a dead server, ends after about 51 seconds of retransmissions
+      # (7, from 200 ms, doubling each time), not the default 15's 15
+      # minutes. During a loss of network connectivity lasting a few seconds,
+      # TCP only resends the unacknowledged data.
+      net.ipv4.tcp_retries2: "7"
+    as: setting
+    sysctl_setting:
+      name: "{{ .setting.key }}"
+      value: "{{ .setting.value }}"
+
+  # Journal size limits: a disk that fills with logs is the most common
+  # outage of a new system.
+  - task_block:
+      id: journal_size_limits
+      changes:
+        - id: create_the_journald_settings_directory
+          directory:
+            path: /etc/systemd/journald.conf.d
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - id: write_the_journal_size_limits
+          file:
+            path: /etc/systemd/journald.conf.d/50-monkeymaxxing-stack.conf
+            content: |
+              # Managed by MMX. The journal keeps at most 2 GB, and always
+              # leaves 4 GB of the disk free; the oldest entries go first.
+              [Journal]
+              SystemMaxUse=2G
+              SystemKeepFree=4G
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      activate:
+        - id: restart_journald
+          systemd_service:
+            name: systemd-journald
+            state: running
+            refresh: restart
+
+  # Security updates, installed every day by the distribution's
+  # unattended-upgrades, and on the servers outside the database pool the
+  # updates from the vendors' repositories of Caddy and cloudflared.
+  # On a database server, an update of PostgreSQL or pg_auto_failover
+  # restarts Postgres, and after a kernel update the server's reboot
+  # restarts Postgres.
+  # An update of PgBouncer drops the apps' connections to PgBouncer on the
+  # database server.
+  # Updates of PostgreSQL, pg_auto_failover, the kernel, and PgBouncer wait
+  # for update_database_servers in the team's window
+  # (files/unattended_upgrades.conf).
+  - id: install_unattended_upgrades
+    apt_package:
+      packages:
+        - {name: unattended-upgrades, version: newest_when_first_installed}
+        - {name: needrestart, version: newest_when_first_installed}
+  - id: refresh_package_lists_and_upgrade_every_day
+    file:
+      path: /etc/apt/apt.conf.d/20auto-upgrades
+      content: |
+        APT::Periodic::Update-Package-Lists "1";
+        APT::Periodic::Unattended-Upgrade "1";
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: write_the_unattended_upgrades_settings
+    file:
+      path: /etc/apt/apt.conf.d/52unattended-upgrades-local
+      template: files/unattended_upgrades.conf
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  # needrestart restarts the services that still use an old library after an
+  # update. Debian does not install needrestart by default, so the package
+  # task above installs needrestart explicitly.
+  - id: create_the_needrestart_settings_directory
+    directory:
+      path: /etc/needrestart/conf.d
+      create_missing_parent_directories: true
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: write_when_needrestart_restarts_services
+    file:
+      path: /etc/needrestart/conf.d/50-monkeymaxxing-stack.conf
+      template: files/needrestart.conf
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  # A new server's image can be months old, with a hundred security updates
+  # waiting. The new server's first MMX run installs waiting security updates
+  # at once, using the update settings in files/unattended_upgrades.conf
+  # and the service restart policy in files/needrestart.conf.
+  # The first MMX run does not leave the security updates to the next
+  # morning's timer. The reboot that an update asks for comes in the operating
+  # procedure that adds the server, right after its setup
+  # (operating_procedures/add_a_server.md, step 7).
+  # App, jobs and load-balancer servers skip this task: their new servers
+  # serve first and install the same updates in the last fleet stage of
+  # playbooks/every_server.yml, install_the_waiting_security_updates_on_new_servers,
+  # with the same marker file. Database servers, util01 and staging01 install
+  # here, before their services start: needrestart only lists the services of
+  # a database server (a running Postgres would keep the old libraries until
+  # the weekly window), and no replacement of a failed server waits for them.
+  # --no-minimal-upgrade-steps installs in one dpkg run instead of one per
+  # package group, which takes about half the time; minimal steps exist so
+  # that a shutdown can interrupt the upgrade, and a first MMX run is not
+  # shut down.
+  - id: install_the_waiting_security_updates_on_a_new_server
+    when:
+      not:
+        any:
+          - "{{ .inputs.is_app_server }}"
+          - "{{ .inputs.is_jobs_server }}"
+          - "{{ .inputs.is_load_balancer_server }}"
+    time_limit: 30m
+    shell:
+      script: apt-get update && unattended-upgrade --no-minimal-upgrade-steps
+      dryrun: printf 'would install the waiting security updates, the first time only\n'
+      run_only_once_marker_file: /var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server
+  - id: run_the_daily_package_list_refresh
+    systemd_service:
+      name: apt-daily.timer
+      state: running
+      start_at_boot: true
+  - id: run_the_daily_unattended_upgrade
+    systemd_service:
+      name: apt-daily-upgrade.timer
+      state: running
+      start_at_boot: true
+
+  # MMWatchdog checks when the distribution release stops receiving free
+  # security fixes, using the dates from the distro-info-data package.
+  - id: install_the_release_dates_of_the_distribution
+    apt_package:
+      packages:
+        - {name: distro-info-data, version: newest_when_first_installed}
+
+  # The MMWatchdog release is unpacked beside the earlier releases.
+  # Nothing runs the new MMWatchdog release yet.
+  # On util01, the util_server role configures MMWatchdog as the fleet hub.
+  # On every server except util01, the mmwatchdog_joined_node role joins the
+  # server's MMWatchdog instance to the fleet hub.
+  - id: create_the_mmwatchdog_group
+    group:
+      name: mmwatchdog
+      system: true
+  # MMWatchdog runs its shell checks as the mmwatchdog user account.
+  - id: create_the_mmwatchdog_check_account
+    user:
+      name: mmwatchdog
+      system: true
+      primary_group: mmwatchdog
+      home: /var/lib/mmwatchdog-checks
+      create_home_directory: false
+  - id: create_the_home_of_the_mmwatchdog_check_account
+    directory:
+      path: /var/lib/mmwatchdog-checks
+      owner: mmwatchdog
+      group: mmwatchdog
+      permissions_mode: "0700"
+  - id: create_the_mmwatchdog_program_directory
+    directory:
+      path: /usr/local/lib/mmwatchdog
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_mmwatchdog_releases_directory
+    directory:
+      path: /usr/local/lib/mmwatchdog/releases
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # MMWatchdog's modules of the project's own. The stack has none, and
+  # MMWatchdog needs /usr/local/lib/mmwatchdog/external_modules anyway.
+  - id: create_the_mmwatchdog_external_modules_directory
+    directory:
+      path: /usr/local/lib/mmwatchdog/external_modules
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: unpack_the_mmwatchdog_release
+    unpack_archive:
+      url: "{{ .inputs.mmwatchdog_release.download_url }}"
+      sha256: "{{ .inputs.mmwatchdog_release.sha256 }}"
+      path: "/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}"
+      unpack_without_wrapping_folder: true

@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Render the phone-code lockout settings and the go-live public checks with MMX.
+
+  MMX_BINARY=/path/to/mmx python3 tests/phone_code_lockout_test.py
+
+It proves the project settings reach fail2ban's jail, the desk's first-login
+text, and the MMWatchdog alert severities, that a bad value gives a clear
+error, and that the public-address (sos) checks exist only after go-live.
+"""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
+GOOD = dict(wrong_codes_before_lockout=5, lockout_minutes=5, alert_severity_when_a_laptop_is_locked_out='warn')
+
+
+class Rendered(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.mmx = os.environ.get('MMX_BINARY') or shutil.which('mmx')
+        if not cls.mmx:
+            raise RuntimeError('Set MMX_BINARY to test the actual MMX templates.')
+
+    def render_result(self, filename, **values):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root/'inventories').mkdir()
+            (root/'playbooks').mkdir()
+            (root/'mmx_project_settings.yml').write_text(json.dumps(dict(project_name='render_test', default_inventory='servers', vars=values)))
+            (root/'inventories/servers.yml').write_text(json.dumps(dict(nodes={'app001': {'address': '127.0.0.1'}})))
+            (root/'source.template').write_text((T/filename).read_text().replace('.inputs', '.vars'))
+            (root/'playbooks/render.yml').write_text(json.dumps(dict(fleet_stages=[dict(id='render', nodes='all', node_tasks=[
+                dict(id='render', file=dict(path='/tmp/rendered', template='source.template', permissions_mode='0600'))])])))
+            result = subprocess.run([self.mmx, 'explain', 'render', '--json'], cwd=root, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)['fleet_stages'][0]['node_tasks'][0]['rendered_templates'][0]
+
+    def render(self, filename, **values):
+        rendered = self.render_result(filename, **values)
+        self.assertIn('text', rendered, rendered)
+        return rendered['text']
+
+    def lockout(self, **changes):
+        return dict(phone_code_lockout=dict(GOOD, **changes), person_unix_username='alex')
+
+    def test_the_jail_uses_the_settings(self):
+        jail = self.render('roles/systems_desk/files/phone_code_jail.conf', **self.lockout())
+        self.assertIn('maxretry = 5\n', jail)
+        self.assertIn('bantime = 300\n', jail)
+        jail = self.render('roles/systems_desk/files/phone_code_jail.conf',
+                           **self.lockout(wrong_codes_before_lockout=3, lockout_minutes=60))
+        self.assertIn('maxretry = 3\n', jail)
+        self.assertIn('bantime = 3600\n', jail)
+
+    def test_a_role_input_arrives_as_a_decimal_number(self):
+        # MMX passes role inputs as JSON, so a whole number can arrive as 5.0, which Go reads as a float.
+        # A run on a real server failed on exactly this.
+        for rendered in (self.render_text_of_a_float(),):
+            self.assertIn('maxretry = 5\n', rendered)
+            self.assertIn('bantime = 300\n', rendered)
+
+    def render_text_of_a_float(self):
+        values = self.lockout(wrong_codes_before_lockout=5.0, lockout_minutes=5.0)
+        return self.render('roles/systems_desk/files/phone_code_jail.conf', **values)
+
+    def test_bad_values_stop_with_a_clear_error(self):
+        for changes, words in [(dict(wrong_codes_before_lockout=0), 'wrong_codes_before_lockout is 0'),
+                               (dict(wrong_codes_before_lockout='five'), 'wrong_codes_before_lockout is five'),
+                               (dict(lockout_minutes=0), 'lockout_minutes is 0'),
+                               (dict(lockout_minutes=-5), 'lockout_minutes is -5'),
+                               (dict(lockout_minutes=2.5), 'lockout_minutes is 2.5'),
+                               (dict(alert_severity_when_a_laptop_is_locked_out='page'), 'is page. Use info, warn, or sos')]:
+            with self.subTest(changes=changes):
+                rendered = self.render_result('roles/systems_desk/files/phone_code_jail.conf', **self.lockout(**changes))
+                self.assertNotIn('text', rendered)
+                self.assertIn(words, rendered['not_rendered_because'])
+        rendered = self.render_result('mmwatchdog_checks/systems_desks.yml',
+                                      **self.lockout(alert_severity_when_a_laptop_is_locked_out='page'))
+        self.assertIn('Use info, warn, or sos', rendered['not_rendered_because'])
+
+    def test_one_wrong_code_is_info_and_the_lockout_has_the_chosen_severity(self):
+        for severity in ('info', 'warn', 'sos'):
+            checks = self.render('mmwatchdog_checks/systems_desks.yml',
+                                 **self.lockout(alert_severity_when_a_laptop_is_locked_out=severity))
+            first, rest = checks.split('phone_code_lockouts:')
+            self.assertIn('alert_severity: info', first)
+            self.assertNotIn('alert_severity: warn', first)
+            lockout_group = rest.split('phone_code_file:')[0]
+            self.assertIn(r'\[systems-desk-phone-code\] Ban', lockout_group)
+            # fail2ban logs bans to this file; its journal holds only start-up lines (seen on a real server).
+            self.assertIn('log_file_path: /var/log/fail2ban.log', lockout_group)
+            self.assertIn(f'alert_severity: {severity}\n', lockout_group)
+
+    def test_first_login_says_the_lockout_once(self):
+        script = self.render('roles/systems_desk/files/set-up-the-phone-code', **self.lockout(lockout_minutes=7))
+        self.assertEqual(script.count('lock this laptop out'), 1)
+        self.assertIn("'5' '7'", script)
+
+    def test_public_site_checks_start_only_after_go_live(self):
+        apps = dict(shop=dict(health_url_path='/up'))
+        names = dict(production=dict(shop='shop.example.com'))
+        before = self.render('mmwatchdog_checks/util_server.yml', apps=apps, public_host_names=names,
+                             public_site_checks_run=False, backups=dict(uploads_backup_runs_on=[]), stack_software={},
+                            triage_agent_coding_agent='claude_code', systems_desk_coding_agent='claude_code',
+                            app_pool_load_settings=dict(what_the_triage_agent_may_do_without_a_person='routine_fixes'),
+                            inventory_nodes={})
+        self.assertNotIn('public_sites:', before)
+        self.assertNotIn('alert_severity: sos', before)
+        after = self.render('mmwatchdog_checks/util_server.yml', apps=apps, public_host_names=names,
+                            public_site_checks_run=True, backups=dict(uploads_backup_runs_on=[]), stack_software={},
+                            triage_agent_coding_agent='claude_code', systems_desk_coding_agent='claude_code',
+                            app_pool_load_settings=dict(what_the_triage_agent_may_do_without_a_person='routine_fixes'),
+                            inventory_nodes={})
+        self.assertIn('https://shop.example.com/up', after)
+        self.assertIn('alert_severity: sos', after)
+
+
+if __name__ == '__main__':
+    unittest.main()

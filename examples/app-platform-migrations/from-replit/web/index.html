@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monkeymaxxing customer portal</title>
+<style>
+body{font:16px system-ui;max-width:1000px;margin:30px auto;padding:0 20px;background:#f6f5ef;color:#203229}h1{font-size:30px}section{background:white;border:1px solid #ddd;padding:22px;margin:20px 0;border-radius:10px}input,textarea,button{font:inherit;padding:8px;margin:5px}input,textarea{max-width:90%}button{cursor:pointer;background:#e4eddf;border:1px solid #83917e;border-radius:5px}li{padding:12px 0;border-bottom:1px solid #eee}small{color:#4b6253}pre{white-space:pre-wrap;word-break:break-word}#message{color:#892b18}label{display:block}textarea{display:block;width:80%}
+</style>
+<h1>Monkeymaxxing customer portal</h1><p>Manage your invoice records, private documents and record-count reports.</p>
+<p id="message" role="status"></p>
+<section id="auth"><h2>Register or sign in</h2><p>Use your synthetic example.com account. No email is sent.</p>
+<form id="auth-form"><label>Email <input name="email" id="email" type="email" required autocomplete="username"></label><label>Password <input name="password" id="password" type="password" required minlength="12" autocomplete="current-password"></label><button name="action" value="login">Sign in</button><button name="action" value="register">Register</button></form></section>
+<div id="portal" hidden><p><strong id="account"></strong> <button id="logout">Sign out</button></p>
+<section><h2>Invoice records</h2><form id="record-form"><input id="record-id" type="hidden"><label>Title <input id="title" required maxlength="200"></label><label>Description <textarea id="description"></textarea></label><button id="save-record">Create record</button><button id="cancel-edit" type="button">Cancel edit</button></form><ul id="records"></ul></section>
+<section><h2>Private documents</h2><p>Files stay private to your account. Maximum 1 MiB because uploads are buffered in server memory.</p><form id="upload-form"><input type="file" id="document" required><button>Upload document</button></form><ul id="documents"></ul></section>
+<section><h2>Record-count reports</h2><p>Reports wait until report processing is enabled.</p><button id="queue-report">Queue report</button><ul id="jobs"></ul></section>
+<section><h2>Daily task and worker controls</h2><p>The daily task archives completed reports older than 30 days. The background service runs daily tasks. Paused tasks remain due until processing resumes.</p><pre id="operations"></pre><div id="admin-controls" hidden><button data-control="worker_paused">Toggle report worker pause</button><button data-control="scheduler_paused">Toggle daily task pause</button><button data-control="maintenance_enabled">Toggle maintenance</button><button id="run-schedule">Run daily task now</button></div></section></div>
+<script>
+const byId=id=>document.getElementById(id);let currentUser,operations;
+const message=text=>byId('message').textContent=text;
+async function api(path,method='GET',body){const response=await fetch('/api'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw new Error(response.status+': '+data.error);return data;}
+function button(text,work){const element=document.createElement('button');element.textContent=text;element.onclick=()=>run(work);return element;}
+const run=async work=>{try{message('');await work();}catch(error){message(error.message);}};
+function row(list,text){const li=document.createElement('li');const span=document.createElement('span');span.textContent=text;li.append(span);byId(list).append(li);return li;}
+async function refresh(){currentUser=await api('/me');byId('auth').hidden=true;byId('portal').hidden=false;byId('account').textContent=currentUser.email;byId('admin-controls').hidden=!currentUser.is_admin;
+for(const id of ['records','documents','jobs'])byId(id).replaceChildren();
+for(const record of await api('/records')){const li=row('records',record.title+' — '+record.description+' ');li.append(button('Edit',async()=>{byId('record-id').value=record.id;byId('title').value=record.title;byId('description').value=record.description;byId('save-record').textContent='Save record';}),button('Delete',async()=>{if(confirm('Delete this record?')){await api('/records/'+record.id,'DELETE');await refresh();}}));}
+for(const doc of await api('/documents')){const li=row('documents',doc.filename+' ('+doc.byte_length+' bytes) ');const link=document.createElement('a');link.href='/api/documents/'+doc.id+'/download';link.textContent='Download';li.append(link);const hash=document.createElement('small');hash.textContent=' SHA-256 '+doc.sha256;li.append(document.createElement('br'),hash);}
+for(const job of await api('/jobs'))row('jobs',job.state+' '+job.id+(job.output?' — '+job.output:''));
+operations=await api('/operations');byId('operations').textContent=JSON.stringify(operations,null,2);}
+byId('auth-form').onsubmit=event=>{event.preventDefault();run(async()=>{await api('/auth/'+event.submitter.value,'POST',{email:byId('email').value,password:byId('password').value});byId('password').value='';await refresh();});};
+byId('logout').onclick=()=>run(async()=>{await api('/auth/logout','POST');currentUser=null;byId('portal').hidden=true;byId('auth').hidden=false;message('Signed out.');});
+const resetRecord=()=>{byId('record-form').reset();byId('record-id').value='';byId('save-record').textContent='Create record';};byId('cancel-edit').onclick=resetRecord;
+byId('record-form').onsubmit=event=>{event.preventDefault();run(async()=>{const id=byId('record-id').value;await api('/records'+(id?'/'+id:''),id?'PATCH':'POST',{title:byId('title').value,description:byId('description').value});resetRecord();await refresh();});};
+byId('upload-form').onsubmit=event=>{event.preventDefault();run(async()=>{const file=byId('document').files[0];if(file.size>1024*1024)throw new Error('Maximum document size is 1 MiB.');const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(const value of bytes)binary+=String.fromCharCode(value);await api('/documents','POST',{filename:file.name,content_base64:btoa(binary)});byId('upload-form').reset();await refresh();});};
+byId('queue-report').onclick=()=>run(async()=>{await api('/jobs','POST');await refresh();});
+for(const element of document.querySelectorAll('[data-control]'))element.onclick=()=>run(async()=>{const key=element.dataset.control;await api('/operations','PUT',{[key]:!operations.controls[key]});await refresh();});
+byId('run-schedule').onclick=()=>run(async()=>{await api('/operations/schedule/run','POST');await refresh();});
+refresh().catch(()=>{byId('auth').hidden=false;byId('portal').hidden=true;});
+</script></html>

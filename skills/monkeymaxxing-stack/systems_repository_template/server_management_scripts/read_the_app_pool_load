@@ -1,0 +1,42 @@
+#!/bin/bash
+# read_the_app_pool_load --add|--remove: writes what the load calls for to
+# /var/lib/replace_failed_servers/app_pool_for_the_load.json, for
+# add_an_app_server_for_the_load and remove_an_app_server_for_the_load, which
+# run next as the mmhotline user. Runs as root on util01: only root may read
+# the fleet hub's readings. The decision is
+# /usr/local/bin/check-whether-the-load-changes-the-app-pool's, the same
+# program that util01's checks app_servers_to_add_for_the_load and
+# app_servers_to_remove_for_the_load run, with the same settings: the
+# inventory's app servers with their server_type, growth_limits.app_servers
+# and triage_agent_server_work. The file holds its JSON answer: decision
+# (add, remove, none or stopped_by_a_bound), why, and server_to_remove.
+set -euo pipefail
+repository=$PWD
+. "$repository/server_management_scripts/steps_for_replacing_failed_servers.bash"
+
+case ${1:-} in
+  --add|--remove) direction=$1 ;;
+  *) printf 'usage: read_the_app_pool_load --add|--remove\n' >&2; exit 4 ;;
+esac
+arguments=(
+  --smallest-number-of-servers "$(jq -r .app_servers.smallest_number_of_servers <<< "$GROWTH_LIMITS")"
+  --largest-number-of-servers "$(jq -r .app_servers.largest_number_of_servers <<< "$GROWTH_LIMITS")"
+  --minutes-of-high-load "$(jq -r .minutes_of_high_load_before_an_app_server_is_added <<< "$SERVER_WORK")"
+  --days-of-low-load "$(jq -r .days_of_low_load_before_an_app_server_is_removed <<< "$SERVER_WORK")"
+  --cpu-percent-below-which-the-app-pool-can-spare-a-server "$(jq -r .cpu_percent_below_which_the_app_pool_can_spare_a_server <<< "$SERVER_WORK")"
+)
+while IFS= read -r server; do
+  arguments+=(--app-server "$server")
+done < <(jq -r --argjson nodes "$INVENTORY_NODES" '.app_servers[] | . + ":" + $nodes[.].vars.server_type' <<< "$INVENTORY_GROUPS")
+
+answer=$state_dir/app_pool_for_the_load.json
+status=0
+/usr/local/bin/check-whether-the-load-changes-the-app-pool "$direction" --json "${arguments[@]}" > "$answer.new" || status=$?
+if [ "$status" -gt 2 ]; then
+  printf "the app servers' load could not be read (check-whether-the-load-changes-the-app-pool exited %s); nothing changed\n" "$status"
+  exit 1
+fi
+jq -r .why "$answer.new"
+chgrp mmhotline "$answer.new"
+chmod 0640 "$answer.new"
+mv "$answer.new" "$answer"

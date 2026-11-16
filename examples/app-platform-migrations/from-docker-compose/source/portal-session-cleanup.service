@@ -1,0 +1,8 @@
+[Unit]
+Description=Remove expired portal sessions
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/compose-portal/source
+EnvironmentFile=/etc/compose-portal/source.env
+ExecStart=/usr/bin/docker compose -f compose.yaml -f compose.production.yaml run --rm --no-deps worker schedule.mjs

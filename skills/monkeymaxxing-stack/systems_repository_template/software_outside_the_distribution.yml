@@ -1,0 +1,165 @@
+# Every program on the servers that doesn't come from the distribution.
+#
+# MMWatchdog's vulnerability checks cover the distribution's packages only.
+# For the downloaded programs, pinned under stack_software in
+# mmx_project_settings.yml, MMWatchdog's check group pinned_program_releases
+# on util01 warns when a newer release exists (mmwatchdog_checks/util_server.yml).
+# A program from a vendor's apt repository updates itself.
+# The scheduled software review, when the team turns it on, reads
+# software_outside_the_distribution.yml too: the triage agent compares each
+# program's installed version with the vendor's latest release and reads
+# the vendor's security advisories (scheduled_software_review_task.md;
+# operating_procedures/turn_on_the_scheduled_software_review.md).
+#
+# An empty releases_page or security_advisories_page means the program has
+# no such public page yet: the review fetches nothing for that page. Never
+# write an address that does not answer.
+#
+# The triage agent's internet access is "listed hosts only".
+# MMHotline automatically adds each releases_page and security_advisories_page
+# host from software_outside_the_distribution.yml to the triage agent's
+# allowed hosts. MMHotline reads software_outside_the_distribution.yml
+# from MMHotline's copy of the systems repository.
+#
+# installed_on_server_groups names inventory groups, or all for every
+# server, so an entry stays right when a server is added or replaced.
+# installed_on_server_groups names every group whose servers may run the
+# program, including groups used in later steps.
+# Moving a program between groups already listed in installed_on_server_groups
+# needs no change to software_outside_the_distribution.yml.
+# For example, a later step moves Caddy from the app servers to the
+# load-balancer servers, and Caddy's entry already lists each group.
+#
+# A program from a vendor's apt repository updates itself with the security
+# updates, on the servers where those updates are automatic.
+# A downloaded program's pin under stack_software in mmx_project_settings.yml
+# uses the program's entry name in software_outside_the_distribution.yml.
+# A commit that changes the pin updates the downloaded program when util01
+# applies the commit
+# (operating_procedures/add_or_update_a_program_from_outside_the_distribution.md,
+# "Updating a program from outside the distribution").
+#
+# Every entry names a program this system installs. Delete the entry of a
+# program the system does not install, such as codex while
+# triage_agent_coding_agent is claude_code, or rclone while
+# backups.uploads_backup_runs_on is []. Add the
+# entry back when the system starts installing the program.
+# Reason: MMHotline allows the triage agent to reach each entry's pages,
+# and the scheduled software review checks each entry, so an unused entry
+# widens the agent's internet access and adds work for nothing.
+software_outside_the_distribution:
+  caddy:
+    installed_on_server_groups: [app_servers, load_balancer_servers, staging_server]
+    installed_from: vendor_apt_repository     # Debian 13 ships Caddy 2.6.2 from 2022
+    installed_version_command: caddy version
+    releases_page: https://github.com/caddyserver/caddy/releases
+    security_advisories_page: https://github.com/caddyserver/caddy/security/advisories
+
+  cloudflared:
+    # On util01, cloudflared is the Cloudflare Tunnel connector that serves
+    # MMHotline's pages.
+    installed_on_server_groups: [app_servers, load_balancer_servers, util_server, staging_server]
+    installed_from: vendor_apt_repository
+    installed_version_command: cloudflared --version
+    releases_page: https://github.com/cloudflare/cloudflared/releases
+    security_advisories_page: https://github.com/cloudflare/cloudflared/security/advisories
+
+  mmx:
+    # mmx runs on util01. Every server also has MMX's node runner,
+    # mmx-runner, which carries out MMX's tasks on the server.
+    # mmx installs mmx-runner at the version of mmx. Updating mmx therefore
+    # updates mmx-runner on every server.
+    installed_on_server_groups: [util_server]
+    installed_from: downloaded_binary
+    installed_version_command: mmx version
+    # The team gets mmx releases from the archive that stack_software.mmx
+    # in mmx_project_settings.yml pins, which each Stack version updates.
+    # mmx has no public release list and no advisory page yet, so the
+    # scheduled software review compares the installed version with that
+    # pin and fetches no page.
+    releases_page: ""
+    security_advisories_page: ""
+
+  mmwatchdog:
+    installed_on_server_groups: [all]               # the fleet hub on util01, a node everywhere else
+    installed_from: downloaded_binary
+    installed_version_command: mmwatchdog version
+    # The team gets MMWatchdog releases from the archive that stack_software.mmwatchdog
+    # in mmx_project_settings.yml pins, which each Stack version updates.
+    # MMWatchdog has no public release list and no advisory page yet, so the
+    # scheduled software review compares the installed version with that
+    # pin and fetches no page.
+    releases_page: ""
+    security_advisories_page: ""
+
+  mmhotline:
+    installed_on_server_groups: [util_server, systems_desks]
+    installed_from: downloaded_binary
+    installed_version_command: mmhotline version
+    # The team gets MMHotline releases from the archive that stack_software.mmhotline
+    # in mmx_project_settings.yml pins, which each Stack version updates.
+    # MMHotline has no public release list and no advisory page yet, so the
+    # scheduled software review compares the installed version with that
+    # pin and fetches no page.
+    releases_page: ""
+    security_advisories_page: ""
+
+  set_up_outside_services:
+    # The Stack's own command for the account and secret setup, which the
+    # person runs on their systems desk. Built from the Stack repository's
+    # set_up_outside_services/ at the Stack version's tag.
+    installed_on_server_groups: [systems_desks]
+    installed_from: downloaded_binary
+    installed_version_command: set-up-outside-services version
+    # The team gets set-up-outside-services from the archive that
+    # stack_software.set_up_outside_services pins, which each Stack version
+    # updates. The Stack has no public release list and no advisory page
+    # yet, so the review fetches no page.
+    releases_page: ""
+    security_advisories_page: ""
+
+  litestream:
+    installed_on_server_groups: [util_server]       # copies MMHotline's database to its backup bucket
+    installed_from: downloaded_binary
+    installed_version_command: litestream version
+    releases_page: https://github.com/benbjohnson/litestream/releases
+    security_advisories_page: https://github.com/benbjohnson/litestream/security/advisories
+
+  rclone:
+    # rclone makes the nightly copy of the apps' uploads on util01
+    # while backups.uploads_backup_runs_on is [util_server].
+    installed_on_server_groups: [util_server]
+    installed_from: downloaded_binary               # Debian 13's rclone 1.60 cannot sign in with today's bucket-restricted B2 keys
+    installed_version_command: rclone version
+    releases_page: https://github.com/rclone/rclone/releases
+    security_advisories_page: https://github.com/rclone/rclone/security/advisories
+
+  # The triage agent uses a coding agent installed on util01.
+  # Keep the entry of each coding agent installed on util01.
+  claude_code:
+    installed_on_server_groups: [util_server]
+    installed_from: vendor_apt_repository     # the claude-code package, from the stable channel of Anthropic's apt repository, in /usr/bin
+    installed_version_command: claude --version
+    releases_page: https://downloads.claude.ai/claude-code-releases/stable   # the newest stable version, as plain text, which the apt repository's stable channel serves
+    security_advisories_page: https://github.com/anthropics/claude-code/security/advisories
+
+  rex:
+    installed_on_server_groups: [systems_desks]
+    installed_from: vendor_apt_repository
+    installed_version_command: rex version
+    # The preview apt index lists published versions and their checksums.
+    # Release notes are in the beta Discord's #changelog, behind login:
+    # https://www.superlogical.com/rex/docs/beta/community-mcp
+    releases_page: https://pkgs.superlogical.com/rex/apt/dists/preview/main/binary-amd64/Packages
+    # No public security advisories page was found. Do not invent a URL.
+    security_advisories_page: ""
+
+  # util_server installs Codex only while triage_agent_coding_agent in
+  # mmx_project_settings.yml is codex, and a systems desk only while
+  # systems_desk_coding_agent is codex, at the version in stack_software.codex.
+  codex:
+    installed_on_server_groups: [util_server, systems_desks]
+    installed_from: downloaded_binary         # Codex's release package in /usr/local/lib/codex/releases/<version>; codex, codex-code-mode-host, and rg linked in /usr/local/bin
+    installed_version_command: codex --version
+    releases_page: https://github.com/openai/codex/releases
+    security_advisories_page: https://github.com/openai/codex/security/advisories

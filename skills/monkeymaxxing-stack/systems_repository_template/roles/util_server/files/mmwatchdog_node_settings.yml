@@ -1,0 +1,42 @@
+# Managed by MMX from the systems repository (roles/util_server).
+# MMWatchdog on util01 is the fleet hub. Every server outside
+# database_restore_servers, except util01, reports to the hub over WireGuard.
+# The hub delivers every server's alerts to MMHotline, as
+# alert_destinations.yml specifies.
+keep_undelivered_alerts_for: 24h
+undelivered_alerts_content_size_limit: 8MiB
+# The hub-outage alerters, app001 and db01 during the initial setup, send an SOS
+# alert when util01 stops reporting: then nothing operates the system.
+alert_severity_when_this_node_goes_silent: sos
+alert_severity_when_this_node_has_rebooted: warn
+# MMHotline runs on util01 and stops with util01, so the hub-outage alerters send
+# the alert about util01 going silent straight to Pushover.
+send_silence_alerts_of_this_node_only_to_destinations: [on_call_push_app]
+# MMHotline's dashboard draws one box per MMWatchdog node group.
+# MMWatchdog's node groups match the inventory groups: util01 uses util_server.
+this_node_is_in_node_groups: [util_server]
+# The triage agent reads a full week of recorded measurements. A day more
+# covers the week that ends now.
+keep_measurement_history_for: 8d
+measurement_history_size_limit: 256MiB
+fleet_hub_role:
+  # util01's WireGuard address, so only the servers reach the hub.
+  listen_on_address: {{ .inputs.private_ip }}:8445
+  address_for_nodes: {{ .inputs.private_ip }}:8445
+  # After three missed reports, the hub marks the reporting server as silent.
+  report_every: 30s
+  # A hub-outage alerter alerts when its own reports to the hub fail for 2
+  # minutes. Measured on test servers: three reboots of a real util01 left the
+  # hub unreachable for 27, 22 and 21 seconds, and each alerter missed one
+  # report, so 2 minutes is well past a reboot, and util01 going silent
+  # wakes the team a minute sooner than with 3.
+  alert_after_hub_unreachable_for: 2m
+  # If the hub has not taken an alert within 30 seconds, the alert's source
+  # server sends the alert itself.
+  send_alert_without_hub_after_waiting_for: 30s
+  undelivered_alerts_of_nodes_content_size_limit: 32MiB
+  # The week of every server's readings, kept on util01 too, so the history
+  # of a server that died is still there. Dozens of servers take well under
+  # the size limit.
+  keep_measurement_history_of_nodes_for: 8d
+  measurement_history_of_nodes_size_limit: 4GiB

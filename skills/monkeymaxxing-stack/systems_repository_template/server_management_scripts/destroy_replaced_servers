@@ -1,0 +1,155 @@
+#!/bin/bash
+# destroy_replaced_servers: destroys, at the provider, each failed server
+# that replace_failed_servers replaced, once its newest replacement does its
+# work, and records it with one signed commit on main. The last of the three
+# runs of a replacement (playbooks/destroy_replaced_servers.yml). Runs as the
+# mmhotline user on util01, from util01's copy of the systems repository,
+# after read_the_fleet_hub_for_server_replacement.
+#
+# A chain is the replacements of one failed server: app001 replaced by
+# app002, and app002, a bad new server, replaced by app003. For each chain
+# whose failed servers no cleanup commit destroyed yet:
+#   1. The newest new server must report to the fleet hub and pass
+#      check-that-this-server-does-its-work over SSH from util01. Otherwise
+#      nothing of the chain is destroyed, and the run ends with exit 1:
+#      "app002 does not do its work yet: nothing destroyed". The triage agent
+#      then requests replace_failed_servers, which counts as the next try.
+#   2. Each failed server of the chain is destroyed by the provider ID in its
+#      replacement commit's trailer, never by a name. A server the provider no
+#      longer lists counts as destroyed. An ID the provider lists under the
+#      name of a server in the inventory is refused: a damaged trailer never
+#      destroys a server in use.
+#   3. One commit, "Destroy app001 at the provider: app002 does its work",
+#      removes the destroyed servers' lines from ssh/known_hosts and carries,
+#      for each, the trailers Destroyed-server and Destroyed-server-provider-id
+#      (none when the provider never listed it). A refused push is redone on
+#      the new main, up to 3 pushes.
+#   After the provider confirms each destroy (or no longer lists the server),
+#   `mmx mark-node-work-failed --node NAME --json` in util01's project tells
+#   MMX that unconfirmed work of the gone server, such as a reboot run that
+#   never heard back, will never be confirmed. Exit 0: recorded, or nothing
+#   unconfirmed. Exit 2: MMX reached the server although the provider says it
+#   is destroyed, which is wrong: the run stops, commits nothing more and ends
+#   with exit 1 (servers already destroyed stay destroyed; a rerun counts them
+#   as destroyed and asks MMX again). Exit 3 or 4: the output says so and the
+#   destroy does not fail, because the server is gone and only MMX's history
+#   is untidy.
+# A destroy that fails leaves the commit unmade. A rerun, at any time,
+# finds the same chains: the servers destroyed already are no longer listed
+# and count as destroyed, and the rest are destroyed then. Nothing is ever
+# destroyed before the new server does its work.
+set -euo pipefail
+repository=$PWD
+. "$repository/server_management_scripts/steps_for_replacing_failed_servers.bash"
+. "$repository/server_management_scripts/steps_for_reading_the_providers_list.bash"
+
+say() { printf '%s\n' "$*"; }
+work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
+clone=$work_dir/repository
+trap 'rm -rf -- "$work_dir"' EXIT
+
+[ -z "$EVERYONE_LOCKED_OUT_EXCEPT_DESK" ] || { say "destroy_replaced_servers refuses: the lock-out is on; nothing destroyed"; exit 1; }
+clone_main "$clone" || { say "destroy_replaced_servers: the Git host did not answer a fetch of main; nothing destroyed"; exit 1; }
+pending=$(pending_replacements "$(replacement_history "$clone")")
+# Each chain, by its newest new server: the head is a pending replacement
+# whose new server no later pending replacement replaced.
+chains=$(jq -c '
+  . as $pending |
+  def chain($entry): [$entry] + ([$pending[] | select(.replacement == $entry.replaced)] | if length > 0 then chain(.[0]) else [] end);
+  [.[] | select(.replacement as $new | [$pending[] | select(.replaced == $new)] | length == 0) | chain(.)]' <<< "$pending")
+if [ "$(jq length <<< "$chains")" -eq 0 ]; then
+  say "nothing to destroy: no replacement waits for its cleanup"
+  exit 0
+fi
+
+provider_servers=$(server_management_scripts/list_the_servers_at_the_provider) || { say "the provider's list failed; nothing destroyed"; exit 1; }
+the_provider_list_holds_util01 "$provider_servers" || { say "destroy_replaced_servers refuses: $not_this_systems_list; nothing destroyed or committed"; exit 1; }
+inventory_names=$(jq -c 'keys' <<< "$INVENTORY_NODES")
+failed=0
+# MMX's vault passphrase, which mmx reads to open a saved run.
+export MMX_VAULT_PASSWORD_FILE=${MMX_VAULT_PASSWORD_FILE:-/var/lib/mmhotline/mmx_vault_passphrase}
+a_destroyed_server_answered=
+# Run after the provider confirmed that a server is gone. Returns 2 when MMX
+# reached the server anyway; any other trouble is only said.
+tell_mmx_the_server_is_gone() {
+  local name=$1 mark_status=0 output
+  output=$(mmx mark-node-work-failed --node "$name" --json --non-interactive 2>&1) || mark_status=$?
+  case "$mark_status" in
+    0) ;;
+    2)
+      say "MMX reached $name although the provider says it is destroyed: stopping here, nothing more is committed, a person looks. mmx said: $output"
+      return 2 ;;
+    *) say "$name is gone, but mmx mark-node-work-failed exited $mark_status, so MMX's history still holds unconfirmed work of $name (the destroy is not affected): $output" ;;
+  esac
+}
+destroyed=()
+while IFS= read -r chain; do
+  new=$(jq -r '.[0].replacement' <<< "$chain")
+  pool=$(jq -r '.[0].pool' <<< "$chain")
+  replaced=$(jq -r '[.[].replaced] | join(", ")' <<< "$chain")
+  state=$(jq -r --arg name "$new" '[.nodes[] | select(.name == $name) | .state][0] // "not in the hub"' "$fleet_file")
+  if [ "$state" != reporting ]; then
+    say "$new does not do its work yet: the fleet hub says $state; nothing of $replaced destroyed"
+    failed=1; continue
+  fi
+  if ! the_server_does_its_work "$clone" "$(address_of "$new" "$pool")"; then
+    say "$new does not do its work yet: nothing of $replaced destroyed"
+    failed=1; continue
+  fi
+  while IFS=$'\t' read -r name id; do
+    if [ "$id" != none ] && jq -e --arg id "$id" '.servers | any(.id == $id)' <<< "$provider_servers" > /dev/null; then
+      listed_as=$(jq -r --arg id "$id" '[.servers[] | select(.id == $id) | .name][0]' <<< "$provider_servers")
+      if jq -e --arg name "$listed_as" 'index($name)' <<< "$inventory_names" > /dev/null; then
+        say "the provider lists ID $id as $listed_as, a server in the inventory: $name's trailer is wrong; nothing destroyed for it, a person decides"
+        failed=1; continue
+      fi
+      if ! server_management_scripts/destroy_a_server_at_the_provider --server-id "$id" > /dev/null; then
+        say "destroying $name (ID $id) at the provider failed; request destroy_replaced_servers again"
+        failed=1; continue
+      fi
+      say "destroyed $name (ID $id) at the provider: $new does its work"
+    else
+      say "the provider no longer lists $name (ID $id): counted as destroyed"
+    fi
+    tell_mmx_the_server_is_gone "$name" || { a_destroyed_server_answered=yes; break 2; }
+    destroyed+=("$name"$'\t'"$id"$'\t'"$pool"$'\t'"$new")
+  done < <(jq -r '.[] | [.replaced, .replaced_id] | @tsv' <<< "$chain")
+done < <(jq -c '.[]' <<< "$chains")
+
+make_the_cleanup_commit() {
+  local entry name id pool new trailers= subjects=
+  for entry in "${destroyed[@]}"; do
+    IFS=$'\t' read -r name id pool new <<< "$entry"
+    # A name is never used twice, so its address's host key lines are its own.
+    grep -v "^$(address_of "$name" "$pool") " "$clone/ssh/known_hosts" > "$work_dir/known_hosts" || true
+    cat "$work_dir/known_hosts" > "$clone/ssh/known_hosts"
+    trailers+="Destroyed-server: $name"$'\n'"Destroyed-server-provider-id: $id"$'\n'
+    subjects+="${subjects:+, }$name"
+  done
+  git -C "$clone" add ssh/known_hosts
+  git -C "$clone" commit --quiet --allow-empty -F - <<MESSAGE
+Destroy $subjects at the provider: $new does its work
+
+destroy_replaced_servers on util01 destroyed each server by the provider ID
+of its replacement commit, after its replacement passed
+check-that-this-server-does-its-work.
+
+Server-pool: $pool
+$trailers
+MESSAGE
+}
+
+if [ -n "$a_destroyed_server_answered" ]; then
+  say "destroy_replaced_servers stopped: no cleanup commit was made; the servers destroyed so far stay destroyed, and a rerun asks MMX again"
+  exit 1
+fi
+if [ "${#destroyed[@]}" -gt 0 ]; then
+  if push_to_main "$clone" make_the_cleanup_commit; then
+    say "committed $(git -C "$clone" rev-parse HEAD): destroyed $(printf '%s\n' "${destroyed[@]}" | cut -f1 | paste -sd, - | sed 's/,/, /g')"
+  else
+    say "the cleanup commit was not pushed; the servers above are destroyed at the provider; request destroy_replaced_servers again"
+    failed=1
+  fi
+fi
+[ "$failed" -eq 0 ] || say "destroy_replaced_servers did not finish: what is not destroyed stays at the provider, powered off"
+exit "$failed"

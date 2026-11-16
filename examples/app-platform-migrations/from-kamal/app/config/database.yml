@@ -1,0 +1,6 @@
+<% require "pg"; require "json"
+values = STACK_DATABASE_URL ? PG::Connection.conninfo_parse(STACK_DATABASE_URL).filter_map { |item| [item[:keyword], item[:val]] if item[:val] }.to_h : {}
+values["database"] = values.delete("dbname") if values["dbname"]
+%>
+production:
+  <%= values.merge("adapter" => "postgresql", "pool" => Integer(ENV.fetch("DATABASE_POOL_MAX_CONNECTIONS", "4")), "checkout_timeout" => 5, "connection_retries" => 0, "prepared_statements" => false, "keepalives" => "1", "keepalives_idle" => "30", "keepalives_interval" => "5", "keepalives_count" => "3", "tcp_user_timeout" => "10000").to_json %>

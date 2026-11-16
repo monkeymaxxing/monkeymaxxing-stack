@@ -1,0 +1,13 @@
+node_modules
+.git
+.lead
+secrets
+exports
+export
+*.dump
+*.tar.gz
+.env
+.env.*
+*.env
+destination.env
+tests

@@ -1,0 +1,70 @@
+{{- /*
+  The MMWatchdog settings of a server that reports to the fleet hub. It reads
+  the role inputs is_app_server, is_database_server, is_jobs_server,
+  is_load_balancer_server, inventory_groups,
+  job_containers_run_only_on_the_jobs_servers, and
+  tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers.
+*/ -}}
+{{- $first_app_server := first .inputs.inventory_groups.app_servers -}}
+{{- $first_database_server := first .inputs.inventory_groups.database_servers -}}
+{{- $node_groups := list -}}
+{{- range $group_name, $node_names := .inputs.inventory_groups -}}
+{{- if has $.node.name $node_names }}{{ $node_groups = append $node_groups $group_name }}{{ end -}}
+{{- end -}}
+# Managed by MMX from the systems repository. MMWatchdog on this server
+# reports to the fleet hub on util01. The join code holds the hub's
+# address. The hub delivers this server's alerts.
+keep_undelivered_alerts_for: 24h
+undelivered_alerts_content_size_limit: 8MiB
+join_fleet_hub:
+  join_code_file: /etc/mmwatchdog/secrets/fleet-hub-join-code
+{{- if or (and .inputs.is_app_server (eq .node.name $first_app_server)) (and .inputs.is_database_server (eq .node.name $first_database_server)) }}
+  # The first server listed in each of the app_servers and database_servers
+  # inventory groups is a hub-outage alerter. When the hub on util01 stops
+  # answering, the hub-outage alerters alert straight to Pushover.
+  prefer_this_node_as_hub_outage_alerter: true
+{{- end }}
+{{- if .inputs.is_database_server }}
+# A silent database server needs a person, even with a replica left.
+alert_severity_when_this_node_goes_silent: sos
+alert_severity_when_this_node_has_rebooted: warn
+{{- else if .inputs.is_jobs_server }}
+# One silent jobs server warns because the remaining jobs servers take
+# queued jobs. While job_containers_run_only_on_the_jobs_servers is false
+# in mmx_project_settings.yml, the app servers also take queued jobs.
+# When job_containers_run_only_on_the_jobs_servers is true, only the jobs
+# servers take queued jobs.
+alert_severity_when_this_node_goes_silent: warn
+alert_severity_when_this_node_has_rebooted: info
+{{- if .inputs.job_containers_run_only_on_the_jobs_servers }}
+# Only the jobs servers run the jobs. When every jobs server is silent,
+# no job may run, and no other check sees that. So the hub raises the jobs
+# servers' silence alerts to sos. With a single jobs server, the hub raises
+# the silence alert to sos when the single jobs server is silent.
+raise_to_sos_when_every_node_of_these_node_groups_is_silent: [jobs_servers]
+{{- end }}
+{{- else if .inputs.is_load_balancer_server }}
+# One silent load-balancer server wakes nobody: the other one carries every
+# request. When the site is down, the hub's check of the public site wakes a
+# person.
+alert_severity_when_this_node_goes_silent: warn
+alert_severity_when_this_node_has_rebooted: info
+{{- if .inputs.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}
+# Only the load-balancer servers bring requests in. While both
+# load-balancer servers are silent, the requests may reach no app, so the
+# hub raises both servers' silence alerts to sos.
+raise_to_sos_when_every_node_of_these_node_groups_is_silent: [load_balancer_servers]
+{{- end }}
+{{- else }}
+# One silent app server wakes nobody: when the site is down, the hub's check
+# of the public site wakes a person. Staging alerts go no higher than warn.
+alert_severity_when_this_node_goes_silent: warn
+alert_severity_when_this_node_has_rebooted: info
+{{- end }}
+# MMHotline's dashboard draws one box per node group. Every inventory group
+# containing this server becomes a node group on the dashboard.
+this_node_is_in_node_groups: [{{ join ", " $node_groups }}]
+# The triage agent reads a full week of check measurements, such as CPU use
+# and Postgres readings. A day more covers the week that ends now.
+keep_measurement_history_for: 8d
+measurement_history_size_limit: 256MiB

@@ -1,0 +1,35 @@
+{
+  "name": "portal-from-netlify",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify-export": "node scripts/verify_export.mjs",
+    "import-objects": "node scripts/import_objects.mjs",
+    "export-netlify": "node scripts/export_netlify.mjs",
+    "web": "node web.mjs",
+    "start": "node web.mjs",
+    "migrate": "node database.mjs",
+    "jobs": "node jobs_runner.mjs",
+    "seed-test-data": "node seed_test_data.mjs",
+    "import-netlify": "node scripts/import_netlify.mjs",
+    "test-rehearsal": "node --test tests/rehearsal.test.mjs",
+    "build": "vite build frontend --outDir ../web/client"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1019.0",
+    "@netlify/database": "2.0.1",
+    "@netlify/blobs": "11.1.7",
+    "bcryptjs": "3.0.3",
+    "express": "5.3.0",
+    "pg": "8.23.1",
+    "nodemailer": "10.3.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "devDependencies": {
+    "vite": "8.3.5"
+  }
+}

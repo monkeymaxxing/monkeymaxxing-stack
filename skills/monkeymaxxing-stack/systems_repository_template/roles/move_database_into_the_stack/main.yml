@@ -1,0 +1,86 @@
+inputs:
+  action: {type: string, required: true}
+  database_moving_in: {type: mapping, required: true}
+  apps: {type: mapping, required: true}
+  replication_password: {type: string, required: true, secret: true}
+  superuser_password: {type: string, required: true, secret: true}
+  relay_admin_password: {type: string, secret: true}
+
+node_tasks:
+  - id: install_the_database_move_program
+    file:
+      path: /var/lib/postgresql/move_database_into_the_stack.py
+      source: ../../files_used_by_several_roles/move_database_into_the_stack.py
+      owner: postgres
+      group: postgres
+      permissions_mode: "0700"
+
+  - id: write_the_old_database_password_file
+    shell:
+      script: |
+        python3 -I - <<'PYTHON'
+        import json, os
+        from pathlib import Path
+        moving = json.loads(os.environ['DATABASE_MOVING_IN'])
+        def field(value):
+            if '\n' in value or '\r' in value:
+                raise SystemExit('A database_moving_in password contains a newline, which PostgreSQL password files cannot represent.')
+            return value.replace('\\','\\\\').replace(':','\\:')
+        path = Path('/var/lib/postgresql/database_moving_in.pgpass')
+        content = ''.join(':'.join(field(str(v)) for v in [moving['wireguard_address'],moving['postgres_port'],'*',role,os.environ[variable]])+'\n'
+                          for role,variable in [('postgres','SUPERUSER_PASSWORD'),('database_moving_in_replication','REPLICATION_PASSWORD')])
+        os.umask(0o077)
+        path.write_text(content)
+        path.chmod(0o600)
+        PYTHON
+      run_as_user_account: postgres
+      env:
+        DATABASE_MOVING_IN: "{{ .inputs.database_moving_in }}"
+        SUPERUSER_PASSWORD: "{{ .inputs.superuser_password }}"
+        REPLICATION_PASSWORD: "{{ .inputs.replication_password }}"
+      output_is_secret: true
+
+  - id: write_the_relay_administrator_password_file
+    when: {equals: ["{{ .inputs.action }}", switch_through_relay]}
+    shell:
+      script: |
+        python3 -I - <<'PYTHON'
+        import json, os
+        from pathlib import Path
+        moving = json.loads(os.environ['DATABASE_MOVING_IN'])
+        if not moving.get('through_relay', False):
+            raise SystemExit('The relay switch requires database_moving_in.through_relay: true. Set through_relay: false for a self-hosted source.')
+        def field(value):
+            if '\n' in value or '\r' in value:
+                raise SystemExit('A relay administrator password contains a newline, which PostgreSQL password files cannot represent.')
+            return value.replace('\\','\\\\').replace(':','\\:')
+        password = os.environ['RELAY_ADMIN_PASSWORD']
+        if not password:
+            raise SystemExit('Set database_moving_in_relay_admin_password in the vault before switching through a relay.')
+        path = Path('/var/lib/postgresql/database_moving_in_relay_admin.pgpass')
+        content = ':'.join(field(str(v)) for v in [moving['wireguard_address'],moving['postgres_port'],'pgbouncer','database_moving_in_relay_admin',password])+'\n'
+        os.umask(0o077)
+        path.write_text(content)
+        path.chmod(0o600)
+        PYTHON
+      run_as_user_account: postgres
+      env:
+        DATABASE_MOVING_IN: "{{ .inputs.database_moving_in }}"
+        RELAY_ADMIN_PASSWORD: "{{ .inputs.relay_admin_password }}"
+      output_is_secret: true
+
+  - id: copy_or_switch_the_old_database
+    when: {equals: ["{{ .node.name }}", "{{ .inputs.database_moving_in.copy_onto }}"]}
+    shell:
+      script: 'exec python3 -I /var/lib/postgresql/move_database_into_the_stack.py "$ACTION"'
+      output_holds_no_secret: true
+      run_as_user_account: postgres
+      env:
+        ACTION: "{{ .inputs.action }}"
+        DATABASE_MOVING_IN: "{{ .inputs.database_moving_in }}"
+        APPS: "{{ .inputs.apps }}"
+    # The program bounds catch-up and connection checks itself. A task
+    # deadline can kill fence recovery or a valid large-object transfer.
+    time_limit: null
+    time_limit_per_try: null
+    retry: false

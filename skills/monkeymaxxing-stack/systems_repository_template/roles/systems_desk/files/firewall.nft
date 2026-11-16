@@ -1,0 +1,26 @@
+#!/usr/sbin/nft -f
+# Replace only our table: fail2ban owns its separate table and live bans.
+# The prototype's nftables firewall also works during the bootstrap handoff;
+# ufw's controller-source safeguard rejects the deliberate closing of that path.
+table inet systems_desk {}
+flush table inet systems_desk
+table inet systems_desk {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        iifname "lo" accept
+        ct state established,related accept
+        iifname "wg0" ip saddr {{ .inputs.systems_desk_laptop_addresses }} tcp dport 22 accept
+        # The redirect (wireguard_udp_443_redirect.nft) turns UDP 443 into the
+        # WireGuard port before this chain sees the packet.
+        iifname != "wg0" udp dport {{ .inputs.wireguard_listen_port }} accept
+        # DHCP renews the provider network lease; it is never a private service.
+        iifname != "wg0" udp sport 67 udp dport 68 accept
+        iifname != "wg0" udp sport 547 udp dport 546 accept
+        # ICMP carries path-MTU errors and IPv6 neighbour discovery.
+        ip protocol icmp accept
+        meta l4proto ipv6-icmp accept
+    }
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+}

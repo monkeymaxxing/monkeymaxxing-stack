@@ -1,0 +1,57 @@
+#!/bin/bash
+# util01-alert-pause: the alert pause of util01's own planned work, which
+# never pauses util01's public site checks.
+#
+#   util01-alert-pause start --for 10m --reason "reboot_util01_after_updates" [--without-maintenance-on-and-off-alerts]
+#   util01-alert-pause end
+#
+# start opens an MMWatchdog maintenance window on every check group that
+# util01's MMWatchdog runs now, and on node_reports, the fleet hub's alerts
+# for servers that stop reporting, but never on public_sites, the checks of
+# the users' sites through their public addresses. end ends the windows of
+# the same check groups. The rule (docs/design.md, the alert pause rule):
+# the public site checks are never paused, because they are what tells the
+# team that users cannot reach the site, and planned work on util01 does
+# not stop the site. MMWatchdog offers a window on every check group,
+# --every-check-group, or on named check groups, and no window on every
+# check group but some, so the program names them.
+#
+# A named window differs from the whole-node window in one way, and it is
+# accepted: when util01 reboots, MMWatchdog sends util01's reboot notice
+# (warn), which only a whole-node window holds back. The window's reason
+# names the playbook, so the notice is known as planned
+# (triage_agent_rules.md).
+#
+# The check groups come from the running MMWatchdog (mmwatchdog status
+# --json, whose checks are named CHECK_GROUP/CHECK), because maintenance
+# refuses a name the running MMWatchdog does not know, such as a check group
+# a new file adds before the restart.
+set -euo pipefail
+
+check_groups_to_pause() {
+  local status=0 output
+  output=$(/usr/local/bin/mmwatchdog status --json) || status=$?
+  # 1 and 3 answer whole: a check needs attention, or its health is unknown.
+  case $status in
+    0|1|3) ;;
+    *) printf 'util01-alert-pause: mmwatchdog status --json exited %s; no window changed\n' "$status" >&2; return 1 ;;
+  esac
+  jq -r '[.checks | keys[] | split("/")[0]] + ["node_reports"] | unique - ["public_sites"] | .[]' <<< "$output"
+}
+
+action=${1:-}
+[ "$#" -gt 0 ] && shift
+case $action in
+  start)
+    groups=$(check_groups_to_pause)
+    # shellcheck disable=SC2086 # one word per check group name
+    exec /usr/local/bin/mmwatchdog maintenance on $groups "$@" ;;
+  end)
+    [ "$#" -eq 0 ] || { echo 'util01-alert-pause end takes no arguments' >&2; exit 4; }
+    groups=$(check_groups_to_pause)
+    # shellcheck disable=SC2086
+    exec /usr/local/bin/mmwatchdog maintenance off $groups ;;
+  *)
+    echo 'usage: util01-alert-pause start --for DURATION --reason TEXT [--without-maintenance-on-and-off-alerts] | util01-alert-pause end' >&2
+    exit 4 ;;
+esac

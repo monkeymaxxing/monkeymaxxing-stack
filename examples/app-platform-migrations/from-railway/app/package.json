@@ -1,0 +1,23 @@
+{
+  "name": "railway-portal-migration",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "migrate": "node database.mjs",
+    "jobs": "node jobs.mjs",
+    "cron": "node cron.mjs",
+    "seed-test-data": "node seed-test-data.mjs",
+    "check": "node --check server.mjs && node --check database.mjs && node --check storage.mjs && node --check jobs.mjs && node --check cron.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "bcryptjs": "^3.0.2",
+    "@aws-sdk/client-s3": "^3.922.0"
+  }
+}

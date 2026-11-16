@@ -1,0 +1,40 @@
+#!/bin/bash
+# read_the_fleet_hub_for_server_replacement: writes the fleet hub's view of
+# every server, mmwatchdog fleet --json, to
+# /var/lib/replace_failed_servers/fleet.json for replace_failed_servers and
+# destroy_replaced_servers, which run next as the mmhotline user. Runs as
+# root on util01: only root may ask the hub.
+#
+# When a server is silent inside the alert pause of reboot_servers_after_updates
+# and that run may still wait for it (silent_during_its_reboot in
+# steps_for_replacing_failed_servers.bash), the program waits until the
+# server's reboot counts as failed and reads the hub again. So a triage
+# agent that requests replace_failed_servers right after a reboot run failed,
+# because the server did not come back, gets the replacement in the same run.
+# The wait is at most the reboot run's own wait plus 2 minutes after the
+# server's last report, about 1 to 2 minutes after the reboot run failed.
+set -euo pipefail
+repository=$PWD
+. "$repository/server_management_scripts/steps_for_replacing_failed_servers.bash"
+
+read_the_hub() {
+  local status=0
+  /usr/local/bin/mmwatchdog fleet --json > "$fleet_file.new" || status=$?
+  # Exit 1 means a node needs attention, such as a silent node: the answer is whole.
+  if [ "$status" -gt 1 ] || ! jq -e '.nodes | type == "array"' "$fleet_file.new" > /dev/null; then
+    printf 'the fleet hub did not answer (mmwatchdog fleet --json exited %s); nothing replaced or destroyed\n' "$status"
+    exit 1
+  fi
+}
+
+read_the_hub
+wait_seconds=$(jq -r --argjson now "$(date +%s)" "$fleet_classes_jq"'
+  [.nodes[] | class($now) | select(.class == "silent_during_its_reboot") | .counts_as_failed_at - $now + 1] | max // 0' "$fleet_file.new")
+if [ "$wait_seconds" -gt 0 ]; then
+  printf 'a server is silent during its reboot by reboot_servers_after_updates; waiting %s seconds, until its reboot counts as failed, then reading the fleet hub again\n' "$wait_seconds"
+  sleep "$wait_seconds"
+  read_the_hub
+fi
+chgrp mmhotline "$fleet_file.new"
+chmod 0640 "$fleet_file.new"
+mv "$fleet_file.new" "$fleet_file"

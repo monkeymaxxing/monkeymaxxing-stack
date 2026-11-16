@@ -1,0 +1,240 @@
+#!/bin/bash
+# add_an_app_server_for_the_load: creates one app server when the load calls
+# for it, and puts it in the inventory with one signed commit on main.
+# every_server then installs it and every Caddy and the tunnel take it in.
+# Runs as the mmhotline user on util01, from util01's copy of the systems
+# repository, after read_the_fleet_hub_for_server_replacement and
+# read_the_app_pool_load --add (playbooks/add_an_app_server_for_the_load.yml).
+#
+# The load decides first: /var/lib/replace_failed_servers/app_pool_for_the_load.json
+# holds check-whether-the-load-changes-the-app-pool's answer. With "none"
+# the program says why and exits 0: nothing to add.
+#
+# The program refuses, with exit 1, a line naming the reason, and nothing
+# created, when:
+#   - the lock-out is on (everyone_locked_out_except_desk);
+#   - the pool holds its largest number of servers
+#     (growth_limits.app_servers.largest_number_of_servers);
+#   - an app server does not report to the fleet hub, or a replacement in
+#     app_servers is unfinished: replacing comes first, and the load of a
+#     pool with a silent server is not known;
+#   - the newest app server's server_type is not in
+#     growth_limits.app_servers.server_types;
+#   - the Postgres connections would pass 70 of 100 with the new server, by
+#     the sum of operating_procedures/add_an_app_server.md: then PgBouncer
+#     comes first;
+#   - the provider's list, or the Git host, does not answer, or the list
+#     does not hold util01 (steps_for_reading_the_providers_list.bash);
+#   - the pool has used every number up to 254, the last address of its block.
+#
+# The new server copies the server_type and location of the pool's newest
+# server, the one with the highest number. Reason: the newest server holds
+# the team's latest choice, such as a bigger type that replaced the first
+# servers; in a pool of mixed types the CPU rule counts every server alike,
+# and the load check asks again once the new server reports.
+#
+# Steps, and what a failure leaves:
+#   1. The next unused name, above every number the pool used in the
+#      inventory's Git history, in the provider's list and in the trailers.
+#   2. The create, as replace_failed_servers does it
+#      (steps_for_a_server_this_run_creates.bash): first-boot data with peers
+#      util01 and every systems desk, a runtime WireGuard peer on util01, the
+#      receipt, and the host key over WireGuard.
+#   3. The commit, in a clone of main of the run's own: the new node block
+#      after the pool's last server, its name at the end of the pool's nodes
+#      list, and its host key; with these Git trailers:
+#        Server-pool: app_servers
+#        Added-server: app004
+#        Added-server-provider-id: 34567890
+#      A refused push is redone on the new main, up to 3 pushes.
+#   4. A failure before the push destroys the created server by the
+#      receipt's ID and removes the runtime peer (the exit trap). Nothing else
+#      is ever destroyed here.
+# The last lines say what exists, the new server's monthly price from
+# read_the_monthly_price_at_the_provider, and the next request: every_server.
+set -euo pipefail
+repository=$PWD
+. "$repository/server_management_scripts/steps_for_a_server_this_run_creates.bash"
+. "$repository/server_management_scripts/steps_for_replacing_failed_servers.bash"
+. "$repository/server_management_scripts/steps_for_reading_the_providers_list.bash"
+
+say() { printf '%s\n' "$*"; }
+refuse() {
+  trap - EXIT
+  [ -z "${work_dir:-}" ] || rm -rf -- "$work_dir"
+  say "add_an_app_server_for_the_load refuses: $1"
+  say "nothing created or committed; a person decides"
+  exit 1
+}
+
+[ -z "$EVERYONE_LOCKED_OUT_EXCEPT_DESK" ] || refuse "the lock-out is on (everyone_locked_out_except_desk: $EVERYONE_LOCKED_OUT_EXCEPT_DESK)"
+load=$(cat "$state_dir/app_pool_for_the_load.json")
+why=$(jq -r .why <<< "$load")
+case $(jq -r .decision <<< "$load") in
+  add) say "$why" ;;
+  stopped_by_a_bound) refuse "$why" ;;
+  *) say "nothing to add: $why"; exit 0 ;;
+esac
+
+pool=app_servers
+servers_in_the_pool=$(jq -r --arg pool "$pool" '.[$pool] | length' <<< "$INVENTORY_GROUPS")
+largest=$(jq -r --arg pool "$pool" '.[$pool].largest_number_of_servers' <<< "$GROWTH_LIMITS")
+[ "$servers_in_the_pool" -lt "$largest" ] || \
+  refuse "$pool holds $servers_in_the_pool servers, its largest number, $largest (growth_limits in mmx_project_settings.yml)"
+not_reporting=$(jq -r --argjson groups "$INVENTORY_GROUPS" --arg pool "$pool" '
+  (.nodes | map({key: .name, value: .state}) | from_entries) as $hub |
+  [$groups[$pool][] | select($hub[.] != "reporting") | . + " is " + ($hub[.] // "not in the fleet hub")] | join(", ")' "$fleet_file")
+[ -z "$not_reporting" ] || refuse "$not_reporting: a server that does not report is replaced first, and the pool's load is not known meanwhile"
+
+work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
+clone=$work_dir/repository
+receipt=
+created_name=
+created_public_key=
+finish() {
+  local result=$?
+  trap - EXIT
+  trap '' INT TERM HUP
+  local keep_the_attempt=
+  cd "$repository"
+  if [ -n "$created_name" ]; then
+    rm -f -- "$work_dir/first_boot_data.yml"
+    if destroy_the_owned_server "$receipt" "$created_name"; then
+      say "$created_name: created, then destroyed again, because its commit was not pushed"
+    else
+      say "$created_name: created and NOT destroyed: a person destroys it by the ID in $receipt, with server_management_scripts/destroy_a_server_at_the_provider --server-id ID"
+      keep_the_attempt=yes
+    fi
+    [ -z "$created_public_key" ] || remove_the_runtime_peer_on_util01 "$created_public_key" || \
+      say "util01 keeps a runtime WireGuard peer for $created_name until util01's next every_server run"
+    [ "$result" -ne 0 ] || result=1
+  fi
+  [ -n "$keep_the_attempt" ] || rm -rf -- "$work_dir"
+  [ "$result" -eq 0 ] || say "add_an_app_server_for_the_load failed: request it again only after the cause above is fixed or understood"
+  exit "$result"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
+clone_main "$clone" || refuse "the Git host did not answer a fetch of main"
+history=$(replacement_history "$clone")
+unfinished=$(pending_replacements "$history" | jq -r --arg pool "$pool" '[.[] | select(.pool == $pool) | .replaced + " by " + .replacement] | join(", ")')
+[ -z "$unfinished" ] || refuse "the replacement of $unfinished in $pool is unfinished: destroy_replaced_servers comes first"
+
+# The new server copies the newest server of the pool.
+newest=$(jq -r --arg pool "$pool" '.[$pool] | max_by(capture("(?<n>[0-9]+)$").n | tonumber)' <<< "$INVENTORY_GROUPS")
+server_type=$(jq -r --arg name "$newest" '.[$name].vars.server_type' <<< "$INVENTORY_NODES")
+location=$(jq -r --arg name "$newest" '.[$name].vars.location' <<< "$INVENTORY_NODES")
+jq -e --arg pool "$pool" --arg type "$server_type" '.[$pool].server_types | index($type)' <<< "$GROWTH_LIMITS" > /dev/null || \
+  refuse "the newest app server, $newest, has the server type $server_type, which is not in growth_limits.$pool.server_types in mmx_project_settings.yml"
+
+# The connection budget of operating_procedures/add_an_app_server.md, as one
+# JSON object {total, limit, why}, for the app servers' CPU counts
+# CPU_COUNTS ({"app001": 4, ...}) and one more app server with NEW_CPU_COUNT:
+#   - web: for each app, each app server's WEB_CONCURRENCY (the app's own
+#     under env, or the server's CPU count) times the app's connections per
+#     worker process (the app's database_connections_per_worker_process,
+#     or else RAILS_MAX_THREADS under env, or else 3, Rails' default),
+#     twice, because the live and the new release run together during a
+#     deploy;
+#   - jobs: each job container counts as one worker process, on every server
+#     that runs job containers;
+#   - with PgBouncer in front of production's Postgres, the apps' web and
+#     job connections share 54, and only the job containers that connect
+#     directly to Postgres count on top;
+#   - 15 for the system's own connections.
+# 70 of Postgres's 100 is the limit, where MMWatchdog's
+# connections_are_below_70_percent warns.
+postgres_connections_with_one_more_app_server() {
+  jq -nc --argjson apps "$APPS" --argjson cpu "$1" --argjson new_cpu "$2" --argjson groups "$INVENTORY_GROUPS" \
+    --argjson pgbouncer "$PGBOUNCER_RUNS_IN_FRONT_OF_POSTGRES" --argjson through "$APPS_CONNECT_THROUGH_PGBOUNCER" \
+    --argjson jobs_only "$JOB_CONTAINERS_RUN_ONLY_ON_THE_JOBS_SERVERS" '
+    def connections_per_process: (.database_connections_per_worker_process // .env.RAILS_MAX_THREADS // 3 | tonumber);
+    ([$cpu[]] + [$new_cpu]) as $app_server_cpus |
+    ((if $jobs_only then 0 else ($app_server_cpus | length) end) + (($groups.jobs_servers // []) | length)) as $servers_with_jobs |
+    ($pgbouncer and $through.production) as $through_pgbouncer |
+    ([$apps[] | . as $app | $app_server_cpus | map(($app.env.WEB_CONCURRENCY // .) | tonumber) | add * ($app | connections_per_process)] | add // 0) as $web |
+    ([$apps[] | select(.jobs_command != "") | select(($through_pgbouncer | not) or .jobs_connect_directly_to_postgres) |
+      connections_per_process * $servers_with_jobs] | add // 0) as $jobs |
+    (if $through_pgbouncer then 54 else 2 * $web end) as $web_counted |
+    {total: ($web_counted + $jobs + 15), limit: 70,
+     why: ((if $through_pgbouncer then "54 through PgBouncer"
+            else "\($web) for the web containers, \(2 * $web) during a deploy" end) +
+           ", \($jobs) for the job containers and 15 for the system: \($web_counted + $jobs + 15)")}'
+}
+cpu_counts={}
+for name in $(jq -r --arg pool "$pool" '.[$pool][]' <<< "$INVENTORY_GROUPS"); do
+  count=$(cd "$clone" && ssh -F ssh/config -o ConnectTimeout=10 "root@$(jq -r --arg name "$name" '.[$name].vars.private_ip' <<< "$INVENTORY_NODES")" nproc < /dev/null) || \
+    refuse "$name did not answer nproc over SSH, so the Postgres connections with one more app server are not known"
+  cpu_counts=$(jq -c --arg name "$name" --argjson count "$count" '. + {($name): $count}' <<< "$cpu_counts")
+done
+budget=$(postgres_connections_with_one_more_app_server "$cpu_counts" "$(jq -r --arg name "$newest" '.[$name]' <<< "$cpu_counts")")
+if [ "$(jq -r .total <<< "$budget")" -gt "$(jq -r .limit <<< "$budget")" ]; then
+  refuse "with one more app server, the apps would open $(jq -r .why <<< "$budget"): more than $(jq -r .limit <<< "$budget") of Postgres's 100 connections. Add PgBouncer first (operating_procedures/add_pgbouncer.md)"
+fi
+say "Postgres connections with one more app server: $(jq -r .why <<< "$budget"), within $(jq -r .limit <<< "$budget")"
+
+provider_servers=$(server_management_scripts/list_the_servers_at_the_provider) || refuse "the provider's list failed"
+jq -e '.servers | type == "array"' <<< "$provider_servers" > /dev/null || refuse "the provider's list is not a list of servers"
+# A partial list could hide a number in use, and the new name would then
+# be one the provider already has.
+the_provider_list_holds_util01 "$provider_servers" || refuse "$not_this_systems_list"
+number=$(( $(highest_number_used "$clone" app "$provider_servers" "$history" "") + 1 ))
+[ "$number" -le 254 ] || refuse "$pool has used every number up to 254, the last address of its block: a person decides"
+new_name=$(printf 'app%03d' "$number")
+address=$(address_of "$new_name" "$pool")
+# The inventory change applies to main before anything is created.
+(cd "$clone" && change_the_pool_in_the_inventory "" "$new_name" "$pool" "$address" 192.0.2.1 "$UTIL01_WIREGUARD_PUBLIC_KEY" stand-in stand-in && \
+  git checkout --quiet -- inventories/servers.yml) || refuse "the inventory on main has no one-line nodes list for $pool to change"
+peers=$(jq -c --arg port "$(wireguard_listen_port)" --argjson nodes "$INVENTORY_NODES" --argjson groups "$INVENTORY_GROUPS" --argjson util01 "$(util01_as_a_peer)" '
+  [$util01] + [($groups.systems_desks // [])[] | $nodes[.].vars |
+    {public_key: .wireguard_public_key, allowed_ips: [.private_ip + "/32"],
+     endpoint: (.public_ipv4_address + ":" + $port), persistent_keepalive: 25}]' <<< null)
+
+receipt=$work_dir/created_server_$new_name.json
+created_name=$new_name
+umask 077
+write_the_first_boot_data "$address" "$peers" "$work_dir/first_boot_data.yml" "$work_dir/wireguard_public_key_$new_name"
+umask 022
+created_public_key=$(cat "$work_dir/wireguard_public_key_$new_name")
+(cd "$repository" && add_a_runtime_peer_on_util01 "$created_public_key" "$address")
+create_the_owned_server "$new_name" "$server_type" "$location" "$address" "$created_public_key" \
+  "$work_dir/first_boot_data.yml" "$receipt" > /dev/null
+rm -f -- "$work_dir/first_boot_data.yml"
+new_id=$(jq -er '.id | strings | select(length > 0)' "$receipt")
+public_ipv4_address=$(jq -er '.public_ipv4_address | strings | select(length > 0)' "$receipt")
+say "created $new_name (ID $new_id, $server_type in $location, like $newest) at $address"
+(cd "$clone" && accept_the_host_key_over_wireguard "$address") || { say "$new_name did not answer SSH over WireGuard within 5 minutes"; exit 1; }
+grep "^$address " "$clone/ssh/known_hosts" > "$work_dir/host_key_lines_$new_name"
+
+make_the_add_commit() {
+  cd "$clone"
+  change_the_pool_in_the_inventory "" "$new_name" "$pool" "$address" "$public_ipv4_address" \
+    "$created_public_key" "$server_type" "$location" || \
+    { say "main changed: $new_name is in the inventory already"; cd "$repository"; return 1; }
+  grep -q "^$address " ssh/known_hosts || cat "$work_dir/host_key_lines_$new_name" >> ssh/known_hosts
+  mmx validate > "$work_dir/validate_output" 2>&1 || { cat "$work_dir/validate_output"; cd "$repository"; return 1; }
+  git add inventories/servers.yml ssh/known_hosts
+  git commit --quiet -F - <<MESSAGE
+Add $new_name to $pool for the load
+
+add_an_app_server_for_the_load on util01 created $new_name, $server_type in
+$location like $newest. $why.
+every_server installs $new_name.
+
+Server-pool: $pool
+Added-server: $new_name
+Added-server-provider-id: $new_id
+MESSAGE
+  cd "$repository"
+}
+push_to_main "$clone" make_the_add_commit || { say "the commit that puts $new_name in the inventory was not pushed"; exit 1; }
+commit=$(git -C "$clone" rev-parse HEAD)
+created_name=
+created_public_key=
+
+say "What exists now:"
+say "  $new_name: at the provider (ID $new_id), and in the inventory since commit $commit; $pool holds $((servers_in_the_pool + 1)) of at most $largest servers"
+say "  $(monthly_price_line "$new_name" "$server_type" "$location")"
+say "next: request playbooks/every_server.yml, which installs $new_name and sends it requests"

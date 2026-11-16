@@ -1,0 +1,11 @@
+CREATE TABLE users(id uuid PRIMARY KEY,email text UNIQUE NOT NULL,password_hash text NOT NULL,is_admin boolean NOT NULL DEFAULT false);
+CREATE TABLE identities(user_id uuid PRIMARY KEY REFERENCES users(id),issuer text NOT NULL,subject text NOT NULL,UNIQUE(issuer,subject));
+CREATE TABLE sessions(token_hash text PRIMARY KEY,user_id uuid NOT NULL REFERENCES users(id),expires_at timestamptz NOT NULL);
+CREATE TABLE records(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES users(id),title text NOT NULL);
+CREATE TABLE documents(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES users(id),filename text NOT NULL,object_key text UNIQUE NOT NULL,sha256 text NOT NULL,byte_length integer NOT NULL);
+CREATE TABLE jobs(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES users(id),state text NOT NULL DEFAULT 'PENDING' CHECK(state IN ('PENDING','COMPLETED')),output text,created_at timestamptz NOT NULL DEFAULT now(),completed_at timestamptz,archived boolean NOT NULL DEFAULT false);
+CREATE TABLE controls(id integer PRIMARY KEY CHECK(id=1),maintenance boolean NOT NULL DEFAULT false,worker_paused boolean NOT NULL DEFAULT true,scheduler_paused boolean NOT NULL DEFAULT false);
+INSERT INTO controls(id) VALUES(1);
+CREATE TABLE schedules(id text PRIMARY KEY,cron_expression text NOT NULL,last_run_at timestamptz);
+INSERT INTO schedules(id,cron_expression) VALUES('archive_old_reports','0 3 * * *');
+CREATE TABLE scheduled_runs(schedule_id text NOT NULL REFERENCES schedules(id),occurrence_date date NOT NULL,completed_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(schedule_id,occurrence_date));

@@ -1,0 +1,25 @@
+# The API proxy, the desk's one program between the coding agent and
+# the outside APIs. On 127.0.0.1:8081 it adds the person's server provider
+# token, or signs the request, and forwards it to the provider's API; on
+# 127.0.0.1:8082 it adds the desk's Cloudflare token and forwards it to
+# Cloudflare's API. Only this service reads the token files
+# (roles/systems_desk/main.yml, provider_api_proxy).
+[Unit]
+Description=API proxy for the server provider on 127.0.0.1:8081 and Cloudflare on 127.0.0.1:8082
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+{{- if eq .inputs.provider_api_authentication "token_in_a_header" }}
+ExecStart=/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outside_services_release.version }}/set-up-outside-services run-the-provider-api-proxy --provider-api-url {{ .inputs.provider_api_url }}
+LoadCredential=provider-api-token:/etc/systems-desk/provider-api-token.conf
+{{- else }}
+ExecStart=/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outside_services_release.version }}/set-up-outside-services run-the-provider-api-proxy
+LoadCredential=provider-api-signing-credential:/etc/systems-desk/provider-api-signing-credential.json
+{{- end }}
+LoadCredential=cloudflare-api-token:/etc/systems-desk/cloudflare-api-token.conf
+DynamicUser=yes
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+# Store real values outside the source tree, with file mode 600.
+DATABASE_URL=postgresql://portal:REPLACE_PASSWORD@db01:5432,db02:5432/portal?target_session_attrs=read-write&connect_timeout=3
+PUBLIC_ORIGIN=https://portal.example.com
+HOST=0.0.0.0
+PORT=8001
+WEB_CONCURRENCY=2
+S3_ENDPOINT=https://REPLACE_ACCOUNT.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_BUCKET=portal-private-documents
+S3_ACCESS_KEY_ID=REPLACE_ACCESS_KEY
+S3_SECRET_ACCESS_KEY=REPLACE_SECRET_KEY
+# Keep both false through import and verification. Enable only at the selected destination.
+RUN_REPORT_JOBS=false
+RUN_SCHEDULE=false
+EXPORT_SNAPSHOT_FILE=/secure/export/snapshot.json
+EXPORT_OBJECT_DIR=/secure/export/objects
+# Synthetic rehearsal only. Never put a real user's password in a test fixture.
+FIXTURE_PASSWORD_FILE=/secure/fixtures/fixture_password
+REHEARSAL_RESULT_FILE=/secure/results/rehearsal-result.json
+REHEARSAL_S3_DIR=/secure/rehearsal/s3
+APP_ENV=development

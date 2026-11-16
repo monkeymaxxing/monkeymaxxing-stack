@@ -1,0 +1,15 @@
+{
+	admin off
+	auto_https off
+	grace_period 20s
+	frankenphp {
+		num_threads {$WEB_CONCURRENCY:2}
+	}
+}
+:{$PORT:8001} {
+	root * /app/public
+	request_body {
+		max_size 10MB
+	}
+	php_server
+}

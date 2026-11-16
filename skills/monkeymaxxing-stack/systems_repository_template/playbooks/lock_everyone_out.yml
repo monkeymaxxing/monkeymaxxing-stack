@@ -1,0 +1,181 @@
+# The lock-out button. The person presses it on the trusted desk with
+# sudo lock-everyone-out, which runs the copy of this playbook, its two
+# lock-out roles, start_break_in_lockout.py and the SSH settings that the
+# person's last desk review installed, never the pushed ones.
+# Never through run-mmx-on-the-servers. A change here reaches the button at the next
+# desk review, which shows it to the person first.
+# Remove everyone_locked_out_except_desk in the inventory and press it again to undo.
+# The lock-out cuts off every other desk at the servers and stops the triage
+# agent. On the desk that keeps access, the person, the coding agent and its
+# buttons keep working.
+command_line_vars:
+  desk_name: {type: string}
+fleet_stages:
+  - id: verify_the_persons_own_desk
+    nodes: "{{ .vars.desk_name }}"
+    on_node_failure: stop_run
+    node_tasks:
+      - id: require_the_kept_systems_desk
+        assert:
+          that:
+            all:
+              - "{{ .vars.is_systems_desk }}"
+              - any:
+                  - equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]
+                  - equals: ["{{ .vars.everyone_locked_out_except_desk }}", "{{ .node.name }}"]
+          message: Run lock_everyone_out on the desk named by everyone_locked_out_except_desk.
+      - id: install_initial_server_containment
+        file:
+          path: /usr/local/sbin/start_break_in_lockout.py
+          source: server_management_scripts/start_break_in_lockout.py
+          owner: root
+          group: root
+          permissions_mode: "0700"
+      # Every press, the undo included, first checks that what it installs on
+      # the servers still admits this desk: its production key in
+      # root_ssh_public_keys, and its inventory entry, address and keys its
+      # own. Reason (seen on test servers): an undo that installed keys
+      # without this desk's own lost SSH partway, the servers stayed locked,
+      # and only the provider's rescue system recovered them.
+      - id: check_that_this_desk_keeps_its_access
+        shell:
+          script: exec python3 /usr/local/sbin/start_break_in_lockout.py --check-only
+          dryrun: printf '%s\n' 'would check that the keys and peers this press installs still admit this desk'
+          changed_when: false
+          env:
+            DESK_THAT_KEEPS_ACCESS: "{{ .vars.desk_name }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+            ROOT_SSH_PUBLIC_KEYS: "{{ .vars.root_ssh_public_keys }}"
+  # Exit 3 names servers that failed and lets the other servers' lock-out go
+  # on; the last task reports them. Any other failure, such as an inventory
+  # key or address that is not this desk's own, stops the run here.
+  - id: start_containment_before_mmx_admission
+    nodes: "{{ .vars.desk_name }}"
+    when: {not: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: install_server_session_termination_for_the_initial_copy
+        file:
+          path: /usr/local/sbin/end_untrusted_server_sessions
+          source: roles/everyone_locked_out/files/end_untrusted_server_sessions
+          owner: root
+          group: root
+          permissions_mode: "0700"
+      - id: copy_the_reviewed_server_host_keys
+        file:
+          path: /etc/systems-desk/incident-known-hosts
+          source: ssh/known_hosts
+          owner: root
+          group: root
+          permissions_mode: "0600"
+      - id: require_the_reviewed_server_host_keys
+        file:
+          path: /etc/systems-desk/incident-ssh.conf
+          content: "Host *\n  UserKnownHostsFile /etc/systems-desk/incident-known-hosts\n  StrictHostKeyChecking yes\n"
+          owner: root
+          group: root
+          permissions_mode: "0600"
+      - id: stop_untrusted_work_over_ordinary_ssh
+        shell:
+          script: exec python3 /usr/local/sbin/start_break_in_lockout.py
+          dryrun: printf '%s\n' 'would cut off untrusted server admission and active MMX jobs over ordinary SSH'
+          success_exit_codes: [0, 3]
+          env:
+            SSH_AUTH_SOCK: /run/desk-ssh-agent/private.sock
+            DESK_THAT_KEEPS_ACCESS: "{{ .vars.everyone_locked_out_except_desk }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+            ROOT_SSH_PUBLIC_KEYS: "{{ .vars.root_ssh_public_keys }}"
+    outputs:
+      every_server_was_isolated: {equals: ["{{ .node_tasks.stop_untrusted_work_over_ordinary_ssh.exit_code }}", 0]}
+  - id: cut_off_untrusted_server_access
+    nodes: all
+    except_nodes: [systems_desks, database_restore_servers]
+    node_tasks:
+      # The reviewed copy of the role that every_server uses, so the
+      # lock-out keeps each server's own peers and drops the other desks.
+      - id: who_this_server_talks_to
+        role: work_out_who_this_server_talks_to
+        inputs:
+          inventory_nodes: "{{ .inventory.nodes }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          private_ip_ranges: "{{ .vars.private_ip_ranges }}"
+          wireguard_listen_port: "{{ .vars.wireguard_listen_port }}"
+          connections_between_server_pools: "{{ .vars.connections_between_server_pools }}"
+          settings_named_in_the_connections:
+            tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          everyone_locked_out_except_desk: "{{ .vars.everyone_locked_out_except_desk }}"
+          # The lock-out installs no peer for a database moving in, so it reads
+          # no pushed address or key for one.
+          database_moving_in: {}
+      - role: everyone_locked_out
+        inputs:
+          wireguard_listen_port: "{{ .vars.wireguard_listen_port }}"
+          everyone_locked_out_except_desk: "{{ .vars.everyone_locked_out_except_desk }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          root_ssh_public_keys: "{{ .vars.root_ssh_public_keys }}"
+          triage_ssh_public_key: "{{ .vars.triage_ssh_public_key }}"
+          apply_peer_changes: true
+          wireguard_peer_names: "{{ .node_tasks.who_this_server_talks_to.outputs.wireguard_peer_names }}"
+  - id: apply_the_mmhotline_triage_lockout
+    nodes: util_server
+    node_tasks:
+      - id: write_the_mmhotline_settings
+        file:
+          path: /etc/mmhotline/mmhotline_settings.yml
+          template: mmhotline_settings.yml
+          owner: root
+          group: mmhotline
+          permissions_mode: "0640"
+          secret_readable_by_group: true
+          check_new_file:
+            shell:
+              script: mmhotline settings check --settings-file "$NEW_FILE"
+              dryrun: mmhotline settings check --settings-file "$NEW_FILE"
+              env: {NEW_FILE: "{{ .new_file.path }}"}
+              output_holds_no_secret: true
+      - id: apply_the_mmhotline_settings
+        shell:
+          script: exec /usr/local/bin/mmhotline settings apply
+  - id: finish_on_the_desk_that_keeps_access
+    nodes: "{{ .vars.desk_name }}"
+    node_tasks:
+      - role: systems_desk_lockout
+      # The record that the person pressed the lock-out button on this desk.
+      # Its first line holds the desk that keeps access, its WireGuard
+      # address, its WireGuard public key and its production SSH public key,
+      # from the inventory, which start_break_in_lockout.py checked against
+      # this desk's own address and keys in the first stage. Only this playbook
+      # writes and removes it, so only the button starts, changes and undoes a
+      # lock-out: run-mmx-on-the-servers passes the first line to every_server,
+      # which refuses a lock-out unless the line equals the same values in the
+      # inventory, and refuses the undo while the record exists
+      # (playbooks/every_server.yml, the every_server fleet stage).
+      - id: record_that_the_lock_out_button_ran_on_this_desk
+        when: {not: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}}
+        file:
+          path: /etc/systems-desk/everyone-locked-out
+          content: "{{ .vars.everyone_locked_out_except_desk }} {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.private_ip }} {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.wireguard_public_key }} {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.production_ssh_public_key }}\nThe person pressed the lock-out button on this desk, for the desk that keeps access, its WireGuard address, its WireGuard public key and its production SSH public key above. The undo of the lock-out button removes this file.\n"
+          owner: root
+          group: root
+          permissions_mode: "0644"
+      - id: remove_the_record_on_undo
+        when: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}
+        file: {path: /etc/systems-desk/everyone-locked-out, state: absent}
+      - id: revoke_cloudflare_access_sessions
+        when: {not: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}}
+        shell:
+          script: exec python3 /usr/local/sbin/revoke_cloudflare_access_sessions.py
+          dryrun: printf '%s\n' 'would revoke sessions for the configured private Cloudflare Access applications'
+          env:
+            CLOUDFLARE_ACCOUNT_ID: "{{ .vars.cloudflare_account_id }}"
+            PRIVATE_HOST_NAMES: "{{ .vars.util01_private_page_host_names }}"
+            STAGING_HOST_NAMES: "{{ .vars.public_host_names.staging }}"
+            STAGING_SERVERS: "{{ .inventory.groups.staging_server }}"
+      - id: require_initial_containment_on_every_server
+        when: {not: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}}
+        assert:
+          that: "{{ .outputs.start_containment_before_mmx_admission[.vars.desk_name].every_server_was_isolated }}"
+          message: Initial containment failed on a server. Isolate the named server at the provider before continuing.

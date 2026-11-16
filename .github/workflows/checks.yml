@@ -1,0 +1,76 @@
+name: Tests
+
+# Runs the Stack's tests on every push and pull request: the tests/ suite
+# with the MMX release the template pins, mmx validate on the template, and
+# the Go checks of set-up-outside-services. No test needs a provider account
+# or a credential: each one uses stand-ins.
+
+on:
+  push:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  tests:
+    name: Stack tests on Ubuntu
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        env:
+          GOTOOLCHAIN: auto # Read the toolchain directive, even if the runner sets local.
+        with:
+          go-version-file: set_up_outside_services/go.mod
+          cache: false
+      - name: Build the MMX release that the template pins
+        env:
+          GOTOOLCHAIN: auto # MMX's go.mod names its own toolchain.
+        shell: bash
+        run: |
+          settings=skills/monkeymaxxing-stack/systems_repository_template/mmx_project_settings.yml
+          mmx_version=$(awk '/^    mmx:$/ { found = 1; next } found && /version:/ { gsub(/"/, "", $2); print $2; exit }' "$settings")
+          if [ -z "$mmx_version" ]; then
+            echo "Cannot read stack_software.mmx.version from $settings." >&2; exit 1
+          fi
+          git clone --quiet --depth 1 --branch "v$mmx_version" https://github.com/monkeymaxxing/mmx "$RUNNER_TEMP/mmx"
+          # MMX reads official_extra_modules/ next to its binary, so the binary stays in the clone.
+          (cd "$RUNNER_TEMP/mmx" && CGO_ENABLED=0 go build -trimpath -o mmx ./cmd/mmx)
+          echo "MMX_BINARY=$RUNNER_TEMP/mmx/mmx" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/mmx" >> "$GITHUB_PATH"
+      - name: Install jq, and put PostgreSQL's server programs on PATH
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends jq
+          # The row-recovery tests run initdb and pg_ctl against two local clusters.
+          ls -d /usr/lib/postgresql/*/bin | sort -V | tail -n 1 >> "$GITHUB_PATH"
+      - name: Validate the systems repository template
+        working-directory: skills/monkeymaxxing-stack/systems_repository_template
+        run: mmx validate
+      - name: Run every test in tests/
+        shell: bash
+        run: |
+          failed=()
+          for test in tests/*_test.py; do
+            echo "::group::$test"
+            if ! python3 "$test"; then failed+=("$test"); fi
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            printf 'Failed: %s\n' "${failed[@]}" >&2; exit 1
+          fi
+      - name: Check set-up-outside-services with go vet, go test and gofmt
+        working-directory: set_up_outside_services
+        shell: bash
+        run: |
+          go vet ./...
+          go test ./...
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"; exit 1
+          fi

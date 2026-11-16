@@ -1,0 +1,17 @@
+#!/bin/bash
+# Run once as the person: sudo set-up-coding-agent-repository.
+# First register /etc/systems-desk/production_key.pub at the Git host with
+# write access. This public key also signs the coding agent's commits.
+set -euo pipefail
+[ "$(id -u)" -eq 0 ] || { echo 'Run sudo set-up-coding-agent-repository as the person.' >&2; exit 1; }
+IFS= read -r remote < /etc/systems-desk/repository-remote
+export SSH_AUTH_SOCK=/run/desk-ssh-agent/socket
+export GIT_SSH_COMMAND='ssh -F /etc/systems-desk/ssh.conf'
+runuser -u coding-agent -- git -c core.hooksPath=/dev/null clone --branch main -- "$remote" /home/coding-agent/systems_repository
+runuser -u coding-agent -- git -C /home/coding-agent/systems_repository config gpg.format ssh
+runuser -u coding-agent -- git -C /home/coding-agent/systems_repository config user.signingkey /etc/systems-desk/production_key.pub
+runuser -u coding-agent -- git -C /home/coding-agent/systems_repository config commit.gpgsign true
+# set-up-the-systems-repository sets the author right after this; a person
+# who runs this alone sets it by hand.
+[ -n "${SET_UP_THE_SYSTEMS_REPOSITORY:-}" ] ||
+    printf 'Set your Git author name and email in /home/coding-agent/systems_repository, then start the coding agent with: start-the-coding-agent\n'

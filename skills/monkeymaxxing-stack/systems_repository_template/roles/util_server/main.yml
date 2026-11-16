@@ -1,0 +1,1199 @@
+# util01: the tools that operate the system. The util_server role sets up:
+# - The MMX controller, where the coding agent runs pushed changes.
+# - MMWatchdog's fleet hub, which every server reports to.
+# - The Unix users of MMHotline and the triage agent. MMHotline reaches the
+#   person on call and runs the triage agent.
+# - MMHotline's private pages through util01's own Cloudflare tunnel.
+# - MMHotline's copy of the systems repository, and the Git settings for
+#   the triage agent's Unix user.
+# - The daily server settings comparison and the weekly database restore drill.
+#
+# After util_server, MMX reads the hub's join code: the hub's address,
+# certificate fingerprint, and secret that lets servers join the hub.
+# Then the fleet stage mmhotline in playbooks/every_server.yml installs
+# MMHotline, its settings file, and its backup.
+# MMHotline's settings are applied near the end of playbooks/every_server.yml,
+# in apply_the_mmhotline_settings. The comments for the mmhotline stage in
+# playbooks/every_server.yml explain why settings are applied near the end.
+#
+# The every_server role has already set util01 up like every server and
+# unpacked the MMWatchdog release. The every_server role has also set up
+# util01's WireGuard address, which MMHotline and the hub listen on.
+#
+# The node tasks that read no secret come first. MMX hides the result of
+# every node task that starts after one that read a secret and ran
+# something on the server (check_for_a_leftover_restore01_every_day), and
+# the coding agent reads the two SSH public keys made on util01 by
+# ssh_key_of_the_mmhotline_user
+# and ssh_key_of_the_triage_agent from the first run's results.
+inputs:
+  everyone_locked_out_except_desk: {type: string, default: ""}
+  # Every server's check groups read is_database_server and is_staging_server.
+  is_database_server:                       # false on util01
+    type: boolean
+    required: true
+  is_staging_server:
+    type: boolean
+    required: true
+  private_ip:                               # util01's address inside wireguard_network
+    type: string
+    required: true
+  # The failover monitor's: the Postgres version, the formation's nodes, and
+  # the password of the login autoctl_node, with which every node reaches it.
+  postgresql_major_version:
+    type: integer
+    required: true
+  production_formation_node_names:          # the inventory group database_servers
+    type: list
+    required: true
+  # Every server in the inventory. The fleet hub forgets servers absent
+  # from the inventory.
+  inventory_nodes:
+    type: mapping
+    required: true
+  autoctl_node_password:
+    type: string
+    required: true
+    secret: true
+  # Read only by the reboot check of mmwatchdog_checks/every_server.yml,
+  # which util01 never gets: MMX never reboots the machine it runs on. So
+  # util01 passes neither, and both stay empty.
+  inventory_groups: {type: mapping, default: {}}
+  reboot_check_settings: {type: mapping, default: {}}
+  # For util01's checks app_servers_to_add_for_the_load and
+  # app_servers_to_remove_for_the_load (mmwatchdog_checks/util_server.yml):
+  # what_the_triage_agent_may_do_without_a_person, the inventory group
+  # app_servers, growth_limits.app_servers and triage_agent_server_work. The
+  # checks exist only with routine_fixes_and_server_work.
+  app_pool_load_settings:
+    type: mapping
+    required: true
+  apps:                                     # the hub checks each app at its public host name
+    type: mapping
+    required: true
+  public_host_names:                        # the inventory's public_host_names
+    type: mapping
+    required: true
+  # false until chapter 9 (go live): the public_sites check group, whose
+  # failures are sos alerts, is left out of the hub's checks until then.
+  public_site_checks_run:
+    type: boolean
+    default: false
+  util01_private_page_host_names:           # MMHotline dashboard hostname
+    type: mapping
+    required: true
+  systems_repository:                       # ssh_url and git_host_ssh_known_hosts_lines
+    type: mapping
+    required: true
+  triage_agent_coding_agent:                # vars.triage_agent_coding_agent: claude_code or codex
+    type: string
+    required: true
+  codex_release:                            # stack_software.codex: version, download_url, and sha256
+    type: mapping
+    required: true
+  # The pinned_program_releases checks (mmwatchdog_checks/util_server.yml)
+  # compare every pin in stack_software with its newest release; codex is
+  # checked only while one of the two coding agent settings is codex.
+  stack_software:                           # vars.stack_software
+    type: mapping
+    required: true
+  systems_desk_coding_agent:                # vars.systems_desk_coding_agent: claude_code or codex
+    type: string
+    required: true
+  mmx_release:                              # each release: version, download_url, and sha256
+    type: mapping
+    required: true
+  mmwatchdog_release:
+    type: mapping
+    required: true
+  mmx_vault_passphrase:
+    type: string
+    required: true
+    secret: true
+  pushover_application_token:
+    type: string
+    required: true
+    secret: true
+  pushover_user_or_group_key:
+    type: string
+    required: true
+    secret: true
+  # The fleet hub signs alerts and check-ins to MMHotline with
+  # mmhotline_signing_secret_of_the_fleet_hub. For example, an alert reports
+  # a failed check.
+  # A check-in tells MMHotline that the hub is running.
+  # The alert source mmwatchdog_fleet_hub in mmhotline_settings.yml lists
+  # mmhotline_signing_secret_of_the_fleet_hub as a signing secret.
+  mmhotline_signing_secret_of_the_fleet_hub:
+    type: string
+    required: true
+    secret: true
+  cloudflare_tunnel_token:                  # util01's own tunnel, not the app servers'
+    type: string
+    required: true
+    secret: true
+  provider_api_token:                       # util01's own token at the server provider, for the restore drill's restore01
+    type: string
+    required: true
+    secret: true
+  nightly_work_starts_at:                   # vars.nightly_work_starts_at: UTC "HH:MM"; the jobs' order and spacing follow from it
+    type: string
+    required: true
+  weekly_work_day:                          # vars.weekly_work_day: the full backup, the restore drill, the image cleanup
+    type: string
+    required: true
+  check_new_commits_on_main_every_minutes:  # vars.check_new_commits_on_main_every_minutes
+    type: integer
+    required: true
+  # The nightly copy of the apps' uploads runs in roles/uploads_backup; util01
+  # gets its checks while backups.uploads_backup_runs_on names it.
+  backups:                                  # vars.backups: uploads_backup_runs_on
+    type: mapping
+    required: true
+
+node_tasks:
+  # The mmhotline user runs MMHotline, MMX, and the timers. The mmhotline
+  # user alone reads the vault passphrase and holds the SSH key that
+  # changes servers. The util_server role creates mmhotline and
+  # mmhotline-triage-agent before MMHotline's install would create the users.
+  # So the SSH keys of mmhotline and mmhotline-triage-agent exist before
+  # util_server's first secret.
+  #
+  # MMHotline's install keeps existing users and uses the owners and modes
+  # set below. /var/lib/mmhotline belongs to user and group mmhotline,
+  # with mode 0770, the mode MMHotline's own installation sets: MMHotline's
+  # backup runs as its own user, mmhotline-backup, in the group mmhotline,
+  # and Litestream must read and write beside the database. With 0700,
+  # every run of this role cut the backup off from the database until
+  # MMHotline was installed again (seen on test servers: "stat
+  # /var/lib/mmhotline/mmhotline.db: permission denied").
+  # /var/lib/mmhotline-triage-agent belongs to user and
+  # group mmhotline-triage-agent, with mode 0700.
+  # MMHotline's settings file belongs to the group mmhotline, so the
+  # installer keeps the mmhotline group that create_the_mmhotline_group
+  # creates on util01.
+  - id: create_the_mmhotline_group
+    group:
+      name: mmhotline
+      system: true
+  - id: create_the_mmhotline_user
+    user:
+      name: mmhotline
+      system: true
+      primary_group: mmhotline
+      home: /var/lib/mmhotline
+      shell: /usr/sbin/nologin
+      create_home_directory: false
+  - id: create_the_home_of_the_mmhotline_user
+    directory:
+      path: /var/lib/mmhotline
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0770"
+  # The triage agent's user has no sudo; MMHotline runs the agent as this
+  # user in a systemd sandbox.
+  - id: create_the_triage_agent_group
+    group:
+      name: mmhotline-triage-agent
+      system: true
+  - id: create_the_triage_agent_user
+    user:
+      name: mmhotline-triage-agent
+      system: true
+      primary_group: mmhotline-triage-agent
+      home: /var/lib/mmhotline-triage-agent
+      shell: /usr/sbin/nologin
+      create_home_directory: false
+  - id: create_the_home_of_the_triage_agent
+    directory:
+      path: /var/lib/mmhotline-triage-agent
+      owner: mmhotline-triage-agent
+      group: mmhotline-triage-agent
+      permissions_mode: "0700"
+
+  # Git and SSH provide the project copies and server connections.
+  - id: install_git_and_ssh
+    apt_package:
+      packages:
+        - {name: git, version: newest_when_first_installed}
+        - {name: openssh-client, version: newest_when_first_installed}
+  # curl asks the pinned programs' release sources for their newest
+  # releases (pinned_program_releases in mmwatchdog_checks/util_server.yml).
+  - id: install_curl
+    apt_package:
+      packages:
+        - {name: curl, version: newest_when_first_installed}
+
+  # Two SSH keys, each made on util01, so the private half never leaves it.
+  # The coding agent reads each public_key from the first run's results.
+  # The agent commits the mmhotline user's public key in root_ssh_public_keys
+  # in mmx_project_settings.yml. The person also registers the mmhotline
+  # user's public key at the Git host as a deploy key with write access
+  # to the systems repository. The agent commits the triage agent's public
+  # key as triage_ssh_public_key in mmx_project_settings.yml.
+  #
+  # The mmhotline user's key logs in as root on every server, and signs its
+  # commits. The mmhotline user's SSH key also pushes to the Git host.
+  # A separate Git-host key for mmhotline would protect nothing, because
+  # whoever controls the mmhotline account already holds root on every server.
+  - id: ssh_key_of_the_mmhotline_user
+    ssh_key_pair:
+      for_user_account: mmhotline
+      private_key_path: /var/lib/mmhotline/.ssh/id_ed25519
+      key_type: ed25519
+      key_comment_when_created: util01, the mmhotline user
+  # The triage agent's key logs in as the read-only triage user on every
+  # server and signs the agent's commits. The triage agent's key reaches
+  # no Git host: MMHotline pushes the agent's commits itself.
+  - id: ssh_key_of_the_triage_agent
+    ssh_key_pair:
+      for_user_account: mmhotline-triage-agent
+      private_key_path: /var/lib/mmhotline-triage-agent/.ssh/id_ed25519
+      key_type: ed25519
+      key_comment_when_created: util01, the triage agent
+
+  - id: trust_the_ssh_host_keys_of_the_git_host
+    file:
+      path: /var/lib/mmhotline/.ssh/known_hosts
+      template: files/git_host_known_hosts
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0644"
+  # Each user's ~/.gitconfig signs its commits with its SSH key. MMHotline
+  # also signs its merges of the agent's commits with the mmhotline user's
+  # SSH key.
+  - id: write_the_git_settings_of_the_mmhotline_user
+    file:
+      path: /var/lib/mmhotline/.gitconfig
+      source: files/gitconfig_of_the_mmhotline_user
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0644"
+  - id: write_the_git_settings_of_the_triage_agent
+    file:
+      path: /var/lib/mmhotline-triage-agent/.gitconfig
+      source: files/gitconfig_of_the_triage_agent
+      owner: mmhotline-triage-agent
+      group: mmhotline-triage-agent
+      permissions_mode: "0644"
+
+  # The MMX controller coordinates runs across servers. MMX's node runner
+  # executes tasks on each server, including util01. On util01, /opt/mmx
+  # belongs to the node runner, so the controller lives outside /opt/mmx.
+  # The release holds mmx beside the node runner executables that mmx sends
+  # to the servers. The link /usr/local/bin/mmx points to
+  # /usr/local/lib/mmx/releases/<version>/mmx, where <version> is
+  # mmx_release.version. MMX finds the node runner executables beside the
+  # target mmx program.
+  #
+  # Earlier releases stay because the earlier release's mmx runs the
+  # installation of a new release. The running mmx reads the earlier
+  # release's node runner executables throughout the run.
+  - id: create_the_mmx_program_directory
+    directory:
+      path: /usr/local/lib/mmx
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_mmx_releases_directory
+    directory:
+      path: /usr/local/lib/mmx/releases
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: unpack_the_mmx_release
+    unpack_archive:
+      url: "{{ .inputs.mmx_release.download_url }}"
+      sha256: "{{ .inputs.mmx_release.sha256 }}"
+      path: "/usr/local/lib/mmx/releases/{{ .inputs.mmx_release.version }}"
+      unpack_without_wrapping_folder: true
+  - id: use_the_mmx_release_program
+    symlink:
+      path: /usr/local/bin/mmx
+      target: "/usr/local/lib/mmx/releases/{{ .inputs.mmx_release.version }}/mmx"
+
+  # The triage agent's coding agent: Claude Code, from the stable channel
+  # of Anthropic's apt repository, which serves a version about a week old
+  # and skips releases with major regressions. Claude Code's package puts
+  # the claude program in /usr/bin, where every triage run finds it.
+  # Claude Code is not pinned because Claude Code releases several times
+  # a week, so a pin would always be out of date. Claude Code only runs
+  # the coding agent's sessions and tools.
+  #
+  # Claude Code's updates arrive with the security updates, because
+  # every_server's unattended-upgrades settings allow the repository.
+  # The signing key is committed as Anthropic
+  # publishes it, from https://downloads.claude.ai/keys/claude-code.asc,
+  # with the fingerprint 31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE.
+  #
+  # Claude Code uses the credential stored under the vault key
+  # mmhotline_triage_agent_credential. In mmhotline_settings.yml,
+  # triage_agent.credential gives MMHotline the Claude Code credential.
+  # MMHotline gives the credential from mmhotline_triage_agent_credential
+  # to each triage run.
+  - id: add_the_claude_code_apt_repository
+    apt_repository:
+      name: claude-code
+      uris: [https://downloads.claude.ai/claude-code/apt/stable]
+      suites: [stable]
+      components: [main]
+      signing_key_source: files/claude_code_apt_signing_key.asc
+  - id: install_claude_code_for_the_triage_agent
+    apt_package:
+      packages:
+        - {name: claude-code, version: newest_when_first_installed}
+
+  # Codex, when triage_agent_coding_agent is codex: the release pinned in
+  # stack_software.codex, checked against its SHA-256 before unpacking.
+  # Codex has no apt repository, so a pin is the only way to know what util01
+  # runs; Codex updates when the team changes the pin
+  # (operating_procedures/add_or_update_a_program_from_outside_the_distribution.md).
+  # MMHotline looks for codex, its helper codex-code-mode-host, and rg in
+  # /usr/local/bin, so links there point into the unpacked release package.
+  # Each version unpacks to /usr/local/lib/codex/releases/<version>, and the
+  # earlier versions are deleted after the links move: an unpacked package
+  # takes about 520 MB, and no running program needs an earlier one.
+  # With claude_code, util01 downloads and installs nothing for Codex.
+  # Claude Code stays installed in both cases: the claude-code package
+  # updates itself with the security updates and costs nothing while unused.
+  - when: {equals: ["{{ .inputs.triage_agent_coding_agent }}", codex]}
+    task_block:
+      id: install_codex_for_the_triage_agent
+      changes:
+        - id: create_the_codex_releases_directory
+          directory:
+            path: /usr/local/lib/codex/releases
+            create_missing_parent_directories: true
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - id: unpack_the_codex_release
+          unpack_archive:
+            url: "{{ .inputs.codex_release.download_url }}"
+            sha256: "{{ .inputs.codex_release.sha256 }}"
+            path: "/usr/local/lib/codex/releases/{{ .inputs.codex_release.version }}"
+        - id: use_the_codex_release_programs
+          loop:
+            - {name: codex, in_release: bin/codex}
+            - {name: codex-code-mode-host, in_release: bin/codex-code-mode-host}
+            - {name: rg, in_release: codex-path/rg}
+          as: program
+          symlink:
+            path: "/usr/local/bin/{{ .program.name }}"
+            target: "/usr/local/lib/codex/releases/{{ .inputs.codex_release.version }}/{{ .program.in_release }}"
+        - id: delete_the_earlier_codex_releases
+          directory:
+            path: /usr/local/lib/codex/releases
+            owner: root
+            group: root
+            permissions_mode: "0755"
+            delete_everything_inside_except: ["{{ .inputs.codex_release.version }}"]
+
+  # The scheduled jobs below run only a commit that MMHotline trusts
+  # (files/find_the_trusted_commit_of_the_systems_repository). The mmhotline
+  # user asks MMHotline through its command socket, which only root reaches,
+  # so the user gets exactly that one command through sudo, with a full
+  # commit ID. The mmhotline user already runs MMHotline and owns its data,
+  # so the command gives the user nothing new.
+  - id: install_the_script_that_finds_the_trusted_commit
+    file:
+      path: /usr/local/bin/find_the_trusted_commit_of_the_systems_repository
+      source: files/find_the_trusted_commit_of_the_systems_repository
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: allow_the_mmhotline_user_the_commit_check
+    file:
+      path: /etc/sudoers.d/mmhotline-checks-commits
+      content: "mmhotline ALL=(root) NOPASSWD: /usr/local/bin/mmhotline ^commit-reviews check --commit-id [0-9a-f]{40,64} --json$\n"
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -c -f "$NEW_FILE"
+          dryrun: visudo -c -f "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+  # util01's copy of the systems repository belongs to mmhotline. MMHotline, the
+  # helper run_mmx_on_util01 and the scheduled jobs share the copy and
+  # systems_repository.lock. After the clone, only MMHotline moves the
+  # copy's checkout, and only forward to the trusted commit.
+  - id: clone_mmhotline_copy_of_the_systems_repository
+    shell:
+      script: |
+        set -euo pipefail
+        exec 9>> /var/lib/mmhotline/systems_repository.lock
+        if ! flock --nonblock 9; then
+          holder=$(cat /var/lib/mmhotline/systems_repository.lock)
+          printf 'waiting for the lock holder: %s\n' "${holder:-another process on util01 (no holder line)}"
+          flock 9
+        fi
+        printf 'MMX: clone the systems repository; user mmhotline; process %s; started %s\n' "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        git clone --quiet "$SYSTEMS_REPOSITORY_SSH_URL" systems_repository
+      dryrun: printf 'would clone %s into /var/lib/mmhotline/systems_repository\n' "$SYSTEMS_REPOSITORY_SSH_URL"
+      run_as_user_account: mmhotline
+      run_from_directory: /var/lib/mmhotline
+      env:
+        SYSTEMS_REPOSITORY_SSH_URL: "{{ .inputs.systems_repository.ssh_url }}"
+      skip_if_this_path_exists: /var/lib/mmhotline/systems_repository
+      run_only_if_this_command_succeeds:
+        script: git ls-remote --quiet --exit-code "$SYSTEMS_REPOSITORY_SSH_URL" HEAD > /dev/null
+        true_exit_codes: [0]
+        false_exit_codes: [128]           # the Git host refuses the key, or can't be reached
+
+  # MMHotline notices a pushed commit within minutes, not only at its next
+  # run or the next nightly job: this job only asks MMHotline to check the
+  # new commits on main. MMHotline sends one alert for each commit that
+  # waits for review, and moves its checkout forward to the trusted commit.
+  # The job sends no alert of its own, runs no MMX and wakes no coding agent.
+  # It takes no lock, because MMHotline's check takes the lock itself and
+  # waits while an MMX run holds it. Every outcome ends the run without
+  # failing the unit, with one line in the journal when something stopped
+  # the check, because the next run comes in a few minutes.
+  # While another holder has the lock, the job asks nothing: MMHotline's
+  # check would wait for the lock, and its waiting marker would end a
+  # running restore drill for a check that runs nothing
+  # (playbooks/weekly_database_restore_drill.yml). MMHotline checks again
+  # before each of its own runs.
+  - id: check_new_commits_on_main_every_few_minutes
+    systemd_scheduled_job:
+      name: check_new_commits_on_main
+      systemd_calendar_schedule: "*-*-* *:00/{{ .inputs.check_new_commits_on_main_every_minutes }}:00 UTC"
+      run_as_user_account: mmhotline
+      run_from_directory: /var/lib/mmhotline/systems_repository
+      script: |
+        flock --nonblock /var/lib/mmhotline/systems_repository.lock true || exit 0
+        find_the_trusted_commit_of_the_systems_repository > /dev/null || true
+
+  # Only dryrun exit 0 proves that the servers match the repository. Exit 2 means proposed changes;
+  # exit 3 means incomplete; errors also fail the unit. MMWatchdog warns.
+  # UTC: nightly_work_starts_at plus 3 hours 30 minutes, after the restore drill.
+  - id: work_out_the_time_of_the_server_settings_comparison
+    shell:
+      script: printf '%s' "$(date -u -d "2000-01-01 $NIGHTLY_WORK_STARTS_AT UTC + 210 minutes" +%H:%M:00)"  # no trailing newline: a calendar value must be one line
+      dryrun: printf '%s' "$(date -u -d "2000-01-01 $NIGHTLY_WORK_STARTS_AT UTC + 210 minutes" +%H:%M:00)"  # no trailing newline: a calendar value must be one line
+      env:
+        NIGHTLY_WORK_STARTS_AT: "{{ .inputs.nightly_work_starts_at }}"
+      changed_when: false
+  - id: compare_every_server_with_the_repository_every_day
+    systemd_scheduled_job:
+      name: compare_every_server_with_the_repository
+      systemd_calendar_schedule: "*-*-* {{ .node_tasks.work_out_the_time_of_the_server_settings_comparison.stdout }} UTC"
+      run_missed_job_after_downtime: true
+      run_as_user_account: mmhotline
+      run_from_directory: /var/lib/mmhotline
+      script: |
+        set -euo pipefail
+        cd systems_repository
+        export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
+        # Wait while another holder, such as the restore drill, has the lock,
+        # and only then ask MMHotline: its check waits for the lock too, and
+        # its waiting marker would end a running restore drill for a check
+        # that runs nothing (playbooks/weekly_database_restore_drill.yml).
+        flock /var/lib/mmhotline/systems_repository.lock true
+        # Ask MMHotline first, without the lock: MMHotline's check takes the
+        # lock itself. Exit 2: MMHotline trusts no commit of main yet, and
+        # MMHotline's warning names each commit that waits for review, so the
+        # job ends without failing its unit, which would send a second warning.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 2 ] && exit 0; exit "$status"; }
+        exec 9>> /var/lib/mmhotline/systems_repository.lock
+        if ! flock --nonblock 9; then
+          holder=$(cat /var/lib/mmhotline/systems_repository.lock)
+          printf 'waiting for the lock holder: %s\n' "${holder:-another process on util01 (no holder line)}"
+          flock 9
+        fi
+        printf '%s; user mmhotline; process %s; started %s\n' "$JOB_NAME" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        changes=$(git status --porcelain)
+        [ -z "$changes" ]
+        [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
+        # Only MMHotline moves the checkout, and only forward to a trusted
+        # commit, so a checkout at or past the trusted commit is trusted.
+        git merge-base --is-ancestor "$trusted" HEAD || { printf "util01's copy is at %s, not at or past the trusted commit %s; nothing ran, and the next run tries again\n" "$(git rev-parse --short=12 HEAD)" "${trusted:0:12}" >&2; exit 1; }
+        # During a lock-out util01 runs nothing: the servers refuse its key, and
+        # every_server refuses to run on util01. MMX itself says whether
+        # everyone_locked_out_except_desk is set: the first lock-out check of
+        # the every_server fleet stage is skipped exactly when it is not.
+        lock_out_check=$(mmx explain every_server --only-fleet-stages every_server --limit util01 --json \
+          | jq -r '[.fleet_stages[].node_tasks[]? | select(.path | endswith("/a_lock_out_starts_only_with_the_lock_out_button")) | .status][0]')
+        if [ "$lock_out_check" != skipped ]; then
+          printf '%s\n' 'everyone_locked_out_except_desk is set in inventories/servers.yml, so util01 compares nothing during the lock-out. The comparison runs again after the person undoes the lock-out with the lock-out button.'
+          exit 0
+        fi
+        mmx dryrun every_server --non-interactive
+      env:
+        JOB_NAME: compare_every_server_with_the_repository
+
+  # After each passed drill, the weekly restore drill writes
+  # /var/lib/restore_drill/latest_passed_drill. MMWatchdog's check of util01
+  # reads the age of latest_passed_drill.
+  - id: create_the_restore_drill_directory
+    directory:
+      path: /var/lib/restore_drill
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0755"
+
+  # replace_failed_servers and destroy_replaced_servers keep the fleet hub's
+  # answer and each attempt's receipt here
+  # (server_management_scripts/steps_for_replacing_failed_servers.bash). An
+  # attempt directory stays only when a created server could not be
+  # destroyed: its receipt names the server's ID.
+  - id: create_the_directory_of_the_server_replacements
+    directory:
+      path: /var/lib/replace_failed_servers
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0750"
+
+  # The fleet hub on util01 stores each server's capacity check readings.
+  # The triage agent logs in over SSH as the read-only triage user on
+  # util01 to read the past week's readings (triage_agent_rules.md,
+  # "Reading the system"). The every_server role creates the triage user
+  # on every server, including util01.
+  #
+  # files/sudoers_triage_mmwatchdog_fleet_readings generates one sudo line
+  # per server and check group from the inventory, with fixed arguments.
+  - id: allow_the_triage_user_the_fleet_hubs_readings
+    when: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+    file:
+      path: /etc/sudoers.d/triage-reads-fleet-readings
+      template: files/sudoers_triage_mmwatchdog_fleet_readings
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -c -f "$NEW_FILE"
+          dryrun: visudo -c -f "$NEW_FILE"
+          env:
+            NEW_FILE: "{{ .new_file.path }}"
+
+  # weekly_work_day, two hours after nightly_work_starts_at (03:00 UTC on
+  # Sunday in the template), after the full backup. The playbook owns the server receipt and cleanup.
+  # UTC: nightly_work_starts_at plus two hours, on weekly_work_day, after the full backup.
+  - id: work_out_the_time_of_the_restore_drill
+    shell:
+      script: printf '%s' "$(date -u -d "2000-01-01 $NIGHTLY_WORK_STARTS_AT UTC + 120 minutes" +%H:%M:00)"  # no trailing newline: a calendar value must be one line
+      dryrun: printf '%s' "$(date -u -d "2000-01-01 $NIGHTLY_WORK_STARTS_AT UTC + 120 minutes" +%H:%M:00)"  # no trailing newline: a calendar value must be one line
+      env:
+        NIGHTLY_WORK_STARTS_AT: "{{ .inputs.nightly_work_starts_at }}"
+      changed_when: false
+  - id: run_the_restore_drill_every_week
+    systemd_scheduled_job:
+      name: weekly_database_restore_drill
+      systemd_calendar_schedule: "{{ .inputs.weekly_work_day }} *-*-* {{ .node_tasks.work_out_the_time_of_the_restore_drill.stdout }} UTC"
+      run_missed_job_after_downtime: true
+      run_as_user_account: mmhotline
+      run_from_directory: /var/lib/mmhotline
+      script: |
+        set -euo pipefail
+        cd systems_repository
+        export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
+        # Ask MMHotline first, without the lock: MMHotline's check takes the
+        # lock itself. Exit 2: MMHotline trusts no commit of main yet, and
+        # MMHotline's warning names each commit that waits for review, so the
+        # job ends without failing its unit, which would send a second warning.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 2 ] && exit 0; exit "$status"; }
+        exec 9>> /var/lib/mmhotline/systems_repository.lock
+        if ! flock --nonblock 9; then
+          holder=$(cat /var/lib/mmhotline/systems_repository.lock)
+          printf 'waiting for the lock holder: %s\n' "${holder:-another process on util01 (no holder line)}"
+          flock 9
+        fi
+        printf '%s; user mmhotline; process %s; started %s\n' "$JOB_NAME" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        changes=$(git status --porcelain)
+        [ -z "$changes" ]
+        [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
+        # Only MMHotline moves the checkout, and only forward to a trusted
+        # commit, so a checkout at or past the trusted commit is trusted.
+        git merge-base --is-ancestor "$trusted" HEAD || { printf "util01's copy is at %s, not at or past the trusted commit %s; nothing ran, and the next run tries again\n" "$(git rev-parse --short=12 HEAD)" "${trusted:0:12}" >&2; exit 1; }
+        # MMX stop finishes the current node task, including the cleanup.
+        # Keep the shared lock until the controller has finished.
+        run_started_at=$(date -u +%FT%TZ)
+        mmx run weekly_database_restore_drill --non-interactive &
+        controller_pid=$!
+        trap 'mmx stop --non-interactive; wait "$controller_pid"; exit 1' TERM INT HUP
+        status=0
+        wait "$controller_pid" || status=$?
+        # A drill that gave way to MMHotline (playbooks/weekly_database_restore_drill.yml)
+        # ends this run with 75, so systemd runs the drill again later
+        # (10-run-again-after-giving-way.conf below). Only this run's result counts,
+        # and a result with attempt_dir is a failed cleanup, which stays a failure.
+        if [ "$status" -ne 0 ] && jq -e --arg run_started_at "$run_started_at" \
+            '.started_at >= $run_started_at and (.gave_way_to | type) == "string" and (.attempt_dir == null)' \
+            /var/lib/restore_drill/latest_result.json > /dev/null 2>&1; then
+          printf 'the restore drill gave way to: %s\n' "$(jq -r '.gave_way_to' /var/lib/restore_drill/latest_result.json)"
+          exit 75
+        fi
+        exit "$status"
+      env:
+        JOB_NAME: weekly_database_restore_drill
+
+  - id: let_the_restore_drill_finish_cleanup_after_a_stop
+    systemd_unit:
+      name: weekly_database_restore_drill.service
+      drop_in: 10-finish-cleanup.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Service]
+        KillMode=process
+        TimeoutStopSec=infinity
+  # A drill that gave way to MMHotline exits 75, and systemd starts it again
+  # 2 hours later. RestartForceExitStatus restarts whatever Restart= says;
+  # this oneshot unit keeps Restart=no, so a failed drill is not repeated.
+  # While systemd waits, the unit is "activating (auto-restart)", not failed,
+  # so MMWatchdog's failed-unit check stays quiet. A start in that time,
+  # by the weekly timer or by a person, starts the drill at once, and the
+  # waiting restart is used up: the drill never runs twice. A drill that
+  # gives way again waits another 2 hours; one that never passes still
+  # warns after 8 days (restore_drill in mmwatchdog_checks/util_server.yml).
+  # Reason for 2 hours: a server replacement and the runs that follow it
+  # end within an hour, and 2 hours later is still the quiet night. The
+  # value is fixed: a different wait changes nothing a team cares about.
+  - id: run_the_restore_drill_again_after_it_gave_way
+    systemd_unit:
+      name: weekly_database_restore_drill.service
+      drop_in: 10-run-again-after-giving-way.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Service]
+        RestartForceExitStatus=75
+        RestartSec=2h
+  - id: start_the_restore_drill_after_a_copy_of_the_uploads
+    systemd_unit:
+      name: weekly_database_restore_drill.service
+      drop_in: 10-after-the-copy-of-the-uploads.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Unit]
+        After=copy_uploads_to_the_backup_bucket.service
+  # The daily check waits for an active drill, then refuses any leftover.
+  # UTC: nightly_work_starts_at plus 3 hours 45 minutes.
+  - id: work_out_the_time_of_the_leftover_restore01_check
+    shell:
+      script: printf '%s' "$(date -u -d "2000-01-01 $NIGHTLY_WORK_STARTS_AT UTC + 225 minutes" +%H:%M:00)"  # no trailing newline: a calendar value must be one line
+      dryrun: printf '%s' "$(date -u -d "2000-01-01 $NIGHTLY_WORK_STARTS_AT UTC + 225 minutes" +%H:%M:00)"  # no trailing newline: a calendar value must be one line
+      env:
+        NIGHTLY_WORK_STARTS_AT: "{{ .inputs.nightly_work_starts_at }}"
+      changed_when: false
+  - id: check_for_a_leftover_restore01_every_day
+    systemd_scheduled_job:
+      name: check_for_a_leftover_restore01
+      systemd_calendar_schedule: "*-*-* {{ .node_tasks.work_out_the_time_of_the_leftover_restore01_check.stdout }} UTC"
+      run_missed_job_after_downtime: true
+      run_as_user_account: mmhotline
+      run_from_directory: /var/lib/mmhotline
+      script: |
+        set -euo pipefail
+        cd systems_repository
+        export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
+        # Wait while another holder, such as the restore drill, has the lock,
+        # and only then ask MMHotline: its check waits for the lock too, and
+        # its waiting marker would end a running restore drill for a check
+        # that runs nothing (playbooks/weekly_database_restore_drill.yml).
+        flock /var/lib/mmhotline/systems_repository.lock true
+        # Ask MMHotline first, without the lock: MMHotline's check takes the
+        # lock itself. Exit 2: MMHotline trusts no commit of main yet, and
+        # MMHotline's warning names each commit that waits for review, so the
+        # job ends without failing its unit, which would send a second warning.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 2 ] && exit 0; exit "$status"; }
+        exec 9>> /var/lib/mmhotline/systems_repository.lock
+        if ! flock --nonblock 9; then
+          holder=$(cat /var/lib/mmhotline/systems_repository.lock)
+          printf 'waiting for the lock holder: %s\n' "${holder:-another process on util01 (no holder line)}"
+          flock 9
+        fi
+        printf '%s; user mmhotline; process %s; started %s\n' "$JOB_NAME" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        changes=$(git status --porcelain)
+        [ -z "$changes" ]
+        [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
+        # Only MMHotline moves the checkout, and only forward to a trusted
+        # commit, so a checkout at or past the trusted commit is trusted.
+        git merge-base --is-ancestor "$trusted" HEAD || { printf "util01's copy is at %s, not at or past the trusted commit %s; nothing ran, and the next run tries again\n" "$(git rev-parse --short=12 HEAD)" "${trusted:0:12}" >&2; exit 1; }
+        servers=$(server_management_scripts/list_the_servers_at_the_provider)
+        . server_management_scripts/steps_for_reading_the_providers_list.bash
+        the_provider_list_holds_util01 "$servers" || { printf '%s\n' "$not_this_systems_list" >&2; exit 1; }
+        printf '%s\n' "$servers" | jq -e '[.servers[] | select(.name == "restore01")] | length == 0'
+        inventory=$(mmx nodes --json)
+        printf '%s\n' "$inventory" | jq -e '([.nodes[] | select(.name == "restore01")] | length == 0) and ((.groups.database_restore_servers // []) | length == 0)'
+        # Every server at the provider must be in the inventory. The fleet hub
+        # and the failover monitor forget a server that leaves the inventory,
+        # so a server dropped from it by mistake would keep running, and keep
+        # its data, with nobody watching it.
+        not_in_the_inventory=$(printf '%s\n' "$servers" | jq -r --argjson inventory "$inventory" '([.servers[].name] - [$inventory.nodes[].name])[]')
+        if [ -n "$not_in_the_inventory" ]; then
+          printf 'servers at the provider that are not in the inventory: %s\n' "$(printf '%s' "$not_in_the_inventory" | tr '\n' ' ')" >&2
+          exit 1
+        fi
+      env:
+        JOB_NAME: check_for_a_leftover_restore01
+        UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inputs.inventory_nodes.util01.vars.public_ipv4_address }}"
+        SERVER_PROVIDER_API_TOKEN: "{{ .inputs.provider_api_token }}"
+
+  # The failover monitor: pg_auto_failover's own small Postgres, which
+  # watches the database servers and decides which one is the primary.
+  # The failover monitor promotes a replica when the primary fails.
+  # While util01 is down, no failover happens, and the primary keeps running.
+  # The failover monitor holds one formation, production: the database
+  # servers.
+  #
+  # staging01 runs Debian's own cluster outside the production formation
+  # (roles/database_server). The monitor uses one login, autoctl_node, for
+  # every formation. A node with the autoctl_node login can fail over and
+  # remove nodes in any formation. So staging01 stays outside the monitor's
+  # formations to avoid giving staging01 control over production.
+  #
+  # The nodes reach the failover monitor at util01's WireGuard address,
+  # port 5432. The monitor listens only on util01's WireGuard address, and
+  # the firewall admits only the database servers. pg_autoctl lets its login
+  # autoctl_node in from util01's wireguard_network, with a
+  # password and TLS.
+  #
+  # On util01 itself, MMX's pg_auto_failover_monitor module gives initdb's
+  # six local login lines of pg_hba.conf Debian's own methods on every run,
+  # in place of trust, so no account of util01, the triage agent's included,
+  # logs in as the superuser postgres without a password.
+  #
+  # The formation's nodes are the inventory group database_servers. A server
+  # deleted from the inventory leaves the formation at the next run; a
+  # healthy primary is never dropped, and the run fails instead until
+  # switch_database_primary has promoted another database server to primary.
+  #
+  # Installing postgresql-17 would create Debian's own cluster main on port
+  # 5432, but the failover monitor needs port 5432.
+  # /etc/postgresql-common/createcluster.conf prevents creation of main.
+  # MMX must write /etc/postgresql-common/createcluster.conf before installing
+  # postgresql-17. The monitor's packages update themselves with
+  # the daily security updates, because util01 is not a database server: a
+  # restart of the monitor takes seconds and interrupts no app.
+  - id: create_the_postgresql_common_settings_directory
+    directory:
+      path: /etc/postgresql-common
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: keep_the_postgres_package_from_creating_a_cluster
+    file:
+      path: /etc/postgresql-common/createcluster.conf
+      content: "# Managed by MMX: pg_auto_failover creates the cluster.\ncreate_main_cluster = false\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: install_postgres_and_pg_auto_failover
+    apt_package:
+      packages:
+        - {name: "postgresql-{{ .inputs.postgresql_major_version }}", version: newest_when_first_installed}
+        - {name: "postgresql-{{ .inputs.postgresql_major_version }}-auto-failover", version: newest_when_first_installed}
+        - {name: pg-auto-failover-cli, version: newest_when_first_installed}
+  # pg_autoctl keeps a backup directory beside the data directory, so the
+  # directory that holds both belongs to postgres.
+  - id: create_the_directory_of_the_monitor_data_directory
+    directory:
+      path: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}"
+      owner: postgres
+      group: postgres
+      permissions_mode: "0755"
+  - id: failover_monitor_with_the_production_formation
+    pg_auto_failover_monitor:
+      data_directory: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}/pg_auto_failover_monitor"
+      postgresql_major_version: "{{ .inputs.postgresql_major_version }}"
+      port: 5432
+      host_name: "{{ .inputs.private_ip }}"
+      listen_address: "{{ .inputs.private_ip }}"
+      autoctl_node_password: "{{ .inputs.autoctl_node_password }}"
+      formation: production
+      node_names: "{{ .inputs.production_formation_node_names }}"
+      nodes_not_listed: remove
+  # Postgres binds its address when it starts, so at boot the monitor's
+  # service waits for wg0, which holds util01's WireGuard address. The
+  # drop-in changes the unit that the monitor's task above writes. The
+  # drop-in orders the monitor service's start after wg0 at the next boot.
+  # The running monitor service needs no restart for the new start order.
+  - id: start_the_failover_monitor_after_the_wireguard_network
+    systemd_unit:
+      name: pgautofailover.service
+      drop_in: 10-after-wireguard.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml in the systems repository.
+        [Unit]
+        After=wg-quick@wg0.service
+        Wants=wg-quick@wg0.service
+
+  # MMWatchdog's fleet hub sends every server's alerts to MMHotline as the
+  # alert source mmwatchdog_fleet_hub in mmhotline_settings.yml. The hub
+  # signs the alerts with mmhotline_signing_secret_of_the_fleet_hub, the
+  # vault key that also supplies the alert source's signing secret.
+  - id: create_the_mmwatchdog_configuration_directory
+    directory:
+      path: /etc/mmwatchdog
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_mmwatchdog_secrets_directory
+    directory:
+      path: /etc/mmwatchdog/secrets
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  # check-whether-the-load-changes-the-app-pool: the one rule for when the
+  # load calls for one more or one fewer app server, which util01's checks
+  # app_servers_to_add_for_the_load and app_servers_to_remove_for_the_load
+  # and the playbooks add_an_app_server_for_the_load and remove_server run.
+  # Python 3, which the every_server role installs, does the arithmetic.
+  - id: install_check_whether_the_load_changes_the_app_pool
+    file:
+      path: /usr/local/bin/check-whether-the-load-changes-the-app-pool
+      source: files/check-whether-the-load-changes-the-app-pool
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # The alert pause of util01's own planned work, which never pauses the
+  # public site checks: MMWatchdog's restart below and
+  # playbooks/reboot_util01_after_updates.yml use it. Installed before the
+  # restart that uses it.
+  - id: install_the_alert_pause_of_util01
+    file:
+      path: /usr/local/bin/util01-alert-pause
+      source: files/util01-alert-pause
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # MMX prepares the hub's settings and check groups in a candidate directory.
+  # Then the new release's mmwatchdog validates the candidate files.
+  # Only after validation passes does MMX put the release and checked files
+  # into use. Then MMX restarts MMWatchdog inside a maintenance window, as
+  # on every other server (roles/mmwatchdog_joined_node).
+  - task_block:
+      id: mmwatchdog_fleet_hub
+      changes:
+        - id: create_the_candidate_configuration_directory
+          directory:
+            path: /usr/local/lib/mmwatchdog/candidate_config
+            owner: root
+            group: root
+            permissions_mode: "0700"
+        - id: create_the_candidate_check_groups_directory
+          directory:
+            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups
+            owner: root
+            group: root
+            permissions_mode: "0700"
+        - id: write_the_candidate_node_settings
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/mmwatchdog_node_settings.yml
+            template: files/mmwatchdog_node_settings.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: write_the_candidate_alert_destinations
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/alert_destinations.yml
+            template: files/alert_destinations.yml
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: write_the_candidate_check_groups_of_every_server
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml
+            template: ../../mmwatchdog_checks/every_server.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: write_the_candidate_check_groups_of_util01
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups/util_server.yml
+            template: ../../mmwatchdog_checks/util_server.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+
+        # The Pushover application token, Pushover user or group key, and
+        # mmhotline_signing_secret_of_the_fleet_hub go in place before
+        # candidate validation, because validation reads the secrets.
+        # The hub sends the Pushover credentials to every server for the
+        # alert about util01. The hub signs alerts and check-ins to MMHotline
+        # with mmhotline_signing_secret_of_the_fleet_hub, so changing any of
+        # the three secrets restarts the hub.
+        - id: write_the_push_app_application_token
+          file:
+            path: /etc/mmwatchdog/secrets/pushover-application-token
+            content: "{{ .inputs.pushover_application_token }}\n"
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: write_the_push_app_user_or_group_key
+          file:
+            path: /etc/mmwatchdog/secrets/pushover-user-or-group-key
+            content: "{{ .inputs.pushover_user_or_group_key }}\n"
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: write_the_signing_secret_for_mmhotline
+          file:
+            path: /etc/mmwatchdog/secrets/mmhotline-signing-secret
+            content: "{{ .inputs.mmhotline_signing_secret_of_the_fleet_hub }}\n"
+            owner: root
+            group: root
+            permissions_mode: "0600"
+
+        # A rejected candidate fails the block at
+        # check_the_candidate_with_the_new_release, and the running hub
+        # keeps its release and its configuration. The check only reads, so
+        # a dryrun runs the candidate check too: the daily server settings comparison's
+        # dryrun then ends with 0 when nothing differs, instead of 3 for a
+        # task it could not check.
+        - id: check_the_candidate_with_the_new_release
+          shell:
+            # The same read-only program runs in a run and in a dryrun.
+            script: bash -c "$PROGRAM"
+            dryrun: bash -c "$PROGRAM"
+            env:
+              PROGRAM: |
+                release="/usr/local/lib/mmwatchdog/releases/$MMWATCHDOG_VERSION"
+                "$release/mmwatchdog" validate \
+                  --config-dir /usr/local/lib/mmwatchdog/candidate_config \
+                  --official-extra-module-dir "$release/official_extra_modules" \
+                  --external-module-dir /usr/local/lib/mmwatchdog/external_modules
+              MMWATCHDOG_VERSION: "{{ .inputs.mmwatchdog_release.version }}"
+            changed_when: false
+
+        # The checked files and the release go live.
+        - id: install_the_node_settings
+          file:
+            path: /etc/mmwatchdog/mmwatchdog_node_settings.yml
+            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/mmwatchdog_node_settings.yml]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: install_the_alert_destinations
+          file:
+            path: /etc/mmwatchdog/alert_destinations.yml
+            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/alert_destinations.yml]
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        # The check groups directory holds exactly util01's files.
+        - id: delete_every_other_check_group
+          directory:
+            path: /etc/mmwatchdog/check_groups
+            owner: root
+            group: root
+            permissions_mode: "0755"
+            delete_everything_inside_except: [every_server.yml, util_server.yml]
+        - id: install_the_check_groups_of_every_server
+          file:
+            path: /etc/mmwatchdog/check_groups/every_server.yml
+            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: install_the_check_groups_of_util01
+          file:
+            path: /etc/mmwatchdog/check_groups/util_server.yml
+            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/check_groups/util_server.yml]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: use_the_release_official_extra_modules
+          symlink:
+            path: /usr/local/lib/mmwatchdog/official_extra_modules
+            target: "/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}/official_extra_modules"
+        - id: use_the_release_program
+          symlink:
+            path: /usr/local/bin/mmwatchdog
+            target: "/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}/mmwatchdog"
+        - id: install_the_release_systemd_unit
+          file:
+            path: /etc/systemd/system/mmwatchdog.service
+            content_from_node_paths: ["/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}/mmwatchdog.service"]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      activate:
+        # Before the restart, maintenance holds the alerts that the restart
+        # would cause, including the hub's alerts for servers that stopped
+        # reporting.
+        # A first install has no MMWatchdog running and no alerts to prevent,
+        # so start_maintenance ends with success on a first install.
+        # The window is not announced (--without-maintenance-on-and-off-alerts):
+        # this run opens it and end_maintenance closes it a few seconds later,
+        # and the run's own result already shows the restart. Reason:
+        # otherwise every run that changes the hub's files or release
+        # sends the team "util01: maintenance on for the whole node" and its
+        # "off" alert for a routine restart. mmwatchdog events keeps both.
+        # A window a person opens, as the reboot and database playbooks do,
+        # is still announced.
+        # --for 3m: the longest the run waits here, plus a margin: the hub's
+        # acceptance, at most 25s; the restart, which systemd ends after its
+        # start timeout, 90s by default; the 10s wait for the inspection
+        # socket; and a margin for the rest. A run that fails or dies after
+        # the restart leaves the alerts paused at most that long.
+        # util01-alert-pause leaves the public site checks running: the
+        # restart does not stop the users' site, and those checks say when
+        # users cannot reach it.
+        - id: start_maintenance
+          shell:
+            script: |
+              mmwatchdog_state=0
+              systemctl is-active --quiet mmwatchdog || mmwatchdog_state=$?
+              case $mmwatchdog_state in
+                0) ;;
+                3|4) exit 0 ;;
+                *) exit 1 ;;
+              esac
+              /usr/local/bin/util01-alert-pause start --for 3m --reason "mmwatchdog deploy" --without-maintenance-on-and-off-alerts || exit 1
+              exit 2
+            only_when_tracked_inputs_changed: true
+            success_exit_codes: [0, 2]
+            changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+        - id: restart_mmwatchdog
+          systemd_service:
+            name: mmwatchdog
+            state: running
+            start_at_boot: true
+            refresh: restart
+      verify:
+        - id: wait_for_the_inspection_socket
+          wait_for:
+            path_exists: /run/mmwatchdog/mmwatchdog.sock
+            wait_at_most: 10s
+        - id: check_that_mmwatchdog_answers
+          shell:
+            script: /usr/local/bin/mmwatchdog config --json
+            dryrun: /usr/local/bin/mmwatchdog config --json
+            changed_when: false
+        - id: end_maintenance
+          when: {equals: ["{{ .node_tasks.start_maintenance.change }}", changed]}
+          shell:
+            script: /usr/local/bin/util01-alert-pause end
+
+  # The hub listens on util01's WireGuard address, which wg0 holds, so at boot
+  # MMWatchdog waits for wg0. Without the drop-in, a real util01 started the
+  # hub first after a reboot, whose listen on util01's WireGuard address,
+  # port 8445, failed with "bind: cannot assign requested address", and
+  # systemd started it again 4 seconds later. The
+  # drop-in orders the next boot; the running hub needs no restart for it.
+  - id: start_mmwatchdog_after_the_wireguard_network
+    systemd_unit:
+      name: mmwatchdog.service
+      drop_in: 10-after-wireguard.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml in the systems repository.
+        [Unit]
+        After=wg-quick@wg0.service
+        Wants=wg-quick@wg0.service
+
+  # The hub keeps a record of every server that ever reported and expects
+  # further reports from each recorded server. The hub alerts when a
+  # recorded server stops reporting. A server deleted from the inventory,
+  # removed or lost, is gone on purpose. So the task
+  # stop_fleet_hub_expecting_reports_from_removed_servers removes the hub's
+  # expectation of reports from servers absent from the inventory.
+  - id: install_the_script_that_forgets_servers_that_left_the_inventory
+    file:
+      path: /usr/local/sbin/stop_fleet_hub_expecting_reports_from_removed_servers
+      source: files/stop_fleet_hub_expecting_reports_from_removed_servers
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # A new util01's first preview runs before the script above is installed,
+  # so a preview skips the task until the script exists. A run installs the
+  # script first, so a run never skips the task.
+  - id: stop_fleet_hub_expecting_reports_from_removed_servers
+    shell:
+      script: /usr/local/sbin/stop_fleet_hub_expecting_reports_from_removed_servers
+      dryrun: /usr/local/sbin/stop_fleet_hub_expecting_reports_from_removed_servers --dryrun
+      run_only_if_this_path_exists: /usr/local/sbin/stop_fleet_hub_expecting_reports_from_removed_servers
+      env:
+        INVENTORY_NODES: "{{ .inputs.inventory_nodes }}"
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+
+  # remove_earlier_mmwatchdog_releases deletes earlier MMWatchdog release
+  # directories only after the new release runs.
+  - id: remove_earlier_mmwatchdog_releases
+    directory:
+      path: /usr/local/lib/mmwatchdog/releases
+      delete_everything_inside_except: ["{{ .inputs.mmwatchdog_release.version }}"]
+
+  # util01's own Cloudflare tunnel, for its private pages: MMHotline and the
+  # dashboard. util01's tunnel and token are separate from the app servers'
+  # tunnel and token, so the app servers' tunnel never reaches util01.
+  # The routes are in config.yml, so the systems repository holds the
+  # routes: the tunnel is created as a locally managed
+  # tunnel, and Cloudflare's dashboard holds no routes for it. cloudflared
+  # comes from Cloudflare's apt repository, with the signing key the app
+  # servers use too, in the project's files_used_by_several_roles/.
+  - id: add_the_cloudflare_package_repository
+    apt_repository:
+      name: cloudflared
+      uris: [https://pkg.cloudflare.com/cloudflared]
+      suites: [any]
+      components: [main]
+      signing_key_source: ../../files_used_by_several_roles/cloudflare_apt_signing_key.gpg
+  - id: install_cloudflared
+    apt_package:
+      packages:
+        - {name: cloudflared, version: newest_when_first_installed}
+  - task_block:
+      id: cloudflare_tunnel_of_util01
+      changes:
+        - id: create_the_cloudflared_settings_directory
+          directory:
+            path: /etc/cloudflared
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - id: write_the_routes_of_the_tunnel
+          file:
+            path: /etc/cloudflared/config.yml
+            template: files/cloudflared_config.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: cloudflared tunnel --config "$NEW_FILE" ingress validate
+                dryrun: cloudflared tunnel --config "$NEW_FILE" ingress validate
+                env:
+                  NEW_FILE: "{{ .new_file.path }}"
+        - id: write_the_tunnel_token
+          file:
+            path: /etc/cloudflared/tunnel_token.env
+            content: "TUNNEL_TOKEN={{ .inputs.cloudflare_tunnel_token }}\n"
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: write_the_unit_of_cloudflared
+          systemd_unit:
+            name: cloudflared.service
+            template: files/cloudflared.service
+      activate:
+        - id: run_cloudflared
+          systemd_service:
+            name: cloudflared
+            state: running
+            start_at_boot: true
+            refresh: restart
+
+  # The vault passphrase, for MMX's runs on util01, readable only by the
+  # mmhotline user. The vault holds its own passphrase under the key
+  # mmx_vault_passphrase. So a systems desk running every_server to rebuild util01
+  # restores the passphrase along with util01's settings and secrets applied
+  # by every_server. Reading mmx_vault_passphrase requires the vault
+  # passphrase already, so storing the passphrase inside the vault exposes
+  # no secret.
+  #
+  # After mmx secrets passwd, edit mmx_vault_passphrase to the new passphrase
+  # too. Update the desk button passphrase, commit, pull with rebase, and push.
+  # Then run: sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only --limit util_server
+  # The run from a systems desk gives util01 the passphrase needed to open the new vault.
+  # The coding agent commits and pushes the passphrase change, then
+  # applies the new passphrase from the systems desk before a utility-server run.
+  - id: write_the_vault_passphrase_for_mmx_on_util01
+    file:
+      path: /var/lib/mmhotline/mmx_vault_passphrase
+      content: "{{ .inputs.mmx_vault_passphrase }}\n"
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0600"

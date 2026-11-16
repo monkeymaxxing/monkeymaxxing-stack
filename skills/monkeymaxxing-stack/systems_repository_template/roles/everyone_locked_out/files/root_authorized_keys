@@ -1,0 +1,11 @@
+{{- $kept := .inputs.everyone_locked_out_except_desk -}}
+{{- if $kept -}}
+{{- if not (has $kept .inputs.inventory_groups.systems_desks) }}{{ fail "everyone_locked_out_except_desk must name a node in systems_desks. Nothing changed." }}{{ end -}}
+{{- $desk := index .inputs.inventory_nodes $kept -}}
+{{- if not (hasKey $desk.vars "production_ssh_public_key") }}{{ fail "The desk that keeps access needs vars.production_ssh_public_key in inventories/servers.yml. Nothing changed." }}{{ end -}}
+{{- if not (has $desk.vars.production_ssh_public_key .inputs.root_ssh_public_keys) }}{{ fail "The production_ssh_public_key of the desk that keeps access must also appear in root_ssh_public_keys. Nothing changed." }}{{ end -}}
+from="{{ $desk.vars.private_ip }}" {{ $desk.vars.production_ssh_public_key }}
+{{ else -}}
+{{ range .inputs.root_ssh_public_keys }}{{ . }}
+{{ end -}}
+{{ end -}}

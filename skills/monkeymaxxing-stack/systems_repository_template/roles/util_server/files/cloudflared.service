@@ -1,0 +1,22 @@
+# Managed by MMX from the systems repository (roles/util_server). util01's
+# Cloudflare Tunnel connector. It dials out to Cloudflare, so util01 opens
+# no web port, and routes util01's private pages to the programs that serve
+# them (/etc/cloudflared/config.yml).
+[Unit]
+Description=Cloudflare Tunnel connector for util01's private pages
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# systemd reads the tunnel's token from this root-only file, so the token is
+# on no command line; cloudflared takes it from TUNNEL_TOKEN.
+EnvironmentFile=/etc/cloudflared/tunnel_token.env
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel --config /etc/cloudflared/config.yml run
+# cloudflared needs no rights on util01: it runs as a user of its own that
+# systemd makes for each start, with the system read-only.
+DynamicUser=yes
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

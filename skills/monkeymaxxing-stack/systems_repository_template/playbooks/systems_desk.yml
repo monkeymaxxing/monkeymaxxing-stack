@@ -1,0 +1,106 @@
+# Run on this desk with review-and-apply-the-systems-desk-settings, in the person's terminal. It
+# shows what changed since the person's last desk review and asks first,
+# then runs: mmx run systems_desk --var desk_name=<this desk> --connection
+# ssh_only, with the person's private SSH agent socket. Root uses that socket for util01;
+# ssh/desk01 disables the agent and uses only the root-owned loopback key.
+# Initial setup uses this node's WireGuard address and bootstrap root key.
+# ssh/desk01 pins the loopback server to desk01's entry in ssh/known_hosts.
+command_line_vars:
+  desk_name:
+    type: string
+
+fleet_stages:
+  - id: systems_desk
+    nodes: "{{ .vars.desk_name }}"
+    on_node_failure: stop_run
+    node_tasks:
+      - id: refuse_a_node_outside_systems_desks
+        assert:
+          that:
+            all:
+              - equals: ["{{ .node.name }}", "{{ .vars.desk_name }}"]
+              - "{{ .vars.is_systems_desk }}"
+          message: >-
+            {{ .vars.desk_name }} is not in systems_desks in inventories/servers.yml.
+            Name this desk with --var desk_name=<desk name>. Nothing changed.
+      # A released Stack version pins a real release of each program; a
+      # SHA-256 of zeros marks a copy of a Stack checkout that is not a
+      # release. MMX checks every download of a run before the run starts,
+      # so a zero pin of a program this playbook downloads stops the run
+      # earlier, with MMX's "size or SHA-256 mismatch" and nothing changed.
+      # This refusal gives the plain reason for the other pins. Reason: a
+      # hand-filled pin could name any build.
+      - id: no_pin_has_a_sha256_of_zeros
+        loop: "{{ .vars.stack_software }}"
+        as: program
+        assert:
+          that: {not: {equals: ["{{ .program.value.sha256 }}", "0000000000000000000000000000000000000000000000000000000000000000"]}}
+          message: >-
+            stack_software.{{ .program.key }} in mmx_project_settings.yml has a
+            SHA-256 of zeros: this systems repository was copied from a Stack
+            checkout that is not a released version, so no published release
+            fits the pin. Copy stack_software from the template of a released
+            Stack version, a tag such as 2026-11, whose pins hold each
+            program's real release. Nothing changed.
+      - role: systems_desk
+        inputs:
+          wireguard_listen_port: "{{ .vars.wireguard_listen_port }}"
+          private_ip: "{{ .vars.private_ip }}"
+          person_unix_username: "{{ .vars.person_unix_username }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          allowed_laptops: "{{ .vars.allowed_laptops }}"
+          systems_desk_laptop_addresses: "{{ .vars.private_ip_ranges.systems_desk_laptops }}"
+          systems_repository: "{{ .vars.systems_repository }}"
+          root_ssh_public_keys: "{{ .vars.root_ssh_public_keys }}"
+          provider_api_url: "{{ .vars.systems_desk_provider_api_url }}"
+          provider_api_authentication: "{{ .vars.systems_desk_provider_api_authentication }}"
+          mmx_release: "{{ .vars.stack_software.mmx }}"
+          mmhotline_release: "{{ .vars.stack_software.mmhotline }}"
+          phone_code_lockout: "{{ .vars.phone_code_lockout }}"
+          set_up_outside_services_release: "{{ .vars.stack_software.set_up_outside_services }}"
+          systems_desk_coding_agent: "{{ .vars.systems_desk_coding_agent }}"
+          codex_release: "{{ .vars.stack_software.codex }}"
+
+  # The hub stage reads only the join code; it applies no production role.
+  - id: read_the_mmwatchdog_fleet_hub_join_code
+    nodes: util_server
+    node_tasks:
+      - id: mmwatchdog_fleet_hub_join_code
+        shell:
+          script: printf '%s' "$(/usr/local/bin/mmwatchdog fleet join-code)"
+          dryrun: printf '%s' "$(/usr/local/bin/mmwatchdog fleet join-code)"
+          output_is_secret: true
+          changed_when: false
+    outputs:
+      join_code: "{{ .node_tasks.mmwatchdog_fleet_hub_join_code.stdout }}"
+
+  - id: mmwatchdog_on_the_systems_desk
+    nodes: "{{ .vars.desk_name }}"
+    requires:
+      same_node: [systems_desk]
+    node_tasks:
+      - role: mmwatchdog_joined_node
+        inputs:
+          # This playbook runs only on a systems desk, so the file is fixed; and
+          # the desk is named on the command line, which validation cannot read.
+          mmwatchdog_check_file: systems_desks.yml
+          person_unix_username: "{{ .vars.person_unix_username }}"
+          phone_code_lockout: "{{ .vars.phone_code_lockout }}"
+          is_app_server: false
+          is_database_server: false
+          is_staging_server: false
+          is_jobs_server: false
+          is_load_balancer_server: false
+          # The groups as this desk's checks need them: the desk is in
+          # systems_desks and is no hub-outage alerter. The inventory's own
+          # groups would make each added or removed server a change in the
+          # desk review, which this playbook does not need.
+          inventory_groups: {systems_desks: ["{{ .vars.desk_name }}"], app_servers: [], database_servers: []}
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          job_containers_run_only_on_the_jobs_servers: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+          tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
+          reboot_check_settings: {}           # a desk never gets the reboot check

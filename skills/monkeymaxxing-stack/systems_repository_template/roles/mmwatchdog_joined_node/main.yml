@@ -1,0 +1,303 @@
+# MMWatchdog on a node that reports to the fleet hub on util01, including
+# a systems desk. util01 is the hub itself (the util_server role).
+# The every_server or systems_desk role has unpacked the release named by
+# mmwatchdog_release. The mmwatchdog_joined_node role writes the node
+# settings and check groups into a candidate directory, then validates the
+# candidate configuration with the unpacked release's mmwatchdog.
+# After validation passes, mmwatchdog_joined_node installs the checked files
+# and selects the unpacked release. Then mmwatchdog_joined_node starts a
+# maintenance window and restarts MMWatchdog, so the restart sends no false
+# alerts.
+inputs:
+  # mmwatchdog_check_file in the server's pool group in
+  # inventories/servers.yml: the file of mmwatchdog_checks/ with the pool's
+  # own checks, such as app_servers.yml. Every server also gets
+  # every_server.yml. A role cannot ask which pool its server is in, so the
+  # pool's group names the file once, and a new pool needs no edit here.
+  mmwatchdog_check_file:
+    type: string
+    required: true
+  person_unix_username:                                  # the desk owner; unused on production nodes
+    type: string
+    default: ""
+  # From phone_code_lockout in mmx_project_settings.yml; only a systems
+  # desk's check groups read it. The lockout alert's severity.
+  phone_code_lockout:
+    type: mapping
+    default: {}
+  is_app_server:                            # true in app_servers
+    type: boolean
+    required: true
+  is_database_server:                       # true in database_servers
+    type: boolean
+    required: true
+  is_staging_server:                        # true in staging_server
+    type: boolean
+    required: true
+  is_jobs_server:                           # true in jobs_servers
+    type: boolean
+    required: true
+  is_load_balancer_server:                  # true in load_balancer_servers
+    type: boolean
+    required: true
+  inventory_groups:                         # every inventory group and its servers
+    type: mapping
+    required: true
+  apps:
+    type: mapping
+    required: true
+  # From mmx_project_settings.yml. When
+  # job_containers_run_only_on_the_jobs_servers is false, app servers get
+  # job container checks, and silent jobs servers cause warn alerts.
+  # When job_containers_run_only_on_the_jobs_servers is true, app servers
+  # get no job container checks. A silent jobs server still causes a warn
+  # alert. When every jobs server is silent, the hub raises the silence
+  # alerts to sos, including when only a single jobs server exists.
+  job_containers_run_only_on_the_jobs_servers:
+    type: boolean
+    required: true
+  # From mmx_project_settings.yml. When
+  # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers is
+  # false, silent load-balancer servers cause warn alerts. When
+  # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers is
+  # true, the hub raises the silence alerts to sos when every load-balancer
+  # server is silent. A single silent load-balancer server still causes a
+  # warn alert.
+  tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers:
+    type: boolean
+    required: true
+  public_host_names:                        # production's, from the inventory: a load-balancer server's checks ask Caddy for each app by its host name
+    type: mapping
+    required: true
+  # PgBouncer lets many app connections share fewer Postgres connections.
+  # When pgbouncer_runs_in_front_of_postgres is true, the database servers
+  # and staging01 get PgBouncer's check.
+  pgbouncer_runs_in_front_of_postgres:
+    type: boolean
+    required: true
+  mmwatchdog_release:                       # version, download_url, and sha256
+    type: mapping
+    required: true
+  # For the check group reboots_that_may_run_now of every_server.yml: from
+  # mmx_project_settings.yml, what_the_triage_agent_may_do_without_a_person,
+  # public_site_checks_run, and maintenance_window. Only with
+  # routine_fixes_and_server_work does the check exist. {} on a systems
+  # desk, which never gets the check.
+  reboot_check_settings:
+    type: mapping
+    required: true
+  mmwatchdog_join_code:                     # the hub's join code: its address, certificate fingerprint, and join secret
+    type: string
+    required: true
+    secret: true
+
+node_tasks:
+  - task_block:
+      id: mmwatchdog_reports_to_the_fleet_hub
+      changes:
+        # The running MMWatchdog does not use the candidate configuration.
+        # Validation reads the candidate configuration before installation.
+        - id: create_the_candidate_configuration_directory
+          directory:
+            path: /usr/local/lib/mmwatchdog/candidate_config
+            owner: root
+            group: root
+            permissions_mode: "0700"
+        - id: create_the_candidate_check_groups_directory
+          directory:
+            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups
+            owner: root
+            group: root
+            permissions_mode: "0700"
+        - id: write_the_candidate_node_settings
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/mmwatchdog_node_settings.yml
+            template: files/mmwatchdog_node_settings.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: write_the_candidate_check_groups_of_every_server
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml
+            template: ../../mmwatchdog_checks/every_server.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: write_the_candidate_check_groups_of_the_pool
+          file:
+            path: "/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .inputs.mmwatchdog_check_file }}"
+            template: "../../mmwatchdog_checks/{{ .inputs.mmwatchdog_check_file }}"
+            owner: root
+            group: root
+            permissions_mode: "0644"
+
+        # The join code goes in place first: the check reads it.
+        - id: create_the_mmwatchdog_configuration_directory
+          directory:
+            path: /etc/mmwatchdog
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - id: create_the_mmwatchdog_secrets_directory
+          directory:
+            path: /etc/mmwatchdog/secrets
+            owner: root
+            group: root
+            permissions_mode: "0700"
+        - id: write_the_fleet_hub_join_code
+          file:
+            path: /etc/mmwatchdog/secrets/fleet-hub-join-code
+            content: "{{ .inputs.mmwatchdog_join_code }}\n"
+            owner: root
+            group: root
+            permissions_mode: "0600"
+
+        # A rejected candidate fails the block at
+        # check_the_candidate_with_the_new_release,
+        # so the running MMWatchdog keeps its release and configuration.
+        # Validation only reads, so MMX also runs validation during a dryrun.
+        # On util01, the scheduled job compare_every_server_with_the_repository uses a
+        # daily dryrun of every_server to compare servers with the systems
+        # repository. Running validation during the dryrun lets the server
+        # settings comparison exit with 0 when nothing differs. Without validation during
+        # the dryrun, the server settings comparison would exit with 3 for an unchecked task.
+        - id: check_the_candidate_with_the_new_release
+          shell:
+            # The same read-only program runs in a run and in a dryrun.
+            script: bash -c "$PROGRAM"
+            dryrun: bash -c "$PROGRAM"
+            env:
+              PROGRAM: |
+                release="/usr/local/lib/mmwatchdog/releases/$MMWATCHDOG_VERSION"
+                "$release/mmwatchdog" validate \
+                  --config-dir /usr/local/lib/mmwatchdog/candidate_config \
+                  --official-extra-module-dir "$release/official_extra_modules" \
+                  --external-module-dir /usr/local/lib/mmwatchdog/external_modules
+              MMWATCHDOG_VERSION: "{{ .inputs.mmwatchdog_release.version }}"
+            changed_when: false
+
+        # Install the checked files and select the unpacked MMWatchdog
+        # release. The restart follows in activate.
+        - id: install_the_node_settings
+          file:
+            path: /etc/mmwatchdog/mmwatchdog_node_settings.yml
+            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/mmwatchdog_node_settings.yml]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        # The check groups directory holds exactly the files for the server
+        # running mmwatchdog_joined_node.
+        - id: delete_every_other_check_group
+          directory:
+            path: /etc/mmwatchdog/check_groups
+            owner: root
+            group: root
+            permissions_mode: "0755"
+            delete_everything_inside_except: [every_server.yml, "{{ .inputs.mmwatchdog_check_file }}"]
+        - id: install_the_check_groups_of_every_server
+          file:
+            path: /etc/mmwatchdog/check_groups/every_server.yml
+            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: install_the_check_groups_of_the_pool
+          file:
+            path: "/etc/mmwatchdog/check_groups/{{ .inputs.mmwatchdog_check_file }}"
+            content_from_node_paths: ["/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .inputs.mmwatchdog_check_file }}"]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: use_the_release_official_extra_modules
+          symlink:
+            path: /usr/local/lib/mmwatchdog/official_extra_modules
+            target: "/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}/official_extra_modules"
+        - id: use_the_release_program
+          symlink:
+            path: /usr/local/bin/mmwatchdog
+            target: "/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}/mmwatchdog"
+        - id: install_the_release_systemd_unit
+          file:
+            path: /etc/systemd/system/mmwatchdog.service
+            content_from_node_paths: ["/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}/mmwatchdog.service"]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      activate:
+        # Maintenance prevents the alerts caused by the restart from being
+        # sent. On a first install, no MMWatchdog runs to send restart
+        # alerts, so start_maintenance returns success without opening a
+        # window.
+        #
+        # For maintenance on and off, exit status 1 means the window changed
+        # on the server running mmwatchdog_joined_node, but the hub did not
+        # receive the change. For example, util01 can be down or rebuilt.
+        # After util01 is rebuilt, the running MMWatchdog on the joining
+        # server can still use the old hub's join code.
+        #
+        # The restart is short, so the joining server reports again long
+        # before the hub would count the joining server as silent.
+        # Therefore start_maintenance accepts exit status 1 and allows
+        # mmwatchdog_joined_node to continue. The earlier task
+        # write_the_fleet_hub_join_code installs the new hub's join code on
+        # the joining server. The restart lets MMWatchdog use the new code.
+        # A reboot takes longer, so playbooks/reboot_servers_after_updates.yml
+        # stops before rebooting if maintenance on returns exit status 1.
+        #
+        # The window is not announced, for the reason in roles/util_server,
+        # start_maintenance: the run opens and closes it around a routine
+        # restart.
+        # --for 3m: the longest the run waits here, plus a margin: the hub's
+        # acceptance, at most 25s; the restart, which systemd ends after its
+        # start timeout, 90s by default; the 10s wait for the inspection
+        # socket; and a margin for the rest. A run that fails or dies after
+        # the restart leaves the alerts paused at most that long.
+        - id: start_maintenance
+          shell:
+            script: |
+              mmwatchdog_state=0
+              systemctl is-active --quiet mmwatchdog || mmwatchdog_state=$?
+              case $mmwatchdog_state in
+                0) ;;
+                3|4) exit 0 ;;
+                *) exit 1 ;;
+              esac
+              maintenance_state=0
+              /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 3m --reason "mmwatchdog deploy" --without-maintenance-on-and-off-alerts || maintenance_state=$?
+              [ "$maintenance_state" -le 1 ] || exit 1
+              exit 2
+            only_when_tracked_inputs_changed: true
+            success_exit_codes: [0, 2]
+            changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+        - id: restart_mmwatchdog
+          systemd_service:
+            name: mmwatchdog
+            state: running
+            start_at_boot: true
+            refresh: restart
+      verify:
+        - id: wait_for_the_inspection_socket
+          wait_for:
+            path_exists: /run/mmwatchdog/mmwatchdog.sock
+            wait_at_most: 10s
+        - id: check_that_mmwatchdog_answers
+          shell:
+            script: /usr/local/bin/mmwatchdog config --json
+            dryrun: /usr/local/bin/mmwatchdog config --json
+            changed_when: false
+        # Exit status 1 means maintenance ended on the server running
+        # mmwatchdog_joined_node, but the hub did not receive the change.
+        # The hub learns maintenance ended from the joining server's next
+        # report.
+        - id: end_maintenance
+          when: {equals: ["{{ .node_tasks.start_maintenance.change }}", changed]}
+          shell:
+            script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+            success_exit_codes: [0, 1]
+
+  # Delete earlier MMWatchdog releases from the server only after the new
+  # MMWatchdog release runs.
+  - id: remove_earlier_mmwatchdog_releases
+    directory:
+      path: /usr/local/lib/mmwatchdog/releases
+      delete_everything_inside_except: ["{{ .inputs.mmwatchdog_release.version }}"]

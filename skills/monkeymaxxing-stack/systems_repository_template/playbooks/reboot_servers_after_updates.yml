@@ -1,0 +1,233 @@
+# MMX runs reboot_servers_after_updates to reboot each server whose updates
+# wait for a reboot, one at a time. The remaining servers in the rebooting
+# server's pool carry the work:
+#
+#   ./server_management_scripts/run_mmx_on_util01 run reboot_servers_after_updates
+#
+# No server reboots by itself
+# (roles/every_server/files/unattended_upgrades.conf).
+# A person runs reboot_servers_after_updates in the weekly maintenance
+# window, after update_database_servers. With
+# what_the_triage_agent_may_do_without_a_person: routine_fixes_and_server_work
+# in mmx_project_settings.yml, the triage agent also requests it when
+# MMWatchdog's no_reboot_waits_that_may_run_now alerts, and MMHotline runs it
+# after its warning unless someone presses Stop. The database playbook
+# updates and reboots the database servers in its own order.
+# util01 runs reboot_servers_after_updates.
+# MMX never reboots the machine it runs on, so util01's own reboot is
+# reboot_util01_after_updates, from a systems desk.
+#
+# reboot_servers_after_updates covers every server but util01, the database
+# servers, the systems desks, and restore01: staging01, the app servers, the
+# jobs servers, the load-balancer servers, and any pool the team added. A
+# server's updates wait for a reboot while /var/run/reboot-required exists,
+# which MMWatchdog's no_reboot_waits reads. On Debian, unattended-upgrades'
+# kernel hook writes the marker for a new kernel. Library and service
+# restarts are needrestart's job.
+#
+# The only server of a pool, such as app001 alone, reboots only inside the
+# weekly maintenance window (maintenance_window in mmx_project_settings.yml,
+# in UTC), because its users see the reboot. The rule, in
+# check-whether-a-reboot-may-run-now (roles/every_server/files/), lets a
+# reboot run at any time when another server of the pool carries the work,
+# on a jobs server, on staging01, and before go-live
+# (public_site_checks_run: false). A server that waits is skipped, not
+# failed, and the run's output says until when, such as
+# "app001 waits for the maintenance window: tuesday 2026-11-17 21:00 UTC, for
+# 60 minutes; ...". The rule is decided once, when the run starts, on each
+# server's own clock.
+# The playbook, not the triage agent's rules, enforces the window: the run
+# starts only after MMHotline's warning has waited, and the clock may have
+# left the window by then. A person can reboot such a server outside the
+# window, knowing that its users see the reboot:
+#
+#   ./server_management_scripts/run_mmx_on_util01 run reboot_servers_after_updates --var reboot_the_only_server_of_a_pool_outside_the_maintenance_window=true
+#
+# The triage agent cannot pass it: MMHotline runs a requested playbook with
+# no variables.
+#
+# For each server that may reboot, one at a time:
+#   1. The rebooting server's MMWatchdog holds the server's own alerts and
+#      the server's reboot notice, and the fleet hub holds the alert that
+#      the rebooting server stopped reporting.
+#   2. MMX reboots the server whose updates require a reboot.
+#      MMX waits until the rebooted server is back. While a server that runs the tunnel connector is
+#      down, Cloudflare sends new requests to the remaining connectors.
+#      While an app server is down, every Caddy stops sending requests to
+#      the unavailable app server's web containers within seconds.
+#   3. The rebooted server resumes work before the next server reboots:
+#      check-that-this-server-does-its-work passes on it
+#      (roles/every_server/files/check-that-this-server-does-its-work): on
+#      an app server, each app's live web container answers its health URL;
+#      on a server that runs the tunnel connector, cloudflared is connected
+#      to Cloudflare, and each app answers through Caddy on the rebooted
+#      server; on a jobs server, each app's job container runs.
+#   4. The rebooted server's alerts go out again.
+# A server that doesn't come back, or doesn't do its work again, stops the
+# run there, and no other server reboots. Its alert pause ends when the
+# server does not do its work again, or, for a server that does not come
+# back, once the pause ends (10 minutes by default). With
+# routine_fixes_and_server_work, the triage agent requests
+# replace_failed_servers as soon as this run fails because a server did not
+# come back; replace_failed_servers replaces a server silent inside this
+# run's pause once the come-back wait below, plus 2 minutes, has passed
+# since its last report. The fleet hub's node_reports alert at the pause's
+# end stays as the second trigger.
+# With app001 alone, the apps are down while app001 reboots: 32 to 55
+# seconds in three reboots of a cloud server, a few minutes on
+# a dedicated server, whose firmware checks run first. util01's public site
+# checks are never paused:
+# an outage of more than 30 seconds raises their SOS, which waits
+# sos_waits_for_the_agent_minutes (3 by default, mmhotline_settings.yml)
+# for the triage agent and is resolved without waking anyone when the site
+# answers again; only a site that stays down wakes the person on call.
+command_line_vars:
+  # true lets this run reboot the only server of a pool outside the weekly
+  # maintenance window. Only a person passes it, on the helper's command
+  # line; the triage agent's requests run with false.
+  reboot_the_only_server_of_a_pool_outside_the_maintenance_window: {type: boolean, default: false}
+fleet_stages:
+  - id: find_the_servers_whose_updates_wait_for_a_reboot
+    nodes: all
+    except_nodes: [util_server, database_servers, database_restore_servers, systems_desks]
+    node_tasks:
+      # Prints {"a_reboot_waits": ..., "the_reboot_may_run_now": ..., "why": ...}.
+      # The server's pool is the inventory group that holds it: every server
+      # is in exactly one pool.
+      - id: whether_a_reboot_waits_and_may_run_now
+        shell:
+          # The same read-only program runs in a run and in a dryrun.
+          script: bash -c "$PROGRAM"
+          dryrun: bash -c "$PROGRAM"
+          env:
+            PROGRAM: |
+              if ! [ -e /var/run/reboot-required ]; then
+                printf '{"a_reboot_waits": false, "the_reboot_may_run_now": false, "why": "no reboot waits"}\n'
+                exit 0
+              fi
+              pool=$(jq -nr --argjson groups "$INVENTORY_GROUPS" --arg server "$SERVER_NAME" \
+                '[$groups | to_entries[] | select(.value | index($server)) | .key][0]')
+              servers_in_the_pool=$(jq -nr --argjson groups "$INVENTORY_GROUPS" --arg pool "$pool" '$groups[$pool] | length')
+              a_person_allows_it=""
+              if [ "$REBOOT_THE_ONLY_SERVER_OF_A_POOL_OUTSIDE_THE_MAINTENANCE_WINDOW" = true ]; then
+                a_person_allows_it=--a-person-allows-it
+              fi
+              status=0
+              why=$(/usr/local/bin/check-whether-a-reboot-may-run-now --pool "$pool" \
+                --servers-in-the-pool "$servers_in_the_pool" --public-site-checks-run "$PUBLIC_SITE_CHECKS_RUN" \
+                --weekday "$WINDOW_WEEKDAY" --starts-at "$WINDOW_STARTS_AT" --length-minutes "$WINDOW_LENGTH_MINUTES" \
+                $a_person_allows_it) || status=$?
+              case $status in
+                0) may=true ;;
+                1) may=false ;;
+                *) printf '%s\n' "$why" >&2; exit 1 ;;
+              esac
+              jq -nc --argjson may "$may" --arg why "$why" '{a_reboot_waits: true, the_reboot_may_run_now: $may, why: $why}'
+            SERVER_NAME: "{{ .node.name }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+            PUBLIC_SITE_CHECKS_RUN: "{{ .vars.public_site_checks_run }}"
+            WINDOW_WEEKDAY: "{{ .vars.maintenance_window.weekday }}"
+            WINDOW_STARTS_AT: "{{ .vars.maintenance_window.starts_at }}"
+            WINDOW_LENGTH_MINUTES: "{{ .vars.maintenance_window.length_minutes }}"
+            REBOOT_THE_ONLY_SERVER_OF_A_POOL_OUTSIDE_THE_MAINTENANCE_WINDOW: "{{ .vars.reboot_the_only_server_of_a_pool_outside_the_maintenance_window }}"
+          changed_when: false
+      - id: say_that_the_server_waits_for_the_maintenance_window
+        when:
+          all:
+            - "{{ .node_tasks.whether_a_reboot_waits_and_may_run_now.stdout_json.a_reboot_waits }}"
+            - not: "{{ .node_tasks.whether_a_reboot_waits_and_may_run_now.stdout_json.the_reboot_may_run_now }}"
+        show: "{{ .node.name }} {{ .node_tasks.whether_a_reboot_waits_and_may_run_now.stdout_json.why }}"
+    outputs:
+      a_reboot_waits_and_may_run_now:
+        all:
+          - "{{ .node_tasks.whether_a_reboot_waits_and_may_run_now.stdout_json.a_reboot_waits }}"
+          - "{{ .node_tasks.whether_a_reboot_waits_and_may_run_now.stdout_json.the_reboot_may_run_now }}"
+
+  - id: reboot_each_server_whose_updates_wait_for_a_reboot
+    for_each_node: all
+    except_nodes: [util_server, database_servers, database_restore_servers, systems_desks]
+    as: server
+    when: "{{ .outputs.find_the_servers_whose_updates_wait_for_a_reboot[.server].a_reboot_waits_and_may_run_now }}"
+    on_node_failure: stop_run
+    fleet_stages:
+      # 1. and 2.
+      - id: reboot_the_server
+        nodes: "{{ .server }}"
+        node_tasks:
+          # The alert pause: a whole-server MMWatchdog maintenance window,
+          # so the server's own alerts and the fleet hub's alert that it
+          # stopped reporting wait while it reboots. mmwatchdog maintenance
+          # on returns once the fleet hub accepts the window; when the hub
+          # does not within 25 seconds, it exits with 1, the window is on
+          # the server alone, the pause ends again at once (on_failure),
+          # and the run stops before the reboot.
+          # The pause lasts the longest the run waits for this server, plus a
+          # margin: this server's come-back wait,
+          # come_back_wait_after_a_reboot (3m by default, in
+          # mmx_project_settings.yml, or the server's own in the inventory),
+          # then the wait for check-that-this-server-does-its-work, 5m, plus
+          # 2m for the hub's acceptance and the stages' start: 10m by
+          # default. A run that fails or dies leaves the alerts paused no
+          # longer than it would have waited. The reason names this server's
+          # come-back wait: replace_failed_servers reads it from the fleet
+          # hub to tell a server that did not come back from this reboot,
+          # which it replaces, from a server a person stopped for planned
+          # work, which it never replaces
+          # (server_management_scripts/steps_for_replacing_failed_servers.bash).
+          # The pause adds 7 minutes to the setting's whole minutes, so the
+          # setting must be whole minutes, which the check below refuses
+          # otherwise; tests/alert_pauses_test.py checks the sum.
+          - id: the_come_back_wait_is_whole_minutes_from_1_to_45
+            assert:
+              that:
+                matches: ["{{ .vars.come_back_wait_after_a_reboot }}", '^([1-9]|[1-3][0-9]|4[0-5])m$']
+              message: >-
+                come_back_wait_after_a_reboot is "{{ .vars.come_back_wait_after_a_reboot }}" for
+                {{ .node.name }} (mmx_project_settings.yml, or the server's vars in
+                inventories/servers.yml). Use whole minutes from 1m to 45m, such as 3m:
+                MMHotline stops a run after one hour, and one server's turn takes the
+                wait plus 5 minutes. Nothing changed.
+          - task_block:
+              id: pause_the_alerts_of_the_server
+              changes:
+                - id: hold_the_alerts_of_the_server
+                  shell:
+                    script: '/usr/local/bin/mmwatchdog maintenance on --every-check-group --for "$(( ${COME_BACK_WAIT%m} + 7 ))m" --reason "reboot_servers_after_updates: waits $COME_BACK_WAIT for the server to come back"'
+                    env:
+                      COME_BACK_WAIT: "{{ .vars.come_back_wait_after_a_reboot }}"
+              on_failure:
+                - id: end_the_alert_pause_that_the_hub_does_not_know
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+          # The come-back wait, come_back_wait_after_a_reboot: its comment in
+          # mmx_project_settings.yml gives the default, the measurement, and
+          # how a dedicated server gets more. A shorter wait shortens the
+          # time a pool's only server leaves the site down when it does not
+          # come back, before the triage agent replaces it.
+          - id: reboot_the_server
+            reboot:
+              run_only_if_this_path_exists: /var/run/reboot-required
+              wait_at_most: "{{ .vars.come_back_wait_after_a_reboot }}"
+
+      # 3. and 4.
+      - id: wait_until_the_server_does_its_work_again
+        nodes: "{{ .server }}"
+        node_tasks:
+          # check-that-this-server-does-its-work, which the every_server role
+          # installs, checks what the server's pool does: each live web
+          # container on an app server, the tunnel connector and Caddy where
+          # they run, and each job container on a jobs server. Its comment
+          # lists the checks. The pause ends in cleanup, whether the server
+          # does its work or not: a server that does not do its work again
+          # alerts at once, and the run reports the failure too.
+          - task_block:
+              id: wait_until_the_server_does_its_work_then_end_its_alert_pause
+              changes:
+                - id: wait_until_the_server_does_its_work
+                  wait_for:
+                    command_succeeds: /usr/local/bin/check-that-this-server-does-its-work
+                    wait_at_most: 5m
+              cleanup:
+                - id: release_the_alerts_of_the_server
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance off --every-check-group

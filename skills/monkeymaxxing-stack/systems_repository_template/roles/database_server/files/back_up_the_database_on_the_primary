@@ -1,0 +1,36 @@
+#!/bin/bash
+{{- /*
+  The backup timers' program, /usr/local/sbin/back_up_the_database_on_the_primary.
+  It reads the role input postgresql_major_version.
+*/}}
+# Managed by MMX from roles/database_server/files/back_up_the_database_on_the_primary
+# in the systems repository. Takes one pgBackRest backup of the stanza main,
+# as the account postgres:
+#
+#   back_up_the_database_on_the_primary full   # every weekly_work_day, from pgbackrest_full_backup.timer
+#   back_up_the_database_on_the_primary diff   # every other day, from pgbackrest_differential_backup.timer
+#
+# Every database server runs both timers, so the backups follow the primary
+# after a failover. On a replica this program does nothing and exits with 0.
+# A failed backup exits with pgBackRest's code, which fails the timer's
+# service, and MMWatchdog alerts.
+set -euo pipefail
+
+backup_type=${1:-}
+case $backup_type in
+  full | diff) ;;
+  *)
+    echo "usage: back_up_the_database_on_the_primary full|diff" >&2
+    exit 2
+    ;;
+esac
+
+in_recovery=$(/usr/lib/postgresql/{{ .inputs.postgresql_major_version }}/bin/psql --no-psqlrc --tuples-only --no-align \
+  --port 5432 --dbname postgres --command 'select pg_is_in_recovery()')
+if [ "$in_recovery" = t ]; then
+  echo "This server is a replica; the primary takes the backups."
+  exit 0
+fi
+
+exec pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main --type="$backup_type" \
+  --log-level-console=info backup

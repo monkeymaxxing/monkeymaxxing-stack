@@ -1,0 +1,7 @@
+{{- /*
+  What check-that-this-server-does-its-work checks on this server: its
+  pool's flags, its private address, the apps, and their host names. The
+  every_server role writes it at every run, so a new app or host name
+  reaches the check with the run that brings it.
+*/ -}}
+{{ dict "private_ip" (index .inputs.inventory_nodes .node.name).vars.private_ip "is_app_server" .inputs.is_app_server "is_jobs_server" .inputs.is_jobs_server "is_load_balancer_server" .inputs.is_load_balancer_server "is_staging_server" .inputs.is_staging_server "apps" .inputs.apps "public_host_names" .inputs.public_host_names | toJson }}

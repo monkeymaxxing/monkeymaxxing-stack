@@ -1,0 +1,63 @@
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import {randomUUID,randomBytes,createHash} from 'node:crypto';
+import {pool,transaction} from './database.mjs';
+import {putObject,getObject,deleteObject} from './storage.mjs';
+const hash=x=>createHash('sha256').update(x).digest('hex');
+const fail=(status,message)=>Object.assign(new Error(message),{status});
+const text=(x,name)=>{if(typeof x!=='string'||!x.trim())throw fail(400,name+' is required');return x;};
+export async function createServer(){
+ const app=express();app.set('trust proxy',1);app.disable('x-powered-by');
+ const hasDescription=(await pool.query("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='records' AND column_name='description') AS present")).rows[0].present;
+ app.use((req,res,next)=>{res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'"});
+  if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.headers.origin&&req.headers.origin!==`${req.protocol}://${req.get('host')}`)return res.status(403).json({error:'Origin is not allowed'});next();});
+ // Upload/download handlers buffer documents, so cap each document at 1 MiB.
+ app.use(express.json({limit:'1500kb'}));
+ app.get('/healthz',async(req,res)=>{await pool.query('SELECT 1');res.json({ok:true,release:process.env.APP_RELEASE||'1'});});
+ app.use(express.static(new URL('./web/',import.meta.url).pathname,{etag:false}));
+ const cookie=(req,res,token)=>res.cookie('portal_session',token,{httpOnly:true,sameSite:'strict',secure:req.secure,maxAge:7*86400000,path:'/'});
+ async function session(req,res,id){const token=randomBytes(32).toString('hex');await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '7 days')",[hash(token),id]);cookie(req,res,token);}
+ app.post('/api/auth/register',async(req,res)=>{
+  const email=text(req.body.email,'email').trim().toLowerCase(),password=text(req.body.password,'password');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length<12||Buffer.byteLength(password)>72)throw fail(400,'Use a valid email and a password of 12 to 72 bytes');
+  const verifier=await bcrypt.hash(password,12);
+  const user=await transaction(async c=>{await c.query('SELECT pg_advisory_xact_lock(4918303)');
+   if((await c.query('SELECT id FROM users WHERE email=$1',[email])).rowCount)throw fail(409,'Account already exists');
+   const first=(await c.query('SELECT count(*)::integer AS count FROM users')).rows[0].count===0;
+   const u=(await c.query('INSERT INTO users(id,email,password_hash,is_admin) VALUES($1,$2,$3,$4) RETURNING id,email,is_admin',[randomUUID(),email,verifier,first])).rows[0];
+   await c.query("INSERT INTO identities(user_id,issuer,subject) VALUES($1,'application-password',$2)",[u.id,u.id]);return u;});
+  await session(req,res,user.id);res.status(201).json(user);
+ });
+ app.post('/api/auth/login',async(req,res)=>{const user=(await pool.query('SELECT * FROM users WHERE email=$1',[text(req.body.email,'email').toLowerCase().trim()])).rows[0];
+  if(!user||!await bcrypt.compare(text(req.body.password,'password'),user.password_hash))throw fail(401,'Email or password is incorrect');await session(req,res,user.id);res.json({id:user.id,email:user.email,is_admin:user.is_admin});});
+ app.use('/api',async(req,res,next)=>{const token=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('portal_session='))?.slice(15);
+  if(!token)throw fail(401,'Please log in');const u=(await pool.query('SELECT u.id,u.email,u.is_admin,s.token_hash FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at>now()',[hash(token)])).rows[0];
+  if(!u)throw fail(401,'Please log in');req.user=u;next();});
+ app.get('/api/me',(req,res)=>res.json({id:req.user.id,email:req.user.email,is_admin:req.user.is_admin}));
+ app.post('/api/auth/logout',async(req,res)=>{await pool.query('DELETE FROM sessions WHERE token_hash=$1',[req.user.token_hash]);res.clearCookie('portal_session',{path:'/'});res.json({ok:true});});
+ app.get('/api/operations',async(req,res)=>{if(!req.user.is_admin)throw fail(403,'Administrator required');res.json((await pool.query('SELECT * FROM controls WHERE id=1')).rows[0]);});
+ app.put('/api/operations',async(req,res)=>{if(!req.user.is_admin)throw fail(403,'Administrator required');
+  for(const key of ['maintenance','worker_paused','scheduler_paused'])if(key in req.body){if(typeof req.body[key]!=='boolean')throw fail(400,key+' must be boolean');await pool.query(`UPDATE controls SET ${key}=$1 WHERE id=1`,[req.body[key]]);}res.json({ok:true});});
+ app.use('/api',async(req,res,next)=>{if(['POST','PATCH','DELETE'].includes(req.method)&&(await pool.query('SELECT maintenance FROM controls WHERE id=1')).rows[0].maintenance)throw fail(503,'The portal is in maintenance');next();});
+ app.get('/api/records',async(req,res)=>res.json((await pool.query('SELECT * FROM records WHERE owner_id=$1 ORDER BY title',[req.user.id])).rows));
+ app.post('/api/records',async(req,res)=>{const args=[randomUUID(),req.user.id,text(req.body.title,'title')];let q='INSERT INTO records(id,owner_id,title) VALUES($1,$2,$3) RETURNING *';
+  if(hasDescription){args.push(typeof req.body.description==='string'?req.body.description:'');q='INSERT INTO records(id,owner_id,title,description) VALUES($1,$2,$3,$4) RETURNING *';}res.status(201).json((await pool.query(q,args)).rows[0]);});
+ app.get('/api/records/:id',async(req,res)=>{const r=await pool.query('SELECT * FROM records WHERE id=$1 AND owner_id=$2',[req.params.id,req.user.id]);if(!r.rowCount)throw fail(404,'Record not found');res.json(r.rows[0]);});
+ app.patch('/api/records/:id',async(req,res)=>{const args=[req.params.id,req.user.id,text(req.body.title,'title')];let q='UPDATE records SET title=$3 WHERE id=$1 AND owner_id=$2 RETURNING *';
+  if(hasDescription&&'description' in req.body){if(typeof req.body.description!=='string')throw fail(400,'description must be text');args.push(req.body.description);q='UPDATE records SET title=$3,description=$4 WHERE id=$1 AND owner_id=$2 RETURNING *';}const r=await pool.query(q,args);if(!r.rowCount)throw fail(404,'Record not found');res.json(r.rows[0]);});
+ app.delete('/api/records/:id',async(req,res)=>{const r=await pool.query('DELETE FROM records WHERE id=$1 AND owner_id=$2 RETURNING id',[req.params.id,req.user.id]);if(!r.rowCount)throw fail(404,'Record not found');res.json({ok:true});});
+ app.get('/api/documents',async(req,res)=>res.json((await pool.query('SELECT * FROM documents WHERE owner_id=$1',[req.user.id])).rows));
+ app.post('/api/documents',async(req,res)=>{const filename=text(req.body.filename,'filename'),base64=text(req.body.content_base64,'content_base64');
+  if(!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64))throw fail(400,'content_base64 is invalid');
+  const bytes=Buffer.from(base64,'base64');if(bytes.length>1048576)throw fail(413,'Document exceeds the 1 MiB buffered transfer limit');
+  const id=randomUUID(),key=`private/${req.user.id}/${id}`;await putObject(key,bytes);
+  try{res.status(201).json((await pool.query('INSERT INTO documents(id,owner_id,filename,object_key,sha256,byte_length) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',[id,req.user.id,filename,key,hash(bytes),bytes.length])).rows[0]);}catch(e){await deleteObject(key).catch(()=>{});throw e;}});
+ app.get('/api/documents/:id/download',async(req,res)=>{const row=(await pool.query('SELECT * FROM documents WHERE id=$1 AND owner_id=$2',[req.params.id,req.user.id])).rows[0];if(!row)throw fail(404,'Document not found');
+  const bytes=await getObject(row.object_key);if(hash(bytes)!==row.sha256||bytes.length!==row.byte_length)throw fail(500,'Document integrity check failed');res.type('application/octet-stream').send(bytes);});
+ app.get('/api/jobs',async(req,res)=>res.json((await pool.query('SELECT * FROM jobs WHERE owner_id=$1 ORDER BY created_at',[req.user.id])).rows));
+ app.post('/api/jobs',async(req,res)=>res.status(201).json((await pool.query('INSERT INTO jobs(id,owner_id) VALUES($1,$2) RETURNING *',[randomUUID(),req.user.id])).rows[0]));
+ app.get('/api/jobs/:id',async(req,res)=>{const r=await pool.query('SELECT * FROM jobs WHERE id=$1 AND owner_id=$2',[req.params.id,req.user.id]);if(!r.rowCount)throw fail(404,'Report not found');res.json(r.rows[0]);});
+ app.get('/api/schedules',async(req,res)=>res.json((await pool.query('SELECT * FROM schedules ORDER BY id')).rows));
+ app.use((err,req,res,next)=>{const status=err.status||(['22P02','22001'].includes(err.code)?400:500);if(status===500)console.error('Request failed',err.code||err.name);res.status(status).json({error:status===500?'Request failed':err.message});});
+ return app;
+}

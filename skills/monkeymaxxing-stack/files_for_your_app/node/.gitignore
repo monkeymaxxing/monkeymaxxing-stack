@@ -1,0 +1,2 @@
+# What `npm ci` installs for the tests.
+/node_modules/

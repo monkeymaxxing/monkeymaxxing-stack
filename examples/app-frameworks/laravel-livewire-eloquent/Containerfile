@@ -1,0 +1,23 @@
+FROM docker.io/dunglas/frankenphp:1-php8.4-bookworm@sha256:81ba601edfb650d1df63f54dafdedc021d9d1fb37517850a4e93278ab19cced1 AS base
+# Stack web ports are above 1024. File capabilities conflict with the
+# Stack's DropCapability=all boundary and make exec fail with EPERM.
+RUN setcap -r /usr/local/bin/frankenphp
+RUN install-php-extensions pdo_pgsql mbstring pcntl bcmath intl zip
+COPY --from=docker.io/library/composer:2@sha256:5190d9b445add2fa26090108273cb1ef1e1af98175201c737b85b3c4f90fbf7c /usr/bin/composer /usr/local/bin/composer
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --prefer-dist --no-interaction --no-progress
+COPY . .
+RUN mkdir -p bootstrap/cache storage/framework/cache storage/framework/views storage/framework/sessions storage/logs assets \
+ && composer dump-autoload --no-dev --optimize --no-interaction \
+ && chown -R 1000:1000 /app /config /data
+COPY php.ini /usr/local/etc/php/conf.d/portal.ini
+COPY Caddyfile /etc/frankenphp/Caddyfile
+ARG RELEASE=development
+LABEL org.opencontainers.image.revision=$RELEASE
+ENV APP_ENV=production APP_DEBUG=false LOG_CHANNEL=stderr RELEASE=$RELEASE XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
+HEALTHCHECK NONE
+USER 1000:1000
+ENTRYPOINT []
+CMD ["frankenphp", "run", "--config", "/etc/frankenphp/Caddyfile", "--adapter", "caddyfile"]
+STOPSIGNAL SIGTERM

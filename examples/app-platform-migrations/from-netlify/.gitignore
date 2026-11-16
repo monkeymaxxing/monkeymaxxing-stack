@@ -1,0 +1,9 @@
+node_modules/
+exports/
+*.env
+.env*
+!environment.example
+
+web/client/
+*.eml
+secrets/

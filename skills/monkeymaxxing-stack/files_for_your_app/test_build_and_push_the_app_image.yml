@@ -1,0 +1,106 @@
+# Copy this file into the app's repository as
+# .github/workflows/test_build_and_push_the_app_image.yml
+#
+# What it does: on every push to main, it runs the app's tests against a
+# throwaway Postgres, builds the image for the servers' architecture
+# (linux/amd64), tags it with the full commit ID, and pushes it to GitHub's
+# container registry (ghcr.io). The push logs in with the run's own
+# GITHUB_TOKEN, which GitHub makes for this one run and then discards, so
+# the team keeps no registry publishing token at all. On a pull request it
+# runs the tests only.
+#
+# What to change: the two steps marked "REPLACE", for the app's language and
+# test command. Nothing else needs a change when the app has a Containerfile
+# at the top of its repository that takes the build argument RELEASE.
+#
+# The six steps, for any CI service: (1) check out the code and start a
+# throwaway Postgres; (2) run the app's tests; (3) build with
+# `--platform linux/amd64`, `--build-arg RELEASE=<full commit ID>`, and the
+# tag <image>:<full commit ID>; (4) log in to the registry with a
+# short-lived or publish-only credential; (5) push that one tag; (6) ask
+# the registry to list the tag.
+#
+# The image name is ghcr.io/<owner>/<repository>, lowercase. It must be
+# the same text as `image` of the app under `vars.apps` in the systems
+# repository's mmx_project_settings.yml, or the servers pull another image.
+#
+# The build file is Containerfile. For an app with a Dockerfile, rename it,
+# or change `--file Containerfile` below. Either file must start with
+# `ARG RELEASE` (chapter 3 of the setup checks this).
+
+name: test_build_and_push_the_app_image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The least that the run needs: read the code, and publish packages.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test_build_and_push:
+    runs-on: ubuntu-latest
+
+    # A throwaway database for the tests. It holds no real data and no
+    # secret, and it ends with the run.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: throwaway-test-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # REPLACE: set up the app's language. This example is for a Go app;
+      # a Node.js app uses actions/setup-node@v6 with a node-version-file.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # REPLACE: the app's test command. The tests find the database in
+      # TEST_DATABASE_URL; use the setting name the app's tests read. The
+      # tests include the seed command run on the empty database (the
+      # reference app's `go test` does), so the seed command keeps working.
+      - name: Run the app's tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:throwaway-test-password@localhost:5432/postgres
+        run: go test ./...
+
+      - name: Build the image for the servers (linux/amd64), tagged with the full commit
+        if: github.event_name == 'push'
+        run: |
+          # The registry wants a lowercase name. The label links the
+          # package to this repository, which lets this run publish it.
+          image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "image_name=$image_name" >> "$GITHUB_ENV"
+          docker build \
+            --file Containerfile \
+            --platform linux/amd64 \
+            --build-arg RELEASE="${{ github.sha }}" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --tag "$image_name:${{ github.sha }}" \
+            .
+
+      - name: Push the image
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN_FOR_THIS_RUN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN_FOR_THIS_RUN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$image_name:${{ github.sha }}"
+
+      # The registry's own answer that the tag exists, with its digest and
+      # its architecture. The run fails here if the tag is missing.
+      - name: Check that the registry lists the tag
+        if: github.event_name == 'push'
+        run: docker buildx imagetools inspect "$image_name:${{ github.sha }}"

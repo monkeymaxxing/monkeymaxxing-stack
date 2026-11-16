@@ -1,0 +1,103 @@
+#!/bin/bash
+# check-that-this-server-does-its-work: exits 0 when this server does the
+# work of its pool, and 1 with one line for each part that fails. The one
+# way the Stack checks that a server serves again, after a reboot
+# (playbooks/reboot_servers_after_updates.yml) and after a replacement:
+#   - an app server: each app's live web container answers the app's
+#     health URL at the server's private address and live web port, with
+#     Caddy's headers (Host: the app's production host name,
+#     X-Forwarded-Proto: https);
+#   - a server that runs the tunnel connector (/etc/systemd/system/cloudflared.service
+#     exists): cloudflared is connected to Cloudflare
+#     (http://127.0.0.1:20241/ready answers 200), and each app answers its
+#     health URL through Caddy here, with production's host names, or
+#     staging's on staging01;
+#   - a load-balancer server: all of the above for the tunnel connector, and
+#     the unit must exist. A load-balancer server does nothing but forward
+#     requests, so one whose install stopped before the tunnel connector
+#     was set up does not do its work;
+#   - a jobs server: the job container of each app with a jobs_command runs.
+# Any other server, such as a database server or util01, has nothing here
+# to check and passes. A server whose install failed before the every_server
+# role wrote this command has no command at all, which counts as "does not
+# do its work".
+# The every_server role installs this file and writes what it checks into
+# /etc/monkeymaxxing-stack/the_work_of_this_server.json at every run of
+# every_server, from the inventory and mmx_project_settings.yml.
+# Each request may take 5 seconds: an answer that needs longer counts as a
+# failure, as in MMWatchdog's public site checks.
+set -uo pipefail
+
+settings=/etc/monkeymaxxing-stack/the_work_of_this_server.json
+live_web_ports=/var/lib/monkeymaxxing-stack/live_web_ports
+cloudflared_unit=/etc/systemd/system/cloudflared.service
+
+if ! [ -r "$settings" ]; then
+    printf '%s is missing: run every_server, which writes it.\n' "$settings"
+    exit 1
+fi
+
+failures=0
+fail() {
+    printf '%s\n' "$1"
+    failures=$((failures + 1))
+}
+
+# answers URL HOST_NAME: the URL answers 200 within 5 seconds, asked as Caddy asks.
+answers() {
+    [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 \
+        --header "Host: $2" --header 'X-Forwarded-Proto: https' "$1")" = 200 ]
+}
+
+setting() { jq -r "$1" "$settings"; }
+
+private_ip=$(setting '.private_ip')
+is_app_server=$(setting '.is_app_server')
+is_jobs_server=$(setting '.is_jobs_server')
+is_load_balancer_server=$(setting '.is_load_balancer_server')
+is_staging_server=$(setting '.is_staging_server')
+# App names are plain words (mmx_project_settings.yml, apps), so a list split on spaces holds them.
+app_names=$(setting '.apps | keys[]')
+
+if [ "$is_app_server" = true ]; then
+    for app in $app_names; do
+        health_url_path=$(jq -r --arg app "$app" '.apps[$app].health_url_path' "$settings")
+        host_name=$(jq -r --arg app "$app" '.public_host_names.production[$app] // ""' "$settings")
+        if ! port=$(cat "$live_web_ports/$app" 2>/dev/null); then
+            fail "$app has no live web port in $live_web_ports/$app"
+            continue
+        fi
+        answers "http://$private_ip:$port$health_url_path" "$host_name" ||
+            fail "$app's live web container on port $port does not answer $health_url_path with 200"
+    done
+fi
+
+if [ "$is_load_balancer_server" = true ] && ! [ -e "$cloudflared_unit" ]; then
+    fail "this load-balancer server has no tunnel connector: $cloudflared_unit is missing"
+fi
+
+if [ -e "$cloudflared_unit" ]; then
+    [ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 http://127.0.0.1:20241/ready)" = 200 ] ||
+        fail "cloudflared is not connected to Cloudflare: http://127.0.0.1:20241/ready does not answer 200"
+    environment=production
+    [ "$is_staging_server" = true ] && environment=staging
+    for app in $app_names; do
+        health_url_path=$(jq -r --arg app "$app" '.apps[$app].health_url_path' "$settings")
+        host_name=$(jq -r --arg app "$app" --arg environment "$environment" '.public_host_names[$environment][$app] // ""' "$settings")
+        answers "http://127.0.0.1$health_url_path" "$host_name" ||
+            fail "$app does not answer $health_url_path through Caddy here, as $host_name"
+    done
+fi
+
+if [ "$is_jobs_server" = true ]; then
+    for app in $app_names; do
+        [ "$(jq -r --arg app "$app" '.apps[$app].jobs_command' "$settings")" = "" ] && continue
+        systemctl is-active --quiet "$app-jobs.service" ||
+            fail "$app's job container, $app-jobs.service, does not run"
+    done
+fi
+
+if [ "$failures" -gt 0 ]; then
+    exit 1
+fi
+printf '%s does its work\n' "$(hostname)"

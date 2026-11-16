@@ -1,0 +1,19 @@
+[Unit]
+Description=Persistent terminal sessions for the systems desk
+After=network.target
+
+[Service]
+Type=simple
+User={{ .inputs.person_unix_username }}
+Group={{ .inputs.person_unix_username }}
+Environment=HOME=/home/{{ .inputs.person_unix_username }}
+WorkingDirectory=/home/{{ .inputs.person_unix_username }}
+ExecStart=/usr/bin/rex server run --listen unix:///run/rex-desk/server.sock --state-dir /home/{{ .inputs.person_unix_username }}/.local/state/rex
+# Login runtime directories disappear at logout. This directory belongs
+# to the system service and is owned by User and Group above.
+RuntimeDirectory=rex-desk
+RuntimeDirectoryMode=0700
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

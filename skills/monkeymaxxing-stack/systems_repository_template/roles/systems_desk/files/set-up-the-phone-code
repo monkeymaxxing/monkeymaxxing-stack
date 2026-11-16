@@ -1,0 +1,51 @@
+#!/bin/bash
+# Run as the person, in their first SSH session. No secret passes through MMX.
+set -euo pipefail
+umask 077
+code_file="$HOME/.google_authenticator"
+if [ "$(id -u)" = 0 ]; then
+    printf 'Run set-up-the-phone-code as your own account, without sudo.\n' >&2
+    exit 1
+fi
+if [ -e "$code_file" ]; then
+    printf 'Your phone code is already set up. Keep its secret in your password manager.\n' >&2
+    exit 1
+fi
+pending_file=$(mktemp "$HOME/.phone-code-setup.XXXXXXXX")
+# Clears the screen and its scrollback, so the secret does not stay there.
+clear_the_secret_from_the_screen() { printf '\033[3J\033[H\033[2J'; }
+secret_on_screen=no
+trap 'rm -f -- "$pending_file"; [ "$secret_on_screen" = no ] || clear_the_secret_from_the_screen' EXIT
+# Write only a private pending file until the person proves their phone works.
+secret_on_screen=yes
+# --rate-limit=3 --rate-time=30: at most three login tries every 30 seconds,
+# one phone code's lifetime, so a guesser gets three codes per code shown
+# while the person, who types one code, never meets the limit; fail2ban's
+# lockout (phone_code_jail.conf) ends the guessing. --window-size=3 accepts
+# the code before and after the current one, for a phone clock 30 seconds off.
+google-authenticator --time-based --disallow-reuse --rate-limit=3 --rate-time=30 \
+    --window-size=3 --qr-mode=UTF8 --force --no-confirm --secret="$pending_file"
+printf '\nScan the QR code with your phone. Save the secret and recovery codes in your password manager.\n'
+printf 'The screen is cleared after you enter a code.\n'
+read -r -p 'Enter one code from your phone to finish setup: ' confirmation_code
+clear_the_secret_from_the_screen
+secret_on_screen=no
+printf 'The screen is cleared. Your laptop terminal may still keep the secret in its scrollback:\n'
+printf 'scroll up in this window, and if the secret or QR code is still there, clear the scrollback or close the window.\n'
+if [[ "$confirmation_code" =~ ^[0-9]{6}$ ]]; then
+    secret=$(head -n 1 "$pending_file")
+    now=$(date +%s)
+    for offset in -30 0 30; do
+        expected_code=$(oathtool --totp --base32 --now="@$((now + offset))" - <<< "$secret")
+        if [ "$confirmation_code" = "$expected_code" ]; then
+            # A hard link publishes the confirmed file without replacing an
+            # existing enrollment. The private pending name is removed on exit.
+            ln -- "$pending_file" "$code_file"
+            printf 'Your phone code is ready. Each new SSH login now needs your laptop key and a phone code.\nEach code works for one login only. Wait for your phone to show a new code before you log in again.\n'
+            printf '%s wrong codes within ten minutes lock this laptop out of the desk for %s minutes.\n' '{{ .inputs.phone_code_lockout.wrong_codes_before_lockout }}' '{{ .inputs.phone_code_lockout.lockout_minutes }}'
+            exit 0
+        fi
+    done
+fi
+printf 'That code did not match. No phone-code file was kept. Run set-up-the-phone-code again.\n' >&2
+exit 1

@@ -1,0 +1,74 @@
+# replace_failed_servers creates a new server in place of each server that
+# stopped reporting to the fleet hub, in the pools that
+# triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces
+# in mmx_project_settings.yml names, and puts it in the inventory in place of
+# the failed one with one commit on main, signed by util01's mmhotline user.
+# It is the first of the three runs of a replacement, in this order:
+#
+#   replace_failed_servers     creates the new server and commits it
+#   every_server               installs the new server and updates its peers
+#   destroy_replaced_servers   destroys the failed server once the new one
+#                              does its work
+#
+# The triage agent requests the three when MMWatchdog's check
+# node_reports/NODE alerts for a server of a listed pool
+# (triage_agent_rules.md, "Replacing a failed server"); MMHotline runs them at
+# once with what_the_triage_agent_may_do_without_a_person:
+# routine_fixes_and_server_work, and after one approval otherwise. A person
+# runs the same three from a systems desk
+# (operating_procedures/replace_a_server.md, "A failed server: the three
+# replacement playbooks"). It replaces app servers, jobs servers and
+# load-balancer servers, the same way for each:
+#
+#   ./server_management_scripts/run_mmx_on_util01 run replace_failed_servers
+#
+# The program server_management_scripts/replace_failed_servers holds the
+# rules: which server is a target, the refusals, each step, and what a rerun
+# does after a failure at each step. Every refusal comes before anything is
+# created or powered off. The playbook takes no variables: it finds its own
+# servers, so it can be requested again safely at any time.
+fleet_stages:
+  - id: find_and_replace_failed_servers
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      # As root: only root may ask the fleet hub. Waits for a server whose
+      # reboot by reboot_servers_after_updates may still be under way, at
+      # most that run's wait for the server plus 2 minutes.
+      - id: read_the_fleet_hub
+        time_limit: 30m
+        shell:
+          script: server_management_scripts/read_the_fleet_hub_for_server_replacement
+          dryrun: printf 'would read the fleet hub into /var/lib/replace_failed_servers/fleet.json\n'
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          changed_when: false
+      - id: replace_the_failed_servers
+        # MMX's task limit sends SIGKILL. A standard timeout sends TERM to
+        # the program instead, so its exit trap destroys a server it created
+        # whose commit was not pushed. 30 minutes, fixed: the create, up to
+        # 5 minutes for the new server's SSH, and the pushes take about 10
+        # minutes for one server; the limit keeps a stuck run well inside
+        # MMHotline's one-hour limit for a run, so the program's own cleanup
+        # runs, not MMHotline's stop.
+        time_limit: null
+        time_limit_per_try: null
+        shell:
+          script: timeout --signal=TERM 30m server_management_scripts/replace_failed_servers < /dev/null
+          dryrun: printf 'would power off each failed server of the listed pools, create its replacement and commit it to main\n'
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          output_holds_no_secret: true
+          env:
+            SERVER_WORK: "{{ .vars.triage_agent_server_work }}"
+            GROWTH_LIMITS: "{{ .vars.growth_limits }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+            PRIVATE_IP_RANGES: "{{ .vars.private_ip_ranges }}"
+            EVERYONE_LOCKED_OUT_EXCEPT_DESK: "{{ .vars.everyone_locked_out_except_desk }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+            SERVER_IMAGE: "{{ .vars.server_image }}"
+            UTIL01_SSH_KEY_NAME: "{{ .vars.util01_ssh_key_name_at_the_provider }}"
+            UTIL01_WIREGUARD_PUBLIC_KEY: "{{ .inventory.nodes.util01.vars.wireguard_public_key }}"
+            UTIL01_PRIVATE_IP: "{{ .inventory.nodes.util01.vars.private_ip }}"
+            UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inventory.nodes.util01.vars.public_ipv4_address }}"
+            SERVER_PROVIDER_API_TOKEN: "{{ .secrets.util01_provider_api_token }}"

@@ -1,0 +1,15 @@
+{{- /*
+  The weekly image cleanup's timer, on every server that runs the apps'
+  containers: the app servers and staging01 (roles/app_server), and the jobs
+  servers (roles/jobs_server). It runs on weekly_work_day, 3 hours after
+  nightly_work_starts_at, in UTC (Sunday 04:00 in the template). The day and
+  time come in as the role inputs weekly_work_day and nightly_work_starts_at;
+  every_server checks them before any server changes.
+*/ -}}
+# Managed by MMX from files_used_by_several_roles/podman_image_cleanup.timer in the systems repository.
+[Timer]
+OnCalendar={{ .inputs.weekly_work_day }} {{ $p := splitList ":" .inputs.nightly_work_starts_at }}{{ $t := add (add (mul (atoi (index $p 0)) 60) (atoi (index $p 1))) 180 }}{{ printf "%02d:%02d" (div $t 60) (mod $t 60) }}:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

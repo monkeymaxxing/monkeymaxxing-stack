@@ -1,0 +1,419 @@
+#!/usr/bin/python3
+"""The lock-out button: run playbooks/lock_everyone_out.yml as root on this
+desk, from the copies the person last reviewed, never from pushed main.
+
+The person presses it in their own desk terminal, in their systems
+repository. The coding agent prepares and pushes the one-line inventory
+commit, everyone_locked_out_except_desk: DESK; only the person starts a
+lock-out or its undo.
+
+1. It pulls main from the Git host as the person. A break-in must not wait
+   for the Git host: when the pull fails, the lock-out button says why and uses the
+   repository as it is.
+2. It shows every server of the inventory, one line each, and the desk that
+   keeps access, and asks the person to type yes, in the person's own
+   terminal. Reason: the lock-out peers every server with the servers the
+   inventory names, so a server that an outside attacker pushed to the Git
+   host would join the private network through the lock-out itself. A plain
+   list that the person reads at each press shows such a server.
+3. On the undo, the press after everyone_locked_out_except_desk is removed,
+   it compares the keys it lets in with the ones the last desk review
+   recorded, and asks when they changed: the undo installs
+   root_ssh_public_keys and triage_ssh_public_key from the pulled settings on
+   every server, so a key pushed to the Git host would be let in by the undo
+   itself.
+4. It runs MMX as root from REVIEWED, the root-owned copies that the
+   person's last desk review installed: the playbook, the two lock-out roles,
+   the first lock-out script, the SSH settings, and the files the lock-out
+   installs on the servers from outside its roles: the servers' WireGuard
+   peers, the triage user's sudo rules and MMHotline's settings. Only data
+   comes from the pulled repository: the inventory, the servers' host keys,
+   the settings and the vault. Reason: an outside attacker who can push to
+   the Git host must not get root on this desk, or on every server, through
+   the lock-out; a pushed change to what the lock-out runs or installs
+   reaches root only through the person's desk review.
+
+Run it from your systems repository, in your own desk terminal:
+    sudo lock-everyone-out
+"""
+import base64
+import hashlib
+import importlib.machinery
+import importlib.util
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+
+REVIEWED = Path('/usr/local/lib/systems-desk/lock-everyone-out')
+# Root-only. Its .mmx keeps the button's run history between presses:
+# sudo mmx results, run in this directory, shows the last run.
+RUN_DIRECTORY = Path('/var/lib/systems-desk/lock-everyone-out-run')
+MMX = '/usr/local/bin/mmx'
+# Root-owned, installed by the same desk review. The button reuses its pull,
+# its record of the reviewed keys, and its terminal question.
+REVIEW_AND_APPLY_THE_SYSTEMS_DESK_SETTINGS = '/usr/local/bin/review-and-apply-the-systems-desk-settings'
+VAULT_PASSPHRASE = '/etc/systems-desk/vault-passphrase'
+# The record that a lock-out press finished on this desk: the playbook's last
+# stage writes it, and the undo removes it.
+LOCK_OUT_RECORD = Path('/etc/systems-desk/everyone-locked-out')
+# The desk task that revokes Cloudflare Access sessions with the desk's token.
+CLOUDFLARE_SESSIONS_TASK = 'revoke_cloudflare_access_sessions'
+# The desk task whose exit code 0 says every server took the first lock-out.
+FIRST_LOCK_OUT_TASK = 'stop_untrusted_work_over_ordinary_ssh'
+PRIVATE_AGENT_SOCKET = '/run/desk-ssh-agent/private.sock'
+# Every file the lock-out loads, except data. Everything else in the run
+# directory is the person's pulled repository. The roles load the last
+# three from outside themselves: a pushed WireGuard peer, a wider triage
+# sudo rule or changed alert routing would otherwise reach the servers as
+# root through the lock-out itself. tests/desk_repository_and_lock_out_button_test.py
+# fails when the lock-out loads a file that is neither here nor data.
+REVIEWED_PATHS = ['playbooks/lock_everyone_out.yml', 'server_management_scripts/start_break_in_lockout.py',
+                  'roles/everyone_locked_out', 'roles/systems_desk_lockout', 'ssh',
+                  'roles/every_server/files/wireguard_wg0.conf', 'roles/every_server/files/sudoers_triage',
+                  'roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings', 'mmhotline_settings.yml',
+                  'roles/work_out_who_this_server_talks_to']
+# Data from the pulled repository that replaces a reviewed copy's file: new
+# servers' host keys. A host key file runs no command.
+PULLED_DATA_IN_REVIEWED_PATHS = ['ssh/known_hosts']
+# MMX loads these from the project; the lock-out uses none.
+NEVER_COPIED = {'.git', '.mmx', 'external_modules'}
+
+
+class Stop(Exception):
+    pass
+
+
+def find_repository(start):
+    for directory in [start, *start.parents]:
+        if (directory/'mmx_project_settings.yml').is_file():
+            return directory
+    raise Stop('Run sudo lock-everyone-out from your systems repository, for example after cd ~/example_systems. Nothing changed.')
+
+
+def build_run_directory(repository, reviewed, run_directory):
+    """The pulled repository with every reviewed path replaced by its
+    reviewed copy. A pulled link that leaves the run directory stops the
+    button: root would copy a reviewed file through it into a directory the
+    coding agent can write, or MMX would read a file there that the agent
+    can change after the checks."""
+    for path in REVIEWED_PATHS:
+        if not (reviewed/path).exists():
+            raise Stop('This desk has no reviewed copy of %s. Run review-and-apply-the-systems-desk-settings once, which installs the '
+                       'button\'s reviewed copies. Nothing changed.' % path)
+    run_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(run_directory, 0o700)
+    for entry in run_directory.iterdir():
+        if entry.name != '.mmx':
+            shutil.rmtree(entry) if entry.is_dir() and not entry.is_symlink() else entry.unlink()
+    for entry in repository.iterdir():
+        if entry.name in NEVER_COPIED:
+            continue
+        target = run_directory/entry.name
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.copytree(entry, target, symlinks=True)
+        else:
+            shutil.copy2(entry, target, follow_symlinks=False)
+    inside = run_directory.resolve()
+    # os.walk does not follow links into other directories.
+    pulled = [Path(directory)/name for directory, directories, files in os.walk(run_directory)
+              for name in directories + files]
+    for link in sorted(path for path in pulled if path.is_symlink() and path.relative_to(run_directory).parts[0] != '.mmx'):
+        target = link.resolve()
+        if target != inside and inside not in target.parents:
+            raise Stop('%s in your systems repository is a link to %s, outside the repository. The lock-out button copies only '
+                       'files inside it. Remove the link. Nothing changed.' % (link.relative_to(run_directory), target))
+    for path in REVIEWED_PATHS:
+        target = run_directory/path
+        for parent in target.relative_to(run_directory).parents:
+            if parent != Path('.') and (run_directory/parent).is_symlink():
+                raise Stop('%s in your systems repository is a link, and the lock-out button puts its reviewed copy of %s there. '
+                           'Make %s a directory. Nothing changed.' % (parent, path, parent))
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target)
+        elif target.exists() or target.is_symlink():
+            target.unlink()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if (reviewed/path).is_dir():
+            shutil.copytree(reviewed/path, target, symlinks=True)
+        else:
+            shutil.copy2(reviewed/path, target)
+    for path in PULLED_DATA_IN_REVIEWED_PATHS:
+        if (repository/path).is_file() and not (repository/path).is_symlink():
+            shutil.copy2(repository/path, run_directory/path)
+
+
+def paths_that_differ(repository, reviewed):
+    """The reviewed paths whose pulled version differs from the reviewed
+    copy, such as MMHotline's settings changed since the last desk review."""
+    def contents(root, path):
+        base = root/path
+        files = [base] if base.is_file() else sorted(file for file in base.rglob('*') if file.is_file())
+        return {file.relative_to(root).as_posix(): file.read_bytes() for file in files
+                if file.relative_to(root).as_posix() not in PULLED_DATA_IN_REVIEWED_PATHS}
+    return [path for path in REVIEWED_PATHS if contents(repository, path) != contents(reviewed, path)]
+
+
+def check_connection_settings(run_directory, inventory):
+    """Each node's SSH settings file must be a reviewed one, and the
+    reviewed ones must not include other files: OpenSSH runs commands from
+    SSH settings (ProxyCommand, Match exec) as root."""
+    reviewed_settings = {'ssh/' + path.name for path in (run_directory/'ssh').iterdir() if path.name != 'known_hosts'}
+    for name, node in sorted((inventory.get('nodes') or {}).items()):
+        value = (node or {}).get('ssh_config')
+        if value is not None and os.path.normpath(str(value)) not in reviewed_settings:
+            raise Stop('nodes.%s.ssh_config in the inventory is %s, which is not one of the SSH settings files of your '
+                       'last desk review (%s). The lock-out button connects only with reviewed SSH settings. '
+                       'Nothing changed.' % (name, value, ', '.join(sorted(reviewed_settings))))
+    for path in sorted(run_directory.glob('ssh/*')):
+        for number, line in enumerate(path.read_text(errors='replace').split('\n'), 1):
+            if re.match(r'\s*include(\s|=)', line, re.IGNORECASE):
+                raise Stop('ssh/%s, line %d, includes another file, which the lock-out button does not follow, because that '
+                           'file is not part of the reviewed copy. Nothing changed.' % (path.name, number))
+
+
+def load_the_desk_review_command():
+    sys.dont_write_bytecode = True  # no cache file beside the installed command
+    loader = importlib.machinery.SourceFileLoader('review_and_apply_the_systems_desk_settings', REVIEW_AND_APPLY_THE_SYSTEMS_DESK_SETTINGS)
+    module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(module)
+    return module
+
+
+def server_list(desk_review, inventory, desk_that_keeps_access, lock_out_recorded=True):
+    """Every node of the inventory that is not a systems desk, one line each:
+    its name, its pools (the inventory groups that list it), its private
+    address and its public address; then the desk that keeps access and the
+    other desks. Pushed text is shown with control characters escaped."""
+    nodes = inventory.get('nodes') or {}
+    groups = {name: group for name, group in (inventory.get('groups') or {}).items() if isinstance(group, dict)}
+    desks = set(groups.get('systems_desks', {}).get('nodes') or [])
+
+    def pools(name):
+        return ','.join(sorted(str(group) for group, entry in groups.items() if name in (entry.get('nodes') or []))) or '(in no pool)'
+
+    def value(node, key):
+        node_vars = node.get('vars') if isinstance(node, dict) and isinstance(node.get('vars'), dict) else {}
+        return str(node_vars.get(key) or '(none)')
+
+    rows = [(str(name), pools(name), value(node, 'private_ip'), value(node, 'public_ipv4_address'))
+            for name, node in sorted(nodes.items(), key=lambda item: str(item[0])) if name not in desks]
+    rows = [tuple(desk_review.visible(cell) for cell in row) for row in [('Server', 'Pool', 'Private address', 'Public address')] + rows]
+    widths = [max(len(row[column]) for row in rows) for column in range(4)]
+    lines = ['  ' + '  '.join(cell.ljust(width) for cell, width in zip(row, widths)).rstrip() for row in rows]
+    others = sorted(desk_review.visible(str(desk)) for desk in desks if desk != desk_that_keeps_access)
+    if desk_that_keeps_access:
+        lines.append('The desk that keeps access: %s, at %s.' % (desk_review.visible(str(desk_that_keeps_access)),
+                                                                  value(nodes.get(desk_that_keeps_access), 'private_ip')))
+        lines.append('Every other desk loses access to the servers: %s.' % (', '.join(others) or 'there is no other desk'))
+    elif lock_out_recorded:
+        lines.append('everyone_locked_out_except_desk is not set, so this press undoes the lock-out: every desk and util01')
+        lines.append('get their access back, and the triage agent starts again. Desks: %s.' % (', '.join(others) or 'none'))
+    else:
+        # A lock-out press that stopped before its last stage leaves the
+        # servers locked without this record, so the press still offers to
+        # apply normal access.
+        lines.append('No lock-out is set or recorded on this desk, so this press only applies normal access on every server')
+        lines.append('again, which changes something only after a lock-out press that stopped part way. Desks: %s.'
+                     % (', '.join(others) or 'none'))
+    return lines
+
+
+def confirm_the_servers(desk_review, inventory, desk_that_keeps_access, lock_out_recorded=True):
+    """Shows the servers and asks the person to type yes in their own
+    terminal; otherwise stops with nothing changed."""
+    print('The lock-out button works on these servers from inventories/servers.yml:', flush=True)
+    desk_review.show(server_list(desk_review, inventory, desk_that_keeps_access, lock_out_recorded))
+    print('Read each line. If a server is not one you know, press Enter to stop: nothing changes. Then ask your coding')
+    print('agent to find out where the server came from, and remove it from inventories/servers.yml before you press again.', flush=True)
+    action = ('lock everyone out except %s' % desk_review.visible(str(desk_that_keeps_access)) if desk_that_keeps_access
+              else 'undo the lock-out' if lock_out_recorded else 'apply normal access on every server again')
+    try:
+        answer = desk_review.ask_the_person('Type yes to %s, or press Enter to stop: ' % action)
+    except desk_review.Stop:
+        raise Stop('The lock-out button asks you a question, so run it in your own desk terminal. Nothing changed.')
+    if answer.lower() != 'yes':
+        raise Stop('Stopped. Nothing changed.')
+
+
+def key_description(line):
+    """An OpenSSH public key line as the person can check it: its comment,
+    its fingerprint as ssh-keygen -l shows it, its type, and any options
+    before the key, such as command=."""
+    words = line.split()
+    for index, word in enumerate(words[:-1]):
+        try:
+            blob = base64.b64decode(words[index + 1], validate=True)
+        except ValueError:
+            continue
+        if blob[:4 + len(word)] == len(word).to_bytes(4, 'big') + word.encode():
+            fingerprint = 'SHA256:' + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip('=')
+            text = '%s, %s (%s)' % (' '.join(words[index + 2:]) or 'no comment', fingerprint, word)
+            return text + (', with options ' + ' '.join(words[:index]) if index else '')
+    return 'not an SSH public key: ' + line
+
+
+def lock_out_switch(settings, inventory, name):
+    """everyone_locked_out_except_desk as MMX resolves it for one node:
+    project vars, then inventory vars, then its groups' vars, then its own."""
+    value = (settings.get('vars') or {}).get('everyone_locked_out_except_desk', '')
+    groups = [group for group in (inventory.get('groups') or {}).values()
+              if isinstance(group, dict) and name in (group.get('nodes') or [])]
+    node = (inventory.get('nodes') or {}).get(name)
+    for layer in [inventory] + groups + [node if isinstance(node, dict) else {}]:
+        variables = layer.get('vars')
+        if isinstance(variables, dict) and 'everyone_locked_out_except_desk' in variables:
+            value = variables['everyone_locked_out_except_desk']
+    return value
+
+
+def review_the_keys_it_lets_in(desk_review, settings, inventory):
+    """On a press that lets the settings' keys in on a server, the undo:
+    returns when they are the reviewed keys, or the person typed yes in their
+    own terminal; otherwise stops with nothing changed."""
+    if all(lock_out_switch(settings, inventory, name) for name in inventory.get('nodes') or {}):
+        return
+    view = desk_review.lock_out_button_keys_view(settings)
+    old, commit = desk_review.read_record('lock_out_button_keys_view')
+    if old == view:
+        print('The keys the lock-out button lets in are the same as at your last desk review (%s).' % commit, flush=True)
+        return
+    if old is None:
+        print('This desk has no reviewed record of the keys the lock-out button lets in yet, so there is nothing to compare with.')
+        print('Your next review-and-apply-the-systems-desk-settings records them.')
+        old = []
+    else:
+        print('The keys the lock-out button lets in changed since your last desk review (%s).' % commit)
+    print('With everyone_locked_out_except_desk removed, the lock-out button lets in, on every server, each key in')
+    print('root_ssh_public_keys as root, and triage_ssh_public_key as the triage user from util01.')
+    print('Anyone who can push to your Git host can add a key, and the undo would let that key in.')
+    print('Lines with - are keys your reviewed settings had; lines with + are keys the lock-out button would let in now.')
+    print('Each line shows the key\'s comment and its fingerprint, as ssh-keygen -l shows it.')
+    print(flush=True)
+    lines = []
+    for sign, keys in [('-', [line for line in old if line not in view]), ('+', [line for line in view if line not in old])]:
+        for line in keys:
+            if line.startswith('  '):
+                name, _, key = line.strip().partition(': ')
+                lines.append('%s %s: %s' % (sign, name, key_description(key)))
+    desk_review.show(lines)
+    print('If a key is not one you know, or a key you need is gone, press Enter to stop,')
+    print('correct the keys in mmx_project_settings.yml, and press the lock-out button again.', flush=True)
+    try:
+        answer = desk_review.ask_the_person('Type yes to let these keys in on every server, or press Enter to stop: ')
+    except desk_review.Stop:
+        raise Stop('The lock-out button asks you a question, so run it in your own desk terminal. Nothing changed.')
+    if answer.lower() != 'yes':
+        raise Stop('Stopped. Nothing changed.')
+
+
+def main(arguments):
+    if arguments:
+        raise Stop('The lock-out button takes no arguments: sudo lock-everyone-out. Nothing changed.')
+    if os.geteuid() != 0:
+        raise Stop('Run the lock-out button with sudo: sudo lock-everyone-out. Nothing changed.')
+    person = os.environ.get('SUDO_USER', '')
+    if not person or person in ('root', 'coding-agent', 'servers-mmx'):
+        raise Stop('Run sudo lock-everyone-out as yourself, from your own desk terminal. Nothing changed.')
+    repository = find_repository(Path.cwd().resolve())
+    desk_review = load_the_desk_review_command()
+    pulled, reason = desk_review.pull_main_as_the_person(person, repository)
+    if pulled:
+        print(reason, flush=True)
+    else:
+        print('%s The lock-out button goes on with your repository as it is.' % reason, flush=True)
+    import yaml  # python3-yaml, which the desk role installs
+    build_run_directory(repository, REVIEWED, RUN_DIRECTORY)
+    settings = yaml.safe_load((RUN_DIRECTORY/'mmx_project_settings.yml').read_text()) or {}
+    inventory_path = RUN_DIRECTORY/'inventories'/(str(settings.get('default_inventory', '')) + '.yml')
+    inventory = yaml.safe_load(inventory_path.read_text()) or {}
+    check_connection_settings(RUN_DIRECTORY, inventory)
+    desk = socket.gethostname()
+    desk_that_keeps_access = lock_out_switch(settings, inventory, desk)
+    lock_out_recorded = LOCK_OUT_RECORD.exists()
+    confirm_the_servers(desk_review, inventory, desk_that_keeps_access, lock_out_recorded)
+    review_the_keys_it_lets_in(desk_review, settings, inventory)
+    command = [MMX, 'run', 'lock_everyone_out', '--var', 'desk_name=' + desk,
+               '--connection', 'ssh_only', '--vault-password-file', VAULT_PASSPHRASE]
+    print('Running the reviewed lock-out copies from %s, with the inventory of %s.' % (REVIEWED, repository), flush=True)
+    for path in paths_that_differ(repository, REVIEWED):
+        print('Your repository changes %s since your last desk review. The lock-out button uses the reviewed copy. '
+              'After the incident, run review-and-apply-the-systems-desk-settings and read the change.' % path, flush=True)
+    print(' '.join(command), flush=True)
+    # Ctrl-C reaches MMX, which stops its run; the button waits for MMX and
+    # then prints its last lines.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    result = subprocess.run(command, cwd=RUN_DIRECTORY, preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
+                            env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8',
+                                 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+    print(flush=True)
+    failed = failed_tasks_of_the_last_run() if result.returncode else []
+    for line in last_lines(desk_that_keeps_access, result.returncode, failed, desk, lock_out_recorded):
+        print(line, flush=True)
+    return result.returncode
+
+
+def failed_tasks_of_the_last_run():
+    """The button's last MMX run, as (node, task) for each failed node task,
+    task None for a node that failed without one, and (desk node, FIRST_LOCK_OUT_TASK)
+    when that task's exit code says a server failed; None when the results
+    cannot be read."""
+    import json
+    read = subprocess.run([MMX, 'results', '--json'], cwd=RUN_DIRECTORY, text=True, capture_output=True,
+                          env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8'})
+    try:
+        entries = json.loads(read.stdout)['entries']
+        failed = []
+        for entry in entries:
+            response = entry.get('response') or {}
+            tasks = [result['task'] for result in response.get('results') or [] if result.get('status') == 'failed']
+            tasks += [result['task'] for result in response.get('results') or []
+                      if result['task'].split('/')[-1] == FIRST_LOCK_OUT_TASK and result.get('exit_code', 0) != 0]
+            if tasks or response.get('status') == 'failed':
+                failed += [(entry['node'], task) for task in tasks] or [(entry['node'], None)]
+        return failed
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def last_lines(desk_that_keeps_access, exit_code, failed=None, desk='', lock_out_recorded=False):
+    """What the person reads last: whether MMX finished, and after a
+    lock-out, how to undo it. lock_out_recorded: this desk's lock-out was in
+    place when the press began, so a press without desk_that_keeps_access
+    undoes it."""
+    lines = []
+    only_the_cloudflare_sessions = bool(failed) and all(
+        node == desk and task and task.split('/')[-1] == CLOUDFLARE_SESSIONS_TASK for node, task in failed)
+    if exit_code and only_the_cloudflare_sessions:
+        lines.append('MMX ended with exit code %d. Every server was locked out; only the revocation of Cloudflare Access '
+                     'sessions on this desk failed (its error is above), so people signed in to your private pages stay '
+                     'signed in: revoke their sessions at Cloudflare, as operating_procedures/respond_to_a_break_in.md '
+                     'says for Cloudflare.' % exit_code)
+    elif exit_code and desk_that_keeps_access:
+        lines.append('MMX ended with exit code %d. Read the result for every server above: a server that failed is '
+                     'still a way in until you isolate it at the provider.' % exit_code)
+    elif exit_code and lock_out_recorded:
+        lines.append('MMX ended with exit code %d. Read the result for every server above: a server where the undo failed '
+                     'is still locked out, so util01 and the other desks cannot reach it yet. Your coding agent fixes '
+                     'the cause, and you run sudo lock-everyone-out again.' % exit_code)
+    elif exit_code:
+        lines.append('MMX ended with exit code %d. Read the result for every server above: a server that failed did '
+                     'not get normal access applied again. Your coding agent fixes the cause, and you run '
+                     'sudo lock-everyone-out again.' % exit_code)
+    if desk_that_keeps_access:
+        lines.append('To undo the lock-out after a false alarm: your coding agent removes everyone_locked_out_except_desk '
+                     'from inventories/servers.yml and pushes, and you run sudo lock-everyone-out again '
+                     '(operating_procedures/respond_to_a_break_in.md, "Undo a lock-out").')
+    return lines
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Stop as stop:
+        print(stop, file=sys.stderr)
+        sys.exit(1)

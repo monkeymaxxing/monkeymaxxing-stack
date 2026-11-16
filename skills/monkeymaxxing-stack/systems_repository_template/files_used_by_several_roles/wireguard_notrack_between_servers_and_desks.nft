@@ -1,0 +1,77 @@
+{{- /*
+  Skips connection tracking for WireGuard traffic between servers and desks:
+  the UDP packets on WireGuard's port (inventory vars.wireguard_listen_port)
+  to or from the public address of every inventory node that has one. Read
+  by roles/every_server and roles/systems_desk as a template, loaded by
+  wireguard-udp-443-redirect.service after the redirect, and written empty
+  by server_management_scripts/server_first_boot.cloud-config.yml.
+
+  Why: any NAT table on the host, the redirect's included, gives every new
+  flow a "null NAT binding". When two peers send first packets at the same
+  moment, such as after a wg0 reload, or a peer that learned port 51820 meets
+  a flow redirected from 443, the tracking tuples clash and NAT rewrites the
+  source port to a random one. WireGuard roams to that port. When the entry
+  expires (120 s idle, or the conntrack -D drop-in of wg-quick@wg0.service),
+  the peer sits on a dead port, and between servers, which send no keepalive,
+  it stays there: 12+ minutes, measured on test servers. An untracked packet never
+  reaches NAT. Servers and desks therefore use Endpoint
+  <public_ipv4_address>:51820 for each other (no redirect in their path) and
+  skip tracking here. Only an Endpoint change failed alone (0/10); with this
+  table all 12 directed pairs of 4 nodes answered after 150 s of silence,
+  through three rounds that included a wg0 reload on every node.
+
+  Who lists the addresses: a server renders them here from the inventory,
+  so an ordinary every_server run adds a new server or desk. A desk renders
+  an include of /etc/systems-desk/wireguard-notrack-addresses.nft instead,
+  which only update-this-desks-wireguard-peers writes (from pushed main, with
+  the server peers). Reason: a desk review must show no change when a server
+  joins or leaves (the desk's wg0 follows the same rule), so the desk's
+  rendered files cannot list the servers.
+
+  Laptops are not in the set: they keep UDP 443 and the redirect, and a
+  laptop's PersistentKeepalive keeps its flow alive.
+
+  Order on an existing system: this table and the Endpoint change reach
+  machines one run at a time, and any mix still carries traffic.
+    - A packet to the redirected port 443 (a peer not yet moved) is not
+      matched here: dport is 443, not 51820. It is tracked and redirected
+      as before.
+    - A packet to 51820 from a peer that this machine does not yet untrack
+      is tracked as before, and 51820 is open in every firewall since the
+      earlier version. An untracked packet has ct state "untracked", not
+      "invalid", so no firewall rule drops it, and ufw and the desk's
+      firewall admit 51820 with no state condition.
+    - A reply leaves this machine untracked from port 51820. The peer that
+      sent to 443 accepts it: WireGuard takes the packet on its own socket
+      whatever the tracking says, the firewall admits 51820, and WireGuard
+      roams the peer to <address>:51820, which is where it should end.
+  So no step of the move can leave a pair unable to talk, and no step
+  closes a port.
+*/ -}}
+#!/usr/sbin/nft -f
+# Replace only our table, so loading this file again is safe.
+table inet stack_wireguard_notrack {}
+flush table inet stack_wireguard_notrack
+table inet stack_wireguard_notrack {
+    set server_and_desk_public_addresses {
+        type ipv4_addr
+    }
+    chain prerouting {
+        type filter hook prerouting priority raw; policy accept;
+        ip saddr @server_and_desk_public_addresses udp dport {{ .inputs.wireguard_listen_port }} notrack
+    }
+    chain output {
+        type filter hook output priority raw; policy accept;
+        ip daddr @server_and_desk_public_addresses udp sport {{ .inputs.wireguard_listen_port }} notrack
+    }
+}
+{{- if .inputs.is_systems_desk }}
+include "/etc/systems-desk/wireguard-notrack-addresses.nft"
+{{- else }}
+{{- range $name, $node := .inputs.inventory_nodes }}
+{{- $public := get $node.vars "public_ipv4_address" | default "" }}
+{{- if $public }}
+add element inet stack_wireguard_notrack server_and_desk_public_addresses { {{ $public }} }
+{{- end }}
+{{- end }}
+{{- end }}

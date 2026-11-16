@@ -1,0 +1,1374 @@
+# The checklist of this system: every item of the Monkeymaxxing Stack.
+# The list items has two parts, and each item names its part in `part`:
+#
+# part: setup                  the initial setup finishes the item. When the
+#                              setup ends, every Setup item is done, or
+#                              deviated with its reason.
+# part: later_when_it_happens  the item waits for a routine or an event after
+#                              the setup: a routine's first run, the first
+#                              rollback, a team member joining, or a
+#                              rotation. A Later item that stays open is no
+#                              gap in the setup.
+#
+# The Setup items come first, in the order the system is built. People read
+# the checklist, and MMHotline's dashboard shows the open and deviated items
+# of items, in the order of the file.
+#
+# state: open      not proven yet; waits_for says what must happen first
+# state: done      the verification passed; the item gets verified_at (UTC),
+#                  and last_result with what the check measured
+# state: deviated  the system differs from the item's requirement
+#                  deviation says what differs and why
+#
+# An item becomes done only after its verification passed. When verified_at is
+# older than verify_again_every, the item counts as open again.
+#
+# The separate list growth_and_improvement_items holds the items that wait
+# for a trigger that can come late or never: growth, such as a second app
+# server, and improvement, such as an optional drill. Each item names its
+# trigger in `trigger`. An item whose trigger has not come has
+# state: waits_for_its_trigger, which never counts as open. MMHotline's
+# dashboard reads only items and apps, so the dashboard does not show the
+# list. The weekly review only checks whether a trigger arrived. While
+# the growth waits for a later event, such as staging_server for the next
+# release, the item is open with waits_for. After the growth or improvement
+# happened, the item becomes done or deviated, with the same fields as in
+# items.
+#
+# Each app's <app>_seed_command_fills_test_data is a Later item, and
+# staging_server is a growth item: the Stack starts without staging01, and
+# operating_procedures/add_staging01.md finishes both when the team adds
+# staging01, during the setup for a team that chose the fuller system.
+
+stack_version: 2026-11
+# stack_commit records the commit of the stack's repository from which the
+# coding agent copied the system's files. The coding agent records the
+# commit during the initial setup and with each new version. During an
+# upgrade, the coding agent compares the systems repository with the
+# template at the commit recorded in stack_commit. A copy can come from
+# a commit between two tagged versions. The template at the version's tag
+# then differs from the copied template, so stack_version alone cannot
+# identify the copied files.
+stack_commit: "0000000000000000000000000000000000000000"
+
+# Build the system, starting with the app contract: what each app provides
+# so the app runs on the stack. The coding agent checks the app's code
+# before the first server exists. Each app gets a copy of the app contract
+# items under apps. Put the app's name at the start of each item's id and
+# in each item's text. Each app passes or deviates on its own.
+apps:
+  shop:
+    items:
+      # Check where the app stores mutable data first. A file saved on an
+      # app server's disk is missing for every request that reaches another
+      # app server. The file is gone when the app server holding the file
+      # is replaced.
+      - id: shop_stores_data_only_in_postgres_and_object_storage
+        title: shop stores its data only in Postgres and object storage
+        state: open
+        part: setup
+        protects_against: uploads and sessions that vanish when a request reaches another app server, or when an app server is replaced
+        verification: >-
+          shop saves uploads to an R2 bucket (or another S3-compatible store),
+          whose name is shop's production_uploads_r2_bucket in
+          mmx_project_settings.yml ("" when shop keeps no uploads), and keeps
+          sessions in cookies or Postgres; no setting of shop stores mutable
+          app data in a local directory, a SQLite file, or a Podman volume.
+          The read-only /app/assets volume for this release's and the previous
+          release's static assets is required and allowed. The Stack runs
+          shop's containers with a read-only file system (ReadOnly=true in
+          both Quadlet files), so a file shop writes to its own disk fails
+          with "read-only file system", on staging01 or, without staging01,
+          at the production deploy; shop's
+          writable_temporary_directories, if any, hold only scratch files.
+          A file
+          uploaded through https://shop.example.com still downloads after a
+          deploy replaced shop's web container.
+        waits_for: the initial setup
+
+      - id: shop_reads_settings_from_the_environment_and_logs_to_standard_output
+        title: shop takes its settings from environment variables and writes its logs to standard output
+        state: open
+        part: setup
+        protects_against: secrets built into the image, and logs nobody can read because they stay inside a container
+        verification: >-
+          shop's container starts with only the settings in
+          mmx_project_settings.yml and its secrets from /etc/shop/shop.env;
+          `podman image inspect` shows no secret in the image's settings,
+          and a search of the image's files (`podman image mount`) finds
+          none of the values in /etc/shop/shop.env; and
+          `journalctl` on app001 shows the log lines of shop's web and job
+          containers, and none of them holds a secret, such as a password,
+          a token, or DATABASE_URL (the read-only triage user reads the
+          journal).
+        waits_for: the initial setup
+
+      # The containers use the server's own network (Network=host).
+      # A port that the app sets to a constant instead of reading PORT is a
+      # port of the server. The old and new web containers of a deploy
+      # would need the same fixed port. Rails 8's default Containerfile
+      # starts Thruster on port 80, Caddy's port, and Puma, Rails' web
+      # server, on 3000. So the Containerfile's command becomes
+      # ./bin/rails server.
+      - id: shop_web_container_listens_on_port
+        title: shop's web container listens on the port in PORT, and binds no other fixed port
+        state: open
+        part: setup
+        protects_against: a deploy whose new web container can't start because the old one holds its port, and an app that takes port 80 from Caddy
+        verification: >-
+          shop's web server takes its port from the PORT environment variable;
+          shop's web_ports lie in 8001 to 8099 and overlap no other app's; and
+          with a web container of shop running on app001, `sudo ss -tlnp`
+          shows it listening on its own web port and on no other port; and it
+          runs with no Linux capability (the Quadlet unit drops them all).
+        waits_for: the initial setup
+
+      # MMX sets WEB_CONCURRENCY in each server's web containers to the
+      # server's CPU count, unless the app's own environment sets
+      # WEB_CONCURRENCY. Each Caddy sends a request to the web container
+      # with the fewest unfinished requests, so a pool can mix server sizes.
+      - id: shop_starts_its_worker_processes_from_web_concurrency
+        title: shop's web server uses every CPU of its server, with as many worker processes as WEB_CONCURRENCY says
+        state: open
+        part: setup
+        protects_against: a big app server that runs as few worker processes as a small one, so its CPUs sit idle while the small servers fill up
+        verification: >-
+          shop's web server takes its number of worker processes from the
+          WEB_CONCURRENCY environment variable, or a number derived from it
+          (Puma, Gunicorn, and Uvicorn read it by themselves; a Node app
+          forks that many workers with its cluster module), and no setting of
+          shop fixes another number, unless shop's environment in
+          mmx_project_settings.yml sets WEB_CONCURRENCY lower on purpose,
+          such as when memory, not CPUs, limits its workers; and on app001, `podman top
+          shop-web-8001` (or the web port that runs) lists the worker
+          processes that number gives, for the CPU count that `nproc` prints.
+          A server that runs one process with threads on every CPU, as Go's,
+          Java's, and .NET's do, passes as it is.
+        waits_for: the initial setup
+
+      - id: shop_container_image_can_be_rebuilt
+        title: shop has a Containerfile and a tested image build, recommended in CI
+        state: open
+        part: setup
+        protects_against: releases that differ between staging and production, or that can't go back to an exact earlier version
+        verification: >-
+          CI (or, without CI, the coding agent inside a container) tests and builds shop's image from
+          its Containerfile and pushes the image to the registry, such as ghcr.io/example/shop, tagged with
+          the commit; and the app servers pull it with the read-only registry
+          token from the vault.
+        waits_for: the initial setup
+
+      - id: shop_health_url_passes_only_when_shop_can_serve
+        title: shop's health URL passes only when shop can serve requests
+        state: open
+        part: setup
+        protects_against: a deploy that switches users to a container that isn't ready, and Caddy sending requests to a broken container
+        verification: >-
+          shop's health URL, /up, answers 200 from a container that reaches
+          its database, and an error from a container started with a database
+          address that doesn't answer.
+        waits_for: the initial setup
+
+      - id: shop_migrations_keep_the_running_release_working
+        title: shop has one migration command, and its migrations keep the running release working
+        state: open
+        part: setup
+        protects_against: a deploy that breaks the release still serving users, or holds up live requests behind a table lock
+        verification: >-
+          shop's migration_command (bin/rails db:migrate) runs its migrations
+          in a one-off container; a migration waits at most 5 seconds for a
+          table lock and then fails; and the migrations only add tables and
+          columns that allow NULL or have a fixed default, remove or rename
+          over two releases, have no down migrations, and build indexes on
+          large tables with CREATE INDEX CONCURRENTLY.
+        waits_for: the initial setup
+
+      - id: shop_background_jobs_run_from_one_command
+        title: shop runs its background jobs from one command, with its queue in Postgres
+        state: open
+        part: setup
+        protects_against: jobs lost when a container stops, and a second data store, such as Redis, to run, secure, and back up
+        verification: >-
+          shop's jobs_command (bin/jobs) starts its job container; its queue
+          lives in shop's Postgres database (Solid Queue, good_job, or the
+          like); on the stop signal a worker finishes its current job
+          before it exits; and shop's jobs_connect_directly_to_postgres is
+          true exactly when its worker needs a whole Postgres session, for
+          LISTEN/NOTIFY or a session-level advisory lock. An app with no
+          background jobs, whose jobs_command is "", marks this item
+          deviated, with no background jobs as the reason.
+        waits_for: the initial setup
+
+      # shop must serve every file in its asset_directory, the previous
+      # release's files included, not only the files its own build lists.
+      # TanStack Start, SvelteKit, and Nuxt need a change for this; the
+      # stack repository's docs/app-frameworks/ guides give the fix.
+      - id: shop_deploys_without_dropping_requests
+        title: shop deploys without dropping requests
+        state: open
+        part: setup
+        protects_against: errors and broken pages for users during every release
+        verification: >-
+          during a deploy of a new tag, a request every second to
+          https://shop.example.com/up got no error; a page rendered by the old
+          release still loaded its CSS and JavaScript after the switch, from
+          the asset_directory shop names (/rails/public/assets); shop finishes
+          the requests in flight on the stop signal before it exits; and its
+          WebSocket clients, if it has any, reconnect on their own.
+        waits_for: the second deploy of shop, the first one that replaces a running release
+
+      # The monkeymaxxing-stack skill is under skills/monkeymaxxing-stack/
+      # in the stack's repository. The guide at
+      # files_for_your_app/database_driver_finds_the_primary.md, relative to
+      # SKILL.md's directory, says what each language's driver takes, and
+      # any required code. The guide also names the file a Node.js app
+      # copies.
+      - id: shop_database_driver_finds_the_primary
+        title: shop's Postgres driver finds the primary by itself
+        state: open
+        part: setup
+        protects_against: shop writing to a replica, or never reconnecting, after a database failover
+        verification: >-
+          every database pool of shop takes DATABASE_URL, or
+          DATABASE_READ_URL for reads that may be a moment behind, both of
+          which list every database server, with target_session_attrs and
+          connect_timeout, in the form that the stack's
+          files_for_your_app/database_driver_finds_the_primary.md gives for shop's
+          language and framework; its driver has TCP keepalive on, with the
+          server's timing, as that page's entry for it says, or uses the
+          entry's documented exception for short query time limits, as the
+          reference app does with pgx; and no setting of
+          shop names one database server alone. A Node.js app makes its
+          pools with
+          pg_with_multiple_database_servers.mjs, and passes that page's
+          initial setup checks.
+        waits_for: the initial setup
+
+      - id: shop_check_queries_for_the_restore_drill
+        title: shop has check queries for the restore drill
+        state: open
+        part: setup
+        protects_against: a restore that looks fine but holds old or empty data
+        verification: >-
+          shop's check queries, such as "the time of the newest order", are in
+          the systems repository where the weekly restore drill reads them,
+          and they return a result against the production shop database.
+        waits_for: the initial setup
+
+      - id: shop_seed_command_fills_test_data
+        title: shop's seed command fills laptops and staging with invented test data
+        state: open
+        part: later_when_it_happens
+        protects_against: >-
+          customer data on a developer's laptop, on staging01, or in CI,
+          copied there because developers had no other realistic data
+        verification: >-
+          The steps in shop's README fill an empty local database with
+          invented test data, with APP_ENV set to development. Running the
+          seed command again leaves the test records unchanged. With
+          APP_ENV set to production, or not set, the seed command refuses
+          and changes nothing. With the seed command's size option, such as
+          --orders 200000, the database holds that many generated records.
+          shop's tests run the migrations and the seed command on an empty
+          database. The tests run before every image build, in CI when the
+          team uses CI. With staging01, the seed command ran
+          there with APP_ENV set to staging. The coding agent found no copy
+          of production's data on staging01 or in CI, and each team member
+          confirmed that their laptop holds none.
+        waits_for: staging01 (operating_procedures/add_staging01.md), or developers needing test data
+
+items:
+  # SETUP: the items that the initial setup finishes. Every Setup item is
+  # done, or recorded as deviated with its reason, when the setup ends.
+  # The accounts, each set up once during the initial setup, then the
+  # servers and the tools that operate the servers, in the order the
+  # servers and tools are built.
+
+  - id: team_password_manager
+    title: A team password manager, for account logins and break-glass access
+    state: open
+    part: setup
+    protects_against: being locked out of an account because the one person who knew its login is away or gone
+    verification: >-
+      the logins of the Cloudflare, server provider, Backblaze, Git host,
+      email sending service, coding agent provider, and push app accounts are
+      in the team password manager, shared with the people who operate the
+      system; a person signed in with the saved login, in a private browser
+      window, to the four accounts whose loss would lock the team out of the
+      system: Cloudflare, the server provider, Backblaze, and the Git host; the
+      password manager also holds the shared console password and each
+      configured pgBackRest cipher passphrase.
+    waits_for: the initial setup
+
+  - id: systems_desk_ready
+    title: Each person has a systems desk and a desk-only laptop login
+    state: open
+    part: setup
+    protects_against: copied laptop infrastructure files granting lasting production access
+    verification: >-
+      each person's numbered desk is in systems_desks in a location different
+      from production; the laptop's wg-quick file has only the desk peer;
+      a fresh SSH login needs the laptop key and a phone code;
+      coding-agent can use production SSH, signed Git push, run-mmx-on-the-servers,
+      and both API proxies without reading personal private keys or tokens;
+      run-mmx-on-the-servers selects the pushed main commit and cannot enter a desk;
+      the person's loopback self-management works; the desk reports to
+      MMWatchdog; the laptop's temporary repository, MMX, provider token,
+      provider CLI credentials, and first-boot payload are cleared;
+      the desk has a read-only clone of the app with its own read-only deploy key;
+      without CI, the desk also has a registry publishing login, and no app
+      test or build tools of its own (tests and builds run in containers).
+      The details of the desk's login protections, such as the refusal of a
+      reused code, are in the optional check of the system's protections.
+    waits_for: chapter 2 (set up your laptop and your systems desk), then chapter 7 (install everything on the production servers) for monitoring enrollment, then the real access and cleanup checks
+
+  - id: systems_desk_recovery_items_saved
+    title: The recovery items are in the team password manager
+    state: open
+    part: setup
+    protects_against: losing the only way to administer surviving production servers when a phone, a laptop, or a desk is lost
+    verification: >-
+      the password manager holds the phone-code secret, production SSH key,
+      desk WireGuard key, vault passphrase, and Git-host
+      recovery access, each saved by the person while the coding agent named
+      the item and its label; the shared root console password and the
+      production pgBackRest cipher passphrase are saved too.
+    waits_for: the initial setup
+
+  - id: cloudflare_account
+    title: The Cloudflare account, with two-step sign-in
+    state: open
+    part: setup
+    protects_against: a takeover of the company's most important login, which controls the domain, the front door, and the private pages
+    verification: >-
+      the person signs in to the Cloudflare account with two-step sign-in,
+      using an authenticator app or a passkey; the coding agent uses the
+      person's desk token, an account token of this account named after the
+      person, never the Global API Key, for which the account's token verify
+      API (/accounts/ACCOUNT_ID/tokens/verify) answers "active"; and the
+      account's token list shows no link token after set-up-outside-services
+      cloudflare ended. The account needs no
+      hardware security key and no second administrator. The team adds a second
+      administrator when a second person joins.
+    waits_for: the initial setup
+
+  - id: server_provider_account
+    title: The server provider's account and API token
+    state: open
+    part: setup
+    protects_against: servers that can only be created by hand, which leaves the weekly restore drill with no way to create one
+    verification: >-
+      `server_management_scripts/list_the_servers_at_the_provider` answers with each of the two tokens: on the
+      person's systems desk with their own API token (SERVER_PROVIDER_API_TOKEN in the desk's
+      token file), and on util01 with util01's own token,
+      util01_provider_api_token in the vault, which the restore drill uses
+      (the coding agent started the daily check once over SSH in chapter 8,
+      and `journalctl -u check_for_a_leftover_restore01` on util01 shows its
+      list passed; the timer then repeats the check every day); and `server_management_scripts/create_a_server_at_the_provider` and
+      `server_management_scripts/destroy_a_server_at_the_provider` work for
+      restore01 at the main provider, or at a second provider when the main
+      one can't create servers through its API.
+    waits_for: the initial setup
+
+  - id: backblaze_b2_locked_backup_bucket
+    title: The Backblaze B2 backup buckets, locked
+    state: open
+    part: setup
+    protects_against: losing the backups to a mistake, an attacker on a database server or on util01, or a takeover of the Cloudflare or server provider account
+    verification: >-
+      the database's bucket has versioning on and Object Lock in compliance
+      mode with a default retention of `backups.lock_backups_against_deletion_for_days`,
+      and keeps prior versions for
+      `backups.keep_prior_file_versions_in_buckets_for_days`; deleting a locked version of a test file fails; the database
+      servers' key can write only to this
+      bucket; and the restore drill's key can only read. The uploads' bucket
+      (backups.uploads_bucket) has the same lock, keeps prior versions for
+      `backups.keep_prior_file_versions_in_buckets_for_days`, and util01's key for it reaches only that bucket.
+    waits_for: the initial setup
+
+  - id: git_host_and_container_registry
+    title: The Git host and the container registry
+    state: open
+    part: setup
+    protects_against: losing the system's history and settings, and app servers that pull images with a token that could also push
+    verification: >-
+      the systems repository and each app's repository are private on the
+      Git host; the person sees on the Git host's token page, such as
+      https://github.com/settings/tokens, that the servers' registry token
+      has read:packages and no other scope, so it cannot push; and the first
+      every_server run in chapter 7 pulled each app's image on app001 with
+      that token from the vault (caddy_app_containers_and_the_first_deploy),
+      which proves its login without anyone reading it.
+    waits_for: the initial setup
+
+  - id: email_sending_service
+    title: An email sending service, with SPF, DKIM, and DMARC
+    state: open
+    part: setup
+    protects_against: the app's email landing in spam, and other people sending email in the company's name
+    verification: >-
+      the email sending service shows the company's domain as verified, and
+      the coding agent read the domain's SPF, DKIM, and DMARC records at
+      Cloudflare (through the API proxy) and found each record the
+      service names. A test email that reaches an outside mailbox with
+      spf=pass, dkim=pass, and dmarc=pass in its Authentication-Results
+      header is an optional extra check. A system whose app sends no email
+      marks this item deviated, with no email as the reason.
+    waits_for: the initial setup
+
+  - id: coding_agent_provider_key
+    title: A key, token, or sign-in for the triage agent's coding agent
+    state: open
+    part: setup
+    protects_against: a triage agent that cannot start when an alert arrives
+    verification: >-
+      the credential is in the vault as mmhotline_triage_agent_credential
+      (an Anthropic or OpenAI API key, a Claude subscription token, a Codex
+      access token, or the auth.json of a ChatGPT sign-in made for MMHotline)
+      for the coding agent that triage_agent_coding_agent in
+      mmx_project_settings.yml names,
+      `credential_type` in mmhotline_settings.yml names which it is
+      (`credential_expires_on` too, for a Codex access token), and util01's test prompt in the
+      triage agent's sandbox passed. The person is responsible for the coding
+      agent's account setup and costs.
+    waits_for: the initial setup
+
+  - id: push_app_on_every_on_call_phone
+    title: A push app for alerts on each on-call phone
+    state: open
+    part: setup
+    protects_against: an SOS that wakes nobody because the phone is set to silent
+    verification: >-
+      each person on call has the push app, such as Pushover, signed in on
+      their phone and allowed to sound in Silent Mode and Do Not Disturb
+      (Critical Alerts on iOS).
+    waits_for: the initial setup
+
+  - id: company_email
+    title: Company email addresses, for the Cloudflare Access rules
+    state: open
+    part: setup
+    protects_against: private pages open to anyone who can sign in with any email address
+    verification: >-
+      every Cloudflare Access Allow policy that admits people names the
+      company's domain, such as "email ends in @example.com", or the
+      company's GitHub organization, rather than admitting any signed-in
+      user; the account's login methods include One-time PIN, or GitHub
+      for a policy that names the GitHub organization; and each person on
+      the team signs in that way.
+    waits_for: the initial setup
+
+  - id: secrets_in_the_vault_scoped_by_role
+    title: Every secret in the vault, and each server gets only its role's secrets
+    state: open
+    part: setup
+    protects_against: secrets leaking through the repository, an image, or a server that never needed them
+    verification: >-
+      the secrets the servers use are in secrets_vault.age, and a secret scan
+      of the repository and its history, such as gitleaks, finds none
+      elsewhere; and the vault passphrase is on each systems desk that runs
+      MMX and on util01, where only the mmhotline user can read it. That each
+      server holds only its role's secrets, as root-only files with the
+      modes the Stack sets, is in the optional check of the system's
+      protections.
+    verify_again_every: 7d
+    waits_for: the initial setup
+
+  # Every server uses Debian 13. Which Debian releases the Stack supports:
+  # initial_setup/06_create_your_three_production_servers.md#the-server-image.
+  - id: app001_db01_and_util01_created
+    title: app001, db01, and util01 created, with their host keys committed
+    state: open
+    part: setup
+    protects_against: servers the repository doesn't know about, and SSH connections that trust whatever machine answers
+    verification: >-
+      `server_management_scripts/list_the_servers_at_the_provider` shows app001, db01, and util01, each running
+      Debian 13 and recorded in inventories/servers.yml with
+      address equal to vars.private_ip, vars.public_ipv4_address holding
+      the provider address, and vars.wireguard_public_key recorded before
+      creation; SSH host keys observed over WireGuard are in
+      ssh/known_hosts; and MMX reaches every server over private SSH.
+    waits_for: the initial setup
+
+  - id: production_ssh_keys_and_desk_phone_codes
+    title: Production SSH by key over WireGuard, and desk SSH by key plus phone code
+    state: open
+    part: setup
+    protects_against: password guessing, and logins with keys nobody listed
+    verification: >-
+      the systems desk reaches every production server, and staging01 when it exists, over wg0
+      with its key, and MMX reaches every server over private SSH; and the
+      desk requires the laptop SSH key plus a phone code on its WireGuard
+      address. The details of the SSH settings, such as the refusal of
+      passwords and the exact list of root's authorized keys, are in the
+      optional check of the system's protections.
+    waits_for: the initial setup
+
+  - id: journald_log_size_limits
+    title: Logs stay within a size limit on every server
+    state: open
+    part: setup
+    protects_against: a disk filled by logs, the most common beginner outage
+    verification: >-
+      run 2 of every_server applied the every_server role to every server
+      without a failed task, and the role writes the journald size limit. The
+      check of the limit's value and of the journal's disk use is in the
+      optional check of the system's protections.
+    waits_for: the initial setup
+
+  # On the database servers, an update of Postgres or pg_auto_failover
+  # restarts Postgres, a PgBouncer update restarts PgBouncer and drops the
+  # apps' connections through PgBouncer, and a kernel update needs a reboot,
+  # so those updates wait for the team's window (update_database_servers). unattended-upgrades installs
+  # every remaining security update automatically.
+  - id: automatic_security_updates
+    title: Security updates install themselves on every server, except the database servers' Postgres, pg_auto_failover, PgBouncer, and kernel
+    state: open
+    part: setup
+    protects_against: known flaws left open on servers where a restart costs nothing
+    verification: >-
+      run 2 of every_server applied the update settings to every server
+      without a failed task; and MMWatchdog's check
+      security_updates/no_security_update_waits passes on the app servers,
+      util01, and staging01 when it exists. The exact settings, such as no automatic reboot
+      (Automatic-Reboot "false") and the database servers' Package-Blacklist
+      (Postgres, pg_auto_failover, PgBouncer, and the kernel), are in the
+      optional check of the system's protections.
+    waits_for: the initial setup
+
+  - id: wireguard_network_and_firewall
+    title: The WireGuard network by role, and the firewall
+    state: open
+    part: setup
+    protects_against: services reachable from the internet, and a private network that a machine outside the inventory could join
+    verification: >-
+      `sudo wg show wg0` on every ordinary server lists the role's server peers
+      and the systems desks, and active peers have recent handshakes; names such
+      as db01 resolve to private addresses from /etc/hosts; and on every
+      ordinary server `ufw status verbose` shows incoming traffic denied by
+      default. MMX's SSH fallback still handles a failed HTTPS runner; failed
+      WireGuard requires the provider console. The exact peer lists, the
+      firewall's rules, the refusal of desk connections to Postgres and MMX's
+      HTTPS port, the closed public SSH port, and the metadata block are in the
+      optional check of the system's protections.
+    waits_for: the initial setup
+
+  - id: postgres_under_pg_auto_failover
+    title: Postgres under pg_auto_failover, as a single node, with the monitor on util01
+    state: open
+    part: setup
+    protects_against: a database that must be rebuilt before it can fail over; with pg_auto_failover from the initial setup, adding db02 is one command
+    verification: >-
+      on util01, `sudo -u postgres pg_autoctl show state --pgdata
+      /var/lib/postgresql/17/pg_auto_failover_monitor --formation production`
+      lists db01 as the primary; and each app's database exists on db01.
+      That Postgres on db01 accepts connections only over WireGuard, from the
+      app servers, the database servers, and util01, is in the optional
+      check of the system's protections.
+    waits_for: the initial setup
+
+  - id: postgres_sends_backups_to_the_locked_bucket
+    title: Database backups use locked B2 storage, with a 60-second archive target
+    state: open
+    part: setup
+    protects_against: loss of the only database copy when every database server is lost
+    verification: >-
+      pgBackRest on db01 uses the B2 bucket as its only backup storage;
+      `pgbackrest info` shows a full backup and the archived write-ahead log;
+      Postgres runs with archive_timeout = 60; a weekly full and a daily
+      differential backup are scheduled (the first full backup exists), and
+      pgBackRest keeps full backups for
+      `backups.keep_database_backups_for_days`; and
+      MMWatchdog's backup-age check passes. That the scheduled backups keep
+      running is watched by MMWatchdog's backup-age check, which alerts when
+      a backup is late, and proved by the weekly restore drill
+      (`backups_restore_every_week`), so it has no Later item.
+    waits_for: the initial setup
+
+  # The uploads live at Cloudflare, so a lost location loses none of them;
+  # the copy is for a mistake, an attacker, and an account takeover.
+  - id: uploads_copied_to_the_locked_bucket_every_night
+    title: Each app's uploaded files are copied to the locked B2 bucket
+    state: open
+    part: setup
+    protects_against: losing uploaded files to a mistake, an attacker who reaches an app's R2 key, or a takeover of the Cloudflare account
+    verification: >-
+      util01's first copy_uploads_to_the_backup_bucket run, started by the
+      chapter 7 run, passed
+      (`journalctl -u copy_uploads_to_the_backup_bucket` on util01); the uploads' bucket holds
+      each app's files in a folder named after the app; and MMWatchdog's
+      check uploads_backup/a_copy_passed_within_the_copy_interval_plus_2_hours passes. That
+      util01's R2 key is refused when it writes and its B2 key has exactly
+      the permissions it needs is in the optional check of the system's
+      protections. That the copy keeps running every night, a full copy comes
+      again within 8 days, and a deleted or overwritten file comes back are
+      in the Later item `uploads_copy_keeps_running_and_restores`; until
+      then MMWatchdog's checks uploads_backup/a_copy_passed_within_the_copy_interval_plus_2_hours
+      and uploads_backup/a_full_copy_passed_in_the_last_8_days alert when a
+      copy is late. A
+      system whose apps keep no uploads, with backups.uploads_backup_runs_on
+      [], marks this item deviated, with no uploads as the reason.
+    waits_for: the initial setup
+
+  # Check the app's containers through Caddy first, then check the tunnel
+  # and public host name. The order lets each part be checked as soon as
+  # the part exists.
+  - id: caddy_app_containers_and_the_first_deploy
+    title: Caddy, the app's containers, and the first deploy
+    state: open
+    part: setup
+    protects_against: an app set up by hand, which nobody can rebuild or release the same way twice
+    verification: >-
+      the first run of the every_server playbook pulled each app's image on
+      app001, ran its migration command, and started its web and job
+      containers as Quadlet services; and each app's health URL answers 200
+      through Caddy on app001, checked from the desk with
+      `ssh -F ssh/config root@10.20.1.1 "curl -fsS -H 'Host: shop.example.com' http://127.0.0.1/up"`.
+    waits_for: the initial setup
+
+  - id: tunnel_and_the_public_host_name
+    title: The tunnel and the public host name
+    state: open
+    part: setup
+    protects_against: open web ports and server addresses in DNS, which let attackers skip Cloudflare's filter and reach the servers directly
+    verification: >-
+      each app's health URL, such as https://shop.example.com/up, answers 200
+      through Cloudflare from outside; Cloudflare's API lists a healthy
+      connector of the apps' tunnel on each app server (the tunnel's
+      connections, read through the API proxy, as chapter 9 (go live)
+      says); and no DNS record of the domain
+      holds a server's address. That stopping Caddy takes the connector out
+      of the tunnel is in the optional check of the system's protections.
+    waits_for: the initial setup, and the domain active at Cloudflare (moving an existing domain's DNS can take up to a day)
+
+  - id: cloudflare_caches_what_the_app_marks
+    title: Cloudflare caches what the app marks as cacheable
+    state: open
+    part: setup
+    protects_against: slow pages for users far from the servers, and load on the app servers for answers Cloudflare could give
+    verification: >-
+      the coding agent read the zone's cache ruleset through Cloudflare's API
+      and found a Cache Rule that covers every production host name and follows
+      the apps' Cache-Control headers (`respect_origin`); the person has the
+      link to the rule in Cloudflare's dashboard. The behavior test is an
+      optional extra check: a public page that an app marks with
+      `Cache-Control: public, max-age=60` answers `cf-cache-status: HIT` on
+      its second request, and any response the app marks with
+      `Cache-Control: private` (the reference app's home page) never
+      answers HIT.
+    waits_for: the initial setup
+
+  - id: mmwatchdog_with_the_default_checks
+    title: MMWatchdog on every server, with the default checks
+    state: open
+    part: setup
+    protects_against: failures nobody notices until customers do
+    verification: >-
+      `sudo mmwatchdog fleet` on util01 lists every server of the inventory
+      as reporting, each in node groups equal to its inventory groups; every
+      server runs the checks in mmwatchdog_checks/, including a check for
+      each trigger and the four vulnerability checks in
+      mmwatchdog_checks/every_server.yml, written as check group/check (check
+      type): security_updates/no_security_update_waits
+      (apt_security_updates), security_updates/no_reboot_waits
+      (reboot_after_updates),
+      security_updates/security_support_lasts_another_half_year
+      (distribution_release_security_support), and
+      installed_packages/known_exploited_flaws
+      (known_exploited_vulnerabilities_in_installed_packages); and the fleet hub's
+      check of each app's public host name, through DNS, Cloudflare, and the
+      tunnel, passes once chapter 9 sets public_site_checks_run to true.
+    waits_for: the initial setup
+
+  - id: mmhotline_reaches_the_person_on_call
+    title: MMHotline reaches the person on call, and its pages are behind Cloudflare Access
+    state: open
+    part: setup
+    protects_against: an SOS that reaches nobody, and an operations page anyone could open
+    verification: >-
+      each person's own Pushover contact method in MMHotline shows its test
+      as delivered; a test SOS from MMWatchdog's fleet hub sounded on the
+      phone of the person on call, who claimed it in MMHotline and then
+      resolved it;
+      https://ops.example.com shows Cloudflare Access's sign-in first and
+      admits a company address with its emailed code, and the coding agent
+      read the application's Access policy through Cloudflare's API: each
+      Allow policy names only the company's email domain, named people, or
+      its GitHub organization, never everyone; and on util01,
+      `sudo mmhotline backup check-uploads` exits 0: MMHotline's backup
+      bucket holds every change of its database that Litestream captured.
+    waits_for: the initial setup
+
+  - id: mmhotline_down_alarm_alerts_when_the_location_goes_silent
+    title: The MMHotline-down alarm alerts when the whole location goes silent
+    state: open
+    part: setup
+    protects_against: an outage of the whole location or the server provider, which takes util01 and the hub-outage alerters down with it
+    verification: >-
+      util01's run applied the mmhotline_down_alarm part of mmhotline_settings.yml
+      (`sudo mmhotline settings show`), which it does only after the
+      MMHotline-down alarm, in the team's Cloudflare account, accepted MMHotline's first
+      check-in; `mmhotline down-alarm show` names the person on call's
+      Pushover notification after `mmhotline_down_alarm.wake_the_person_on_call_after_minutes_without_a_check_in`; and `mmhotline down-alarm
+      send-test` sounded the MMHotline-down alarm's test notification on the person on
+      call's phone, which the person acknowledged in Pushover. The outage test
+      with MMHotline stopped is in the optional check of the system's
+      protections.
+    waits_for: the initial setup
+
+  - id: status_page_for_customers
+    title: A status page for customers
+    state: open
+    part: setup
+    protects_against: customers left guessing during an outage, and the flood of support messages that follows
+    verification: >-
+      `mmhotline status-page set-up` passed on a systems desk, and util01's run
+      applied the status_page part of mmhotline_settings.yml, with an R2 key
+      that can only read and write the page's bucket; https://status.example.com/ said
+      "Everything is working."; a test notice posted on util01 with
+      `mmhotline status-page post` showed on the page with its time in UTC;
+      and a person's systems desk, with only that person's own R2 key for the
+      bucket, resolved it with `mmhotline status-page resolve`, so a post
+      works while util01 is down.
+    waits_for: the initial setup, and the domain active at Cloudflare (moving an existing domain's DNS can take up to a day)
+
+  - id: triage_agent_investigates_alerts
+    title: The triage agent, the team's own coding agent, on util01
+    state: open
+    part: setup
+    protects_against: a person woken at night with no diagnosis, and fixes run that nobody can see
+    verification: >-
+      util01's run applied the triage_agent part of mmhotline_settings.yml
+      (`sudo mmhotline settings show`), which it does only after the agent's
+      test prompt passed in its sandbox; `sudo mmhotline triage-agent show`
+      names the coding agent that triage_agent_coding_agent in
+      mmx_project_settings.yml chose, Claude Code or Codex; and `sudo mmhotline
+      agent-playbook-rules show` prints a line beginning with "Services whose changes a person must approve, on
+      every inventory: pgautofailover.service".
+    waits_for: the initial setup
+
+  - id: triage_agent_server_work
+    title: What the triage agent may do without a person, the team's one answer, applied to MMHotline's rules
+    state: open
+    part: setup
+    protects_against: a site left down, or jobs left waiting, at night while a failed app server, jobs server or load-balancer server waits for a person, and server work the team did not choose
+    verification: >-
+      what_the_triage_agent_may_do_without_a_person in mmx_project_settings.yml
+      holds the person's answer from chapter 6;
+      triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces
+      lists app_servers, jobs_servers and load_balancer_servers, or the pools
+      the team chose instead, recorded as a deviation; `sudo mmhotline
+      agent-playbook-rules show` on util01 lists, for the inventory servers,
+      replace_failed_servers, every_server and destroy_replaced_servers with
+      the rules that mmhotline_settings.yml renders for the answer: act then
+      report with routine_fixes_and_server_work, together with
+      reboot_servers_after_updates, add_an_app_server_for_the_load and
+      remove_server after a warning; or, with the other two answers, get
+      permission then act, where the approval of replace_failed_servers
+      also approves the other two; and with routine_fixes_and_server_work
+      alone, `sudo mmwatchdog status --json` on app001 lists the check
+      reboots_that_may_run_now/no_reboot_waits_that_may_run_now, and on
+      util01 the checks app_servers_to_add_for_the_load/no_app_server_waits_to_be_added
+      and app_servers_to_remove_for_the_load/no_app_server_waits_to_be_removed,
+      each with a message from check-whether-the-load-changes-the-app-pool;
+      growth_limits.app_servers holds the person's smallest and largest
+      number of app servers from chapter 6; and, with every answer,
+      /etc/mmhotline/mmhotline_settings.yml on util01 gives
+      replace_failed_servers, and no other playbook,
+      starts_a_server_replacement: true, and its triage_agent section gives
+      sos_waits_for_a_server_replacement_minutes the value of
+      triage_agent_server_work.sos_waits_for_a_server_replacement_minutes
+      in mmx_project_settings.yml.
+    waits_for: the initial setup
+
+  # Run the weekly restore drill first, because the drill's recorded time
+  # is the trigger for db02.
+  - id: backups_restore_every_week
+    title: Backups restore, every week
+    state: open
+    part: setup
+    protects_against: losing data to a mistake, an attacker on a database server, or an account takeover
+    verification: >-
+      the weekly restore drill restored the end of production's archive on
+      restore01, reading the bucket as it stood when the drill started, and
+      each app's check queries passed; it recorded the time from creating
+      restore01 to the answered check queries, and how long before the
+      drill's start the newest restored transaction committed, the most
+      that a total loss then would have lost; it restored one uploaded file
+      of each app that keeps uploads from the uploads' bucket, as it stood
+      when the drill started, the same byte for byte as the file in R2;
+      and the drill destroyed only the server ID in its ownership receipt;
+      latest_result.json and latest_passed_drill on util01 record the result,
+      and the coding agent recorded the measured result here after review.
+      A drill that gave way to MMHotline ("passed": false with gave_way_to)
+      verifies nothing: record the drill that passes when systemd runs it
+      again.
+    verify_again_every: 7d
+    waits_for: chapter 7 (install everything on the production servers), which starts the first drill once the first backup exists
+
+  - id: provider_console_and_backup_mmhotline_logins
+    title: Break-glass access, console and MMHotline tested
+    state: open
+    part: setup
+    protects_against: being locked out during a Cloudflare outage, or after a broken SSH or network setting
+    verification: >-
+      a person logged in as root at one server's provider console with the
+      shared root console password from the password manager item
+      "Shared root console password", which set-up-outside-services secrets
+      made. Every server
+      has the password hash from vault key shared_root_console_password_hash,
+      applied on every MMX run. SSH refuses the console password. The
+      second way in, an SSH port-forward (`ssh -L 8480:127.0.0.1:8480 util01`)
+      with a one-time link from `sudo mmhotline people create-sign-in-link
+      --sign-in-email-address ADDRESS` that signs a browser in to MMHotline at
+      http://localhost:8480, is in the optional check of the system's
+      protections.
+    verify_again_every: 6 months
+    waits_for: the initial setup
+
+  - id: break_in_response_page
+    title: The password manager holds the break-in response page
+    state: open
+    part: setup
+    protects_against: contact and notification decisions made under stress
+    verification: >-
+      the coding agent proposed an answer to every question in step 0 of
+      operating_procedures/respond_to_a_break_in.md, the person corrected
+      the proposal and saved the page in the password manager, reachable
+      without a working systems desk.
+    waits_for: the team has a password manager
+
+  - id: agent_runs_mmx_on_util01
+    title: The coding agent applies the pushed commit with MMX on util01
+    state: open
+    part: setup
+    protects_against: changes made by hand that nobody can repeat or undo
+    verification: >-
+      a push alone changed no server; the coding agent then ran MMX on
+      util01 at the desk's clean pushed main commit, read the result in
+      MMX's history on util01, and verified the resulting server state.
+    waits_for: the initial setup
+
+  - id: image_build_and_agent_deploy
+    title: Images build in CI, or in a container without CI, and the coding agent deploys
+    state: open
+    part: setup
+    protects_against: a required build service or a build credential that reaches servers
+    verification: >-
+      the image was tested, built, and pushed either by CI or, without CI, by
+      the coding agent inside a container on the systems desk; the coding agent recorded the image
+      tag, committed, pushed, deployed with MMX, and verified the live app;
+      any CI has registry access but no server SSH key, vault passphrase,
+      or systems-repository write credential.
+    waits_for: the initial setup
+
+  - id: operating_handover_saved
+    title: The README contains the current operating guide
+    state: open
+    part: setup
+    protects_against: dependence on the setup conversation for operating links, recovery limits, and next actions
+    verification: >-
+      The README contains this system's actual links, current servers,
+      failure behavior, and dated recovery results. Missing measurements
+      say not measured. Its next actions are at most five, in order, and
+      each names a responsible person and a date or starting event, or
+      states which detail is not agreed.
+      The available links passed their checks. AGENTS.md requires
+      talking_with_the_team.md, which is present in this repository.
+    waits_for: the setup handover
+
+  # LATER, WHEN IT HAPPENS: the routines that keep the system current and
+  # safe, and the events every team meets after the initial setup: a
+  # routine's first run, the first rollback, a team member joining, or a
+  # rotation. A Later item that stays open after the setup is no gap in the
+  # setup. The growth and improvement items are in their own section,
+  # growth_and_improvement_items, below.
+
+  - id: deploy_and_rollback
+    title: Deploys and rollbacks
+    state: open
+    part: later_when_it_happens
+    protects_against: a bad release that stays live because going back is slow or untested
+    verification: >-
+      a production deploy, one commit of a new image tag to
+      deployed_image_tags, made by the coding agent as
+      production_releases_wait_for_a_persons_approval says, was followed by an explicit
+      run of the deploy playbook and ended with its check
+      through the public host name, after its check that each app server
+      had memory for both releases passed (the outputs of
+      check_that_each_app_server_has_memory_for_the_new_release in
+      `./server_management_scripts/run_mmx_on_util01 results`); and a commit of the previous tag rolled it back
+      the same way.
+    waits_for: a rollback, a commit of the previous tag, after the initial setup's first release
+
+  # No server reboots by itself, so the team's weekly window holds the
+  # database servers' updates and every reboot that updates wait for.
+  # With routine_fixes_and_server_work, the triage agent already reboots
+  # every server but util01 and the database servers when its reboot may
+  # run (a pool's only server inside the window), so in the window
+  # reboot_servers_after_updates often finds nothing waiting; a reboot that
+  # someone stopped waits for this window.
+  - id: weekly_window_updates_and_reboots
+    title: The database servers' updates and every waiting reboot, in the team's weekly window, one server at a time
+    state: open
+    part: later_when_it_happens
+    protects_against: known flaws left open on the database servers, and fixed flaws, mostly the kernel's, that stay open while a server runs the old code, without a restart or a reboot at an hour nobody chose
+    verification: >-
+      in the team's window (maintenance_window in mmx_project_settings.yml),
+      update_database_servers ran: the replica first,
+      then a switchover, then the old primary (db01 alone until db02
+      exists); then reboot_servers_after_updates rebooted, one at a time,
+      each other server but util01 whose updates waited for a reboot, each
+      doing its work again before the next one rebooted; and
+      reboot_util01_after_updates, run from a systems desk, rebooted util01 when
+      its updates waited for one. Afterwards MMWatchdog's
+      check security_updates/no_security_update_waits passes on every
+      database server, and security_updates/no_reboot_waits on every server
+      (operating_procedures/reboot_servers_after_updates.md, "Verify").
+    verify_again_every: 7d
+    waits_for: the team's first weekly window after the initial setup
+
+  - id: secret_rotation
+    title: Secret rotation
+    state: open
+    part: later_when_it_happens
+    protects_against: a leaked secret, or one a departed person knew, that still works
+    verification: >-
+      a secret of each kind in the vault was replaced as operating_procedures/rotate_a_secret.md's
+      "Rotating a secret" says (an app secret, an app's database password, a
+      tunnel token, the registry token, the B2 keys, util01's R2 key for the
+      uploads' copy, the Pushover keys, util01's provider token, and the
+      shared root console password): the
+      new one issued, the vault updated and
+      pushed, util01's run restarted what reads it, end_connections_that_use_an_old_database_password ended the
+      old database password's connections, the new one checked working, and
+      the old one revoked.
+    # Reason for 12 months: a yearly rotation is enough when the keys are narrow and are
+    # also rotated at once when someone leaves or a key leaks. A team under a rule that
+    # needs faster rotation, such as every 90 days, writes a shorter period here.
+    verify_again_every: 12 months
+    waits_for: the first sweep after the rotation period, someone leaving, or a suspected leak
+
+  - id: onboarding_and_offboarding
+    title: Onboarding and offboarding a person
+    state: open
+    part: later_when_it_happens
+    protects_against: a person who left and can still get in, and a new person on call who can't
+    verification: >-
+      the onboarding checklist created a separate numbered desk and added the desk's production SSH key to
+      root_ssh_public_keys and the desk's public WireGuard key and private address in a node
+      listed by groups.systems_desks.nodes,
+      the person's Cloudflare Access group, the password
+      manager, vault access, and their MMHotline person and contact methods
+      (their entry in mmhotline_settings.yml's people, and their own contact
+      methods on MMHotline's page); and the offboarding checklist reversed
+      each step for a person, deleted the departing desk's write deploy key on the
+      systems repository at the Git host, deleted the departing desk by verified provider ID,
+      revoked personal tokens, and removed the departing desk's peers
+      in the SSH-key removal commit, rotated the secrets the person could
+      read and the shared root console password, and changed the vault
+      passphrase with `mmx secrets passwd`.
+    waits_for: a person joining or leaving, or a test person; the initial setup onboards the first team members
+
+  - id: scheduled_server_settings_comparison
+    title: A scheduled server settings comparison
+    state: open
+    part: later_when_it_happens
+    protects_against: changes made outside the repository, which the next run or rebuild silently undoes
+    verification: >-
+      the scheduled `mmx dryrun` on util01 ran within its interval and found
+      no change; and `server_management_scripts/list_the_servers_at_the_provider`
+      shows exactly the inventory's servers, with no leftover restore01. That a
+      test change made by hand on a server raises an alert is in the optional
+      check of the system's protections.
+    waits_for: the first scheduled server settings comparison, which runs after the initial setup
+
+  - id: dashboard_and_weekly_review
+    title: The dashboard, and a weekly review with the coding agent
+    state: open
+    part: later_when_it_happens
+    protects_against: alerts, waiting updates, a failed restore drill, due items, and triggers that nobody looks at
+    verification: >-
+      the dashboard at https://ops.example.com shows who is on call, the open
+      incidents, one box per pool, the latest commits, and the checklist's
+      open and deviated items; and the weekly review with the coding agent
+      went through the week's alerts, the waiting updates, the restore
+      drill's result, and the checklist items that are due, checked whether
+      a trigger of growth_and_improvement_items arrived, and set expired
+      items back to open (operating_procedures/do_the_weekly_system_review.md).
+    verify_again_every: 7d
+    waits_for: the first weekly review after the initial setup
+
+  # The nightly uploads copy: the setup proves the first copy; the nightly
+  # run, the weekly full copy, and the restore of a file take days.
+  - id: uploads_copy_keeps_running_and_restores
+    title: The nightly uploads copy keeps running, and a deleted file comes back
+    state: open
+    part: later_when_it_happens
+    protects_against: an uploads copy that stopped after its first run, or a copy that cannot bring a deleted file back
+    verification: >-
+      util01's copy_uploads_to_the_backup_bucket ran at its set times
+      (`nightly_work_starts_at` plus one hour, UTC, and every
+      `backups.uploads_copy_every_hours` hours from there) on several days and
+      passed (`journalctl -u copy_uploads_to_the_backup_bucket` on util01),
+      and copied every file again in the last 8 days; MMWatchdog's checks
+      uploads_backup/a_copy_passed_within_the_copy_interval_plus_2_hours and
+      uploads_backup/a_full_copy_passed_in_the_last_8_days pass; and a file
+      deleted or overwritten in R2 comes back, as the last copy
+      before the change held the file, for
+      `backups.keep_prior_file_versions_in_buckets_for_days` after the change.
+      Once an app's folder holds at least
+      `backups.warn_about_hidden_uploads_only_when_an_app_has_at_least_files`
+      files, deleting more than
+      `backups.warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files`
+      percent of a test app's files in R2 makes the next copy warn
+      (uploads_backup/the_latest_copy_hid_no_unusual_share_of_an_apps_files),
+      and the copy after a quiet interval closes the warning.
+    verify_again_every: 6 months
+    waits_for: a week of nightly copies after the initial setup, and an app that keeps uploads
+
+  # Move an existing database into the Stack, when the team has one.
+
+  - id: existing_database_moved_into_the_stack
+    title: An existing database moves into the Stack without losing acknowledged writes
+    state: open
+    part: later_when_it_happens
+    protects_against: writes sent to an unfinished copy, missing sequence or large-object data, and dependence on the old server
+    verification: >-
+      When moving an existing database, follow move_a_database_into_the_stack.md.
+      The Stack app writes to the old server during the logical copy.
+      Every subscription table reaches ready, and the Stack replica receives the copy.
+      Record the HTTP writer's pause and the switch command's measured parts.
+      Every acknowledged write exists on the Stack primary after the switch.
+      Sequences and large objects match. App container start times do not change.
+      A formation backup completes. Customer writes still pass with the old system powered off.
+      No temporary subscription, slot, password file, peer, or old URL address remains.
+      For a system starting empty, record that no database move was needed.
+    waits_for: an existing database move, or confirmation that the system starts empty
+
+growth_and_improvement_items:
+  # GROWTH: each item waits for its trigger, a measured warning or an
+  # event. An MMWatchdog warning or the weekly review notices the trigger.
+  # Most systems need few growth steps, or none for years.
+
+  - id: staging_server
+    title: staging01, for testing the app before production
+    state: waits_for_its_trigger
+    protects_against: a release or migration reaching customers before anyone tried it
+    verification: >-
+      a release of the app ran on staging01 before production;
+      https://staging.shop.example.com admits the team through Cloudflare
+      Access and refuses everyone else (the coding agent read staging's Access
+      policies through Cloudflare's API: the Allow policy names the company's
+      domain, and the Service Auth policy names the service token's ID); the
+      app answers HTTP 200 through Caddy on staging01 for staging's host name;
+      the person, in the person's own terminal with the desk's token file,
+      sent staging's Access service token as the CF-Access-Client-Id and
+      CF-Access-Client-Secret headers and got the app, and without the
+      headers got a redirect to Access's sign-in page; when CI tests against
+      staging, CI's last run reached staging with
+      the same service token; staging's database holds only seed data and
+      keeps no backups; its Postgres is Debian's own
+      cluster, outside the failover formation, so util01's failover monitor
+      lists only the formation production and staging01 holds no production
+      secret. That staging's alerts go no higher than warn is in the optional
+      check of the system's protections.
+    trigger: the team choosing the fuller system at setup, or wanting to test releases before production (operating_procedures/add_staging01.md)
+
+  - id: second_app_server
+    title: A second app server, app002
+    state: waits_for_its_trigger
+    protects_against: the site going down with app001, for the minutes the coding agent takes to build a new app server
+    verification: >-
+      app002 runs each app's containers and a tunnel connector; and with
+      app001's power cut, each app's public host name kept answering within
+      seconds, served by app002 (operating_procedures/add_an_app_server.md,
+      "The second app server's test"); and
+      growth_limits.app_servers.smallest_number_of_servers in
+      mmx_project_settings.yml is 2, so the triage agent never removes the
+      second app server for low load.
+    trigger: the first paying customers, or when the business cannot stay down while an app server is replaced; a second app server that the triage agent added for the load does not count until the test passed and the smallest number is 2
+
+  - id: second_database_server
+    title: A second database server, db02, with automatic failover
+    state: waits_for_its_trigger
+    protects_against: >-
+      waiting for backup recovery after a database server fails, for as long
+      as the weekly drill measured. Primary switches to db02 and back prove
+      the switch path. Backup recovery can lose recent writes.
+      backups_restore_every_week records the possible write loss at the
+      drill's start, measured in seconds. Whole-site recovery
+      is separate, as what_this_system_does_not_survive explains
+    verification: >-
+      switch_database_primary to db02 and back to db01 passed, and after
+      each switch each app's health URL answered through its public host
+      name without a restart (during the few seconds of a switch, while no
+      server takes writes, it fails by design); and for
+      each Node.js app, check_database_failover.mjs passed during each of
+      the two switches (operating_procedures/test_a_nodejs_app_during_a_database_switchover.md, "A Node app through a switchover").
+    trigger: the first paying customers, or a restore that takes longer than the business can stay down
+
+  - id: capacity_alerts_bring_a_proposed_server_change
+    title: Every trigger warns, and the triage agent proposes its operating procedure
+    state: waits_for_its_trigger
+    protects_against: a pool that runs out of room before anyone notices, and forecasting nobody has time for
+    verification: >-
+      MMWatchdog has a check for every trigger of the stack, with limits MMX
+      wrote from the inventory (an app pool of n servers warns above
+      70% × (n − 1) / n CPU). That a test warning reaches the triage agent,
+      which reads the past week's readings and proposes the operating
+      procedure, ready to approve, such as "Add app003", is in the optional
+      check of the system's protections.
+    trigger: the first measured trigger, or the team's request for the optional check of the system's protections
+
+  - id: bigger_servers
+    title: Bigger servers, by replacing a server
+    state: waits_for_its_trigger
+    protects_against: a server out of CPU, memory, or disk where another server in the pool doesn't help, such as the database primary, which takes every write
+    verification: >-
+      after a trigger named a bigger server, the servers it named were
+      replaced by bigger ones with the one procedure, and that trigger's
+      check passed again.
+    trigger: >-
+      a trigger that names it: the database primary's peak CPU above 50%,
+      a database disk above 70% full,
+      the app servers' memory above 75%, a deploy that stopped because an
+      app server lacked memory for both releases (adding an app server is also
+      an option under operating_procedures/deploy_and_roll_back_an_app_release.md,
+      "Memory for both releases"), or util01 above 70%
+
+  - id: dedicated_servers
+    title: Dedicated servers, for massive headroom at less money
+    state: waits_for_its_trigger
+    protects_against: paying several times more for VPS capacity, and slow network disks under a busy database
+    verification: >-
+      a dedicated server replaced a VPS with the one procedure; each
+      dedicated database server mirrors two enterprise NVMe drives with
+      mdadm; and MMWatchdog's mdadm_array and node_disk_device checks pass on
+      it.
+    trigger: a trigger that fires on servers that are already big VPS instances, usually the database servers first, where local NVMe drives matter most
+
+  # Servers are replaced, never repaired or upgraded in place, so the
+  # procedure in operating_procedures/replace_a_server.md covers a dead
+  # server, a new Debian release, and a bigger size.
+  - id: replacing_a_server
+    title: Replacing a server, the one procedure
+    state: waits_for_its_trigger
+    protects_against: a dead server, a new Debian release, or a bigger size turning into improvised work on a live system
+    verification: >-
+      an app server and a database server were each replaced by a new server
+      with the next number: the new one added, switch_database_primary when
+      the old one held the primary, the old one removed with remove_server
+      and its entries removed from ssh/known_hosts; each app's health URL
+      answered through its public host name throughout.
+    trigger: db02 and app002, so the site stays up during a replacement; or the first server that dies
+
+  - id: read_replicas
+    title: Read replicas
+    state: waits_for_its_trigger
+    protects_against: a primary overloaded by reads that a replica could answer
+    verification: >-
+      each app's reading setting asks for a replica, such as
+      postgresql://db01,db02/shop?target_session_attrs=prefer-standby; reads
+      that must see the app's own latest write go to the primary; the
+      replicas' pg_stat_activity shows the apps' reads; and the primary's
+      peak CPU fell below 50%.
+    trigger: the primary's peak CPU passes 50% and most of its load is reads
+
+  - id: pgbouncer
+    title: PgBouncer in front of Postgres
+    state: waits_for_its_trigger
+    protects_against: Postgres slowing down or refusing connections when thousands of mostly idle connections pile up
+    verification: >-
+      PgBouncer 1.21 or later runs in transaction mode on each database
+      server, in front of its local Postgres; each app's database settings
+      point at PgBouncer's port and still find the primary through
+      target_session_attrs, and for each Node.js app,
+      check_database_failover.mjs passed during switch_database_primary
+      and the switch back (operating_procedures/test_a_nodejs_app_during_a_database_switchover.md, "A Node app through a switchover");
+      work that only one copy may do takes
+      pg_advisory_xact_lock; job workers that use LISTEN/NOTIFY connect to
+      Postgres directly; and Postgres connections in use fell below 70% of
+      max_connections.
+    trigger: Postgres connections in use pass about 70% of max_connections
+
+  - id: jobs_servers
+    title: Jobs servers, jobs001 and up
+    state: waits_for_its_trigger
+    protects_against: background jobs slowing down requests on the app servers
+    verification: >-
+      jobs001 runs only the apps' job containers, with no tunnel connector
+      and no Caddy; jobs001 peers over WireGuard with the database
+      servers, util01, and the systems desks; and the app servers
+      run no job containers.
+    trigger: jobs compete with requests, when the app servers' CPU warning fires and the job containers' recorded CPU is a large part of it
+
+  - id: load_balancer_servers
+    title: Load-balancer servers, lb01 and lb02
+    state: waits_for_its_trigger
+    protects_against: >-
+      a large app pool's servers spending their CPU and network on routing
+      (each app server runs the tunnel connector and Caddy), or the tunnel's limit of
+      25 connectors
+    verification: >-
+      lb01 and lb02 run the tunnel connector and Caddy; each Caddy sends
+      requests to every app server; the app servers run neither and no
+      longer peer with each other; and each carried every request alone
+      while the other was shut down.
+    trigger: >-
+      the app pool passes about 20 servers, the CPU or network that cloudflared
+      and Caddy use on the app servers becomes the limit, or the team wants request rules in
+      Caddy without touching the app servers
+
+  # Leave the current provider: follow
+  # operating_procedures/replace_a_server.md, with each new server at
+  # another provider.
+  - id: move_to_another_provider
+    title: Moving to another provider, as a planned change
+    state: waits_for_its_trigger
+    protects_against: being stuck with a provider that became more expensive, worse, or too far from the users
+    verification: >-
+      every server was replaced by one at the new provider: a new app
+      server first, serving before the database servers changed, then a
+      database server and switch_database_primary, then the other app
+      servers, staging01, and util01 last, with seconds of interruption at
+      the switchover; each systems desk was rebuilt at the new provider with
+      rebuild_a_systems_desk and made its first approved
+      review-and-apply-the-systems-desk-settings; the weekly drill made restore01 at the new
+      provider; and the old provider holds no server of the system, no
+      systems desk included, and no API token of the system.
+    trigger: a cheaper or closer provider, or a decision to leave the current one
+
+  # IMPROVEMENT: practice, extra checks, and recovery proofs. Each item
+  # waits for its trigger: the team's choice, a failure, or the first
+  # customer data. Each drill and each extra check is optional.
+
+  # The restore drill's queries for data that people create need real data.
+  - id: restore_drill_checks_data_people_create
+    title: The restore drill also checks the data that people create
+    state: waits_for_its_trigger
+    protects_against: a restore drill that passes with an empty or old database because its queries only check data that a new system already holds
+    verification: >-
+      each app's restore_drill_check_queries in mmx_project_settings.yml
+      includes a query for data that people create, such as an order from
+      the last two days, and the next weekly restore drill passed with it.
+    trigger: the first customer data in production
+
+  - id: software_review
+    title: The scheduled software review, optional
+    state: waits_for_its_trigger
+    protects_against: a flaw in software that no plain check covers, such as one named only in a vendor's advisory for the installed version
+    verification: >-
+      operating_procedures/turn_on_the_scheduled_software_review.md was
+      followed: scheduled_software_review_task.md fits the team's software,
+      one review by hand finished and sent at most one report, its cost and
+      time were told to the person, and mmhotline triage-agent show on util01
+      prints the interval
+      the person chose. The review is optional: with
+      software_review_interval_hours off, the template's setting, MMWatchdog
+      still warns about security updates and newer releases of the pinned
+      programs.
+    trigger: the team choosing to turn on the scheduled software review; the review is optional
+
+  - id: optional_protection_checks
+    title: The system's protections were checked, when the team asked
+    state: waits_for_its_trigger
+    protects_against: a protection that setup applied but that does not hold on this team's system, such as a firewall rule that does not match the inventory
+    verification: >-
+      the coding agent ran "Check my system's protections" in
+      operating_procedures/assess_a_running_system_and_recommend_changes.md
+      on the team's request: each harmless check passed, each disruptive
+      check ran after the person agreed to a quiet time, and each result
+      is in last_result with its date. The Stack's own tests already prove
+      how the Stack's software behaves. This check shows that the same
+      holds on this team's servers.
+    trigger: the team asking for extra confidence, such as "Check my system's protections"
+
+  - id: hub_outage_alerters_alert_when_util01_goes_silent
+    title: Two hub-outage alerters, an app server and a database server, alert when util01 goes silent
+    state: waits_for_its_trigger
+    protects_against: util01 dying with nobody told, because every other server's alerts go through it
+    verification: >-
+      with MMWatchdog's fleet hub stopped on util01, both hub-outage alerters, the
+      app server and the database server that sudo mmwatchdog fleet on
+      util01 named as hub-outage alerters before the stop, sent the alert that the hub
+      is unreachable straight to the push app, through MMWatchdog's direct
+      fallback.
+    trigger: the optional check of the system's protections, with the fleet hub stopped on util01 at a quiet time that the person on call chooses
+
+  - id: systems_desk_recovery
+    title: Lost phone, lost laptop, and lost desk recovery are verified
+    state: waits_for_its_trigger
+    protects_against: losing the only way to administer surviving production servers
+    verification: >-
+      a replacement phone receives a test alert and logs in with a new phone
+      code; a fresh laptop key reaches only the
+      replacement desk; the old desk is deleted by verified provider ID; the
+      replacement desk restores production access and host identity; status
+      posting works from a browser while util01 works and from a replacement
+      desk while util01 is down; no untested recovery path is marked done.
+    trigger: a real recovery, or a recovery practice that the team chooses; the recovery items are saved in setup (systems_desk_recovery_items_saved)
+
+  # The team repeats the bad-change recovery drill and the util01 rebuild
+  # drill every six months. Stricter teams pick every three months.
+  - id: restore_drills_the_team_runs_by_hand
+    title: "People drills: a bad change, util01 is gone"
+    state: waits_for_its_trigger
+    protects_against: a recovery that is slow and improvised on the day it's needed, because nobody ever practiced it
+    verification: >-
+      with the coding agent, the team ran the preview of
+      recover_rows_from_a_restored_copy for rows of a pretend bad change:
+      it restored production to the minute before on restore01 and counted
+      the rows it would copy back, changing nothing, since nothing was
+      really lost (operating_procedures/recover_rows_lost_to_a_bad_change.md, "Restore a database copy and recover the missing rows", copies them back
+      after a real one); and rebuilt util01 from a systems desk, including
+      MMHotline's database.
+    verify_again_every: 6 months
+    trigger: the team choosing to practice; the drills are optional
+
+  - id: break_in_staging_drill
+    title: Two systems desks passed the staging break-in drill
+    state: waits_for_its_trigger
+    protects_against: containment commands first tried during a real break-in
+    verification: >-
+      the team followed step 7 of operating_procedures/respond_to_a_break_in.md
+      on an isolated staging system with two real desks, open sessions and
+      harmless company credentials. The second desk kept running locally
+      but lost established and new production access. The desk that keeps access and
+      customer HTTP requests worked throughout the access lock. A normal
+      every_server run retained containment. The status switch, evidence
+      copies to the desk and backup bucket, and undo all passed.
+    trigger: the team choosing to practice, on an isolated staging system with two systems desks; the drill is optional
+
+  - id: break_in_yearly_drill
+    title: The team practiced the break-in response this year
+    state: waits_for_its_trigger
+    protects_against: a response plan that nobody remembers how to use
+    verification: >-
+      the coding agent chose the section for an invented sign from "What
+      did you see?" without a lock-out where the page names none, and
+      the team repeated the two-desk staging drill from
+      operating_procedures/respond_to_a_break_in.md, step 7, and recorded
+      the results, times and evidence locations. Company revocations used
+      harmless test identities. Every containment and undo check passed.
+    verify_again_every: 12 months
+    trigger: break_in_staging_drill, and the team choosing to practice every year; the drill is optional
+
+# what_this_system_does_not_survive is a section, not a checklist item.
+# The section never has an open state, so MMHotline's dashboard never
+# lists what_this_system_does_not_survive as an open checklist item.
+what_this_system_does_not_survive: >-
+  An outage of the whole location, of the server provider, or of Cloudflare
+  takes the site down. When the location or the provider is gone, the
+  MMHotline-down alarm, which runs in the team's Cloudflare account, alerts the person on
+  call, and the coding agent rebuilds the system elsewhere from this
+  repository and the backups in Backblaze B2. Plan for hours of downtime.
+  The backup settings target about one minute of recent database changes.
+  The actual data loss depends on the usable backups and archived changes.
+  The README records measured restore results separately from complete
+  site recovery. During a Cloudflare outage the servers keep
+  running, MMHotline still alerts, and the team reaches its private pages
+  through SSH port-forwards; the site and the status page are back when
+  Cloudflare is. Surviving these outages without downtime takes a second
+  location, a second server provider, or a second front door, which this
+  stack version does not build.

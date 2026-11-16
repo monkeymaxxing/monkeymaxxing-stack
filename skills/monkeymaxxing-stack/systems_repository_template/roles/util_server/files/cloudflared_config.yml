@@ -1,0 +1,15 @@
+# Managed by MMX from the systems repository (roles/util_server).
+# cloudflared forwards requests for each host name of util01's tunnel to
+# the matching program on util01.
+# Cloudflare Access, set up in Cloudflare's dashboard, admits only the team
+# to the mmhotline host name in
+# util01_private_page_host_names.
+# roles/util_server/files/cloudflared_config.yml only routes requests.
+ingress:
+  # MMHotline's pages: the host and port of web_listen_address in
+  # mmhotline_settings.yml.
+  - hostname: {{ .inputs.util01_private_page_host_names.mmhotline }}
+    service: http://127.0.0.1:8480
+  # If no host name above matches, cloudflared returns HTTP 404 for
+  # requests sent to util01's tunnel.
+  - service: http_status:404

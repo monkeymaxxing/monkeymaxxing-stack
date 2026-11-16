@@ -1,0 +1,2 @@
+web: node web.mjs
+worker: node jobs.mjs

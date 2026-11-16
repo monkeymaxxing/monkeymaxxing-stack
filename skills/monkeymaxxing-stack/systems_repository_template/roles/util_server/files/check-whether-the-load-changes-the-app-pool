@@ -1,0 +1,227 @@
+#!/usr/bin/python3
+"""check-whether-the-load-changes-the-app-pool: does the load call for one more, or one fewer, app server now?
+
+The one place of the rule, read by util01's MMWatchdog checks
+app_servers_to_add_for_the_load and app_servers_to_remove_for_the_load
+(mmwatchdog_checks/util_server.yml) and by the playbooks
+add_an_app_server_for_the_load and remove_server (run without server_name),
+so the check that starts the triage agent and the playbook that changes the
+pool cannot disagree. Runs as root on util01: it reads the fleet hub's
+readings of every app server's check cpu_is_below_the_app_pool_headroom_limit
+(mmwatchdog_checks/app_servers.yml) with mmwatchdog fleet readings.
+
+--add: an app server is added when, for --minutes-of-high-load, the pool's
+CPU, spread over one server fewer, stayed above 70%: the average of each
+app server's lowest reading in that time is above the limit its check
+records, 70 x (n - 1) / n percent (70 for one server). The limit comes from
+the readings, so app_servers.yml stays its one home.
+
+--remove: an app server is removed when, for --days-of-low-load, the
+smaller pool would have carried the busiest moment with one server to
+spare: the busiest reading of each app server, added up and spread over two
+servers fewer than the pool (at least one), stays below
+--cpu-percent-below-which-the-app-pool-can-spare-a-server. Adding up each
+server's busiest reading counts more than the pool ever used at once, so
+the rule errs toward keeping the server. The server removed is the one with
+the highest number, the newest: names are never used twice, so it is the
+last one added.
+
+A server's readings count only from when its waiting security updates were
+installed: the load of installing them on a new server (86% CPU in a
+measured replacement) is not the users' load. util01 cannot see the marker
+file that records it on the server, so every_server reads its time there and
+writes it on util01, one file for each app server, in
+SECURITY_UPDATES_INSTALLED_DIRECTORY. A server without its file has not
+finished installing them, and the program does not ask the hub: no change
+now, with no error.
+
+Both windows count only the readings since the pool reached its present
+size, so no second setting holds a pause between changes. Each reading
+records the limit its check had then, and the limit differs for every
+number of app servers (70, 35, 47, 53, 56, ...), because every_server writes
+the new limit when the pool grows or shrinks. A window in which a reading
+carries another limit, or one that an app server's readings do not cover,
+calls for no change: right after an add, the new server has no readings
+yet; right after a removal, the other servers' readings come from the
+bigger pool and understate their load.
+
+Exits 0 and prints why when the change may run now; 1 and prints why when
+the load calls for no change now; 2 when the load calls for a change that
+a bound stops (the pool at its largest number for an add, a pool that mixes
+server types for a removal: the add rule assumes equal servers, so a
+removal from a mixed pool waits for a person); 3 for wrong arguments; 4
+when the fleet hub's readings cannot be read. --json prints one JSON object
+instead: decision (add, remove, none or stopped_by_a_bound), why,
+server_to_remove with --remove and decision remove, app_servers and
+cpu_limit_percent.
+"""
+import argparse
+import datetime
+import json
+import re
+import subprocess
+import sys
+
+# A reading comes every 5 minutes (app_server_capacity's check_every in
+# mmwatchdog_checks/app_servers.yml). A window counts as covered when each
+# app server's first reading in it is at most one interval plus a minute
+# after the window's start, and its last at most that long before now. Fixed,
+# with that reason: a missed reading or two must not hide the load.
+READING_INTERVAL_WITH_SLACK = datetime.timedelta(minutes=6)
+
+
+# every_server's stage record_when_each_app_server_installed_its_waiting_security_updates
+# writes one file here for each app server, holding the UTC time of the
+# server's security-updates marker. Fixed: the stage and this program are the only two users.
+SECURITY_UPDATES_INSTALLED_DIRECTORY = '/var/lib/app_pool_for_the_load/security_updates_installed'
+
+
+def parse_time(text):
+    text = re.sub(r'(\.\d{6})\d*', r'\1', text).replace('Z', '+00:00')
+    return datetime.datetime.fromisoformat(text)
+
+
+def number_of(name):
+    match = re.search(r'(\d+)$', name)
+    return int(match.group(1)) if match else 0
+
+
+def describe(moment):
+    return moment.strftime('%Y-%m-%d %H:%M UTC')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    direction = parser.add_mutually_exclusive_group(required=True)
+    direction.add_argument('--add', action='store_true')
+    direction.add_argument('--remove', action='store_true')
+    parser.add_argument('--app-server', action='append', default=[], metavar='NAME:SERVER_TYPE',
+                        help="each server of the inventory's app_servers with its server_type")
+    parser.add_argument('--smallest-number-of-servers', type=int, required=True)
+    parser.add_argument('--largest-number-of-servers', type=int, required=True)
+    parser.add_argument('--minutes-of-high-load', type=int, required=True)
+    parser.add_argument('--days-of-low-load', type=int, required=True)
+    parser.add_argument('--cpu-percent-below-which-the-app-pool-can-spare-a-server', type=int, required=True)
+    parser.add_argument('--json', action='store_true')
+    try:
+        arguments = parser.parse_args()
+    except SystemExit as error:
+        sys.exit(3 if error.code else 0)
+
+    servers = {}
+    for item in arguments.app_server:
+        name, _, server_type = item.partition(':')
+        if not name or not server_type:
+            print(f'--app-server "{item}": use NAME:SERVER_TYPE, such as app001:cx33', file=sys.stderr)
+            sys.exit(3)
+        servers[name] = server_type
+    if not servers:
+        print('no --app-server: the pool has no app server', file=sys.stderr)
+        sys.exit(3)
+    count = len(servers)
+    adding = arguments.add
+    span = f'{arguments.minutes_of_high_load}m' if adding else f'{arguments.days_of_low_load}d'
+    span_words = (f'{arguments.minutes_of_high_load} minutes' if adding else
+                  f'{arguments.days_of_low_load} day' + ('s' if arguments.days_of_low_load != 1 else ''))
+
+    def finish(decision, why, **extra):
+        code = {'add': 0, 'remove': 0, 'none': 1, 'stopped_by_a_bound': 2}[decision]
+        if arguments.json:
+            print(json.dumps({'decision': decision, 'why': why, 'app_servers': count, **extra}))
+        else:
+            print(why)
+        sys.exit(code)
+
+    if not adding and count <= arguments.smallest_number_of_servers:
+        finish('none', f'the app pool holds {count} server{"s" if count != 1 else ""}, its smallest number '
+                       '(growth_limits.app_servers.smallest_number_of_servers): no app server to remove')
+
+    security_updates_installed_at = {}
+    for name in sorted(servers, key=number_of):
+        try:
+            with open(f'{SECURITY_UPDATES_INSTALLED_DIRECTORY}/{name}') as file:
+                security_updates_installed_at[name] = parse_time(file.read().strip())
+        except FileNotFoundError:
+            finish('none', f'{name} has not finished installing its waiting security updates, so it has no load to count yet: no change now')
+        except ValueError as error:
+            print(f'{SECURITY_UPDATES_INSTALLED_DIRECTORY}/{name} does not hold a time: {error}', file=sys.stderr)
+            sys.exit(4)
+
+    command = ['/usr/local/bin/mmwatchdog', 'fleet', 'readings', '--node-group', 'app_servers',
+               'app_server_capacity', 'cpu_is_below_the_app_pool_headroom_limit', '--last', span, '--json']
+    answer = subprocess.run(command, capture_output=True, text=True)
+    try:
+        if answer.returncode != 0:
+            raise ValueError(answer.stderr.strip() or f'exit {answer.returncode}')
+        readings_answer = json.loads(answer.stdout)
+        now = parse_time(readings_answer['until'])
+        since = parse_time(readings_answer['since'])
+        readings = {}
+        for node in readings_answer['nodes']:
+            values = []
+            for block in node.get('measurements', []):
+                if block.get('measurement') == 'cpu_used_percent':
+                    values += [(parse_time(r['at']), float(r['value']), r.get('fail_when_measurement_above'))
+                               for r in block.get('readings', [])]
+            ended = security_updates_installed_at.get(node['node'])
+            readings[node['node']] = sorted(value for value in values if ended is None or value[0] >= ended)
+    except (ValueError, KeyError, TypeError) as error:
+        print(f"the fleet hub's readings of the app servers could not be read ({' '.join(command)}): {error}", file=sys.stderr)
+        sys.exit(4)
+
+    if set(readings) != set(servers):
+        finish('none', f"the fleet hub's app_servers are {', '.join(sorted(readings)) or 'none'} and the inventory's are "
+                       f"{', '.join(sorted(servers))}: every_server has not run since the pool last changed, so no change now")
+    for name in sorted(servers, key=number_of):
+        values = readings[name]
+        if not values:
+            finish('none', f'{name} has no CPU readings in the last {span_words} since its security updates were installed, or it is silent: no change now')
+    limit = readings[max(servers, key=number_of)][-1][2]
+    for name in servers:
+        other = [at for at, _, recorded in readings[name] if recorded != limit]
+        if other:
+            changed_at = max(other)
+            finish('none', f'the app pool changed size at about {describe(changed_at)} (its CPU limit became {limit:g}%), '
+                           f'so the readings of a whole {span_words} at the present size come at {describe(changed_at + (now - since))}: no change now',
+                   cpu_limit_percent=limit)
+    for name in sorted(servers, key=number_of):
+        first, last = readings[name][0][0], readings[name][-1][0]
+        if first > since + READING_INTERVAL_WITH_SLACK or last < now - READING_INTERVAL_WITH_SLACK:
+            finish('none', f"{name}'s CPU readings cover only {describe(first)} to {describe(last)} of the last {span_words}: no change now",
+                   cpu_limit_percent=limit)
+
+    if adding:
+        lowest = {name: min(value for _, value, _ in readings[name]) for name in servers}
+        average = sum(lowest.values()) / count
+        detail = ', '.join(f'{name} {lowest[name]:g}%' for name in sorted(servers, key=number_of))
+        if average <= limit:
+            finish('none', f"the app pool's CPU over the last {span_words}, each server at its lowest ({detail}), averages "
+                           f'{average:.0f}%, not above its limit of {limit:g}%: no app server to add', cpu_limit_percent=limit)
+        if count >= arguments.largest_number_of_servers:
+            finish('stopped_by_a_bound', f"the app pool's CPU stayed above its limit of {limit:g}% for {span_words} ({detail}), and the pool "
+                                         f'holds its largest number of servers, {arguments.largest_number_of_servers} '
+                                         '(growth_limits.app_servers in mmx_project_settings.yml): a person decides', cpu_limit_percent=limit)
+        finish('add', f"the app pool's CPU stayed above its limit of {limit:g}% for {span_words} ({detail}): add an app server, "
+                      f'the pool\'s server number {count + 1} of at most {arguments.largest_number_of_servers}', cpu_limit_percent=limit)
+
+    highest ={name: max(value for _, value, _ in readings[name]) for name in servers}
+    total = sum(highest.values())
+    spread_over = max(count - 2, 1)
+    percent = total / spread_over
+    spare = arguments.cpu_percent_below_which_the_app_pool_can_spare_a_server
+    detail = ', '.join(f'{name} {highest[name]:g}%' for name in sorted(servers, key=number_of))
+    measured = (f'the busiest CPU reading of each app server in the last {span_words} ({detail}) adds up to {total:g}%, '
+                f'{percent:.0f}% spread over {spread_over} server{"s" if spread_over != 1 else ""}')
+    if percent >= spare:
+        finish('none', f'{measured}, not below {spare}%: the pool cannot spare a server', cpu_limit_percent=limit)
+    if len(set(servers.values())) > 1:
+        finish('stopped_by_a_bound', f'{measured}, below {spare}%, but the app pool mixes server types '
+                                     f'({", ".join(f"{name} {servers[name]}" for name in sorted(servers, key=number_of))}), and the rule '
+                                     'assumes equal servers: a person decides which server to remove', cpu_limit_percent=limit)
+    newest = max(servers, key=number_of)
+    finish('remove', f'{measured}, below {spare}%: the pool can spare a server; remove {newest}, its newest',
+           server_to_remove=newest, cpu_limit_percent=limit)
+
+
+if __name__ == '__main__':
+    main()

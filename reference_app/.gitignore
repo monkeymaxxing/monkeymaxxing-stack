@@ -1,0 +1,4 @@
+# What a run on your laptop leaves behind: the program from `go build`, and
+# the asset files from `reference_app write-assets`.
+/reference_app
+/assets/

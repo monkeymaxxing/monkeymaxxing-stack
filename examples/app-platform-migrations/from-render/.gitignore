@@ -1,0 +1,5 @@
+node_modules/
+migration-export/
+exports/
+secrets/
+.env

@@ -1,0 +1,219 @@
+# A jobs server runs each app's job container, using the app's own image
+# and jobs_command, as the app servers do. A jobs server runs nothing that
+# takes requests: no web container, no Caddy, no tunnel connector.
+# The jobs servers are a later step: production's job containers move from
+# the app servers to jobs servers when jobs compete with requests
+# (operating_procedures/add_jobs_servers.md, "Adding jobs servers").
+# A jobs server starts the job containers in the first every_server run
+# that includes the new jobs server. The job containers take jobs from the
+# second every_server run onward, once MMX configures peers using the jobs
+# server's WireGuard public key. The app servers stop job containers once
+# job_containers_run_only_on_the_jobs_servers is true.
+#
+# Two playbooks call the jobs_server role:
+# - every_server sets up the jobs server (set_up_the_server: true) and
+#   keeps each job container on the app servers' live release.
+#   Only a deploy changes a release.
+# - deploy, in its last step, once the app servers stopped their old web
+#   containers, changes each job container to the new release.
+# Only every_server sets up the jobs server, so only every_server passes
+# the secrets.
+#
+# A Quadlet file describes a Podman container for systemd to run.
+# The jobs_server and app_server roles use shared project files for the
+# job container, the apps' env files, and the weekly image cleanup units,
+# so a jobs server runs exactly what an app server runs.
+inputs:
+  database_moving_in: {type: mapping, default: {}}
+  nightly_work_starts_at:                   # vars.nightly_work_starts_at: UTC "HH:MM"; the jobs' order and spacing follow from it
+    type: string
+    required: false
+  weekly_work_day:                          # vars.weekly_work_day: the full backup, the restore drill, the image cleanup
+    type: string
+    required: false
+  set_up_the_server:                        # true only from every_server: Podman, settings and secrets, the image cleanup
+    type: boolean
+    required: true
+  apps:                                     # vars.apps from mmx_project_settings.yml
+    type: mapping
+    required: true
+  # Each job_containers key is an app's name.
+  # Each value is a mapping whose image field names the release's image.
+  # every_server passes live_web_containers from the first entry in the
+  # inventory's app_servers list (.inventory.groups.app_servers[0]).
+  # deploy passes new_web_containers in deploy's last step.
+  job_containers:
+    type: mapping
+    required: true
+  container_registry_username:              # the read-only login the servers pull the apps' images with
+    type: string
+    required: true
+  container_registry_password:
+    type: string
+    required: true
+    secret: true
+  # database_servers, apps_connect_through_pgbouncer, and app_secrets are
+  # needed only when set_up_the_server is true.
+  database_servers:                         # the servers each app's DATABASE_URL lists
+    type: list
+    required: false
+  # Use vars.apps_connect_through_pgbouncer.production from
+  # mmx_project_settings.yml.
+  # PgBouncer lets connections from job containers share fewer Postgres
+  # connections.
+  # When apps_connect_through_pgbouncer is true, DATABASE_URL and
+  # DATABASE_READ_URL use PgBouncer's port, 6432, on each database server
+  # instead of Postgres's port, 5432.
+  apps_connect_through_pgbouncer:
+    type: boolean
+    required: false
+  app_secrets:                              # <database_name>_database_password, and <app>_<VARIABLE> for each name in an app's secrets_from_vault
+    type: mapping
+    required: false
+    secret: true
+
+node_tasks:
+  # Setting the server up, from every_server. -------------------------------
+
+  - id: remove_the_job_container_of_an_app_with_no_jobs
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - {equals: ["{{ .app.value.jobs_command }}", ""]}
+    loop: "{{ .inputs.apps }}"
+    as: app
+    podman_quadlet:
+      name: "{{ .app.key }}-jobs.container"
+      state: file_and_service_removed_named_volumes_kept
+
+  # The job containers run as root's system containers, on the server's own
+  # network (Network=host), as on the app servers.
+  - id: install_podman
+    when: "{{ .inputs.set_up_the_server }}"
+    apt_package:
+      packages:
+        - {name: podman, version: newest_when_first_installed}
+
+  # Each app uses three env files, as on the app servers:
+  # - Plain settings go in /etc/<app>/<app>_settings.env, rendered from
+  #   files_used_by_several_roles/app_settings.env.
+  # - Secrets go in /etc/<app>/<app>.env, rendered from
+  #   files_used_by_several_roles/app_secrets.env.
+  # - Database settings direct to Postgres go in
+  #   /etc/<app>/<app>_database_direct_to_postgres.env, rendered from
+  #   files_used_by_several_roles/app_database_direct_to_postgres.env.
+  # If an app's jobs_connect_directly_to_postgres is true, the job container
+  # reads /etc/<app>/<app>_database_direct_to_postgres.env.
+  # A change to any of the app's three env files restarts the app's job
+  # container in place. every_server works on one jobs server at a time.
+  # With two or more jobs servers, the remaining jobs servers keep taking
+  # jobs.
+  - id: create_the_settings_directory_of_each_app
+    when: "{{ .inputs.set_up_the_server }}"
+    loop: "{{ .inputs.apps }}"
+    as: app
+    directory:
+      path: "/etc/{{ .app.key }}"
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: settings_and_secrets_of_each_app
+    when: "{{ .inputs.set_up_the_server }}"
+    loop: "{{ .inputs.apps }}"
+    as: app
+    key: "{{ .app.key }}"
+    task_block:
+      id: settings_and_secrets
+      changes:
+        - id: write_the_plain_settings
+          file:
+            path: "/etc/{{ .app.key }}/{{ .app.key }}_settings.env"
+            template: ../../files_used_by_several_roles/app_settings.env
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: write_the_secrets
+          file:
+            path: "/etc/{{ .app.key }}/{{ .app.key }}.env"
+            template: ../../files_used_by_several_roles/app_secrets.env
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: write_the_database_settings_direct_to_postgres
+          file:
+            path: "/etc/{{ .app.key }}/{{ .app.key }}_database_direct_to_postgres.env"
+            template: ../../files_used_by_several_roles/app_database_direct_to_postgres.env
+            owner: root
+            group: root
+            permissions_mode: "0600"
+      activate:
+        - id: restart_the_job_container
+          systemd_service:
+            name: "{{ .app.key }}-jobs.service"
+            state: do_not_start_or_stop
+
+  # The job containers, at every call. --------------------------------------
+
+  # Each app's job container, <app>-jobs.service, on the release the
+  # playbook names. A change of release is a restart: the old worker gets
+  # the stop signal and up to the app's seconds_a_job_gets_to_finish_when_stopped
+  # (30 by default) to finish its current job, then the new one starts. A worker
+  # still running after that time is killed,
+  # and the queue runs the unfinished job again. The jobs wait in their
+  # queue in Postgres meanwhile.
+  #
+  # An app whose jobs_command is "" has no background jobs and gets no job
+  # container here. The task after this one removes the job container of an
+  # app that had jobs and was changed to have none.
+  - id: job_container_of_each_app
+    when: {not: {equals: ["{{ .inputs.apps[.job_container.key].jobs_command }}", ""]}}
+    loop: "{{ .inputs.job_containers }}"
+    as: job_container
+    key: "{{ .job_container.key }}"
+    task_block:
+      id: job_container
+      changes:
+        # The Quadlet file names the image without a login, so MMX pulls the
+        # image on the jobs server first, with the registry's read-only
+        # login.
+        - id: pull_the_image_of_the_release
+          podman_image:
+            image: "{{ .job_container.value.image }}"
+            pull_image: when_missing
+            registry_username: "{{ .inputs.container_registry_username }}"
+            registry_password: "{{ .inputs.container_registry_password }}"
+        - id: install_the_quadlet_file_of_the_job_container
+          podman_quadlet:
+            name: "{{ .job_container.key }}-jobs.container"
+            template: ../../files_used_by_several_roles/jobs_container.container
+      activate:
+        - id: run_the_job_container
+          systemd_service:
+            name: "{{ .job_container.key }}-jobs.service"
+            state: running
+
+  # Setting the server up, from every_server. -------------------------------
+
+  # Each deploy pulls a new image on the jobs server too, so the weekly
+  # cleanup used on app servers also runs on jobs servers.
+  # The cleanup deletes images that no container uses and that were made
+  # more than 7 days ago.
+  - id: weekly_cleanup_of_unused_images
+    when: "{{ .inputs.set_up_the_server }}"
+    task_block:
+      id: podman_image_cleanup
+      changes:
+        - id: install_the_image_cleanup_service
+          systemd_unit:
+            name: podman-image-cleanup.service
+            template: ../../files_used_by_several_roles/podman_image_cleanup.service
+        - id: install_the_image_cleanup_timer
+          systemd_unit:
+            name: podman-image-cleanup.timer
+            template: ../../files_used_by_several_roles/podman_image_cleanup.timer
+      activate:
+        - id: run_the_image_cleanup_timer
+          systemd_service:
+            name: podman-image-cleanup.timer
+            state: running
+            start_at_boot: true

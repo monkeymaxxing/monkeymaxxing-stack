@@ -1,0 +1,12 @@
+[Unit]
+Description=Share the production SSH agent with the server buttons
+Requires=desk-ssh-agent.service
+After=desk-ssh-agent.service
+PartOf=desk-ssh-agent.service
+[Service]
+User={{ .inputs.person_unix_username }}
+Group=desk-buttons
+ExecStart=/usr/bin/socat UNIX-LISTEN:/run/desk-ssh-agent/socket,mode=0660,fork,unlink-early UNIX-CONNECT:/run/desk-ssh-agent/private.sock
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

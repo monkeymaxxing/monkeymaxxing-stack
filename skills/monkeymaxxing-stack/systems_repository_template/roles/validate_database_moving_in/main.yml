@@ -1,0 +1,73 @@
+inputs:
+  database_moving_in: {type: mapping, required: true}
+  private_ip_ranges: {type: mapping, required: true}
+  wireguard_network: {type: string, required: true}
+  database_servers: {type: list, required: true}
+  inventory_nodes: {type: mapping, required: true}
+  apps: {type: mapping, required: true}
+  apps_connect_through_pgbouncer: {type: boolean, required: true}
+
+node_tasks:
+  - id: check_the_old_database_settings_before_changing_servers
+    shell:
+      script: |
+        python3 -I - <<'PYTHON'
+        import base64, hashlib, ipaddress, json, os, sys
+        try:
+            moving = json.loads(os.environ['DATABASE_MOVING_IN'])
+            if not moving:
+                sys.exit(0)
+            # through_relay is required: the switch playbook chooses its fleet
+            # stage from it before the run, and MMX cannot read a missing key.
+            expected = {'wireguard_address', 'wireguard_public_key', 'public_ipv4_address', 'postgres_port', 'copy_onto', 'apps', 'through_relay'}
+            if set(moving) != expected:
+                raise ValueError('database_moving_in needs: '+', '.join(sorted(expected)))
+            if type(moving['through_relay']) is not bool:
+                raise ValueError('database_moving_in.through_relay must be true or false')
+            # PgBouncer restores each client's cached default_transaction_read_only on
+            # new server connections, so the Stack's PgBouncer in front of the copy is
+            # unproven during a move. Add it after the move instead.
+            if os.environ['APPS_CONNECT_THROUGH_PGBOUNCER'] == 'true':
+                raise ValueError('apps_connect_through_pgbouncer.production is true. Set it to false while a database moves in, and add PgBouncer after the move by operating_procedures/add_pgbouncer.md.')
+            servers = json.loads(os.environ['DATABASE_SERVERS'])
+            apps = json.loads(os.environ['APPS'])
+            if not servers or moving['copy_onto'] != sorted(servers)[0]:
+                raise ValueError('database_moving_in.copy_onto must be the first database_servers name in name order, the primary of a new formation')
+            if not isinstance(moving['apps'], list) or not moving['apps'] or len(set(moving['apps'])) != len(moving['apps']) or any(app not in apps for app in moving['apps']):
+                raise ValueError('database_moving_in.apps must list existing apps once each')
+            databases = {apps[app]['database_name'] for app in moving['apps']}
+            if moving['through_relay']:
+                copy_entries = {'database_moving_in_'+hashlib.sha256(database.encode()).hexdigest()[:32] for database in databases}
+                if copy_entries & databases:
+                    raise ValueError('A moving database name conflicts with a derived relay copy entry. Rename the app database before using the relay.')
+            if any(app not in moving['apps'] and settings['database_name'] in databases for app,settings in apps.items()):
+                raise ValueError('database_moving_in.apps must include every app sharing a listed database, because those apps share one login and move together')
+            address = ipaddress.IPv4Address(moving['wireguard_address'])
+            ranges = json.loads(os.environ['PRIVATE_IP_RANGES'])
+            network = ipaddress.IPv4Network(ranges['database_moving_in'])
+            if any(address in ipaddress.IPv4Network(value) for name,value in ranges.items() if name != 'database_moving_in'):
+                raise ValueError('database_moving_in.wireguard_address must be outside every other private_ip_ranges entry, so the old peer gains no group permissions')
+            if not network.subnet_of(ipaddress.IPv4Network(os.environ['WIREGUARD_NETWORK'])) or address not in network or address in (network.network_address, network.broadcast_address):
+                raise ValueError('database_moving_in.wireguard_address must be a host in private_ip_ranges.database_moving_in, inside wireguard_network')
+            nodes = json.loads(os.environ['INVENTORY_NODES'])
+            if any(node.get('vars', {}).get('private_ip') == str(address) for node in nodes.values()):
+                raise ValueError('database_moving_in.wireguard_address already belongs to an inventory server')
+            ipaddress.IPv4Address(moving['public_ipv4_address'])
+            if type(moving['postgres_port']) is not int or not 1 <= moving['postgres_port'] <= 65535:
+                raise ValueError('database_moving_in.postgres_port must be an integer from 1 to 65535')
+            key = moving['wireguard_public_key']
+            if len(base64.b64decode(key, validate=True)) != 32 or '\n' in key or '\r' in key:
+                raise ValueError('database_moving_in.wireguard_public_key must be a WireGuard public key')
+            print('database_moving_in settings are valid. The copy and switch also check the live primary.')
+        except (ValueError, TypeError, KeyError) as error:
+            sys.exit('Refused database_moving_in: '+str(error))
+        PYTHON
+      env:
+        DATABASE_MOVING_IN: "{{ .inputs.database_moving_in }}"
+        PRIVATE_IP_RANGES: "{{ .inputs.private_ip_ranges }}"
+        WIREGUARD_NETWORK: "{{ .inputs.wireguard_network }}"
+        DATABASE_SERVERS: "{{ .inputs.database_servers }}"
+        INVENTORY_NODES: "{{ .inputs.inventory_nodes }}"
+        APPS: "{{ .inputs.apps }}"
+        APPS_CONNECT_THROUGH_PGBOUNCER: "{{ .inputs.apps_connect_through_pgbouncer }}"
+      changed_when: false

@@ -1,0 +1,313 @@
+# Copies rows that a bad change deleted back to the primary, from a copy of
+# production's database restored as it stood just before the change
+# (operating_procedures/recover_rows_lost_to_a_bad_change.md, "Restore a
+# database copy and recover the missing rows"). Database servers always need
+# a person: a person approves each run.
+#
+# Each run is whole and leaves nothing behind, like the weekly restore drill
+# (playbooks/weekly_database_restore_drill.yml), whose steps it shares
+# (server_management_scripts/steps_for_a_server_this_run_creates.bash):
+#   1. Refuse values that do not fit, and an existing restore01, before
+#      anything is created.
+#   2. Create restore01, which peers only with util01, and add it as a
+#      runtime WireGuard peer on util01.
+#   3. Clone util01's copy of the systems repository into a temporary
+#      folder, add restore01 to the clone's inventory and accept restore01's
+#      host key there. restore01 and its host key never reach Git, util01's
+#      own copy or a desk, and no desk needs to reach restore01.
+#   4. In the clone, restore production's database onto restore01 with
+#      restore_database, restore_mode=copy_on_restore01, at recover_to.
+#   5. Copy the rows of table where rows_where from the copy to the primary,
+#      in one transaction on the primary (below).
+#   6. Always, also after a failure: destroy restore01 by the ID in the
+#      provider's receipt, remove the runtime peer, and delete the clone.
+#      MMX cancels a task with SIGKILL, so a run stopped with mmx stop skips
+#      this step: destroy restore01 by hand then (the operating procedure,
+#      "If something is different"); check_for_a_leftover_restore01 warns
+#      every day until it is gone.
+#
+# The preview (add_the_rows_to_the_primary=false, the default) runs the same
+# transaction and rolls it back, so its counts are what the real run does,
+# and the primary keeps no change. Give the preview and the real run the
+# same recover_to and read_backup_bucket_as_of: they then restore the same
+# copy. Each run restores again; the weekly drill's restore took 3 to 5
+# minutes at three providers (docs/testing.md).
+#
+# The row copy. The rows go from restore01 through util01 to the primary in
+# one pipe: they pass util01 only in memory, and never reach a file, Git, a
+# desk or MMX's output. The run prints only counts. psql reports errors with
+# VERBOSITY terse, which leaves out a failed row's values; an error about a
+# value that does not fit its column still names that value.
+#   On restore01, in a read-only transaction:
+#     COPY (SELECT * FROM table WHERE (rows_where)) TO STDOUT
+#   On the primary, in ONE transaction:
+#     refuse a database server in recovery (a replica) and a table without a
+#     primary key; count the rows where rows_where; load the copied rows into
+#     a temporary table; count those whose primary key the primary holds,
+#     and those of them with other values; insert the rows; count the rows
+#     where rows_where again; COMMIT, or ROLLBACK for the preview. A failed
+#     copy on restore01 ends the pipe before COMMIT, and the primary rolls
+#     the transaction back.
+#   when_a_primary_key_exists says what happens to a copied row whose primary
+#   key the primary already holds:
+#     skip_the_row: INSERT ... ON CONFLICT ON CONSTRAINT <the primary key>
+#       DO NOTHING. A rerun adds nothing twice.
+#     change_nothing: a plain INSERT, so one such row ends the whole
+#       transaction and the primary keeps no change.
+#   Any other failed check, such as another unique constraint, also ends the
+#   whole transaction.
+#
+# The primary is the database server that the failover monitor on util01
+# has assigned a primary's state (pg_autoctl show state, as the MMX module
+# pg_auto_failover_monitor reads it), read right before the copy.
+# No database service starts or stops on a database server.
+#
+#   ./server_management_scripts/run_mmx_on_util01 run recover_rows_from_a_restored_copy \
+#       --var recover_to="2026-11-03 14:01:00+00" --var read_backup_bucket_as_of="2026-11-03 15:30:00+00" \
+#       --var database_name=shop --var table=orders \
+#       --var rows_where="created_at >= '2026-11-03 14:00:00+00'" \
+#       --var when_a_primary_key_exists=skip_the_row --var add_the_rows_to_the_primary=false
+command_line_vars:
+  # The minute before the bad change started, in UTC, such as
+  # "2026-11-03 14:01:00+00". latest is refused: it would restore the bad
+  # change too.
+  recover_to:
+    type: string
+  # The moment whose bucket contents pgBackRest reads, such as the first
+  # run's start: restore_database's variable of the same name.
+  read_backup_bucket_as_of:
+    type: string
+  # An app's database_name in mmx_project_settings.yml, such as shop.
+  database_name:
+    type: string
+  # The table as SQL names it, such as orders or billing.invoices.
+  table:
+    type: string
+  # An SQL condition that selects the lost rows, such as
+  # created_at >= '2026-11-03 14:00:00+00'.
+  rows_where:
+    type: string
+  # skip_the_row or change_nothing (above).
+  when_a_primary_key_exists:
+    type: string
+  # false: the preview, which changes nothing on the primary. true: the
+  # real run, after the person approved the preview's counts.
+  add_the_rows_to_the_primary:
+    type: boolean
+    default: false
+
+fleet_stages:
+  - id: restore_a_copy_and_copy_the_rows_back
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: create_restore01_copy_the_rows_and_destroy_restore01
+        # A restore by hand has no time limit: a large database must not be
+        # cut off mid-restore (playbooks/restore_database.yml).
+        time_limit: null
+        time_limit_per_try: null
+        shell:
+          script: |
+            set -euo pipefail
+            # Only the counts go to standard output; the rest goes to stderr.
+            exec 3>&1 1>&2
+            repository=/var/lib/mmhotline/systems_repository
+            export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
+            refuse() { printf 'recover_rows_from_a_restored_copy: %s; nothing created\n' "$*"; exit 1; }
+            # 1. Refuse values that do not fit.
+            for pair in recover_to:RECOVER_TO read_backup_bucket_as_of:READ_BACKUP_BUCKET_AS_OF \
+                database_name:DATABASE_NAME table:TABLE rows_where:ROWS_WHERE; do
+              env_name=${pair#*:}
+              value=${!env_name}
+              [ -n "${value//[[:space:]]/}" ] || refuse "${pair%%:*} is empty"
+            done
+            [ "$RECOVER_TO" != latest ] || refuse 'recover_to is the minute before the bad change, such as "2026-11-03 14:01:00+00", not latest, which would restore the bad change too'
+            jq -e --arg name "$DATABASE_NAME" '[.[].database_name] | index($name) != null' <<< "$APPS" > /dev/null ||
+              refuse "database_name=$DATABASE_NAME is no app's database_name in mmx_project_settings.yml"
+            case $WHEN_A_PRIMARY_KEY_EXISTS in
+              skip_the_row) on_conflict='ON CONFLICT ON CONSTRAINT :"primary_key_name" DO NOTHING' ;;
+              change_nothing) on_conflict= ;;
+              *) refuse "when_a_primary_key_exists=$WHEN_A_PRIMARY_KEY_EXISTS: give skip_the_row or change_nothing" ;;
+            esac
+            case $ADD_THE_ROWS_TO_THE_PRIMARY in
+              true) ending=COMMIT ;;
+              false) ending=ROLLBACK ;;
+              *) refuse "add_the_rows_to_the_primary=$ADD_THE_ROWS_TO_THE_PRIMARY: give true or false" ;;
+            esac
+            # Text as an SQL string literal.
+            literal() { printf "'%s'" "${1//\'/\'\'}"; }
+            work_dir=$(mktemp -d /var/lib/restore_drill/row_recovery.XXXXXX)
+            receipt=$work_dir/created_server.json
+            restore_public_key=
+            . "$repository/server_management_scripts/steps_for_a_server_this_run_creates.bash"
+            . "$repository/server_management_scripts/steps_for_reading_the_providers_list.bash"
+            # 6. Destroy restore01 first: it holds a copy of production's data.
+            cleanup() {
+              result=$?
+              trap - EXIT
+              trap '' INT TERM HUP
+              cd "$repository"
+              rm -f -- "$work_dir/first_boot_data.yml" || result=1
+              destroyed=
+              if destroy_the_owned_server "$receipt" restore01; then
+                destroyed=yes
+              else
+                result=1
+                printf 'recover_rows_from_a_restored_copy: destroying restore01 FAILED, and restore01 still holds a copy of production'\''s database: destroy it with ./server_management_scripts/destroy_a_server_at_the_provider --server-id %s; the receipt stays in %s\n' \
+                  "$(jq -r '.id' "$receipt" 2> /dev/null)" "$receipt"
+              fi
+              if [ -n "$restore_public_key" ]; then
+                remove_the_runtime_peer_on_util01 "$restore_public_key" || result=1
+              fi
+              if [ -n "$destroyed" ]; then
+                rm -rf -- "$work_dir" || result=1
+              fi
+              exit "$result"
+            }
+            trap cleanup EXIT
+            trap 'exit 130' INT
+            trap 'exit 143' TERM HUP
+            cd "$repository"
+            refuse_when_a_restore_server_exists
+            # 2. Create restore01, which peers only with util01.
+            umask 077
+            write_the_first_boot_data "$RESTORE01_PRIVATE_IP" "[$(util01_as_a_peer)]" \
+              "$work_dir/first_boot_data.yml" "$work_dir/wireguard_public_key"
+            restore_public_key=$(cat "$work_dir/wireguard_public_key")
+            add_a_runtime_peer_on_util01 "$restore_public_key" "$RESTORE01_PRIVATE_IP"
+            create_the_owned_server restore01 "$SERVER_TYPE" "$LOCATION" "$RESTORE01_PRIVATE_IP" \
+              "$restore_public_key" "$work_dir/first_boot_data.yml" "$receipt"
+            rm -f -- "$work_dir/first_boot_data.yml"
+            public_ipv4_address=$(jq -er '.public_ipv4_address | strings | select(length > 0)' "$receipt")
+            # 3. restore01 lives only in this throwaway clone.
+            git clone --quiet --no-hardlinks --local . "$work_dir/project"
+            cd "$work_dir/project"
+            add_restore01_to_the_inventory_of_this_clone "$RESTORE01_PRIVATE_IP" "$public_ipv4_address" "$restore_public_key"
+            ln -s "$repository/.mmx" .mmx
+            accept_the_host_key_over_wireguard "$RESTORE01_PRIVATE_IP"
+            # 4. Restore the copy.
+            mmx run restore_database --non-interactive \
+              --var restore_mode=copy_on_restore01 --var server_name=restore01 \
+              --var "recover_to=$RECOVER_TO" --var "read_backup_bucket_as_of=$READ_BACKUP_BUCKET_AS_OF"
+            # 5. The primary, by the monitor's assigned state. pg_autoctl keeps
+            # state under XDG_RUNTIME_DIR; root's SSH session sets it to
+            # /run/user/0, which postgres cannot write, so it is unset here.
+            states=$(ssh -F ssh/config "root@$UTIL01_PRIVATE_IP" \
+              "runuser -u postgres -- env -u XDG_RUNTIME_DIR pg_autoctl show state --pgdata /var/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/pg_auto_failover_monitor --formation production --json" < /dev/null)
+            primary=$(jq -r '[.[] | select(.assigned_group_state | IN("single", "wait_primary", "primary", "join_primary", "apply_settings")) | .nodename] | if length == 1 then .[0] else "" end' <<< "$states")
+            [ -n "$primary" ] || { echo 'recover_rows_from_a_restored_copy: the failover monitor names no single primary; nothing changed on the primary'; exit 1; }
+            primary_address=$(jq -er --arg name "$primary" '.[$name].vars.private_ip | strings' <<< "$INVENTORY_NODES") ||
+              { echo "recover_rows_from_a_restored_copy: $primary has no private_ip in the inventory; nothing changed on the primary"; exit 1; }
+            psql_on() { printf 'runuser -u postgres -- psql -X -q -At -v ON_ERROR_STOP=1 -d %q' "$DATABASE_NAME"; }
+            table=$(literal "$TABLE")
+            primary_key_of_the_table="FROM pg_constraint WHERE conrelid = $table::regclass AND contype = 'p'"
+            header=$(cat <<SQL
+            \\set ON_ERROR_STOP on
+            \\set VERBOSITY terse
+            BEGIN;
+            DO \$refusals\$ BEGIN
+              IF pg_is_in_recovery() THEN
+                RAISE EXCEPTION 'this database server is a replica, not the primary';
+              END IF;
+              IF NOT EXISTS (SELECT $primary_key_of_the_table) THEN
+                RAISE EXCEPTION 'the table % has no primary key, so nothing tells a lost row from a row the primary holds', $table;
+              END IF;
+            END \$refusals\$;
+            SELECT c.conname AS primary_key_name, string_agg(quote_ident(a.attname), ', ' ORDER BY k.position) AS primary_key_columns
+              FROM pg_constraint c CROSS JOIN unnest(c.conkey) WITH ORDINALITY AS k(attnum, position)
+              JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+              WHERE c.conrelid = $table::regclass AND c.contype = 'p' GROUP BY c.conname \\gset
+            SELECT count(*) AS rows_on_the_primary_before FROM $TABLE WHERE (
+            $ROWS_WHERE
+            ) \\gset
+            CREATE TEMPORARY TABLE recovered_rows (LIKE $TABLE) ON COMMIT DROP;
+            COPY recovered_rows FROM STDIN;
+            SQL
+            )
+            footer=$(cat <<SQL
+            SELECT count(*) AS rows_from_the_restored_copy FROM recovered_rows \\gset
+            SELECT count(*) AS rows_whose_primary_key_exists,
+                count(*) FILTER (WHERE ROW(r.*)::text IS DISTINCT FROM ROW(t.*)::text) AS rows_whose_primary_key_exists_with_other_values
+              FROM recovered_rows r JOIN $TABLE t USING (:primary_key_columns) \\gset
+            \\warn rows from the restored copy: :rows_from_the_restored_copy, of which the primary already holds the primary key of :rows_whose_primary_key_exists, with other values in :rows_whose_primary_key_exists_with_other_values
+            WITH added AS (
+              INSERT INTO $TABLE OVERRIDING SYSTEM VALUE SELECT * FROM recovered_rows $on_conflict RETURNING 1
+            ) SELECT count(*) AS rows_added FROM added \\gset
+            SELECT count(*) AS rows_on_the_primary_after FROM $TABLE WHERE (
+            $ROWS_WHERE
+            ) \\gset
+            $ending;
+            SELECT json_build_object('primary', $(literal "$primary"), 'database_name', $(literal "$DATABASE_NAME"), 'table', $table,
+              'rows_from_the_restored_copy', :rows_from_the_restored_copy,
+              'rows_whose_primary_key_exists', :rows_whose_primary_key_exists,
+              'rows_whose_primary_key_exists_with_other_values', :rows_whose_primary_key_exists_with_other_values,
+              'rows_on_the_primary_before', :rows_on_the_primary_before,
+              'rows_added', :rows_added,
+              'rows_on_the_primary_after', :rows_on_the_primary_after,
+              'added_to_the_primary', $ADD_THE_ROWS_TO_THE_PRIMARY);
+            SQL
+            )
+            copy_sql=$(cat <<SQL
+            \\set ON_ERROR_STOP on
+            \\set VERBOSITY terse
+            BEGIN TRANSACTION READ ONLY;
+            COPY (SELECT * FROM $TABLE WHERE (
+            $ROWS_WHERE
+            )) TO STDOUT;
+            COMMIT;
+            SQL
+            )
+            # A failed copy on restore01 ends the pipe before \. and COMMIT.
+            status=0
+            report=$(
+              {
+                printf '%s\n' "$header"
+                ssh -F ssh/config "root@$RESTORE01_PRIVATE_IP" "$(psql_on)" <<< "$copy_sql" || exit 1
+                printf '%s\n' '\.' "$footer"
+              } | ssh -F ssh/config "root@$primary_address" "$(psql_on)"
+            ) || status=$?
+            # psql exits 3 after an SQL error, before COMMIT or at it: the
+            # primary rolled the transaction back. Any other failure, such as
+            # a lost connection, ends the transaction unfinished too, unless
+            # it came after COMMIT, which a preview then shows (rows_added 0).
+            if [ "$status" -eq 3 ]; then
+              echo 'recover_rows_from_a_restored_copy: an SQL error ended the transaction on the primary; nothing changed on the primary'
+              exit 1
+            elif [ "$status" -ne 0 ]; then
+              echo "recover_rows_from_a_restored_copy: the copy to the primary did not finish (exit $status); the primary rolls back an unfinished transaction. Run the preview before running again"
+              exit 1
+            fi
+            jq -e '.rows_added | numbers' <<< "$report" > /dev/null ||
+              { echo 'recover_rows_from_a_restored_copy: the primary printed no counts'; exit 1; }
+            if [ "$ADD_THE_ROWS_TO_THE_PRIMARY" = true ]; then
+              jq -r '"added \(.rows_added) rows to \(.table) on \(.primary); rows where rows_where: \(.rows_on_the_primary_before) before, \(.rows_on_the_primary_after) after"' <<< "$report"
+            else
+              jq -r '"preview, nothing changed: the real run would add \(.rows_added) rows to \(.table) on \(.primary); rows where rows_where: \(.rows_on_the_primary_before) now, \(.rows_on_the_primary_after) after"' <<< "$report"
+            fi
+            printf '%s\n' "$report" >&3
+          dryrun: |
+            printf 'would create restore01, restore the copy as of %s, copy the rows of %s where %s back to the primary (add_the_rows_to_the_primary=%s), then destroy restore01\n' \
+              "$RECOVER_TO" "$TABLE" "$ROWS_WHERE" "$ADD_THE_ROWS_TO_THE_PRIMARY"
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          output_holds_no_secret: true
+          env:
+            SERVER_TYPE: "{{ .vars.restore_drill_server_type }}"
+            LOCATION: "{{ .vars.restore_drill_location }}"
+            SERVER_IMAGE: "{{ .vars.server_image }}"
+            UTIL01_SSH_KEY_NAME: "{{ .vars.util01_ssh_key_name_at_the_provider }}"
+            UTIL01_WIREGUARD_PUBLIC_KEY: "{{ .inventory.nodes.util01.vars.wireguard_public_key }}"
+            RESTORE01_PRIVATE_IP: "{{ .vars.restore01_private_ip }}"
+            UTIL01_PRIVATE_IP: "{{ .inventory.nodes.util01.vars.private_ip }}"
+            UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inventory.nodes.util01.vars.public_ipv4_address }}"
+            POSTGRESQL_MAJOR_VERSION: "{{ .vars.postgresql_major_version }}"
+            APPS: "{{ .vars.apps }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            SERVER_PROVIDER_API_TOKEN: "{{ .secrets.util01_provider_api_token }}"
+            RECOVER_TO: "{{ .vars.recover_to }}"
+            READ_BACKUP_BUCKET_AS_OF: "{{ .vars.read_backup_bucket_as_of }}"
+            DATABASE_NAME: "{{ .vars.database_name }}"
+            TABLE: "{{ .vars.table }}"
+            ROWS_WHERE: "{{ .vars.rows_where }}"
+            WHEN_A_PRIMARY_KEY_EXISTS: "{{ .vars.when_a_primary_key_exists }}"
+            ADD_THE_ROWS_TO_THE_PRIMARY: "{{ .vars.add_the_rows_to_the_primary }}"

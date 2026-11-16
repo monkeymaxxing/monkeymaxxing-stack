@@ -1,0 +1,61 @@
+{{- /*
+  The lockout alert's severity comes from phone_code_lockout in
+  mmx_project_settings.yml. The desk's fail2ban jail
+  (roles/systems_desk/files/phone_code_jail.conf) checks every lockout
+  number before this file is written, and this file checks the severity
+  again because MMWatchdog needs a valid one.
+*/ -}}
+{{- $lockout_severity := .inputs.phone_code_lockout.alert_severity_when_a_laptop_is_locked_out -}}
+{{- if not (has $lockout_severity (list "info" "warn" "sos")) }}{{ fail (printf "phone_code_lockout.alert_severity_when_a_laptop_is_locked_out is %v. Use info, warn, or sos. Nothing changed." $lockout_severity) }}{{ end -}}
+# Managed by MMX. The ordinary node checks are in every_server.yml too.
+# To be woken for a check, set that check's alert_severity to sos. warn tells
+# a person during the day; sos wakes the person on call, which a small team
+# turns on check by check. The checks a careful team raises first: the
+# backups, write-ahead log archiving, and the restore drill. Each value below
+# has its reason beside it; change a value only with a reason of your own.
+check_groups:
+  phone_code_logins:
+    check_every: 5s
+    time_limit_per_run: 4s
+    alert_after_failing_for: 0s
+    # log_lines opens immediately. A burst ends after one minute of health
+    # from the first reading with no matching line.
+    recovered_after_healthy_for: 1m
+    checks:
+      no_failed_phone_code_logins:
+        log_lines:
+          journal_of_systemd_unit: ssh.service
+          # The same PAM rejection as the phone-code fail2ban filter.
+          fail_when_a_new_line_matches_regex: '^error: PAM: Authentication failure for {{ .inputs.person_unix_username }} from [^ ]+\s*$'
+        # One wrong code is usually a typo, so it is only an info alert.
+        # A lockout has its own alert, below.
+        alert_severity: info
+        # The incident keeps the opening reading's count and source lines.
+        # Later failures keep that incident open, without another alert.
+
+  # fail2ban logs one "Ban" line when the wrong codes reach
+  # wrong_codes_before_lockout. That line is the lockout alert, with the
+  # severity the team chose. fail2ban writes its log to this file, not to
+  # the journal; MMWatchdog reads the file as root and follows its rotation.
+  phone_code_lockouts:
+    check_every: 5s
+    time_limit_per_run: 4s
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 1m
+    checks:
+      a_laptop_is_locked_out_of_the_desk:
+        log_lines:
+          log_file_path: /var/log/fail2ban.log
+          fail_when_a_new_line_matches_regex: '\[systems-desk-phone-code\] Ban [^ ]+\s*$'
+        alert_severity: {{ $lockout_severity }}
+
+  phone_code_file:
+    check_every: 10s
+    time_limit_per_run: 5s
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 0s
+    checks:
+      phone_code_file_exists:
+        file:
+          path: /home/{{ .inputs.person_unix_username }}/.google_authenticator
+        alert_severity: warn

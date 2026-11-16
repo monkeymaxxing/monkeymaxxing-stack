@@ -1,0 +1,82 @@
+{{- /*
+  One web container of an app, as a Quadlet file. The role renders it for
+  the live and for the new web container from the same loop variable,
+  web_container (key: the app's name; value: web_port and image), so a
+  container that the deploy started as the new one is the same file when
+  every_server later finds it live, and is never restarted for it.
+*/ -}}
+{{- $app_name := .web_container.key -}}
+{{- $web_port := .web_container.value.web_port -}}
+{{- $app := index .inputs.apps $app_name -}}
+# Managed by MMX from roles/app_server/files/web_container.container in the
+# systems repository.
+[Unit]
+Description={{ $app_name }} web container on port {{ $web_port }}
+
+[Container]
+ContainerName={{ $app_name }}-web-{{ $web_port }}
+Image={{ .web_container.value.image }}
+# The container uses the server's own network: it listens on PORT at the
+# server's addresses, where Caddy on every app server reaches it over
+# WireGuard (the firewall opens the web ports only on wg0), and it reaches
+# the database servers as the server itself.
+Network=host
+Environment=PORT={{ $web_port }}
+{{- if not (hasKey $app.env "WEB_CONCURRENCY") }}
+# This server's CPU count (its online logical CPUs, a VPS's vCPUs), from which
+# the app's web server sizes its worker processes: Puma, Gunicorn, and
+# Uvicorn read WEB_CONCURRENCY by themselves, and a Node app forks that many
+# workers with its cluster module. A bigger server then runs more of them.
+# An app that sets WEB_CONCURRENCY in its own env gets none here,
+# because Podman lets this line win over the settings file below.
+Environment=WEB_CONCURRENCY={{ .node.cpu.count }}
+{{- end }}
+EnvironmentFile=/etc/{{ $app_name }}/{{ $app_name }}_settings.env
+EnvironmentFile=/etc/{{ $app_name }}/{{ $app_name }}.env
+# The asset files of this release and of the one before it (asset bridging).
+Volume=/var/lib/monkeymaxxing-stack/web_assets/{{ $app_name }}-web-{{ $web_port }}:{{ $app.asset_directory }}:ro
+LogDriver=journald
+# The container's file system is read-only: a file the app writes to its
+# own disk would vanish at the next deploy (each deploy starts a new
+# container and removes the old one), so the app fails at once instead,
+# in staging, with "read-only file system". Podman mounts /tmp, /run and
+# /dev as memory-backed temporary directories (ReadOnlyTmpfs). An app that
+# needs another scratch path lists it in its writable_temporary_directories
+# in mmx_project_settings.yml; each is a memory-backed directory too, empty
+# at every start and writable by any user (mode 1777, as /tmp is, because
+# the apps' images run as different users). Keep nothing there that must
+# last: use Postgres or object storage.
+ReadOnly=true
+ReadOnlyTmpfs=true
+{{- if hasKey $app "writable_temporary_directories" }}
+{{- range $app.writable_temporary_directories }}
+Tmpfs={{ . }}:mode=1777
+{{- end }}
+{{- end }}
+# Root inside the container is not root on the server. Podman picks an
+# unused, unprivileged range of user ids for this container (UserNS=auto,
+# from the containers range in /etc/subuid and /etc/subgid, which the
+# every_server role writes), and each container gets its own range. An
+# app that breaks out of its container is then a user that owns no file
+# and no process on the server. Together with the AppArmor profile below,
+# which makes a break-out harder, this makes one less harmful. Rootless
+# Podman is not used, because on Debian it refuses any AppArmor profile.
+UserNS=auto
+# The apps need no Linux capability: they listen on ports above 1024, and
+# a container on the server's own network shouldn't be able to change it.
+# With every capability dropped and no way to gain privileges, a
+# compromised app can't reconfigure the server's network or read files
+# that aren't mounted into it.
+DropCapability=all
+NoNewPrivileges=true
+# The every_server role loads this confined profile, including crun's
+# stacked labels, so an app can stop its own worker processes.
+PodmanArgs=--security-opt=apparmor=monkeymaxxing-app-containers
+# The stop signal, then up to 30 seconds to finish the requests in flight.
+StopTimeout=30
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

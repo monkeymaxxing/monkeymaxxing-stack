@@ -1,0 +1,784 @@
+# MMX's project settings for this system. MMX finds the project root by
+# locating mmx_project_settings.yml. Values every server or role reads are
+# under vars. The playbook calling each role passes the required vars
+# values as role inputs.
+project_name: example_systems
+allow_role_calls_within_roles: true         # shared server/desk containment tasks
+default_inventory: servers                  # inventories/servers.yml: production, and staging01 when the team has it
+vault_file: secrets_vault.age
+run_history_retention: 30d                  # mmx results and --diff work for a month of runs
+vars:
+  # Every server schedule is in UTC, one clock for every server and every
+  # log. The coding agent picks these times during setup from the hours
+  # when most of your users are away (chapter 1 asks where they are), and
+  # tells you the times in your local time. To see times in your local time
+  # afterward, add that instruction to AGENTS.md.
+  #
+  # nightly_work_starts_at: "01:00". The database's backups start at this
+  # UTC time. The uploads' copy follows one hour later. On weekly_work_day
+  # the restore drill follows two hours after it and the image cleanup three
+  # hours after it. The server settings comparison runs 3 hours 30 minutes
+  # after it, and the check for a leftover restore01 3 hours 45 minutes
+  # after it. The jobs' order and spacing are fixed: the drill needs the
+  # full backup, and the checks need the drill. "HH:MM", from 00:00 to
+  # 20:14, so all of them start before midnight UTC.
+  nightly_work_starts_at: "01:00"
+  # weekly_work_day: sunday by default. The day of the full database
+  # backup, the restore drill, and the image cleanup. Reason for Sunday:
+  # most apps have their fewest users on Sunday, and the drill's result is
+  # ready for the weekly system review at the start of the week. A team
+  # whose quiet day differs sets another day, such as saturday: commit,
+  # push, and run every_server, which moves the timers on every server.
+  # A full backup every week is fixed: the weekly restore drill needs a
+  # recent full backup, and a kernel or Postgres security fix should not
+  # wait longer than a week.
+  weekly_work_day: sunday
+  # restore_drill_time_limit_hours: 6. The weekly restore drill stops after
+  # this many hours, from 1 to 24, and destroys restore01. Restore time grows with
+  # the database, so a team with a large database raises it. The maximum
+  # of 24 is because restore01 is paid by the hour and a drill must finish
+  # well before the next week's drill.
+  restore_drill_time_limit_hours: 6
+  # check_new_commits_on_main_every_minutes: 5. How often util01 asks
+  # MMHotline to check the new commits on main at the Git host
+  # (roles/util_server, the job check_new_commits_on_main). MMHotline sends
+  # one alert for each commit that waits for review. Reason
+  # for 5: a push from outside the team is noticed within minutes, and one
+  # git fetch every few minutes costs the Git host nothing. From 1 to 59: the
+  # job's systemd schedule repeats within each hour. A number that does not
+  # divide 60 gives a shorter gap once an hour.
+  check_new_commits_on_main_every_minutes: 5
+  # The weekly window for database updates and the reboots that wait for
+  # them (operating_procedures/update_and_restart_the_database_servers.md).
+  # starts_at is UTC. The agent runs updates and reboots only inside the
+  # window, one server at a time, and the weekly review reads the window from here.
+  # Reason for weekly: MMWatchdog's no_reboot_waits warns at 8 days.
+  # reboot_servers_after_updates reboots the only server of the app or
+  # load-balancer pool, whose reboot users see, only inside the window
+  # (roles/every_server/files/check-whether-a-reboot-may-run-now).
+  # length_minutes: 60 by default, from 30 to 1440. Reason for at least 30:
+  # with routine_fixes_and_server_work, the reboot check alerts about 10
+  # minutes after the window opens, the triage agent asks within about a
+  # minute, MMHotline's warning waits
+  # triage_agent_server_work.minutes_between_the_warning_and_a_reboot (10 by
+  # default), and the reboot takes under a minute on a cloud server: about
+  # 25 minutes. A team that raises the warning's wait raises the window too.
+  # At most 1440, one day: a longer window is no longer a quiet time the team
+  # chose, and the users would see reboots on most days of the week.
+  maintenance_window:
+    weekday: tuesday
+    starts_at: "21:00"
+    length_minutes: 60
+  # The come-back wait: the longest time reboot_servers_after_updates and
+  # reboot_util01_after_updates wait for a rebooted server to come back
+  # before the run fails, in whole minutes, such as 3m. 3m by default,
+  # measured: three reboots of a cloud server took 34, 54 and 56 seconds
+  # until the server answered and did its work, so 3m is the longest plus a
+  # clear margin. A dedicated server, which runs firmware checks before it
+  # boots, needs more: set it for one server, or for one group, under that
+  # server's or group's vars in inventories/servers.yml, such as
+  #   app001: {..., vars: {..., come_back_wait_after_a_reboot: 15m}}
+  # What follows from it: the reboot's alert pause lasts this wait plus 5
+  # minutes for the server's work check plus 2 minutes (10 minutes with 3m),
+  # and with routine_fixes_and_server_work the triage agent replaces a
+  # server that did not come back once this wait plus 2 minutes has passed
+  # since its last report. From 1m to 45m: MMHotline stops a run after one
+  # hour, and one server's turn takes this wait plus 5 minutes for its work
+  # check and the stages' start. Each reboot playbook refuses another value
+  # on the server before the reboot.
+  come_back_wait_after_a_reboot: 3m
+  # production_releases_wait_for_a_persons_approval: true. With true, the
+  # coding agent shows a person the tested version and waits for the
+  # person's yes before each release to production. With false, the coding
+  # agent releases a tested version without asking and reports the result.
+  # Staging releases and rollbacks never wait for approval. The coding agent
+  # follows this setting as "A release" in
+  # operating_procedures/deploy_and_roll_back_an_app_release.md says; no
+  # server reads it. Reason for true: a release changes what customers see,
+  # so the person decides when it goes live. A team that releases often
+  # sets false, because the deploy's health check keeps users on the old
+  # version when the new version fails.
+  production_releases_wait_for_a_persons_approval: true
+  # The inventory overrides this only while a database moves in. Removing
+  # the inventory block returns to this empty default.
+  database_moving_in: {}
+  # Set the desk name in inventories/servers.yml during a break-in.
+  # An empty string means everyone has their normal access.
+  everyone_locked_out_except_desk: ""
+  send_app_requests_to_the_status_page: false
+  # Phone-code lockout on each systems desk. A person's laptop is locked
+  # out of the desk after wrong_codes_before_lockout wrong phone codes
+  # within ten minutes. For lockout_minutes the desk then refuses
+  # the laptop's address ("connection refused"), even with a correct code.
+  # One wrong code is only an info alert (a typo is normal). A lockout
+  # sends one alert with alert_severity_when_a_laptop_is_locked_out:
+  #   info: shown in MMHotline, nobody is notified.
+  #   warn: a person is told during the day (a stolen key keeps trying).
+  #   sos:  wakes the person on call. A team turns this on only if it wants
+  #         that; typing mistakes can also cause a lockout.
+  # Reasons for the defaults: five tries keep an honest typist from
+  # locking themselves out, and five minutes ends a lockout quickly
+  # while a thief still gets only a handful of guesses an hour.
+  # Both numbers are whole numbers of at least 1: fail2ban treats 0 or a
+  # negative ban time as no ban or a permanent ban.
+  phone_code_lockout:
+    wrong_codes_before_lockout: 5
+    lockout_minutes: 5
+    alert_severity_when_a_laptop_is_locked_out: warn
+  # The public-address checks (MMWatchdog's public_sites check group on
+  # util01) request each app's health URL at its public host name and send
+  # an sos alert when the app does not answer. Until go-live the domain can
+  # still be Pending at Cloudflare and the app is not announced, so the
+  # checks would wake the person on call for a system that was never live.
+  # Chapter 9 (go live) sets this to true after the first public check
+  # passes, and util01 applies it with every_server.
+  public_site_checks_run: false
+  status_page_host_name: status.example.com
+  cloudflare_account_id: "0123456789abcdef0123456789abcdef"
+  apps:
+    shop:
+      image: ghcr.io/example/shop
+      web_ports: [8001, 8002]               # used in turn
+      # A deploy starts the new version on the unused port in web_ports.
+      health_url_path: /up
+      migration_command: bin/rails db:migrate
+      # The command that starts the app's background-job worker. Every app
+      # states it: write "" for an app with no background jobs. An app with
+      # "" gets no job container on any server, no job checks, and no job
+      # container is left running from an earlier setting. Reason for "":
+      # a missing key is a forgotten setting, so a missing jobs_command is
+      # refused, and the empty value says on purpose that there are no jobs.
+      # The app's checklist item shop_background_jobs_run_from_one_command
+      # is then deviated, with no background jobs as the reason.
+      jobs_command: bin/jobs
+      # How long a worker gets to finish its current job when its container
+      # stops, such as at a deploy, from 10 to 3600 seconds. Without this
+      # key the Stack uses 30. Set it to your longest job: a job that
+      # needs longer is killed and, in a job queue, runs again on every
+      # deploy, and a job with outside effects, such as sending an email,
+      # then runs twice. The web containers' 30 seconds are fixed: a
+      # request that takes longer than that is a bug.
+      seconds_a_job_gets_to_finish_when_stopped: 30
+      asset_directory: /rails/public/assets
+      # Every container of the app runs with a read-only file system, so a
+      # file the app writes to its own disk fails at once with "read-only
+      # file system", on staging01, or without staging01 at the production
+      # deploy, instead of vanishing at the next deploy.
+      # /tmp, /run and /dev are always writable (memory-backed). An app that
+      # writes scratch files elsewhere, such as Laravel's compiled views in
+      # /app/storage/framework/views, lists those directories here; each
+      # becomes a memory-backed directory, empty at every start. Leave the
+      # key out when the app needs none. The deploy's health check tests that
+      # the app starts and serves: on staging01, or without it in production,
+      # where a failed check keeps users on the running release. Do not list
+      # a directory that holds data that must last.
+      # writable_temporary_directories: [/app/storage/framework/views]
+      database_name: shop
+      # How many Postgres connections each of the app's web worker
+      # processes, and each job container, keeps open: a whole number from
+      # 1. Leave the key out for a Rails app: the Stack then counts
+      # RAILS_MAX_THREADS under env, or 3, Rails' own default. Set it for an
+      # app on another framework, to the size of the app's database pool in
+      # one process, such as 10 for node-postgres's default pool. Reason:
+      # adding an app server opens more connections, and the sum in
+      # operating_procedures/add_an_app_server.md, which
+      # add_an_app_server_for_the_load does by itself, refuses an app server
+      # that would take Postgres past 70 of its 100 connections. A count
+      # that is too low lets that sum pass while the database refuses
+      # connections at the next deploy.
+      # database_connections_per_worker_process: 10
+      env:                          # plain settings; secrets come from the vault
+        RAILS_ENV: production
+      secrets_from_vault: [SECRET_KEY_BASE, STRIPE_API_KEY, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]
+      # jobs_connect_directly_to_postgres is read only for an app with a
+      # jobs_command; an app with "" can leave it false.
+      # Set jobs_connect_directly_to_postgres to true when the app's job
+      # worker needs a Postgres session across transactions.
+      # PgBouncer's transaction mode lends a Postgres connection for just
+      # one transaction. The worker can get a different connection for the
+      # next transaction.
+      #
+      # Workers that wait with LISTEN/NOTIFY or hold a session-level advisory
+      # lock need a session across transactions, as Rails' good_job does.
+      # A session-level advisory lock keeps cooperating workers from doing
+      # the same work at once, across transactions. The lock belongs to the
+      # Postgres session, so the worker needs the session between
+      # transactions.
+      #
+      # With jobs_connect_directly_to_postgres: true, the app's job container
+      # connects to Postgres directly, even after PgBouncer starts.
+      # Use false when the worker does each job's work inside transactions.
+      jobs_connect_directly_to_postgres: false
+      # The R2 bucket that holds the app's uploaded files in production,
+      # which util01 copies to the uploads' B2 bucket every night, or every
+      # backups.uploads_copy_every_hours hours (backups.uploads_bucket below); "" for an app that keeps no uploads.
+      # Staging's uploads aren't copied: staging holds seed data only.
+      production_uploads_r2_bucket: example-shop-uploads
+      # The R2 bucket that holds the app's uploaded files on staging01, apart
+      # from production's, so staging never reaches production's uploads.
+      # operating_procedures/add_staging01.md sets it, such as
+      # example-shop-staging-uploads, for an app with
+      # production_uploads_r2_bucket; "" without staging01. Nothing copies it
+      # to B2: staging holds seed data only.
+      staging_uploads_r2_bucket: ""
+      # The two names in secrets_from_vault that hold the app's R2 key for
+      # production_uploads_r2_bucket. set-up-outside-services cloudflare
+      # makes the key and saves it in the vault as shop_R2_ACCESS_KEY_ID
+      # and shop_R2_SECRET_ACCESS_KEY. Leave it out for an app without
+      # uploads.
+      production_uploads_r2_key_variables:
+        access_key_id: R2_ACCESS_KEY_ID
+        secret_access_key: R2_SECRET_ACCESS_KEY
+      # restore_database runs each query read-only on the restored copy of
+      # the app's database. Every query must answer true. A restored copy
+      # with no data or old data fails the drill.
+      #
+      # the_migrations_came_back holds for any Rails app.
+      # an_order_from_the_last_two_days_came_back needs an order in the two
+      # days before each restore drill. Until a quiet app has such orders,
+      # leave out an_order_from_the_last_two_days_came_back.
+      # Write restore_drill_check_queries for the app's own tables.
+      restore_drill_check_queries:
+        - name: the_migrations_came_back
+          sql: select count(*) > 0 from schema_migrations
+        - name: an_order_from_the_last_two_days_came_back
+          sql: select max(created_at) > now() - interval '2 days' from orders
+
+  # The inventory group whose servers run each environment's apps: the
+  # deploy of an environment works on these servers.
+  app_server_group_of_environment:
+    production: app_servers
+    staging: staging_server
+
+  # The inventory groups whose servers may run each environment's Caddy.
+  # A deploy changes each running Caddy in the listed groups to send
+  # requests to the environment's new web containers.
+  # Production's app servers run Caddy until the load-balancer servers
+  # receive requests through the tunnel connector and send requests to app
+  # servers through Caddy.
+  groups_that_run_caddy_of_environment:
+    production: [app_servers, load_balancer_servers]
+    staging: [staging_server]
+
+  # The settings below enable jobs servers, load-balancer servers, and
+  # PgBouncer. See AGENTS.md, "When this happens, follow this operating
+  # procedure": "Add jobs servers", "Add load-balancer servers", and
+  # "Add PgBouncer".
+  # The roles and fleet stages for jobs servers, load-balancer servers, and
+  # PgBouncer are present from the initial setup. The roles and fleet stages
+  # change nothing until the matching operating procedure adds the required
+  # servers or sets the required settings. The operating procedure's
+  # commits set the matching settings in mmx_project_settings.yml to true.
+  # To return to the earlier setup, follow the jobs-server, load-balancer,
+  # or PgBouncer operating procedure named below. The return steps include
+  # setting the jobs, load-balancer, or PgBouncer settings in
+  # mmx_project_settings.yml back to false.
+  #
+  # Jobs servers: after the jobs servers run every app's job containers, set
+  # job_containers_run_only_on_the_jobs_servers to true. The next run
+  # removes job containers from the app servers.
+  # See operating_procedures/add_jobs_servers.md, "Adding jobs servers".
+  job_containers_run_only_on_the_jobs_servers: false
+  # Load-balancer servers: after lb01 and lb02 receive production's requests
+  # through the tunnel connector and Caddy, set
+  # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers to true.
+  # The run then removes the tunnel connector, Caddy, and WireGuard peering
+  # between app servers. staging01 always runs a tunnel connector and Caddy.
+  # See operating_procedures/add_load_balancer_servers.md, "Adding
+  # load-balancer servers".
+  tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: false
+  # PgBouncer lets apps share Postgres connections. PgBouncer runs in front
+  # of Postgres on each database server and on staging01.
+  # See operating_procedures/add_pgbouncer.md, "Adding PgBouncer".
+  #
+  # Use three commits in this order so the apps keep working:
+  # First, set pgbouncer_runs_in_front_of_postgres to true to install and
+  # start PgBouncer. Next, set apps_connect_through_pgbouncer.staging to true.
+  # Then, set apps_connect_through_pgbouncer.production to true.
+  # For each environment, DATABASE_URL and DATABASE_READ_URL then use
+  # PgBouncer's port, 6432, instead of Postgres's port, 5432.
+  pgbouncer_runs_in_front_of_postgres: false
+  apps_connect_through_pgbouncer:
+    staging: false
+    production: false
+
+  # Postgres 17 comes from Debian 13's own packages on the database
+  # servers, staging01, and util01's failover monitor. Debian 13 has no
+  # postgresql-18-auto-failover package. PGDG is PostgreSQL's separate apt
+  # repository. PGDG packages would sit outside the distribution,
+  # silently unchecked by MMWatchdog's
+  # apt_security_updates and vulnerability checks.
+  # Postgres 17 gets upstream minor releases, including security fixes,
+  # through Debian security until November 2029. Debian 13 has 17.11-0+deb13u1.
+  # A major upgrade comes only with a new Debian release. Replace a server
+  # (operating_procedures/replace_a_server.md) alone cannot do one, because
+  # a replica must run the primary's Postgres major version. The Stack
+  # version that adds the new Debian release brings tested steps for
+  # moving the database servers.
+  postgresql_major_version: 17
+
+  # The B2 bucket that pgBackRest sends every change and the backups of
+  # production's database to, through B2's S3-compatible API at the
+  # endpoint and region of the buckets' B2 account. Each bucket keeps file
+  # versions. Object Lock prevents deletion of each backup for
+  # lock_backups_against_deletion_for_days. Compliance mode means even the
+  # B2 account's owner cannot delete a backup sooner.
+  # The database servers write with a key that can reach only the production
+  # bucket, in the vault as pgbackrest_b2_write_key_id and
+  # pgbackrest_b2_write_application_key. staging01 keeps no backups:
+  # staging holds only the seed command's invented data, which a new
+  # staging01 gets again from the seed command.
+  # Replace the example buckets, endpoint, and region.
+  #
+  # The apps' uploaded files live in R2, at Cloudflare. Every night, util01
+  # copies each app's production_uploads_r2_bucket into uploads_bucket, in
+  # a folder named after the app. The R2 key can only read the apps' buckets.
+  # The B2 key reaches only uploads_bucket. The vault holds the R2 key as
+  # uploads_r2_read_only_* and the B2 key as uploads_backup_b2_write_*.
+  #
+  # uploads_bucket is locked as the database's buckets are, and keeps each
+  # file's prior versions for keep_prior_file_versions_in_buckets_for_days.
+  # uploads_r2_s3_endpoint is the
+  # Cloudflare account's R2 address, https://ACCOUNT_ID.r2.cloudflarestorage.com.
+  #
+  # Use uploads_backup_runs_on: [util_server] to enable the nightly copy
+  # when any app keeps uploads. When no app keeps uploads, set
+  # uploads_backup_runs_on to []. With uploads_backup_runs_on: [], a run
+  # needs neither uploads_bucket nor the four keys. While
+  # uploads_backup_runs_on is [], nothing reads uploads_bucket or
+  # uploads_r2_s3_endpoint. Leave uploads_bucket and uploads_r2_s3_endpoint
+  # as "" while uploads_backup_runs_on is [].
+  #
+  # First create uploads_bucket and the keys. Then put the keys in the
+  # vault. Only then set uploads_backup_runs_on to [util_server]. See
+  # operating_procedures/turn_on_nightly_backups_of_uploaded_files.md,
+  # "Turning the uploads' copy on". A run refuses an app with a
+  # production_uploads_r2_bucket while uploads_backup_runs_on is [].
+  # Reason it is a setting and not worked out from the apps' buckets: MMX
+  # picks a stage's servers from one value written before the run and
+  # loads the vault keys of every stage that picks a server, and an app
+  # names its bucket before its keys exist, so a worked-out value would
+  # stop every run in between for keys that are not there yet.
+  #
+  # Litestream copies MMHotline's database as the database changes, to a
+  # separate bucket in the B2 account used for pgBackRest's and uploads'
+  # backups. mmhotline_backup_replica_url gives Litestream the backup
+  # bucket, a folder, and the B2 account's endpoint and region.
+  # The MMHotline backup bucket's key is in the vault as
+  # mmhotline_backup_access_key_id and mmhotline_backup_secret_access_key.
+  # The MMHotline backup bucket is not locked, because Litestream cannot
+  # write into a locked bucket.
+  #
+  # How long backups are kept. Each setting has a minimum, and the Stack
+  # refuses a value below it, with the reason:
+  # keep_database_backups_for_days: 21. At least 14. A full database
+  #   backup runs every week, and the weekly restore drill needs the
+  #   previous full backup still present. pgBackRest keeps full backups for
+  #   this many days (repo1-retention-full-type=time).
+  # lock_backups_against_deletion_for_days: 14. From 8 up to
+  #   keep_database_backups_for_days. The uploads job makes a full copy
+  #   every 6 days and warns at 8 days, so a shorter lock could end before
+  #   the next full copy protects an unchanged file. Both locked buckets and
+  #   all three backup types use it. A team under a data-retention rule can
+  #   raise it. The lock is set when the bucket is created
+  #   (set-up-outside-services); a change reaches an existing bucket when
+  #   set-up-outside-services runs again.
+  # keep_prior_file_versions_in_buckets_for_days: 14. At least 1. The
+  #   lifecycle rule of both kinds of bucket, the database backups' buckets
+  #   and the uploads' bucket, deletes a replaced or hidden version of a
+  #   file this many days after the change. For uploads it is how long an
+  #   uploaded file can be restored after it is replaced or deleted.
+  #
+  # The uploads' copy, while uploads_backup_runs_on names util01:
+  # uploads_copy_every_hours: 24, one copy every night. One of 1, 2, 3, 4,
+  #   6, 8, 12 and 24, so the copies fall at the same hours every day; one
+  #   copy starts an hour after nightly_work_starts_at. Reason for 24: a
+  #   file uploaded since the last copy has no backup yet, and one night is
+  #   what a small team loses at most; a shorter interval loses less but
+  #   lists every file of every app's bucket that often, which costs
+  #   storage requests at R2 and B2. MMWatchdog warns when no copy passed
+  #   for this many hours plus 2.
+  # warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files: 10.
+  #   A copy hides in B2 each file deleted or replaced in R2 since the copy
+  #   before. When one copy hides more than this share of the files an
+  #   app's folder held, MMWatchdog warns, naming the app and both numbers.
+  #   Reason for 10: an app that deletes or replaces a tenth of its files
+  #   in one night is unusual, and an intruder or a mistake that deletes
+  #   everything is far above any normal night. Reason for warn, not sos:
+  #   the files stay restorable for keep_prior_file_versions_in_buckets_for_days,
+  #   and a customer's own bulk delete would otherwise wake a person for
+  #   nothing.
+  # warn_about_hidden_uploads_only_when_an_app_has_at_least_files: 100.
+  #   No warning while an app's folder holds fewer files. Reason: a new app
+  #   with ten files deletes two on a normal day, a fifth of its files.
+  backups:
+    keep_database_backups_for_days: 21
+    lock_backups_against_deletion_for_days: 14
+    keep_prior_file_versions_in_buckets_for_days: 14
+    b2_s3_endpoint: s3.eu-central-003.backblazeb2.com
+    b2_region: eu-central-003
+    production_bucket: example-systems-backups
+    uploads_bucket: example-systems-uploads-backups
+    uploads_r2_s3_endpoint: https://example-cloudflare-account-id.r2.cloudflarestorage.com
+    uploads_backup_runs_on: [util_server]
+    uploads_copy_every_hours: 24
+    warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files: 10
+    warn_about_hidden_uploads_only_when_an_app_has_at_least_files: 100
+    mmhotline_backup_replica_url: "s3://example-mmhotline-backup/mmhotline?endpoint=https://s3.eu-central-003.backblazeb2.com&region=eu-central-003"
+
+  # The app servers pull the apps' images with a read-only login to the
+  # registry. container_registry_read_only_username names the registry
+  # account. The registry account's token is in the vault as
+  # container_registry_read_only_token. On GitHub's registry, ghcr.io, the
+  # account is the GitHub account that owns the token, and the token needs
+  # only the read:packages permission. Replace the example account.
+  container_registry_read_only_username: example-registry-reader
+
+  # Normal root access on app, database, jobs, tools, staging, and load-balancer servers:
+  # one OpenSSH public key line each.
+  # During an incident, everyone_locked_out_except_desk instead admits only
+  # the production_ssh_public_key of the desk that keeps access, from that desk's address.
+  # The list below is restored by undo.
+  # The comment at the end of each line says whose key it is. Root's
+  # authorized_keys holds exactly root_ssh_public_keys. Removing a key from
+  # root_ssh_public_keys removes the key's root SSH access on the next run.
+  # MMX logs in with the private keys matching root_ssh_public_keys too.
+  # Keep each systems desk's production key and the key of util01's
+  # mmhotline user, or MMX loses SSH access.
+  # The example keys belong to nobody; replace them.
+  root_ssh_public_keys:
+    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIR+J8OoEVNHl3P/KSWFruheEQaq8Cgw/PziDAinSTJJ alex on desk01
+    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4Jcw7Fq2URbtI72IZ9N/p0WjdFGpZ0VJcet+YVhxZx util01, the mmhotline user
+
+  # The public half of the triage agent's SSH key, which lives on util01.
+  # The triage agent logs in as the triage user, only from util01's
+  # WireGuard address.
+  triage_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPsX9pp+bDzWfdnB2oQs5Hfkdg86mfoXg/fTLpSaAVrE util01, the triage agent
+
+  # The coding agent that the triage agent runs on util01: claude_code or
+  # codex; by default the same as systems_desk_coding_agent below, which
+  # chapter 4 copies here. Reason for the default: the team already has an
+  # account with that vendor and trusts that agent. A team that wants the
+  # other one sets it here, has the person save the matching credential
+  # with set-up-outside-services secrets --replace
+  # mmhotline_triage_agent_credential, and runs every_server.
+  # mmhotline_settings.yml reads it for triage_agent.coding_agent, and
+  # set-up-outside-services secrets reads it to ask for the right credential.
+  # The util_server role installs Codex on util01 only when the value is
+  # codex, at the version pinned in stack_software.codex. Claude Code is
+  # installed either way. Reason: one setting decides both what MMHotline
+  # runs and what util01 installs, so the two cannot disagree.
+  triage_agent_coding_agent: claude_code
+
+  # The coding agent on each systems desk: claude_code or codex. The desk
+  # review installs it, Codex at the version pinned in stack_software.codex,
+  # and writes the command start-the-coding-agent, which starts it as the
+  # coding-agent account in its checkout. After a change, the other
+  # program stays installed until the desk is rebuilt; that is harmless,
+  # because start-the-coding-agent starts only the program named here and
+  # nothing else runs it. It is separate from
+  # triage_agent_coding_agent. Reason: the desks' coding agent and the
+  # triage agent on util01 are different jobs, and a team may use one
+  # vendor's plan for one and another vendor's key for the other.
+  systems_desk_coding_agent: claude_code
+
+  # MMHotline's private dashboard, protected by Cloudflare Access.
+  util01_private_page_host_names:
+    mmhotline: ops.example.com
+
+  # The coding agent reaches the provider's API at 127.0.0.1:8081 on the
+  # desk, which sends each request here. Use the chosen provider guide's
+  # API URL, with its trailing slash. Cloudflare has its own fixed API URL
+  # on 127.0.0.1:8082.
+  systems_desk_provider_api_url: https://api.hetzner.cloud/v1/
+  # How the desk adds the person's provider credential to each request, as
+  # the provider guide says: token_in_a_header (Hetzner Cloud, DigitalOcean,
+  # Vultr, Scaleway: the API proxy adds the token), or one where the
+  # same proxy signs the requests: ovhcloud_signed_requests (OVHcloud),
+  # aws_signed_requests (AWS EC2) or google_cloud_service_account_tokens
+  # (Google Compute Engine). Reason: OVHcloud and AWS sign each request with a
+  # secret, and Google Cloud takes short-lived tokens made from a key, which a
+  # header-adding proxy cannot do.
+  systems_desk_provider_api_authentication: token_in_a_header
+
+  # This repository at the Git host, which util01 clones once, pulls from,
+  # and pushes to over SSH, with the mmhotline user's key as a deploy key
+  # with write access. The Git host's SSH host keys are its published ones:
+  # the github.com ssh-ed25519 entry below comes from GitHub's page
+  # "GitHub's SSH key fingerprints".
+  systems_repository:
+    ssh_url: git@github.com:example/systems.git
+    git_host_ssh_known_hosts_lines:
+      - github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+
+  # The weekly restore drill's server, restore01: util01 creates it at the
+  # server provider, with the team's provider scripts and util01's own token
+  # (util01_provider_api_token in the vault), restores production onto it,
+  # and destroys it. restore01 must match the database servers' size and
+  # location, so the database restore time that weekly_database_restore_drill
+  # records is the time a real database recovery takes.
+  # The person or coding agent updates restore_drill_server_type when a
+  # database server is replaced with a bigger server. When moving to
+  # another provider, the person or coding agent updates
+  # restore_drill_server_type, restore_drill_location, and server_image
+  # (operating_procedures/replace_a_server.md, "Replacing a server", and
+  # operating_procedures/move_the_servers_to_another_provider.md).
+  restore_drill_server_type: cx23
+  restore_drill_location: fsn1
+  # The provider's name for the Debian image of every server util01
+  # creates, restore01 included, in the provider's own words, such as
+  # debian-13 at Hetzner or "Debian 13" at OVHcloud.
+  # initial_setup/06_create_your_three_production_servers.md#the-server-image
+  # says which Debian releases the Stack supports.
+  server_image: debian-13
+  # The name under which util01's mmhotline user's public key is registered
+  # at the provider (chapter 7). Every server util01 creates, restore01
+  # included, starts with that key, and MMX on util01 logs in with the
+  # mmhotline user's matching private key.
+  util01_ssh_key_name_at_the_provider: util01, the mmhotline user
+
+  # The growth limits: the servers the coding agent adds without asking.
+  # The person sets them once, in chapter 6 (create your three production
+  # servers), after seeing each server type's monthly price and the monthly
+  # cost of every pool at its limit. Inside the limits, when an operating
+  # procedure's trigger arrives, the coding agent adds a server to a pool,
+  # or replaces a server with a bigger type from the pool's list, at once,
+  # and then reports the new server and its monthly cost. The coding agent
+  # asks the person first for anything outside the limits: more servers in
+  # a pool, a type not in the pool's list, a new kind of server such as
+  # staging01, or a new outside account. Reason: a trigger such as busy app
+  # servers must never wait for a person to approve a price, and the
+  # person still decides how far the bill can grow.
+  # To change a limit, the person tells the coding agent, which edits it
+  # here and commits. The triage agent's server work reads the limits:
+  # replace_failed_servers refuses to replace a server in a pool that holds
+  # more than its largest number, or whose server type is not in the pool's
+  # list; add_an_app_server_for_the_load and remove_server, and util01's
+  # checks app_servers_to_add_for_the_load and
+  # app_servers_to_remove_for_the_load, read the app pool's limits.
+  # smallest_number_of_servers, app_servers only, 1 by default: the triage
+  # agent removes an app server for low load only while the pool keeps at
+  # least this many (remove_server, run without server_name). Reason for 1:
+  # the Stack starts with one app server. The growth item second_app_server
+  # raises it to 2, so the second server that keeps the site up while one
+  # fails is never removed for low load. From 1 to largest_number_of_servers:
+  # every_server refuses another value before it changes anything.
+  # largest_number_of_servers, by default:
+  #   app_servers: 4. Four app servers carry about four times the first
+  #     server's requests; a team that needs a fifth looks at the bill
+  #     again first.
+  #   database_servers: 2. db01 and its replica db02, the database's growth
+  #     step; a third database server is rare for a small team.
+  #   jobs_servers: 2, so the jobs keep running while one is replaced.
+  #   load_balancer_servers: 2: the operating procedure adds the pair lb01
+  #     and lb02.
+  # server_types: the provider's types the pool may use, smallest first.
+  # The template's are Hetzner Cloud's, chapter 6's sizes and one bigger
+  # type each; chapter 6 writes the team's provider's types. A
+  # load-balancer server is at least an app server's size, because either
+  # one of the pair may carry every request alone
+  # (operating_procedures/add_load_balancer_servers.md).
+  growth_limits:
+    app_servers: {smallest_number_of_servers: 1, largest_number_of_servers: 4, server_types: [cx33, cx43]}
+    database_servers: {largest_number_of_servers: 2, server_types: [cx23, cx33]}
+    jobs_servers: {largest_number_of_servers: 2, server_types: [cx33]}
+    load_balancer_servers: {largest_number_of_servers: 2, server_types: [cx33, cx43]}
+
+  # What the triage agent may do without asking a person. One of:
+  #   every_fix_waits_for_a_person: every fix the triage agent asks for waits
+  #     for a person's approval in MMHotline (MMHotline's preset
+  #     permission_for_every_fix).
+  #   routine_fixes: restarting a service that failed, freeing disk space
+  #     and pulling an image again run at once, and the triage agent reports
+  #     each one; anything else waits for a person
+  #     (routine_fixes_without_permission).
+  #   routine_fixes_and_server_work: routine fixes, plus the six playbooks
+  #     of server work, which run without a person: replace_failed_servers,
+  #     every_server and destroy_replaced_servers replace a failed server of
+  #     the pools that triage_agent_server_work names, at once;
+  #     reboot_servers_after_updates reboots servers for installed updates,
+  #     and add_an_app_server_for_the_load and remove_server (run without
+  #     server_name) add and remove app servers with the load, each after a
+  #     warning that anyone on the team can stop. Database servers
+  #     and util01 still need a person, and so does any other playbook.
+  #     With this choice alone, each server MMWatchdog watches for a waiting
+  #     reboot also gets the check no_reboot_waits_that_may_run_now, which
+  #     starts the triage agent when a reboot may run now, and util01 gets
+  #     the checks app_servers_to_add_for_the_load and
+  #     app_servers_to_remove_for_the_load, which start it when the load
+  #     calls for one more or one fewer app server.
+  # routine_fixes by default. Reason: a new team first sees what the triage
+  # agent does before it lets the agent create servers and reboot them.
+  # mmhotline_settings.yml reads this setting for
+  # rules_for_running_agent_playbooks. To change it, the person tells the
+  # coding agent, which edits this line, commits, and runs every_server.
+  what_the_triage_agent_may_do_without_a_person: routine_fixes
+  # The limits of the triage agent's server work. MMHotline lets the six
+  # playbooks run without a person only with
+  # routine_fixes_and_server_work; with the other two choices each run
+  # waits for a person's approval, and these limits still hold.
+  triage_agent_server_work:
+    # The pools whose failed servers replace_failed_servers replaces: any of
+    # app_servers, jobs_servers and load_balancer_servers. All three by
+    # default: their servers hold no data, and a new one starts from this
+    # repository and the vault alone, so a replacement loses nothing. A
+    # pool with no servers costs nothing listed. database_servers,
+    # util_server and staging_server are refused: a database server's
+    # replacement copies data and changes the failover formation, util01
+    # runs MMX itself, and staging01 holds staging's database. [] turns the
+    # replacement off.
+    pools_whose_failed_servers_the_triage_agent_replaces: [app_servers, jobs_servers, load_balancer_servers]
+    # 2 by default: a provider sometimes hands out a bad server, so one
+    # fresh try is cheap. A second bad server points to a cause that a new
+    # server does not reach. At least 1.
+    tries_to_replace_a_failed_server: 2
+    # 24 by default, the day of the triage rules' returning-fault rule: a
+    # pool that loses another server within a day of a replacement has a
+    # cause that a new server does not fix, so the playbook refuses and a
+    # person is woken. At least 0; 0 never refuses for this reason.
+    hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person: 24
+    # How long MMHotline's warning waits before reboot_servers_after_updates
+    # runs, so that someone can press Stop. 10 by default: someone who sees
+    # the warning on the phone during the day can press Stop, and the wait
+    # plus the reboots fit in a 60-minute maintenance window. From 1 to
+    # 1440, the range MMHotline accepts for a warning's wait.
+    minutes_between_the_warning_and_a_reboot: 10
+    # While the triage agent replaces a failed server, an urgent alert (SOS)
+    # that waits for the triage agent keeps waiting this many minutes from
+    # the replacement's start, instead of waking the person on call after
+    # sos_waits_for_the_agent_minutes in mmhotline_settings.yml. MMHotline
+    # sends one warning as the replacement starts, and wakes the person on
+    # call at once when a run of the replacement fails, the triage agent
+    # asks for a person, or a run waits for an approval; otherwise at this
+    # limit, unless the site answers again first. 7 by default. Reason: at
+    # Hetzner the triage agent alone took 2 minutes 21.5 seconds at most from
+    # the replacement's start to a serving site (2 m 21.5 s, 2 m 14.8 s,
+    # 2 m 11.4 s, measured on test servers); slower providers take longer, up to
+    # about 2 minutes more; with half again added that gives about 7. A
+    # failed replacement, a hand-over or an SOS report wakes the person at
+    # once whatever this says, so the limit only matters for a slow
+    # replacement that is still working. A team at a fast provider may lower
+    # it, a team at a slower one raises it. From 0 to 60: 0 turns the longer
+    # wait off, and 60 is MMHotline's own limit, because MMHotline stops an
+    # MMX run after one hour, so a replacement never runs longer. A
+    # replacement reads the value once, as it starts.
+    sos_waits_for_a_server_replacement_minutes: 7
+    # How long MMHotline holds a warning that starts a triage session before
+    # it reaches people, while the triage agent tries first. 3 by default:
+    # a routine change the agent handles by itself (a fix, a load change)
+    # then makes one sound, MMHotline's own warning or approval request or
+    # the agent's report, and not a warning followed by the report. The
+    # agent asks for its playbook run or sends a report within the first
+    # minute or two of a session, well inside 3 minutes. Nothing is dropped:
+    # a warning the agent does not take sounds at the end of the wait, and
+    # at once when the agent cannot run (not set up, its sandbox or
+    # MMHotline's copy of this repository is missing, or its run fails or
+    # ends with no request or report). A warning that joins a session already
+    # running is never held. From 0 to 15: 0 turns holding off, and 15 is
+    # MMHotline's own limit, because a stuck agent would hold a warning
+    # longer than that.
+    warn_waits_for_the_triage_agent_minutes: 3
+    # Adding and removing app servers with the load, inside
+    # growth_limits.app_servers (smallest_number_of_servers to
+    # largest_number_of_servers). The app pool's CPU is each app server's
+    # reading of MMWatchdog's check cpu_is_below_the_app_pool_headroom_limit
+    # (mmwatchdog_checks/app_servers.yml), every 5 minutes, which util01's
+    # fleet hub keeps for 8 days. Both windows count only the readings since
+    # the pool reached its present size, so after any change the pool waits
+    # at least one whole window before the next change, and never flaps.
+    #
+    # How long MMHotline's warning waits before add_an_app_server_for_the_load
+    # or remove_server runs, so that someone can press Stop. 10 by default,
+    # the reboot's wait: a person who sees the warning on the phone can stop
+    # a server that costs money, and users of a busy site wait only minutes
+    # more. From 1 to 1440, the range MMHotline accepts for a warning's wait.
+    minutes_between_the_warning_and_adding_or_removing_an_app_server: 10
+    # An app server is added when, for this many minutes, the pool's CPU,
+    # spread over one server fewer, stayed above 70% (each app server's
+    # lowest reading, against the headroom limit of app_servers.yml). 15 by
+    # default, the same time the app servers' own CPU warning waits: a burst
+    # of a few minutes adds no server. At least 5, one reading.
+    minutes_of_high_load_before_an_app_server_is_added: 15
+    # An app server is removed when, for this many days, the smaller pool
+    # would have kept a server to spare below
+    # cpu_percent_below_which_the_app_pool_can_spare_a_server. 7 by
+    # default: a server costs cents a day, and each change costs a triage
+    # session and a few minutes of the team's attention, so only a drop
+    # that lasts through a whole week's peaks removes a server; a daily or
+    # weekend low never does. From 1 to 7: the fleet hub keeps 8 days of
+    # readings.
+    days_of_low_load_before_an_app_server_is_removed: 7
+    # The pool can spare a server when the busiest reading of each app server
+    # in those days, added up and spread over two servers fewer than the
+    # pool (at least one), stays below this percent: the smaller pool would
+    # still carry the week's peak with one server to spare. 50 by default:
+    # 20 points below the 70% at which a server is added, so the load must
+    # grow by 40% over the week's peak before the smaller pool asks for the
+    # server again. From 1 to 69: at 70 or more, the smaller pool would ask
+    # for a server at once.
+    cpu_percent_below_which_the_app_pool_can_spare_a_server: 50
+
+  # Releases from outside the distribution, each pinned by version and
+  # SHA-256. The release page of each program gives both: the archive's
+  # download address and its line in the release's SHA256SUMS. The servers
+  # are x86-64, so use each program's Linux x86-64 archive: linux-amd64, or
+  # linux-x86_64 for Litestream. A released Stack version pins a real
+  # release of each program here. A SHA-256 of zeros marks a copy of a
+  # Stack checkout that is not a release: every_server and the desk
+  # playbook refuse it before they change anything.
+  # MMWatchdog's pinned_program_releases on util01 warns when a pin here is
+  # older than the program's newest release on GitHub
+  # (mmwatchdog_checks/util_server.yml).
+  stack_software:
+    mmx:
+      version: "0.1.0"
+      download_url: https://github.com/monkeymaxxing/mmx/releases/download/v0.1.0/mmx-0.1.0-linux-amd64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    mmwatchdog:
+      version: "0.1.0"
+      download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.1.0/mmwatchdog-0.1.0-linux-amd64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    mmhotline:
+      version: "0.1.0-do-proof.26"
+      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.1.0-do-proof.26/mmhotline-0.1.0-do-proof.26-linux-amd64.tar.gz
+      sha256: "abf698fa83396c5d96dfaaa15b9ca2328054afe47d1b8c486af381f50d7f01d1"
+    # The Stack's command for the account and secret setup on the systems
+    # desk (initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md).
+    # Its release is the Stack version's, built reproducibly by the Stack
+    # repository's set_up_outside_services/build_release_archive.sh, which
+    # writes this pin.
+    set_up_outside_services:
+      version: "2026-11"
+      download_url: https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/download/2026-11/set-up-outside-services-2026-11-linux-amd64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    # MMHotline's backup: use the Litestream version named in the MMHotline
+    # repository's docs/how-to/back-up-and-restore-the-database.md, "Set up".
+    # Litestream calls its x86-64 archive linux-x86_64; the release's
+    # checksums.txt gives the SHA-256.
+    litestream:
+      version: "0.5.18"
+      download_url: https://github.com/benbjohnson/litestream/releases/download/v0.5.18/litestream-0.5.18-linux-x86_64.tar.gz
+      sha256: "d3687b9fd0f2e9426bbd3da828429ff3f1dfc5c9b74d54fdf028e4ee510e7dea"
+    # The nightly copy of the apps' uploads, on util01 while
+    # backups.uploads_backup_runs_on names it. rclone's own release, not
+    # Debian 13's 1.60. Debian 13's rclone 1.60 cannot sign in with
+    # bucket-restricted B2 keys and lacks the fix for reading a bucket as
+    # the bucket stood at a past time. See roles/uploads_backup/main.yml
+    # for the required versions.
+    # The release's SHA256SUMS gives the SHA-256 of the linux-amd64 zip.
+    rclone:
+      version: "1.75.2"
+      download_url: https://github.com/rclone/rclone/releases/download/v1.75.2/rclone-v1.75.2-linux-amd64.zip
+      sha256: "349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702"
+    # The triage agent's coding agent when triage_agent_coding_agent is
+    # codex; util01 downloads nothing for Codex otherwise. Use the Codex
+    # version that the pinned MMHotline release was built against, which
+    # MMHotline's docs/validation.md names. Codex's release package holds
+    # codex, its helper codex-code-mode-host, and rg. Codex's releases are
+    # tagged rust-vVERSION
+    # and publish no checksum file: the release page shows each file's
+    # SHA-256 beside its name.
+    codex:
+      version: "0.166.0"
+      download_url: https://github.com/openai/codex/releases/download/rust-v0.166.0/codex-package-x86_64-unknown-linux-musl.tar.gz
+      sha256: "1d44b28bc4ac9937d7d3532264baa68a507ce364956a0d4ebb856f331cdee254"

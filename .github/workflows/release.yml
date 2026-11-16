@@ -1,0 +1,57 @@
+name: Publish the release archive
+
+# Pushing a version tag, such as 2026-11, builds the release archive of
+# set-up-outside-services with set_up_outside_services/build_release_archive.sh
+# and attaches it, with SHA256SUMS, to a GitHub release of that tag. The tag
+# must name the release commit: stack_version in the template's checklist is
+# the tag, and stack_software.set_up_outside_services already pins this
+# archive's SHA-256. The build is reproducible, so the job refuses an archive
+# whose SHA-256 differs from the pin.
+
+on:
+  push:
+    tags: ['[0-9][0-9][0-9][0-9]-[0-9][0-9]*']
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        env:
+          GOTOOLCHAIN: auto # Read the toolchain directive, even if the runner sets local.
+        with:
+          go-version-file: set_up_outside_services/go.mod
+          cache: false
+      - name: Confirm the pinned Go toolchain
+        shell: bash
+        run: test "$(go env GOVERSION)" = "$(awk '$1 == "toolchain" {print $2}' set_up_outside_services/go.mod)"
+      - name: Build the archive and compare it with the template's pin
+        shell: bash
+        run: |
+          # The script refuses a tag other than stack_version, and rewrites the pin from the archive it built.
+          set_up_outside_services/build_release_archive.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/release"
+          if ! git diff --exit-code -- skills/monkeymaxxing-stack/systems_repository_template/mmx_project_settings.yml; then
+            echo "The archive's SHA-256 differs from stack_software.set_up_outside_services in the tagged commit. Build the release commit's archive again and commit its pin before tagging." >&2
+            exit 1
+          fi
+          cd "$RUNNER_TEMP/release" && sha256sum -- *.tar.gz > SHA256SUMS
+      - name: Attest the release archive
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: ${{ runner.temp }}/release/*.tar.gz
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/release/"*.tar.gz "$RUNNER_TEMP/release/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Monkeymaxxing Stack $GITHUB_REF_NAME" --generate-notes

@@ -1,0 +1,52 @@
+#!/bin/bash
+# Fills the asset directory of one web container: the asset files of its own
+# image and, when PREVIOUS_IMAGE names one, of the release that served before
+# it. The container mounts the directory over the app's asset_directory, so a
+# page that the previous release rendered still finds its CSS and JavaScript
+# after the switch (asset bridging). Asset file names carry a fingerprint of
+# their content, so the two releases' files sit side by side; a file of the
+# same name in both, such as a manifest, is the new release's.
+#
+# Input, in environment variables: CONTAINER_NAME (such as shop-web-8002),
+# ASSET_DIRECTORY (the directory inside the image), IMAGE, and PREVIOUS_IMAGE
+# (empty for none).
+#
+# Exits with 0 when the directory already holds the files of these images,
+# and with 2 after it filled the directory.
+set -euo pipefail
+
+directory="/var/lib/monkeymaxxing-stack/web_assets/$CONTAINER_NAME"
+made_from_images_file="$directory.made_from_images"
+made_from_images="$PREVIOUS_IMAGE $IMAGE"
+if [ -d "$directory" ] && [ "$(cat "$made_from_images_file" 2>/dev/null)" = "$made_from_images" ]; then
+  exit 0
+fi
+
+# The files go into a directory beside it first, so a container never sees a
+# half-filled one.
+filling_directory="$directory.filling"
+rm -rf "$filling_directory"
+mkdir "$filling_directory"
+
+copy_the_assets_of() {
+  local image="$1" mount_point copy_status=0
+  mount_point=$(podman image mount "$image")
+  cp -a "$mount_point$ASSET_DIRECTORY/." "$filling_directory/" || copy_status=$?
+  podman image unmount "$image" >/dev/null
+  return "$copy_status"
+}
+if [ -n "$PREVIOUS_IMAGE" ]; then
+  copy_the_assets_of "$PREVIOUS_IMAGE"
+fi
+copy_the_assets_of "$IMAGE"
+
+# The container runs as a user that the server does not know (UserNS=auto),
+# so to it every file belongs to "other": make all of them readable, and the
+# directories enterable, by anyone. An image whose files only their owner
+# may read would otherwise fail inside the container.
+chmod -R a+rX "$filling_directory"
+
+rm -rf "$directory"
+mv "$filling_directory" "$directory"
+printf '%s\n' "$made_from_images" > "$made_from_images_file"
+exit 2

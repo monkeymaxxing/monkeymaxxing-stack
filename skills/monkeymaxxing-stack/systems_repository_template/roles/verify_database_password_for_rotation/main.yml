@@ -1,0 +1,40 @@
+# Prove the current vault password with a read-only app-role login.
+# Postgres listens on the private address. The apps' pg_hba file admits
+# the database server's own private address with password authentication.
+inputs:
+  database_name:
+    type: string
+    required: true
+  database_server_address:
+    type: string
+    required: true
+  database_passwords:
+    type: mapping
+    required: true
+    secret: true
+node_tasks:
+  - id: check_the_current_password_with_a_database_login
+    shell:
+      # The same read-only program runs in a run and in a dryrun.
+      script: bash -c "$PROGRAM"
+      dryrun: bash -c "$PROGRAM"
+      env:
+        PROGRAM: |
+          set -euo pipefail
+          export PGPASSWORD
+          PGPASSWORD=$(jq -er --arg database "$DATABASE_NAME" '.[$database] | strings | select(length > 0)' <<< "$DATABASE_PASSWORDS")
+          if ! psql -X --no-password -qAt -v ON_ERROR_STOP=1 \
+              --host "$DATABASE_SERVER_ADDRESS" --username "$DATABASE_NAME" --dbname "$DATABASE_NAME" \
+              --command 'select true' >/dev/null 2>&1; then
+            echo 'the database password does not match the current vault; run every_server and wait for replication before rotating connections' >&2
+            exit 1
+          fi
+          echo 'the database password matches the current vault'
+        DATABASE_NAME: "{{ .inputs.database_name }}"
+        DATABASE_SERVER_ADDRESS: "{{ .inputs.database_server_address }}"
+        DATABASE_PASSWORDS: "{{ .inputs.database_passwords }}"
+        PGCONNECT_TIMEOUT: "3"
+        PGPASSFILE: /dev/null
+        PGOPTIONS: -c default_transaction_read_only=on
+      output_holds_no_secret: true
+      changed_when: false

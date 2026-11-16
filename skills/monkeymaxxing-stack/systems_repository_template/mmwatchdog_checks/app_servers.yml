@@ -1,0 +1,96 @@
+{{- /*
+  MMWatchdog's check groups for the app servers: the triggers that name the
+  app pool's operating procedures. This file is an MMX template: MMX renders it on each app
+  server into /etc/mmwatchdog/check_groups/app_servers.yml. It reads the
+  role inputs inventory_groups (the app pool's size), apps, and
+  job_containers_run_only_on_the_jobs_servers, and the server's own facts.
+  staging01 stays one server, so it has no triggers.
+*/ -}}
+{{- $app_servers := len .inputs.inventory_groups.app_servers -}}
+{{- /*
+  Headroom: add an app server when the pool's CPU, spread over one server
+  fewer, would pass 70%. The limit is 70 x (n - 1) / n percent for n app
+  servers, rounded: 35 for two, 47 for three. A single app server has no
+  server fewer to spread over, so its limit is 70%: every pool keeps at
+  least 30% of CPU unused as headroom, and past 70% the one server is full.
+*/ -}}
+{{- $cpu_limit := 70.0 -}}
+{{- if gt $app_servers 1 -}}{{- $cpu_limit = round (divf (mul 70 (sub $app_servers 1)) $app_servers) 0 -}}{{- end -}}
+{{- /* The interface of the default route carries the users' requests. */ -}}
+{{- $public_interface := "" -}}
+{{- range .node.network.default_routes -}}{{- if and (eq .family "ipv4") (eq $public_interface "") -}}{{- $public_interface = .interface -}}{{- end -}}{{- end -}}
+# Managed by MMX from mmwatchdog_checks/app_servers.yml in the systems repository.
+# To be woken for a check, set that check's alert_severity to sos. warn tells
+# a person during the day; sos wakes the person on call, which a small team
+# turns on check by check. The checks a careful team raises first: the
+# backups, write-ahead log archiving, and the restore drill. Each value below
+# has its reason beside it; change a value only with a reason of your own.
+# Servers in the app pool: {{ $app_servers }}.
+check_groups:
+  # Each reading covers the 5 minutes since the previous reading.
+  # MMWatchdog sends a warning after 15 minutes past a limit.
+  app_server_capacity:
+    check_every: 5m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 15m
+    recovered_after_healthy_for: 5m
+    checks:
+      # Operating procedure: add an app server.
+      # warn, or info with what_the_triage_agent_may_do_without_a_person:
+      # routine_fixes_and_server_work. Reason for info then: util01's check
+      # app_servers_to_add_for_the_load watches the whole pool by these
+      # readings and starts the triage agent, which adds the server after
+      # MMHotline's warning; a warn here too would ring the phone once more
+      # for each busy app server. One busy server in a pool that is not busy
+      # still shows on MMHotline's pages and in the weekly review.
+      cpu_is_below_the_app_pool_headroom_limit:
+        node_resource: cpu
+        fail_when_measurement_above:
+          cpu_used_percent: {{ $cpu_limit }}
+        alert_severity: {{ if eq (.inputs.reboot_check_settings.what_the_triage_agent_may_do_without_a_person | default "") "routine_fixes_and_server_work" }}info{{ else }}warn{{ end }}
+      # Operating procedure: add an app server, or bigger app servers.
+      # Reason for 75%: leaves room for a deploy, which runs the new and the live release together
+      # (see Memory for both releases). Reason for warn: slow or killed processes, not yet an outage.
+      memory_is_below_75_percent:
+        node_resource: memory
+        fail_when_measurement_above:
+          memory_used_percent: 75
+        alert_severity: warn
+      # Operating procedure: add load-balancer servers.
+      # If load-balancer servers already receive requests from Cloudflare
+      # and forward requests to app servers, add an app server instead.
+      # 600 Mbit/s is 60% of a 1 Gbit/s port, the usual port of a rented
+      # server.
+      network_is_below_60_percent_of_the_port:
+        node_network_interface: {{ $public_interface }}
+        fail_when_measurement_above:
+          received_mbit_per_second: 600
+          sent_mbit_per_second: 600
+        alert_severity: warn
+{{- /* An app whose jobs_command is "" has no job container, so it has no job check. */ -}}
+{{- $some_app_has_jobs := false -}}
+{{- range $app_name, $app := .inputs.apps }}{{ if ne $app.jobs_command "" }}{{ $some_app_has_jobs = true }}{{ end }}{{ end -}}
+{{- /* While the job containers run here: until only the jobs servers run them. */ -}}
+{{- if and $some_app_has_jobs (not .inputs.job_containers_run_only_on_the_jobs_servers) }}
+
+  # MMWatchdog records each job container's CPU readings without sending
+  # alerts. When MMWatchdog sends the app-server CPU warning, the triage
+  # agent reads the job-container CPU readings.
+  # The job-container CPU readings distinguish "add an app server" from
+  # "move the jobs to jobs servers".
+  job_containers:
+    check_every: 5m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 15m
+    recovered_after_healthy_for: 5m
+    checks:
+{{- range $app_name, $app := .inputs.apps }}
+{{- if ne $app.jobs_command "" }}
+      {{ $app_name }}_jobs_cpu:
+        only_record_readings: true
+        systemd_unit_resource:
+          systemd_unit: {{ $app_name }}-jobs.service
+          resource: cpu
+{{- end }}
+{{- end }}
+{{- end }}

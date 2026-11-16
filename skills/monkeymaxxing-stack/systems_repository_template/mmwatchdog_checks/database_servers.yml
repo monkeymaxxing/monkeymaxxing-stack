@@ -1,0 +1,208 @@
+{{- /*
+  MMWatchdog's check groups for the database servers and staging01: the
+  triggers that name the database pool's operating procedures, Postgres's health, and the
+  backups. This file is an MMX template: MMX renders it on each of those
+  servers into /etc/mmwatchdog/check_groups/database_servers.yml. It reads
+  the role inputs is_staging_server and pgbouncer_runs_in_front_of_postgres,
+  and the server's own facts. staging01 stays one server and keeps no
+  backups, so it gets the health checks only: no triggers and no backup
+  checks.
+*/ -}}
+{{- $staging := .inputs.is_staging_server -}}
+# Managed by MMX from mmwatchdog_checks/database_servers.yml in the systems repository.
+# To be woken for a check, set that check's alert_severity to sos. warn tells
+# a person during the day; sos wakes the person on call, which a small team
+# turns on check by check. The checks a careful team raises first: the
+# backups, write-ahead log archiving, and the restore drill. Each value below
+# has its reason beside it; change a value only with a reason of your own.
+check_groups:
+{{- if not $staging }}
+{{- /*
+  The disk device that holds Postgres's data directory,
+  /var/lib/postgresql/<version>/pg_auto_failover_node: the device of the
+  longest mount point that holds it, which is /, a directory above
+  /var/lib/postgresql, or /var/lib/postgresql/<version> or that data
+  directory itself. A server whose data is on no block device, such as a
+  filesystem of its own kind, records no disk reads.
+*/ -}}
+{{- $postgres_data_device := "" -}}
+{{- $longest_mount_point := 0 -}}
+{{- range .node.storage.block_devices -}}
+{{- $device := . -}}
+{{- if hasKey . "mount_points" -}}
+{{- range .mount_points -}}
+{{- $holds_the_data := or (eq . "/") (hasPrefix (printf "%s/" .) "/var/lib/postgresql/") (regexMatch "^/var/lib/postgresql/[0-9]+(/pg_auto_failover_node)?$" .) -}}
+{{- if and $holds_the_data (gt (len .) $longest_mount_point) -}}{{- $postgres_data_device = $device.path -}}{{- $longest_mount_point = len . -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+  # Each reading covers the 5 minutes since the previous reading. A warning
+  # goes out after 15 minutes past a limit.
+  database_server_capacity:
+    check_every: 5m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 15m
+    recovered_after_healthy_for: 5m
+    checks:
+      # Operating procedure: send reads to the replicas, or bigger database servers.
+      # Reason for 50%: reads can move to replicas only while there is room, and a failover
+      # puts the primary's work on one server. Reason for warn: slow, not down.
+      cpu_is_below_50_percent:
+        node_resource: cpu
+        fail_when_measurement_above:
+          cpu_used_percent: 50
+        alert_severity: warn
+      # Operating procedure: bigger database servers.
+      # Reason for 70%: a database disk fills fast (write-ahead log, a long vacuum), and replacing a database
+      # server takes days. Reason for warn: nothing has stopped yet.
+      disks_are_below_70_percent_full:
+        every_disk_and_network_filesystem:
+          filesystems_to_ignore: []
+        fail_when_measurement_above:
+          space_used_percent: 70
+        alert_severity: warn
+      # Recorded, never alerting: the evidence for bigger database servers.
+      # The readings record the amount of data
+      # read from the disk storing Postgres's data, and how often programs
+      # had to wait for memory. Postgres's own cache share,
+      # cache_hit_percent, is recorded by every postgresql check in the
+      # postgres group below, and never alerts: a block missing from
+      # Postgres's buffers is often in the operating system's page cache,
+      # so a low share alone proves nothing.
+{{- if $postgres_data_device }}
+      postgres_data_disk:
+        only_record_readings: true
+        node_disk_device: {{ $postgres_data_device }}
+{{- end }}
+      memory_pressure:
+        only_record_readings: true
+        node_resource: memory_pressure
+
+{{- end }}
+
+  # The checks log in as the operating system account postgres, through the
+  # server's local socket.
+  postgres:
+    check_every: 1m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 2m
+    recovered_after_healthy_for: 1m
+    checks:
+      # Reason for warn, not sos: with several database servers a failover handles a lost primary, and util01's
+      # public-site checks wake someone when users are hurt. A team with one database server may raise this to sos.
+      postgres_answers:
+        postgresql: {}
+        alert_severity: warn
+      # Postgres numbers transactions. Near 100 percent, Postgres refuses
+      # every write until a long vacuum finishes, while reads keep working.
+      # A healthy server reads about 5 to 10, and Postgres's own emergency
+      # vacuum starts near 9. 50 leaves about a billion transactions:
+      # weeks on a busy server, time to find what blocks vacuum.
+      # A replica reads the primary's number.
+      # Reason for warn: there is time to act (see the numbers below) before writes stop.
+      transaction_ids_are_less_than_half_way_to_wraparound:
+        postgresql: {}
+        fail_when_measurement_above:
+          transaction_ids_used_before_wraparound_percent: 50
+        alert_severity: warn
+        no_alerts_or_recovery_actions_while_these_checks_fail: [postgres/postgres_answers]
+{{- if not $staging }}
+      # Operating procedure: add PgBouncer.
+      # Reason for 70%: leaves room for a burst and for the apps' own connection pools. Reason for warn:
+      # new connections fail only near 100%.
+      connections_are_below_70_percent:
+        postgresql: {}
+        fail_when_measurement_above:
+          connections_used_percent: 70
+        alert_severity: warn
+        alert_after_failing_for: 15m
+        no_alerts_or_recovery_actions_while_these_checks_fail: [postgres/postgres_answers]
+      # With synchronous replication, the primary confirms a write only
+      # after a replica holds the write too. A primary is 0 seconds behind.
+      # Reason for 30 seconds: with synchronous replication a healthy replica is nearly 0 seconds behind;
+      # 30 seconds means it is stuck. Reason for warn: the primary keeps serving.
+      replica_is_less_than_30_seconds_behind:
+        postgresql: {}
+        fail_when_measurement_above:
+          replication_lag_seconds: 30
+        alert_severity: warn
+        no_alerts_or_recovery_actions_while_these_checks_fail: [postgres/postgres_answers]
+{{- end }}
+{{- if .inputs.pgbouncer_runs_in_front_of_postgres }}
+
+  # PgBouncer lets many app connections share fewer Postgres connections on
+  # the database server or staging01 where the PgBouncer checks run.
+  # After a crash, systemd starts PgBouncer again.
+  # What to do: the triage agent finds out why PgBouncer stopped, hangs, or
+  # fails to restart when the local Postgres starts or changes role.
+  # Restarting PgBouncer makes clients reconnect and learn Postgres's current
+  # role. The Postgres checks above keep measuring Postgres itself through
+  # Postgres's local socket.
+  pgbouncer:
+    check_every: 1m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 2m
+    recovered_after_healthy_for: 1m
+    checks:
+      # Reason for warn: systemd restarts PgBouncer after a crash; the warning means it did not stay up.
+      pgbouncer_runs:
+        systemd_unit_state:
+          systemd_unit: pgbouncer.service
+          fail_when: the_unit_is_not_active
+        alert_severity: warn
+      # A PgBouncer that runs but hangs doesn't answer its admin console,
+      # which the account postgres reaches through the local socket.
+      pgbouncer_answers:
+        shell:
+          script: psql -X -At -h /var/run/postgresql -p 6432 -U pgbouncer -d pgbouncer -c 'SHOW VERSION' > /dev/null
+          run_as_user_account: postgres
+          env: {PGCONNECT_TIMEOUT: "5"}
+        alert_severity: warn
+        no_alerts_or_recovery_actions_while_these_checks_fail: [pgbouncer/pgbouncer_runs]
+      # After a failover, PgBouncer must restart so clients learn Postgres's
+      # current role. A systemd path unit watches Postgres's data directory
+      # and triggers the restart (roles/pgbouncer/main.yml). The path unit is
+      # active while watching.
+      pgbouncer_follows_postgres:
+        systemd_unit_state:
+          systemd_unit: refresh_pgbouncer_when_postgres_starts_or_changes_role.path
+          fail_when: the_unit_is_not_active
+        alert_severity: warn
+{{- end }}
+{{- if not $staging }}
+
+  # What to do: rerun the backup. A replica archives nothing, so
+  # wal_archive_lag_seconds on a replica reports 0 seconds.
+  write_ahead_log_archiving:
+    check_every: 1m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 1m
+    checks:
+      # Reason for 300 seconds: archive_timeout is 60 seconds, so 5 minutes means archiving is stuck.
+      # Reason for warn: nothing is lost yet, but every minute past the limit is a minute a restore cannot reach.
+      # A careful team raises this check to sos.
+      archived_within_5_minutes:
+        postgresql: {}
+        fail_when_measurement_above:
+          wal_archive_lag_seconds: 300
+        alert_severity: warn
+        no_alerts_or_recovery_actions_while_these_checks_fail: [postgres/postgres_answers]
+
+  # What to do: rerun the backup. pgBackRest takes a daily backup, and the check
+  # also fails on any problem pgBackRest reports.
+  backups:
+    check_every: 10m
+    time_limit_per_run: 1m
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 0s
+    checks:
+      # Reason for 26 hours: a daily backup plus 2 hours for a slow one. Reason for warn: the earlier
+      # backups still restore. A careful team raises this check to sos.
+      latest_backup_is_less_than_26_hours_old:
+        pgbackrest:
+          stanza: main
+        fail_when_measurement_above:
+          latest_backup_age_hours: 26
+        alert_severity: warn
+{{- end }}

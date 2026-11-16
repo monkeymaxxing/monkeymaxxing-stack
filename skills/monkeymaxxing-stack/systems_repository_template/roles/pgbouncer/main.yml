@@ -1,0 +1,261 @@
+# PgBouncer on the database servers, and on staging01 for staging: a pool in
+# front of the server's own Postgres, so that thousands of the apps' mostly
+# idle connections share a few dozen Postgres connections. every_server runs
+# the pgbouncer role once pgbouncer_runs_in_front_of_postgres in
+# mmx_project_settings.yml is true, the later step for when Postgres
+# connections in use pass about 70% of max_connections
+# (operating_procedures/add_pgbouncer.md, "Adding PgBouncer").
+#
+# In transaction mode, PgBouncer lends a Postgres connection to a client for
+# one transaction only. The next transaction can use a different Postgres
+# connection, so a client cannot rely on session state between transactions.
+# Session state includes LISTEN, a session-level advisory lock, and a setting
+# sent at login, such as the app's database-schema migrations' lock_timeout.
+# A session-level advisory lock is an app-controlled lock tied to a Postgres
+# session across transactions.
+#
+# Work that needs a whole session connects to Postgres directly, on port
+# 5432:
+# - the app's database-schema migration commands,
+# - the job container of an app whose jobs_connect_directly_to_postgres is
+#   true,
+# - replication, the failover monitor, pgBackRest, and MMWatchdog's checks.
+# Prepared statements work through PgBouncer: PgBouncer 1.21 and later
+# prepares each statement again on the Postgres connection that runs the
+# statement.
+#
+# PgBouncer reaches its own Postgres at the server's WireGuard address, as
+# the client's Postgres login account (role). PgBouncer reads the login
+# account's password from Postgres at each login (auth_query), so no second
+# copy of a password exists, and a rotated password works at once.
+#
+# PgBouncer keeps client connections when the local Postgres restarts or
+# changes between primary and standby. PgBouncer keeps telling each new
+# client what Postgres reported at PgBouncer's first connection, such as
+# whether Postgres is a standby. After a failover, the apps' connections to
+# the old primary would stay on a standby. libpq is Postgres's client
+# library, used by the database drivers in Rails and Django. A driver using
+# libpq would incorrectly identify the new primary as a standby and find no
+# server for writes.
+#
+# Whenever the local Postgres starts, becomes a standby, or is promoted,
+# files/refresh_pgbouncer_when_postgres_starts_or_changes_role restarts
+# PgBouncer. PgBouncer restarts on a standby and on a new primary, so clients
+# reconnect and the driver finds the primary.
+#
+# The RECONNECT command replaces PgBouncer's Postgres connections after
+# transactions finish, but keeps client connections open. RECONNECT left
+# the new primary's PgBouncer telling new clients that Postgres was a standby.
+inputs:
+  # staging01 uses the main cluster created by Debian's Postgres package,
+  # which uses Debian's cluster layout. The data_directory and pg_hba_file
+  # paths below compare staging01's main cluster with the database servers'
+  # pg_auto_failover_node cluster.
+  is_staging_server:
+    type: boolean
+    required: true
+  postgresql_major_version:
+    type: integer
+    required: true
+  apps:                                     # vars.apps from mmx_project_settings.yml: each app's database_name
+    type: mapping
+    required: true
+  # PgBouncer listens and reaches the local Postgres at the WireGuard
+  # address of the server running the pgbouncer role.
+  private_ip:
+    type: string
+    required: true
+  # The source address PgBouncer uses to log in to Postgres, in pg_hba.conf
+  # CIDR notation (address/prefix length). The source is the database
+  # servers' range, or staging01's WireGuard address with /32 for a single
+  # server.
+  addresses_pgbouncer_logs_in_from:
+    type: string
+    required: true
+
+node_tasks:
+  # Data directory and pg_hba.conf paths for the database servers'
+  # pg_auto_failover_node cluster and staging01's main cluster. The paths
+  # match roles/database_server/main.yml.
+  - id: name_the_files_of_the_pg_auto_failover_node
+    when: {not: "{{ .inputs.is_staging_server }}"}
+    set_vars:
+      data_directory: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}/pg_auto_failover_node"
+      pg_hba_file: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}/pg_auto_failover_node/pg_hba.conf"
+  - id: name_the_files_of_debians_own_cluster
+    when: "{{ .inputs.is_staging_server }}"
+    set_vars:
+      data_directory: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}/main"
+      pg_hba_file: "/etc/postgresql/{{ .inputs.postgresql_major_version }}/main/pg_hba.conf"
+
+  # PgBouncer comes from Debian, as Postgres does: 1.24.1 on Debian 13.
+  # MMX keeps a package from starting its services while it installs, so
+  # PgBouncer first starts below, with the settings of the pgbouncer role.
+  # A PgBouncer update restarts PgBouncer, which drops the apps' connections
+  # on the server running the pgbouncer role. So every_server leaves
+  # PgBouncer updates uninstalled on the database servers, and
+  # update_database_servers installs PgBouncer updates in the team's weekly
+  # maintenance window for database updates.
+  - id: install_pgbouncer
+    apt_package:
+      packages:
+        - {name: pgbouncer, version: newest_when_first_installed}
+
+  # Each app's Postgres login account uses the app's password from the
+  # address where PgBouncer runs. On every production database server, the
+  # login rules allow the database servers' address range. On staging01,
+  # the login rules allow staging01's own address. The staging01 login rule
+  # matches the direct app login rule word for word in
+  # roles/database_server/files/pg_hba_logins_of_the_apps.conf.
+  #
+  # PgBouncer's login rules live in
+  # /etc/postgresql/pg_hba_logins_through_pgbouncer.conf, which pg_hba.conf
+  # includes. The database_server role also keeps direct app login rules
+  # in a separate included file. pg_autoctl manages failover nodes and adds
+  # login rules to pg_hba.conf. pg_rewind brings an old primary back as a
+  # replica and replaces pg_hba.conf with the primary's copy.
+  #
+  # pg_autoctl and pg_rewind can change pg_hba.conf after every_server's
+  # pgbouncer fleet stage, which runs the postgres_logins_of_pgbouncer node
+  # task block. So MMX tracks changes for postgres_logins_of_pgbouncer only
+  # in /etc/postgresql/pg_hba_logins_through_pgbouncer.conf.
+  - id: include_the_logins_through_pgbouncer_in_pg_hba_conf
+    line:
+      path: "{{ .vars.pg_hba_file }}"
+      line: include_if_exists /etc/postgresql/pg_hba_logins_through_pgbouncer.conf
+      insert_at_end_of_file: true
+  - id: postgres_logins_of_pgbouncer
+    task_block:
+      id: postgres_logins_of_pgbouncer
+      changes:
+        - id: write_the_logins_through_pgbouncer
+          file:
+            path: /etc/postgresql/pg_hba_logins_through_pgbouncer.conf
+            template: files/pg_hba_logins_through_pgbouncer.conf
+            owner: root
+            group: postgres
+            permissions_mode: "0640"
+      activate:
+        # Postgres reads pg_hba.conf again without dropping a connection.
+        - id: reload_postgres
+          shell:
+            script: '"/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/psql" --no-psqlrc --quiet --port 5432 --command "select pg_reload_conf()"'
+            run_as_user_account: postgres
+            env:
+              POSTGRESQL_MAJOR_VERSION: "{{ .inputs.postgresql_major_version }}"
+            only_when_tracked_inputs_changed: true
+
+  # PgBouncer's settings, and its unit's own settings. A change of
+  # pgbouncer.ini, such as a new app's database, reloads PgBouncer, which
+  # keeps every connection. A change of pgbouncer.service's
+  # 10-monkeymaxxing-stack.conf drop-in restarts PgBouncer. The first run
+  # starts PgBouncer.
+  - task_block:
+      id: pgbouncer
+      changes:
+        - id: write_the_pgbouncer_settings
+          file:
+            path: /etc/pgbouncer/pgbouncer.ini
+            template: files/pgbouncer.ini
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: settings_of_the_pgbouncer_unit
+          systemd_unit:
+            name: pgbouncer.service
+            drop_in: 10-monkeymaxxing-stack.conf
+            content: |
+              # Managed by MMX from roles/pgbouncer/main.yml in the systems repository.
+              [Unit]
+              # PgBouncer listens on this server's WireGuard address, which wg0 holds.
+              After=wg-quick@wg0.service
+              Wants=wg-quick@wg0.service
+
+              [Service]
+              # Each client connection is an open file: room for max_client_conn
+              # in pgbouncer.ini, and for the connections to Postgres.
+              LimitNOFILE=16384
+              Restart=on-failure
+              RestartSec=5s
+              # A stop waits for the transactions in flight, and one long query
+              # or an idle transaction would hold a restart up for 90 seconds:
+              # after 10, PgBouncer is ended, and its clients connect again.
+              TimeoutStopSec=10s
+      activate:
+        - id: run_pgbouncer
+          systemd_service:
+            name: pgbouncer
+            state: running
+            start_at_boot: true
+            refresh: reload
+      verify:
+        - id: wait_until_pgbouncer_accepts_connections
+          wait_for:
+            tcp_port_accepts_connections: 6432
+            tcp_host: "{{ .inputs.private_ip }}"
+            wait_at_most: 10s
+
+  # PgBouncer restarts whenever Postgres on the server running the pgbouncer
+  # role starts, becomes a standby, or is promoted. The opening comments in
+  # roles/pgbouncer/main.yml explain why PgBouncer must restart.
+  # The systemd path unit
+  # refresh_pgbouncer_when_postgres_starts_or_changes_role.path watches two
+  # files in Postgres's data directory and starts the refresh service on a
+  # change:
+  # - postmaster.opts, which Postgres writes at each start, before it accepts
+  #   a connection: after a failover or a switchover, the old primary starts
+  #   again as a standby;
+  # - standby.signal, which pg_autoctl writes when it sets the node up as a
+  #   standby, and again at each of its reloads, and deletes while it
+  #   follows a new primary, and which Postgres deletes when it is promoted.
+  # postmaster.pid cannot identify only starts and changes between primary
+  # and standby, because Postgres opens postmaster.pid for writing every
+  # minute. An old primary that comes back makes about five changes to
+  # postmaster.opts and standby.signal in a few seconds.
+  # The wait in
+  # files/refresh_pgbouncer_when_postgres_starts_or_changes_role combines
+  # several file changes into one PgBouncer restart. StartLimitIntervalSec=0
+  # keeps systemd from refusing the next start of
+  # refresh_pgbouncer_when_postgres_starts_or_changes_role.service.
+  - id: install_the_program_that_refreshes_pgbouncer
+    file:
+      path: /usr/local/sbin/refresh_pgbouncer_when_postgres_starts_or_changes_role
+      source: files/refresh_pgbouncer_when_postgres_starts_or_changes_role
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - task_block:
+      id: refresh_pgbouncer_when_postgres_starts_or_changes_role
+      changes:
+        - id: install_the_service_that_refreshes_pgbouncer
+          systemd_unit:
+            name: refresh_pgbouncer_when_postgres_starts_or_changes_role.service
+            content: |
+              # Managed by MMX from roles/pgbouncer/main.yml in the systems repository.
+              [Unit]
+              Description=Bring PgBouncer up to date with its Postgres after a start or a change of role
+              StartLimitIntervalSec=0
+
+              [Service]
+              Type=oneshot
+              ExecStart=/usr/local/sbin/refresh_pgbouncer_when_postgres_starts_or_changes_role {{ .vars.data_directory }}
+        - id: install_the_path_unit_that_watches_postgres
+          systemd_unit:
+            name: refresh_pgbouncer_when_postgres_starts_or_changes_role.path
+            content: |
+              # Managed by MMX from roles/pgbouncer/main.yml in the systems repository.
+              [Unit]
+              Description=Watch this server's Postgres for a start, a demotion, or a promotion
+
+              [Path]
+              PathChanged={{ .vars.data_directory }}/postmaster.opts
+              PathChanged={{ .vars.data_directory }}/standby.signal
+
+              [Install]
+              WantedBy=multi-user.target
+      activate:
+        - id: watch_postgres_for_a_start_or_a_change_of_role
+          systemd_service:
+            name: refresh_pgbouncer_when_postgres_starts_or_changes_role.path
+            state: running
+            start_at_boot: true

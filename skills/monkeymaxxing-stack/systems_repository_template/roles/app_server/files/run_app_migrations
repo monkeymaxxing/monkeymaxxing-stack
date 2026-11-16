@@ -1,0 +1,33 @@
+#!/bin/bash
+# Runs one app's migration command in a one-off container of the given image,
+# with the app's settings and secrets, on this server's network.
+#
+# Usage: run_app_migrations APP_NAME IMAGE MIGRATION_COMMAND...
+#
+# Each statement of the migration waits at most 5 seconds for a table lock
+# and then fails, so a deploy stops before its switch instead of holding up
+# live requests behind the lock. PGOPTIONS is read by every driver built on
+# libpq (Ruby's pg, Python's psycopg, PHP's), by Go's pgx, and by Node's pg;
+# Prisma's CLI gets it in its URL from run_with_the_primary_database_url.mjs,
+# from the stack's skill; an app with another driver sets lock_timeout in
+# its own database settings.
+#
+# The migrations connect to Postgres directly, never through PgBouncer:
+# PgBouncer refuses PGOPTIONS, and a migration may hold a session-level
+# advisory lock, as Rails' migrations do, which PgBouncer's transaction mode
+# would lose. Podman reads the env files in order, and a later file's
+# setting wins, so the database settings direct to Postgres come last.
+set -euo pipefail
+
+app_name="$1"
+image="$2"
+shift 2
+
+exec podman run --rm --name "$app_name-migrations" --network host \
+  --userns=auto \
+  --security-opt apparmor=monkeymaxxing-app-containers \
+  --env-file "/etc/$app_name/${app_name}_settings.env" \
+  --env-file "/etc/$app_name/$app_name.env" \
+  --env-file "/etc/$app_name/${app_name}_database_direct_to_postgres.env" \
+  --env PGOPTIONS="-c lock_timeout=5s" \
+  "$image" "$@"

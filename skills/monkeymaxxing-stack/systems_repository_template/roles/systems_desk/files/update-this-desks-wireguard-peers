@@ -1,0 +1,378 @@
+#!/usr/bin/python3
+"""Set this desk's WireGuard peers for the servers from pushed main.
+
+The coding agent runs it, with no arguments, after any change to the
+inventory's servers, at the start of each session, and when SSH to a server
+fails:
+    sudo -n update-this-desks-wireguard-peers
+
+It fetches pushed main as servers-mmx, the way run-mmx-on-the-servers does,
+with the desk's SSH agent relay and the desk's own Git settings, never as
+root. It runs nothing from the repository: it reads only
+inventories/servers.yml, as data, and checks each value before root uses it.
+It writes the server peers to SERVER_PEERS, which only this command writes,
+and sets the same peers on the running interface wg0, keeping the other
+peers' sessions. It prints the commit it used and each peer it added,
+changed or removed, by server name.
+
+The desk's peers for the servers: every inventory node outside the group
+systems_desks that has a wireguard_public_key, with its private_ip and
+public_ipv4_address, except a node of database_restore_servers whose
+private_ip lies outside vars.private_ip_ranges.database_servers. A node
+without a wireguard_public_key is a server that does not exist yet.
+Reason for the database_restore_servers rule: a new database server that
+restore_database restores after every database server is lost keeps a
+database server's address, because it joins database_servers after the
+restore, and the desks run that restore and trust its SSH host key over
+WireGuard, so the desk needs its peer. restore01, of the restore drill and
+of a copy restored to recover rows, takes vars.restore01_private_ip, outside
+every pool; its first-boot data peers it with util01 alone, so a desk peer
+for it would reach nothing. Each peer is the
+node's key, AllowedIPs private_ip/32, and Endpoint public_ipv4_address:PORT,
+as the servers' own peers are written (roles/every_server/files/wireguard_wg0.conf).
+PORT is the inventory's vars.wireguard_listen_port: servers and desks reach
+each other on WireGuard's own port, never the redirected UDP 443, and the
+desk skips connection tracking for them (files_used_by_several_roles/
+wireguard_notrack_between_servers_and_desks.nft says why). The command writes
+every server's public address to NOTRACK_ADDRESSES, which that table includes
+whenever it loads (so the set survives a reboot), and adds them to the running
+set at once, so a server the inventory gains is untracked before the desk's
+next wg0 reload. Reason for a file only this command writes: a desk review
+must show no change when a server joins or leaves, so the reviewed files
+cannot list the servers. A server that leaves stays in the running set until
+the table next loads; the address then answers nothing on that port.
+
+Reason for a fixed program that the desk review installs: it runs as root,
+so a change to it reaches root only through the person's desk review, while
+the servers it reads come from the Git host. Reason for the checks: anyone
+who can push to the Git host could otherwise give a server a laptop's key
+or address and cut the person off from their desk, or take an address
+inside the desks' or the laptops' blocks.
+
+The desk playbook keeps the interface and the laptop peers in
+/etc/wireguard/wg0.conf, and copies SERVER_PEERS below SERVER_PEERS_LINE, so
+a desk review keeps these peers; wg0's PostUp line loads SERVER_PEERS when
+wg0 starts, such as after a reboot.
+
+The desk playbook itself runs, as root, before it writes wg0:
+    update-this-desks-wireguard-peers --only-write-the-server-peers-file ALLOWED_LAPTOPS_JSON
+That writes SERVER_PEERS from pushed main with the same checks, and touches
+neither wg0 nor its file, so the desk review that follows keeps every server
+peer. Reason: on a desk from an earlier Stack version, or a rebuilt desk,
+SERVER_PEERS would otherwise be empty when the desk review rewrites wg0, and
+MMX would cut the desk, its own controller, off from the servers. The
+laptops come from the reviewed run, ALLOWED_LAPTOPS_JSON being the desk's
+allowed_laptops, because wg0's file may not have SERVER_PEERS_LINE yet. When
+pushed main cannot be fetched, such as at a new desk's bootstrap, before the
+Git host knows the desk's key, SERVER_PEERS stays as it is. The coding
+agent's sudo rule allows only the empty argument, so it never reaches this
+form.
+"""
+import base64
+import ipaddress
+import json
+import os
+from pathlib import Path
+import pwd
+import re
+import subprocess
+import sys
+import tempfile
+
+INSTALLED_PATH = '/usr/local/bin/update-this-desks-wireguard-peers'
+SERVER_PEERS = Path('/etc/systems-desk/wireguard-server-peers.conf')
+WG0_CONF = Path('/etc/wireguard/wg0.conf')
+NOTRACK_ADDRESSES = Path('/etc/systems-desk/wireguard-notrack-addresses.nft')
+# The line in WG0_CONF, from roles/systems_desk/files/wireguard_wg0.conf,
+# above which the interface and the laptop peers are.
+SERVER_PEERS_LINE = '# Server peers, copied from /etc/systems-desk/wireguard-server-peers.conf'
+REPOSITORY_REMOTE = Path('/etc/systems-desk/repository-remote')
+# servers-mmx's own bare repository: only the fetched commits, no checkout.
+FETCH_REPOSITORY = '/var/lib/servers-mmx/wireguard-peers.git'
+FETCH_ACCOUNT = 'servers-mmx'
+INVENTORY = 'inventories/servers.yml'
+SETPRIV = '/usr/bin/setpriv'
+WG = '/usr/bin/wg'
+NFT = '/usr/sbin/nft'
+NOTRACK_TABLE = ['inet', 'stack_wireguard_notrack', 'server_and_desk_public_addresses']
+GIT = '/usr/bin/git'
+NODE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,62}')
+# The desk playbook's form: write SERVER_PEERS only, before the desk review
+# writes wg0. Root only: the coding agent's sudo rule allows no argument.
+ONLY_WRITE_THE_SERVER_PEERS_FILE = '--only-write-the-server-peers-file'
+
+
+class Stop(Exception):
+    """A reason to stop before anything changed."""
+
+
+class FetchFailed(Stop):
+    """Pushed main could not be fetched from the Git host."""
+
+
+def as_the_fetch_account(arguments):
+    account = pwd.getpwnam(FETCH_ACCOUNT)
+    result = subprocess.run([SETPRIV, '--reuid=%d' % account.pw_uid, '--regid=%d' % account.pw_gid, '--init-groups', '--',
+                             GIT, '-c', 'core.hooksPath=/dev/null', *arguments],
+                            text=True, capture_output=True, cwd=account.pw_dir,
+                            env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': account.pw_dir, 'LANG': 'C.UTF-8',
+                                 'SSH_AUTH_SOCK': '/run/desk-ssh-agent/socket',
+                                 'GIT_SSH_COMMAND': 'ssh -F /etc/systems-desk/ssh.conf'})
+    if result.returncode:
+        raise FetchFailed('git %s failed: %s. Nothing changed.' % (arguments[0], ' '.join(result.stderr.split())[:400]))
+    return result.stdout
+
+
+def fetch_the_pushed_inventory():
+    remote = REPOSITORY_REMOTE.read_text().strip()
+    if not Path(FETCH_REPOSITORY, 'HEAD').exists():
+        as_the_fetch_account(['init', '--quiet', '--bare', FETCH_REPOSITORY])
+    as_the_fetch_account(['-C', FETCH_REPOSITORY, 'fetch', '--quiet', '--no-tags', '--', remote, 'refs/heads/main'])
+    commit = as_the_fetch_account(['-C', FETCH_REPOSITORY, 'rev-parse', '--verify', 'FETCH_HEAD^{commit}']).strip()
+    return commit, as_the_fetch_account(['-C', FETCH_REPOSITORY, 'show', '%s:%s' % (commit, INVENTORY)])
+
+
+def canonical_key(value):
+    """A WireGuard public key as WireGuard writes it: 32 bytes in base64,
+    44 characters."""
+    if not isinstance(value, str) or len(value) != 44:
+        return False
+    try:
+        return base64.b64encode(base64.b64decode(value, validate=True)).decode() == value and len(base64.b64decode(value)) == 32
+    except ValueError:
+        return False
+
+
+def server_peers(inventory, keys_that_are_not_servers):
+    """The desk's server peers from the pushed inventory, by public key:
+    {key: (name, private_ip, public_ipv4_address)}. Stops on the first value
+    that a server must not have, naming the server and the value."""
+    if not isinstance(inventory, dict):
+        raise Stop('%s in pushed main is not a mapping. Nothing changed.' % INVENTORY)
+    variables = inventory.get('vars') if isinstance(inventory.get('vars'), dict) else {}
+
+    def network(value, name):
+        try:
+            return ipaddress.IPv4Network(value)
+        except (TypeError, ValueError):
+            raise Stop('%s in %s is %r, not an IPv4 address block. Nothing changed.' % (name, INVENTORY, value))
+    wireguard_network = network(variables.get('wireguard_network'), 'vars.wireguard_network')
+    ranges = variables.get('private_ip_ranges') if isinstance(variables.get('private_ip_ranges'), dict) else {}
+    blocks_of_others = {name: network(ranges.get(name), 'vars.private_ip_ranges.' + name)
+                        for name in ('systems_desks', 'systems_desk_laptops')}
+    groups = inventory.get('groups') if isinstance(inventory.get('groups'), dict) else {}
+    def members(group):
+        entry = groups.get(group) if isinstance(groups.get(group), dict) else {}
+        return set(entry.get('nodes') or [])
+    not_servers = members('systems_desks')
+    restore_servers = members('database_restore_servers')
+    database_block = network(ranges.get('database_servers'), 'vars.private_ip_ranges.database_servers') if restore_servers else None
+
+    def restore01_or_like_it(name, node_vars):
+        # A database_restore_servers node outside the database servers' block (the docstring says why).
+        try:
+            return name in restore_servers and ipaddress.IPv4Address(node_vars.get('private_ip')) not in database_block
+        except (TypeError, ValueError):
+            return False  # the checks below refuse the value and name it
+    nodes = inventory.get('nodes') if isinstance(inventory.get('nodes'), dict) else {}
+    peers, names_of_addresses = {}, {}
+    for name in sorted(nodes, key=str):
+        node = nodes[name] if isinstance(nodes[name], dict) else {}
+        node_vars = node.get('vars') if isinstance(node.get('vars'), dict) else {}
+        if name in not_servers or not node_vars.get('wireguard_public_key') or restore01_or_like_it(name, node_vars):
+            continue
+        if not isinstance(name, str) or not NODE_NAME.fullmatch(name):
+            raise Stop('The node name %r in %s is not a server name: letters, digits, _, . and -. Nothing changed.' % (name, INVENTORY))
+        key = node_vars['wireguard_public_key']
+        where = 'nodes.%s.vars' % name
+        if not canonical_key(key):
+            raise Stop('%s.wireguard_public_key in %s is %r, not a WireGuard public key (44 characters of base64). '
+                       'Nothing changed.' % (where, INVENTORY, key))
+        try:
+            private_ip = ipaddress.IPv4Address(node_vars.get('private_ip'))
+        except (TypeError, ValueError):
+            raise Stop('%s.private_ip in %s is %r, not an IPv4 address. Nothing changed.' % (where, INVENTORY, node_vars.get('private_ip')))
+        if private_ip not in wireguard_network:
+            raise Stop('%s.private_ip in %s is %s, outside vars.wireguard_network, %s. Nothing changed.'
+                       % (where, INVENTORY, private_ip, wireguard_network))
+        for block_name, block in blocks_of_others.items():
+            if private_ip in block:
+                raise Stop('%s.private_ip in %s is %s, inside vars.private_ip_ranges.%s, %s, which is for %s, never a server. '
+                           'Nothing changed.' % (where, INVENTORY, private_ip, block_name, block,
+                                                 'systems desks' if block_name == 'systems_desks' else 'the desks\' laptops'))
+        try:
+            public = ipaddress.IPv4Address(node_vars.get('public_ipv4_address'))
+        except (TypeError, ValueError):
+            raise Stop('%s.public_ipv4_address in %s is %r, not an IPv4 address. Nothing changed.'
+                       % (where, INVENTORY, node_vars.get('public_ipv4_address')))
+        if key in keys_that_are_not_servers:
+            raise Stop('%s.wireguard_public_key in %s is %s, the WireGuard key of %s. A server never takes it. Nothing changed.'
+                       % (where, INVENTORY, key, keys_that_are_not_servers[key]))
+        if key in peers:
+            raise Stop('%s and %s in %s have one wireguard_public_key, %s. Each server has its own. Nothing changed.'
+                       % (peers[key][0], name, INVENTORY, key))
+        if private_ip in names_of_addresses:
+            raise Stop('%s and %s in %s have one private_ip, %s. Each server has its own. Nothing changed.'
+                       % (names_of_addresses[private_ip], name, INVENTORY, private_ip))
+        peers[key] = (name, str(private_ip), str(public))
+        names_of_addresses[private_ip] = name
+    return peers
+
+
+def peer_sections(text):
+    """Each [Peer] section of a wg-quick file: (public key, the name in its
+    first comment line or the key)."""
+    found = []
+    for section in re.split(r'(?m)^\[Peer\]\s*$', text)[1:]:
+        key = re.search(r'(?m)^\s*PublicKey\s*=\s*(\S+)', section)
+        name = re.search(r'(?m)^\s*#\s*(\S+)', section)
+        if key:
+            found.append((key.group(1), name.group(1) if name else key.group(1)))
+    return found
+
+
+def keys_of_this_desks_other_peers():
+    """This desk's own key and its laptops' keys, from the reviewed
+    WG0_CONF, by key: none of them may become a server peer, and none is
+    removed here."""
+    text = WG0_CONF.read_text()
+    if SERVER_PEERS_LINE not in text:
+        raise Stop('%s has no line "%s": this desk\'s settings are from an earlier Stack version. Ask the person to run '
+                   'review-and-apply-the-systems-desk-settings once, which also writes the server peers; '
+                   'then this command has nothing to add (operating_procedures/upgrade_to_a_new_stack_version.md). Nothing changed.' % (WG0_CONF, SERVER_PEERS_LINE))
+    keys = {key: 'the laptop ' + name for key, name in peer_sections(text.split(SERVER_PEERS_LINE, 1)[0])}
+    keys[own_public_key()] = 'this desk'
+    return keys
+
+
+def running_peers():
+    """The running wg0's peers: {key: (endpoint, allowed IPs)}."""
+    dump = subprocess.run([WG, 'show', 'wg0', 'dump'], text=True, capture_output=True, check=True).stdout.splitlines()
+    peers = {}
+    for line in dump[1:]:
+        fields = line.split('\t')
+        peers[fields[0]] = (fields[2], fields[3])
+    return peers
+
+
+def listen_port(inventory):
+    """WireGuard's port on servers and desks, vars.wireguard_listen_port."""
+    variables = inventory.get('vars') if isinstance(inventory, dict) and isinstance(inventory.get('vars'), dict) else {}
+    port = variables.get('wireguard_listen_port')
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise Stop('vars.wireguard_listen_port in %s is %r, not a port from 1 to 65535. Nothing changed.' % (INVENTORY, port))
+    return port
+
+
+def server_peers_file(commit, peers, port):
+    lines = ['# Written by %s from %s at pushed main commit %s.' % (INSTALLED_PATH, INVENTORY, commit),
+             '# Change the servers in the inventory, never this file.']
+    for key, (name, private_ip, public) in sorted(peers.items(), key=lambda item: item[1][0]):
+        lines += ['', '[Peer]', '# ' + name, 'PublicKey = ' + key, 'Endpoint = %s:%d' % (public, port), 'AllowedIPs = %s/32' % private_ip]
+    return '\n'.join(lines) + '\n'
+
+
+def notrack_addresses_file(commit, peers):
+    """NOTRACK_ADDRESSES: one nft statement for the table that skips tracking."""
+    lines = ['# Written by %s from %s at pushed main commit %s.' % (INSTALLED_PATH, INVENTORY, commit),
+             '# Loaded by wireguard_notrack_between_servers_and_desks.nft. Change the servers in the inventory, never this file.']
+    addresses = sorted({public for _, _, public in peers.values()}, key=ipaddress.IPv4Address)
+    if addresses:
+        lines.append('add element %s { %s }' % (' '.join(NOTRACK_TABLE), ', '.join(addresses)))
+    return '\n'.join(lines) + '\n'
+
+
+def write_atomically(path, text):
+    with tempfile.NamedTemporaryFile('w', dir=path.parent, delete=False) as out:
+        out.write(text)
+    os.chmod(out.name, 0o600)
+    os.replace(out.name, path)
+
+
+def parse_inventory(text):
+    import yaml  # python3-yaml, which the desk role installs
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise Stop('%s in pushed main is not YAML: %s. Nothing changed.' % (INVENTORY, ' '.join(str(error).split())))
+
+
+def own_public_key():
+    return subprocess.run([WG, 'show', 'wg0', 'public-key'], text=True, capture_output=True, check=True).stdout.strip()
+
+
+def only_write_the_server_peers_file(allowed_laptops_json):
+    """The desk playbook's form: SERVER_PEERS from pushed main, with the
+    laptops of the reviewed run. Returns 2 when it wrote the file, 0 when
+    the file stays as it is."""
+    try:
+        laptops = json.loads(allowed_laptops_json)
+        others = {laptop['wireguard_public_key']: 'the laptop ' + laptop['laptop_name'] for laptop in laptops}
+    except (ValueError, TypeError, KeyError):
+        raise Stop('%s takes the desk\'s allowed_laptops as JSON, a list of laptop_name and wireguard_public_key. '
+                   'Nothing changed.' % ONLY_WRITE_THE_SERVER_PEERS_FILE)
+    others[own_public_key()] = 'this desk'
+    try:
+        commit, text = fetch_the_pushed_inventory()
+    except FetchFailed as failed:
+        print('%s stays as it is: the fetch of pushed main did not work (%s). On a new desk, before the Git host knows '
+              'this desk\'s key, that is expected; the server peers come with sudo -n update-this-desks-wireguard-peers.'
+              % (SERVER_PEERS, str(failed).replace(' Nothing changed.', '')), flush=True)
+        return 0
+    inventory = parse_inventory(text)
+    wanted = server_peers(inventory, others)
+    new = server_peers_file(commit, wanted, listen_port(inventory))
+    new_addresses = notrack_addresses_file(commit, wanted)
+    names = ', '.join(name for name, _, _ in sorted(wanted.values())) or 'none yet'
+    if SERVER_PEERS.exists() and SERVER_PEERS.read_text() == new and NOTRACK_ADDRESSES.exists() and NOTRACK_ADDRESSES.read_text() == new_addresses:
+        print('%s already holds the servers of pushed main commit %s: %s.' % (SERVER_PEERS, commit, names), flush=True)
+        return 0
+    write_atomically(SERVER_PEERS, new)
+    write_atomically(NOTRACK_ADDRESSES, new_addresses)
+    print('Wrote %s from pushed main commit %s. Servers: %s.' % (SERVER_PEERS, commit, names), flush=True)
+    return 2
+
+
+def main(arguments):
+    if os.geteuid() == 0 and len(arguments) == 2 and arguments[0] == ONLY_WRITE_THE_SERVER_PEERS_FILE:
+        return only_write_the_server_peers_file(arguments[1])
+    if arguments:
+        raise Stop('update-this-desks-wireguard-peers takes no arguments: sudo -n update-this-desks-wireguard-peers. Nothing changed.')
+    if os.geteuid() != 0:
+        raise Stop('Run it with sudo: sudo -n update-this-desks-wireguard-peers. Nothing changed.')
+    commit, text = fetch_the_pushed_inventory()
+    print('Pushed main commit %s.' % commit, flush=True)
+    inventory = parse_inventory(text)
+    others = keys_of_this_desks_other_peers()
+    wanted = server_peers(inventory, others)
+    port = listen_port(inventory)
+    before = {key: name for key, name in peer_sections(SERVER_PEERS.read_text())} if SERVER_PEERS.exists() else {}
+    before.update({key: name for key, name in peer_sections(WG0_CONF.read_text().split(SERVER_PEERS_LINE, 1)[1])})
+    write_atomically(SERVER_PEERS, server_peers_file(commit, wanted, port))
+    write_atomically(NOTRACK_ADDRESSES, notrack_addresses_file(commit, wanted))
+    running = running_peers()
+    report = []
+    for key in sorted(set(running) - set(wanted) - set(others), key=lambda key: before.get(key, key)):
+        subprocess.run([WG, 'set', 'wg0', 'peer', key, 'remove'], check=True)
+        report.append('Removed: %s (%s).' % (before.get(key, key), running[key][1]))
+    for key, (name, private_ip, public) in sorted(wanted.items(), key=lambda item: item[1][0]):
+        endpoint, allowed = '%s:%d' % (public, port), '%s/32' % private_ip
+        if running.get(key) == (endpoint, allowed):
+            continue
+        subprocess.run([WG, 'set', 'wg0', 'peer', key, 'endpoint', endpoint, 'allowed-ips', allowed], check=True)
+        report.append('%s: %s (%s).' % ('Changed' if key in running else 'Added', name, private_ip))
+    # Not fatal: a desk from an earlier version has no such table until its next desk review writes it.
+    if wanted:
+        subprocess.run([NFT, 'add', 'element', *NOTRACK_TABLE, '{ %s }' % ', '.join(sorted({public for _, _, public in wanted.values()}))],
+                       capture_output=True, text=True)
+    print('\n'.join(report) if report else 'No change: this desk\'s WireGuard peers already match the %d servers of the inventory.'
+          % len(wanted), flush=True)
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Stop as stop:
+        print(stop, file=sys.stderr)
+        sys.exit(1)

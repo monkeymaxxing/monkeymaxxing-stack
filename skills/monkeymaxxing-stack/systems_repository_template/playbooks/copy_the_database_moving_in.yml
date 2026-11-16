@@ -1,0 +1,31 @@
+# Follow operating_procedures/move_a_database_into_the_stack.md first.
+fleet_stages:
+  - id: validate_database_moving_in
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: require_a_database_moving_in
+        assert:
+          that: {not: {equals: ["{{ .vars.database_moving_in }}", {}]}}
+          message: Set database_moving_in in inventories/servers.yml before moving a database.
+      - role: validate_database_moving_in
+        inputs:
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          private_ip_ranges: "{{ .vars.private_ip_ranges }}"
+          wireguard_network: "{{ .vars.wireguard_network }}"
+          database_servers: "{{ .inventory.groups.database_servers }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+          apps: "{{ .vars.apps }}"
+          apps_connect_through_pgbouncer: "{{ .vars.apps_connect_through_pgbouncer.production }}"
+  - id: copy_the_database_moving_in
+    nodes: database_servers
+    when: {not: {equals: ["{{ .vars.database_moving_in }}", {}]}}
+    on_node_failure: stop_run
+    node_tasks:
+      - role: move_database_into_the_stack
+        inputs:
+          action: copy
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          apps: "{{ .vars.apps }}"
+          replication_password: "{{ .secrets.database_moving_in_replication_password }}"
+          superuser_password: "{{ .secrets.database_moving_in_superuser_password }}"

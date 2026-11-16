@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Checks, before a deploy starts the new release, that this server has
+# memory for one more copy of its live web containers.
+#
+# During a deploy, each app server runs both releases for a minute or two:
+# the new web containers start beside the live ones, which stop only once
+# every Caddy sends the requests to the new ones. So on top of what the
+# server uses now, it needs about as much again as its live web containers
+# use, and room for everything else while both run:
+#
+# - Available: MemAvailable in /proc/meminfo, the kernel's estimate of the
+#   memory that programs can still get without swapping, with the page cache
+#   it can drop.
+# - One more copy of the live web containers: what each one uses now, read
+#   from its systemd unit's cgroup: memory.current, less inactive_file in
+#   memory.stat, the file cache that the kernel takes back first and that
+#   MemAvailable counts as available already. The new release is taken to
+#   need what the live one uses.
+# - The margin, a tenth of the server's memory (MemTotal): for what grows
+#   meanwhile, such as the new containers as they warm up, the job
+#   containers, and on staging01 Postgres, and for the page cache of the
+#   programs' own code, without which a server slows to a crawl well before
+#   the kernel kills a process.
+#
+# The deploy playbook runs this program in its stage
+# check_that_each_app_server_has_memory_for_the_new_release, before it pulls
+# or changes anything. Input, in the environment variable LIVE_WEB_CONTAINERS:
+# each app's live web container on this server, as JSON, from
+# find_live_web_ports. It prints the numbers as JSON, in MiB, and exits 1 with
+# the reason when the memory isn't there. It only reads.
+
+set -euo pipefail
+
+containers=$(jq -c 'to_entries | sort_by(.key)' <<< "$LIVE_WEB_CONTAINERS") || exit 1
+mib=$((1024 * 1024))
+while read -r name value _; do
+    case $name in
+        MemAvailable:) available=$((value * 1024)) ;;
+        MemTotal:) total=$((value * 1024)) ;;
+    esac
+done < /proc/meminfo
+margin=$((total / 10))
+live=0
+apps_text=''
+while IFS= read -r container; do
+    app_name=$(jq -r '.key' <<< "$container")
+    web_port=$(jq -er '.value.web_port' <<< "$container") || exit 1
+    control_group=$(systemctl show --property=ControlGroup --value "$app_name-web-$web_port.service") || exit 1
+    used=0
+    if [[ -n $control_group ]]; then
+        directory="/sys/fs/cgroup$control_group"
+        current=$(< "$directory/memory.current")
+        inactive_file=0
+        while read -r name value; do
+            if [[ $name == inactive_file ]]; then
+                inactive_file=$value
+            fi
+        done < "$directory/memory.stat"
+        used=$((current - inactive_file))
+        if (( used < 0 )); then used=0; fi
+    fi
+    live=$((live + used))
+    apps_text+="${apps_text:+, }$app_name $((used / mib)) MiB"
+done < <(jq -c '.[]' <<< "$containers")
+needed=$((live + margin))
+
+jq -cn --argjson available "$((available / mib))" --argjson live "$((live / mib))" \
+    --argjson margin "$((margin / mib))" --argjson needed "$((needed / mib))" \
+    '{memory_available_mib: $available, live_web_containers_mib: $live, margin_mib: $margin, memory_needed_mib: $needed}'
+if (( available < needed )); then
+    printf '%s\n' "this server has $((available / mib)) MiB of memory available (MemAvailable), but the new release needs $((needed / mib)) MiB: $((live / mib)) MiB for a second copy of its live web containers as they use memory now ($apps_text), and $((margin / mib)) MiB, a tenth of its memory, for everything else while both releases run. The deploy changed nothing. The operating procedure: a bigger server, or a smaller WEB_CONCURRENCY for the app; on staging01, a bigger staging01 (operating_procedures/deploy_and_roll_back_an_app_release.md, \"Memory for both releases\"). When the live release uses more memory than it should, as one that leaks memory does, its rollback may run without this check: --var skip_the_memory_check=true." >&2
+    exit 1
+fi

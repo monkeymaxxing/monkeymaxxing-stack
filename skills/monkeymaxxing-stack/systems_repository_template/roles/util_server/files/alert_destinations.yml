@@ -1,0 +1,38 @@
+# Managed by MMX from the systems repository (roles/util_server). Where the
+# fleet hub on util01 delivers the alerts of every server. Only util01 has
+# the rendered /etc/mmwatchdog/alert_destinations.yml.
+destinations:
+  # MMHotline on util01, which reaches the person on call. A server whose
+  # alert the hub did not take in time sends the alert directly to MMHotline
+  # at mmhotline_url. The URL uses util01's WireGuard address, reachable
+  # from every server outside database_restore_servers.
+  # MMHotline identifies the fleet hub, which forwards every server's
+  # alerts, as alert source mmwatchdog_fleet_hub in mmhotline_settings.yml.
+  # The hub signs alerts with the secret listed for
+  # mmwatchdog_fleet_hub under signing_secrets in mmhotline_settings.yml.
+  # MMHotline's signing_secrets and the util_server role's input
+  # mmhotline_signing_secret_of_the_fleet_hub use the vault key
+  # mmhotline_signing_secret_of_the_fleet_hub.
+  mmhotline_on_call:
+    mmhotline:
+      mmhotline_url: http://{{ .inputs.private_ip }}:8484
+      mmhotline_alert_source_id: mmwatchdog_fleet_hub
+      mmhotline_signing_secret_file: /etc/mmwatchdog/secrets/mmhotline-signing-secret
+    alert_severities: [info, warn, sos]
+
+  # The servers reach Pushover directly to notify everyone who can be on
+  # call.
+  # Only the hub-outage alerters' alert that util01 stopped reporting goes to
+  # on_call_push_app, because MMHotline stops with util01.
+  # The hub selects on_call_push_app with
+  # send_silence_alerts_of_this_node_only_to_destinations in
+  # roles/util_server/files/mmwatchdog_node_settings.yml.
+  # Every other alert goes through MMHotline, which knows who is on call.
+  on_call_push_app:
+    remind_every: never                             # the push app repeats an sos alert itself
+    pushover:
+      application_token_file: /etc/mmwatchdog/secrets/pushover-application-token
+      user_or_group_key_file: /etc/mmwatchdog/secrets/pushover-user-or-group-key
+      repeat_sos_alerts_every: 5m
+      stop_repeating_sos_alerts_after: 1h
+    alert_severities: []

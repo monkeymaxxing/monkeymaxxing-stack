@@ -1,0 +1,3 @@
+{{- range .inputs.allowed_laptops }}
+{{ .ssh_public_key }}
+{{- end }}

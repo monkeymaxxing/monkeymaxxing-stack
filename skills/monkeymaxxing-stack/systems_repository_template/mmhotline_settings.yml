@@ -1,0 +1,380 @@
+{{- /*
+  MMHotline's settings: the team, its people and who is on call, the alert
+  sources, what the triage agent may do without a person, how alerts reach
+  people, the MMHotline-down alarm, and the status page. This file is an MMX template:
+  util01's run of every_server renders it into
+  /etc/mmhotline/mmhotline_settings.yml, with each secret from the vault,
+  checks it with MMHotline's own mmhotline settings check, and applies it
+  with mmhotline settings apply (playbooks/every_server.yml, the fleet stage
+  mmhotline). The pinned release's settings file reference lists every key:
+  docs/reference/settings-file.md.
+
+  Each secret is a vault key that the file reads as .secrets and the key's
+  name, so a section added here brings its keys, which go into the vault
+  first. A section left out turns its feature off, and MMHotline removes its
+  setup when the file applies. The addresses come from where they are set
+  already: web_url from util01_private_page_host_names in
+  mmx_project_settings.yml, and the alert intake from util01's private_ip in
+  the inventory.
+*/ -}}
+# Managed by MMX from mmhotline_settings.yml in the systems repository.
+# Change mmhotline_settings.yml in the systems repository and push the commit.
+# The coding agent runs every_server on util01 to apply the pushed commit.
+team_name: Example Inc.                     # the company's name, on every page and in alerts
+
+# The pages, at MMHotline's host name behind Cloudflare Access: util01's own
+# tunnel reaches them on the loopback address
+# (roles/util_server/files/cloudflared_config.yml). The alert intake listens
+# on util01's WireGuard address. Every server's MMWatchdog sends signed
+# alerts to the intake. MMHotline uses the alert source's signing secret to
+# check which source sent an alert. Changing web_url, web_listen_address,
+# alert_intake_listen_address, or cloudflare_access restarts MMHotline for a
+# few seconds. The fleet hub sends its alerts again until MMHotline takes
+# them.
+web_url: https://{{ .vars.util01_private_page_host_names.mmhotline }}
+web_listen_address: 127.0.0.1:8480
+alert_intake_listen_address: "{{ .vars.private_ip }}:8484"
+# MMHotline checks each person's Access sign-in itself: in the Cloudflare
+# dashboard, the team domain is under Zero Trust, Settings. The audience tag
+# is the Application Audience (AUD) Tag of the Access application for
+# MMHotline's host name.
+# An audience tag of zeros is a placeholder that refuses every Access
+# sign-in.
+cloudflare_access:
+  team_domain: example.cloudflareaccess.com
+  audience_tag: "0000000000000000000000000000000000000000000000000000000000000000"
+# MMHotline runs fleet_view_command to fill the dashboard's box for each
+# pool with MMWatchdog's fleet view on util01. The command runs through
+# MMHotline's own socket unit as root, with no network and a read-only
+# file system.
+fleet_view_command: [/usr/local/bin/mmwatchdog, fleet, --json]
+
+# Everyone who uses MMHotline, each by the email address their Access
+# sign-in gives. A person left out can no longer sign in, and their contact
+# methods are removed; their history stays. MMHotline refuses to leave out
+# a person who owns a claimed incident or has taken on-call. Each person
+# adds their own contact methods, such as their Pushover user key, on
+# MMHotline's page.
+people:
+  - name: Ana Silva
+    sign_in_email_address: ana@example.com
+    role: administrator
+
+# Who is on call: a weekly rotation, handed over each Monday at 09:00 in the
+# team's time zone. Everyone who goes on call is in people and in the
+# rotation.
+on_call_schedule:
+  # How long MMHotline waits for a claim of an SOS before notifying the
+  # people selected by backup_option.
+  escalate_if_unclaimed_after_minutes: 5
+  schedule_type: weekly_rotation
+  time_zone: Europe/Lisbon
+  handoff_weekday: 1                        # Monday
+  handoff_hour: 9
+  handoff_minute: 0
+  first_start_date: "2026-11-02"            # the Monday that starts the first week
+  rotation_sign_in_email_addresses: [ana@example.com]
+  backup_option: everyone_available         # when nobody claims in time, everyone else who's available
+
+# The programs that send alerts and check in: MMWatchdog's fleet hub on
+# util01, which sends every server's alerts. The fleet hub signs the alerts
+# with the secret in the vault key mmhotline_signing_secret_of_the_fleet_hub.
+# roles/util_server gives the fleet hub the signing secret. The hub sends
+# alerts to MMHotline's alert intake as the source mmwatchdog_fleet_hub,
+# identified by alert_source_id
+# (roles/util_server/files/alert_destinations.yml).
+# While the fleet hub changes from signing with the old secret to signing
+# with the new secret, signing_secrets lists the old and new secrets
+# (operating_procedures/rotate_a_secret.md, "Rotating a secret").
+alert_sources:
+  - alert_source_id: mmwatchdog_fleet_hub
+    name: MMWatchdog fleet hub on util01
+    signing_secrets: [{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub | toJson }}]
+    warn_after_no_check_in_for_minutes: 2
+    sos_after_no_check_in_for_minutes: 5
+
+# The rules_for_running_agent_playbooks entry servers sets what the triage agent's fixes may
+# do without a person for the inventory named servers. The inventory name
+# servers refers to inventories/servers.yml, which holds every server.
+# mmx_project_settings.yml selects servers with default_inventory.
+# The entry follows the team's one answer,
+# what_the_triage_agent_may_do_without_a_person in mmx_project_settings.yml;
+# change the answer there, never here, so that MMHotline's rules, the reboot
+# check and the triage agent's rules cannot disagree. playbooks/every_server.yml
+# refuses a value other than the three below before it changes anything.
+#   every_fix_waits_for_a_person: the preset permission_for_every_fix.
+#   routine_fixes: the preset routine_fixes_without_permission. Routine fixes
+#     that can't lose data run at once and are reported, such as restarting a
+#     service that failed or freeing disk space. A fix that can cut off a
+#     server, a network, or a name waits for a person's approval. A fix
+#     MMHotline can't recognize from the task modules and arguments also
+#     waits for a person's approval.
+#   routine_fixes_and_server_work: the same preset, plus six playbooks listed
+#     by name that run without a person. A listed playbook takes its listed
+#     rule whatever its tasks do.
+#   With the first two answers, the three playbooks that replace a failed
+#   server are listed too, each waiting for a person, so that one approval
+#   covers the whole replacement. add_an_app_server_for_the_load and
+#   remove_server are not listed then: the preset makes them wait for a
+#   person, and the triage agent does not request them
+#   (triage_agent_rules.md, "Adding and removing app servers with the load").
+#     The preset every_fix_without_permission is never used: it would let any
+#     one-time playbook and any reboot run without a person on every server,
+#     database servers and util01 included.
+# An inventory without an entry in rules_for_running_agent_playbooks fails rules_for_running_agent_playbooks, and every
+# fix there waits for a person.
+rules_for_running_agent_playbooks:
+  servers:
+{{- if eq .vars.what_the_triage_agent_may_do_without_a_person "every_fix_waits_for_a_person" }}
+    preset: permission_for_every_fix
+{{- else }}
+    preset: routine_fixes_without_permission
+{{- end }}
+    # replace_failed_servers creates a new server in place of a failed one,
+    # every_server installs it, and destroy_replaced_servers destroys the
+    # failed server once the new one does its work.
+    playbooks:
+{{- if eq .vars.what_the_triage_agent_may_do_without_a_person "routine_fixes_and_server_work" }}
+    # All three run at once and are reported: a replacement ends an outage.
+    # reboot_servers_after_updates, add_an_app_server_for_the_load and
+    # remove_server run after MMHotline's warning, unless someone presses
+    # Stop: none of them ends an outage. The triage agent requests
+    # remove_server without server_name, which removes only the app server
+    # the load no longer needs; MMHotline's requests take no variables. The
+    # key its_approval_also_approves_in_the_same_session is left out here:
+    # MMHotline accepts it only with get_permission_then_act.
+    # starts_a_server_replacement marks replace_failed_servers alone: its run
+    # starts the replacement, during which a waiting SOS waits
+    # sos_waits_for_a_server_replacement_minutes (the triage_agent section
+    # below). Adding or removing an app server for the load is no outage, so
+    # neither load playbook carries it.
+      replace_failed_servers: {rule: act_then_report, starts_a_server_replacement: true}
+      every_server: {rule: act_then_report}
+      destroy_replaced_servers: {rule: act_then_report}
+      reboot_servers_after_updates: {rule: warn_wait_then_act, warning_wait_minutes: {{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}}
+      add_an_app_server_for_the_load: {rule: warn_wait_then_act, warning_wait_minutes: {{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}}
+      remove_server: {rule: warn_wait_then_act, warning_wait_minutes: {{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}}
+{{- else }}
+    # Each waits for a person, and one approval of replace_failed_servers
+    # also approves every_server and destroy_replaced_servers, once each,
+    # later in the same triage session, so a person woken by an outage
+    # approves once. MMHotline's approval page says so before the click.
+    # every_server and destroy_replaced_servers are listed so the covering
+    # key may name them; without the cover each still waits for a person, as
+    # under the preset. starts_a_server_replacement marks replace_failed_servers:
+    # the replacement starts when its approved run starts, and by then the
+    # approval request has woken the person on call.
+      replace_failed_servers: {rule: get_permission_then_act, approvals_needed: 1, its_approval_also_approves_in_the_same_session: [every_server, destroy_replaced_servers], starts_a_server_replacement: true}
+      every_server: {rule: get_permission_then_act, approvals_needed: 1}
+      destroy_replaced_servers: {rule: get_permission_then_act, approvals_needed: 1}
+{{- end }}
+# A playbook that starts, stops, restarts, or changes one of these waits for
+# a person whatever the rules for running the agent's playbooks say: pgautofailover.service runs the
+# keeper on each database server and the failover monitor on util01. The
+# keeper is pg_autoctl's program that runs Postgres and follows the
+# monitor's instructions (triage_agent_rules.md, "When to hand over").
+services_whose_changes_a_person_must_approve: [pgautofailover.service]
+
+# How MMHotline reaches people: Pushover, with the push app's application
+# token. MMWatchdog sends the hub-outage alerters' alert that util01 stopped
+# reporting directly through Pushover with the application's token.
+# MMHotline refuses to remove a sending service while a contact method uses it.
+sending_services:
+  pushover:
+    application_token: {{ .secrets.pushover_application_token | toJson }}
+
+# The triage agent: Claude Code or Codex, as triage_agent_coding_agent in
+# mmx_project_settings.yml says. roles/util_server installs Claude Code
+# always, and Codex only when triage_agent_coding_agent is codex. Change
+# the coding agent there, never here, so util01 installs the agent that
+# MMHotline runs.
+# credential_type: api_key is an API key (Anthropic's for claude_code,
+# OpenAI's for codex), which belongs to the company's account, never
+# expires, and has its own usage limits. Recommended for both.
+# For claude_code, subscription_token is the token of claude setup-token:
+# billed to one person's Claude plan, valid one year, and dead when that
+# person leaves. For codex, access_token is a Codex access token from a
+# ChatGPT Business or Enterprise workspace, with credential_expires_on:
+# "YYYY-MM-DD" (not a secret; up to 90 days away); chatgpt_sign_in is the
+# whole auth.json from signing in to Codex once in a new empty folder, with
+# a ChatGPT account that has no connected apps, never used anywhere else.
+# util01's run tests
+# a new setup with one prompt in the agent's sandbox before MMHotline saves
+# the new triage agent setup. model: the newest of the provider's most
+# capable family that answers within minutes; opus for Claude Code, and for
+# Codex one that `codex debug models` lists on util01.
+#
+# The agent reaches the internet only through MMHotline's logging proxy: the
+# coding agent's service, OSV.dev, the servers, the pages listed in
+# software_outside_the_distribution.yml, and listed_hosts. OSV.dev provides
+# records of known software flaws for the triage agent to check the
+# servers' distribution packages.
+# MMHotline automatically allows the hosts of each releases_page and
+# security_advisories_page in software_outside_the_distribution.yml, from
+# MMHotline's copy of the systems repository. The team adds only additional
+# hosts for the triage agent to listed_hosts, such as
+# {host: example.org, port: 443}.
+#
+# MMHotline runs mmx at the judged commit in the shared utility-server
+# copy, under /var/lib/mmhotline/systems_repository.lock, and commits no
+# run output.
+#
+# MMHotline is the one place that decides which commit of the systems
+# repository is trusted. Before every MMX run, every triage agent run, and
+# every scheduled job on util01 (roles/util_server), MMHotline checks each
+# new commit. A commit signed by a key in trusted_commit_signing_public_keys
+# passes. A commit signed by commit_signing_public_key, the triage agent's
+# key, passes when it changes only one_time_playbooks/ and
+# triage_agent_notes/. Every other commit waits for review, and MMHotline
+# runs nothing past it until the commit is approved.
+# commits_without_a_trusted_signature_are_approved_by and
+# paths_only_a_person_may_approve, below, say who approves.
+{{ if not .vars.everyone_locked_out_except_desk }}
+triage_agent:
+  commit_signing_public_key: "{{ .vars.triage_ssh_public_key }}"
+  # One list serves the servers' root logins and commit signing:
+  # root_ssh_public_keys in mmx_project_settings.yml. Each systems desk signs
+  # its commits with its production key, and util01's mmhotline user signs
+  # MMHotline's merges of the triage agent's commits, so util01's key is in
+  # the list too. The triage agent's key is never in the list
+  # (playbooks/every_server.yml refuses it), because a trusted key's commits
+  # pass whatever they change. MMHotline uses the keys of the settings it
+  # last applied, never the keys in the pushed repository: a pushed commit
+  # that adds a key trusts nobody until a run at a trusted commit applies
+  # this file, or until a person's own run from a systems desk applies it.
+  trusted_commit_signing_public_keys:
+{{- range .vars.root_ssh_public_keys }}
+    - {{ . | toJson }}
+{{- end }}
+  # Who approves a commit that no key in trusted_commit_signing_public_keys
+  # signed, such as an edit or a merge on the Git host's website:
+  # a_person_or_the_triage_agent or a_person.
+  # a_person_or_the_triage_agent by default: the triage agent reviews each
+  # such commit in a commit review run, approves an ordinary change with
+  # one info alert, and reports at SOS, with the commit's review link, a
+  # commit that changes who can get in or looks like nobody on the team
+  # made it (triage_agent_rules.md, "The commit review run"). Reason for
+  # the default: a legitimate unsigned commit must not stop fixes at night,
+  # and the triage agent still wakes a person for the commit that changes
+  # who can get in.
+  # a_person: every such commit waits until a person selects Mark commit
+  # reviewed on MMHotline's Approvals page, with one MMHotline warning for
+  # each commit.
+  # With either value, the triage agent never approves its own commit that
+  # changes files outside one_time_playbooks/ and triage_agent_notes/.
+  commits_without_a_trusted_signature_are_approved_by: a_person_or_the_triage_agent
+  # The paths in the systems repository that only a person may approve. A
+  # commit that changes one of them waits for a person as a whole, even when
+  # the commit changes other files too, and MMHotline sends one warning at
+  # once. An entry that ends in / is a whole directory. A rename counts the
+  # old and the new path.
+  # The list is short on purpose. The list protects only the files through
+  # which an approved commit could widen the triage agent's own powers or
+  # add a trusted key. The triage agent judges every other change, the
+  # playbooks, the roles and the inventory too, and reports at SOS a commit
+  # that changes who can get in. A longer list makes the team wait for a
+  # person over ordinary changes again.
+  # The cost, which is intended and no fault: an unsigned commit that
+  # changes any setting in mmx_project_settings.yml waits for a person,
+  # because the trusted keys are in mmx_project_settings.yml and MMHotline
+  # judges a commit by the paths that the commit changes, never by the
+  # lines.
+  # A team that adds a file that sets what the triage agent may do, or
+  # which keys MMHotline trusts, adds the file to this list in the same
+  # commit.
+  paths_only_a_person_may_approve:
+    # The rules for running the agent's playbooks, the triage agent's own
+    # settings, and these two settings.
+    - mmhotline_settings.yml
+    # root_ssh_public_keys, the source of the trusted signing keys, and
+    # triage_ssh_public_key, the triage agent's own key.
+    - mmx_project_settings.yml
+    # The triage agent's instructions. CLAUDE.md is the file Claude Code
+    # reads first; it brings in AGENTS.md.
+    - triage_agent_rules.md
+    - AGENTS.md
+    - CLAUDE.md
+    # What the triage user may run as root on the servers.
+    - roles/every_server/files/sudoers_triage
+    - roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings
+  coding_agent: {{ .vars.triage_agent_coding_agent }}
+  credential_type: api_key
+  credential: {{ .secrets.mmhotline_triage_agent_credential | toJson }}
+  model: opus
+  reasoning_effort: high
+  internet_access: listed_hosts_only
+  listed_hosts: []
+  # The scheduled software review: off, or 1 to 8760 hours between reviews.
+  # off by default. Reason: each review starts the coding agent and costs
+  # tokens, so a team turns the review on knowingly, after one review by
+  # hand showed what a review costs
+  # (operating_procedures/turn_on_the_scheduled_software_review.md). While
+  # it is off, the triage agent wakes only for alerts, and MMWatchdog's
+  # checks still warn about security updates and newer pinned releases.
+  # The review's task is scheduled_software_review_task.md.
+  software_review_interval_hours: off
+  # How long an urgent (SOS) alert waits for the triage agent before
+  # MMHotline wakes the person on call, 0 to 15 minutes; 3 by default, and
+  # 0 wakes the person on call at once. Reason for 3, measured on
+  # 2026-11-11: the triage agent finished its one fix 55 seconds after its
+  # session started, and the alert resolved about 2 minutes after the
+  # start. When the triage agent hands over to a person, which took 1 minute
+  # to 1 minute 50 seconds, the wait ends at once. So 3 minutes covers a fix
+  # and its confirmation, and a triage agent that is stuck delays the phone
+  # by at most 3 minutes.
+  sos_waits_for_the_agent_minutes: 3
+  # While the triage agent replaces a failed server, a waiting SOS keeps
+  # waiting this many minutes from the replacement's start, 0 to 60:
+  # triage_agent_server_work.sos_waits_for_a_server_replacement_minutes in
+  # mmx_project_settings.yml, with its reason. The playbook marked
+  # starts_a_server_replacement in rules_for_running_agent_playbooks starts
+  # the replacement.
+  sos_waits_for_a_server_replacement_minutes: {{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}
+  # How long a warning that starts a triage session is held, 0 to 15
+  # minutes, while the triage agent tries first:
+  # triage_agent_server_work.warn_waits_for_the_triage_agent_minutes in
+  # mmx_project_settings.yml, with its reason. The agent's request for a
+  # playbook run, or its report, in that session takes the warning over;
+  # otherwise MMHotline sends the warning at the end of the wait, or at
+  # once when the agent cannot run.
+  warn_waits_for_the_agent_minutes: {{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}
+{{ end }}
+
+# The MMHotline-down alarm is a small program running at Cloudflare, called a
+# Cloudflare Worker, in the team's own account. The MMHotline-down alarm wakes the
+# person on call when MMHotline stops checking in. The Cloudflare account's
+# ID is on the Cloudflare dashboard's home page. The token is an account
+# API token with one permission, Account › Workers Scripts › Edit.
+mmhotline_down_alarm:
+  cloudflare_account_id: "{{ .vars.cloudflare_account_id }}"
+  cloudflare_api_token: {{ .secrets.mmhotline_down_alarm_cloudflare_api_token | toJson }}
+  # Minutes without a check-in from MMHotline before the MMHotline-down alarm wakes the
+  # person on call; 5 by default, 3 to 60 accepted. Reason for 5:
+  # MMHotline checks in every 60 seconds and at once when it starts. A
+  # restart of MMHotline adds under a second, and a reboot of util01 leaves
+  # at most about 2 minutes 30 seconds without a check-in (measured on
+  # test servers), so 5 minutes never wakes anyone for a restart or a reboot.
+  wake_the_person_on_call_after_minutes_without_a_check_in: 5
+  # Minutes without a check-in before the MMHotline-down alarm also wakes the
+  # backup: the named backup, or everyone else available under
+  # backup_option: everyone_available. At least 5 more than the first; 10 by
+  # default. Reason: the person on call gets 5 minutes to answer before
+  # anyone else is woken.
+  wake_the_backup_after_minutes_without_a_check_in: 10
+
+# The status page uses two files in an R2 bucket of the team's own account:
+# index.html is the public page, and status.json holds the notices. Customers
+# reach the page at host_name, which Cloudflare connects to the bucket, so
+# the page works while util01 is down.
+# r2_bucket_url is what the desk's mmhotline status-page set-up printed.
+# The R2 account API token provides an access-key ID and a secret access
+# key for r2_access_key_id and r2_secret_access_key. The token has Object
+# Read & Write permission only on the status page's bucket, at r2_bucket_url.
+# When util01's run of every_server first applies status_page with
+# mmhotline settings apply, MMHotline publishes "Everything is working."
+status_page:
+  page_title: Example Inc.
+  host_name: "{{ .vars.status_page_host_name }}"
+  r2_bucket_url: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/mmhotline-status-status-example-com-18a8ea11
+  r2_access_key_id: {{ .secrets.mmhotline_status_page_r2_access_key_id | toJson }}
+  r2_secret_access_key: {{ .secrets.mmhotline_status_page_r2_secret_access_key | toJson }}

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Managed by MMX from roles/database_server/files/show_the_database_servers_and_their_health
+# in the systems repository. update_database_servers installs it on util01
+# and runs it as postgres.
+# Says which replica a switchover can go to, and whether one formation of
+# util01's pg_auto_failover monitor is settled, for update_database_servers:
+#
+#     show_the_database_servers_and_their_health --monitor-data-directory /var/lib/postgresql/17/pg_auto_failover_monitor --formation production
+#
+# MMX's modules say which node is the primary (pg_auto_failover_monitor's
+# primary_node_name), switch it (pg_auto_failover_primary), and wait for a
+# settled formation themselves. They don't say which replica is ready to take
+# over.
+#
+# It prints one line of JSON, such as
+#
+#     {"switch_to_node_name": "db02"}
+#
+# - switch_to_node_name: the first healthy replica by name, in the state
+#   secondary that the monitor assigned it, which update_database_servers
+#   makes the primary; "" when there is none, such as with db01 alone.
+#
+# It exits with 0 when the formation is settled: every node healthy and in
+# the state the monitor assigned it, one of them primary (single while it is
+# the only node) and every other one secondary. It exits with 1 when the
+# formation is not settled, such as while a replica catches up, is in
+# maintenance, or is down, or during a switchover or a failover, and names
+# each node's state on standard error; and with 2 when it can't read the
+# monitor.
+
+set -euo pipefail
+
+usage() {
+    printf 'usage: %s --monitor-data-directory DIR --formation NAME\n' "${0##*/}" >&2
+    exit 2
+}
+monitor_data_directory=''
+formation=''
+while (( $# )); do
+    (( $# >= 2 )) || usage
+    case $1 in
+        --monitor-data-directory) monitor_data_directory=$2 ;;
+        --formation) formation=$2 ;;
+        *) usage ;;
+    esac
+    shift 2
+done
+[[ -n $monitor_data_directory && -n $formation ]] || usage
+
+error_file=$(mktemp)
+trap 'rm -f "$error_file"' EXIT
+if ! shown=$(pg_autoctl show state --pgdata "$monitor_data_directory" --formation "$formation" --json 2> "$error_file"); then
+    error=$(< "$error_file")
+    error="${error#"${error%%[![:space:]]*}"}"
+    error="${error%"${error##*[![:space:]]}"}"
+    printf 'pg_autoctl show state failed: %s\n' "$error" >&2
+    exit 2
+fi
+if ! nodes=$(jq -cs 'if length == 1 then .[0] else error("expected one JSON value") end' <<< "$shown" 2>/dev/null); then
+    printf 'pg_autoctl show state printed no JSON: %s\n' "${shown:0:300}" >&2
+    exit 2
+fi
+if [[ $(jq 'type == "array" and length > 0' <<< "$nodes") != true ]]; then
+    printf 'the formation %s has no node\n' "$formation" >&2
+    exit 1
+fi
+nodes=$(jq -c 'sort_by(.nodename)' <<< "$nodes")
+
+# A settled formation has one healthy primary and only healthy replicas,
+# all in their assigned states. A primary alone is in the single state.
+readiness=$(jq -c '
+    def in_assigned_state: .health == 1 and .current_group_state == .assigned_group_state;
+    map(select(in_assigned_state and .current_group_state == "secondary")) as $replicas |
+    map(select(in_assigned_state and (.current_group_state == "single" or .current_group_state == "primary"))) as $primaries |
+    {switch_to_node_name: ($replicas[0].nodename // ""),
+     settled: (($primaries | length) == 1 and ($replicas | length) == length - 1)}' <<< "$nodes")
+jq -c '{switch_to_node_name}' <<< "$readiness"
+if [[ $(jq '.settled' <<< "$readiness") != true ]]; then
+    states=$(jq -r 'map("\(.nodename) is \(.current_group_state // "None") (assigned \(.assigned_group_state // "None"), \(if .health == 1 then "healthy" else "not healthy" end))") | join(", ")' <<< "$nodes")
+    printf 'the formation %s is not settled: %s\n' "$formation" "$states" >&2
+    exit 1
+fi

@@ -1,0 +1,102 @@
+# Makes one database server the primary of the production formation: a
+# planned switchover.
+#
+#   ./server_management_scripts/run_mmx_on_util01 run switch_database_primary --var server_name=db02
+#
+# Run switch_database_primary before removing the current primary from the
+# production formation, such as when replacing the primary or moving to
+# another provider.
+# Run switch_database_primary again to make the former primary the primary
+# again. The database server named by server_name must be a healthy replica:
+# the monitor reports the selected server as healthy and in the assigned
+# secondary state. The switchover loses no write already confirmed by
+# Postgres, because replication is synchronous: the primary confirmed each
+# write only once the replica held the write too.
+#
+# In order:
+#   1. Every database server's MMWatchdog holds its alerts for as long as
+#      the run waits for the switchover, as update_database_servers does. Without the hold, every switchover
+#      on test servers sent warnings that wake nobody. For example,
+#      write_ahead_log_archiving/archived_within_5_minutes warned while the
+#      old primary restarted as a replica. The warnings also included
+#      postgres/postgres_answers going on and off, and the triage agent
+#      answered each one. If the fleet hub does not confirm a server's
+#      alert hold within 25 seconds, the run stops during
+#      hold_the_alerts_of_the_database_servers, before the switchover.
+#   2. On util01, the failover monitor makes the database server named by
+#      server_name the primary, within seconds. Writes fail meanwhile,
+#      and the apps' write connections to the old primary break; the
+#      Postgres driver opens new ones and finds
+#      the new primary by itself (target_session_attrs=read-write in each
+#      app's DATABASE_URL).
+#   3. pg_auto_failover_primary waits until the old primary has caught up
+#      as a replica, so the new primary again confirms writes only after a
+#      replica holds the writes too. pg_auto_failover_primary waits, at
+#      most five minutes each, for a settled formation before the
+#      switchover and after the switchover.
+#   4. MMX on util01 requests each app's health URL through the app's public
+#      host name, the way users reach the app. Each app answers without a
+#      restart: the app still reaches its database.
+#   5. Every database server's alerts go out again, also after a failed
+#      switchover, so a fault that the switchover left warns.
+command_line_vars:
+  server_name:                              # the database server that becomes the primary, such as db02
+    type: string
+
+fleet_stages:
+  # 1. Like hold_the_alerts_of_the_replica and
+  # hold_the_alerts_of_the_old_primary in playbooks/update_database_servers.yml:
+  # MMWatchdog maintenance holds every check group's alerts on each server.
+  # The pause lasts the longest the run waits for the switchover, plus a
+  # margin: make_the_server_the_primary's time_limit of 20 minutes, one
+  # minute for each app's answer (wait_at_most 60s each), and 2 minutes for
+  # the hub's acceptance and the stages' start: 22 plus the number of
+  # apps. Change the numbers together; tests/alert_pauses_test.py checks
+  # the sum. When maintenance on exits with 1 on a server, that
+  # server's pause ends again at once (on_failure); a server that already
+  # paused keeps its pause until it ends, because the run stops here.
+  - id: hold_the_alerts_of_the_database_servers
+    nodes: database_servers
+    on_node_failure: stop_run
+    node_tasks:
+      - task_block:
+          id: pause_the_alerts_of_the_database_server
+          changes:
+            - id: hold_the_alerts_of_the_database_server
+              shell:
+                script: |
+                  pause_minutes=$((22 + $(jq -n --argjson apps "$APPS" '$apps | length')))
+                  /usr/local/bin/mmwatchdog maintenance on --every-check-group --for "${pause_minutes}m" --reason "switch_database_primary"
+                env:
+                  APPS: "{{ .vars.apps }}"
+          on_failure:
+            - id: end_the_alert_pause_that_the_hub_does_not_know
+              shell:
+                script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+
+  # 2 to 4.
+  - id: switch_the_primary
+    nodes: util_server
+    node_tasks:
+      - id: make_the_server_the_primary
+        pg_auto_failover_primary:
+          monitor_data_directory: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_monitor"
+          formation: production
+          node_name: "{{ .vars.server_name }}"
+        time_limit: 20m
+      - id: wait_until_each_app_answers_through_its_public_host_name
+        loop: "{{ .vars.apps }}"
+        as: app
+        wait_for:
+          url_responds: "https://{{ .vars.public_host_names.production[.app.key] }}{{ .app.value.health_url_path }}"
+          expected_http_status_codes: [200]
+          wait_at_most: 60s
+
+  # 5. The release_the_alerts_of_the_database_servers stage also appears in
+  # playbooks/update_database_servers.yml.
+  - id: release_the_alerts_of_the_database_servers
+    nodes: database_servers
+    node_tasks:
+      - id: end_the_maintenance_of_mmwatchdog
+        shell:
+          script: /usr/local/bin/mmwatchdog maintenance off --every-check-group

@@ -1,0 +1,250 @@
+# cloudflared receives web requests from Cloudflare and forwards the
+# requests to Caddy. As the tunnel connector, cloudflared opens outgoing
+# connections to Cloudflare, so no server has a web port open to the
+# internet.
+# Caddy runs beside cloudflared and forwards each request over WireGuard
+# to a healthy web container on any app server of the environment.
+#
+# cloudflared and Caddy run on production's app servers until the
+# load-balancer servers take over production's requests. The load-balancer
+# servers run cloudflared and Caddy before and after taking over
+# production's requests. For staging, cloudflared and Caddy run on
+# staging01.
+#
+# Cloudflare decides by itself how to split the requests between the
+# connectors, and can send every request to one connector. Each server
+# running tunnel_connector_and_caddy must therefore be able to handle
+# every request alone.
+#
+# Three playbooks call tunnel_connector_and_caddy:
+# - every_server sets up each server receiving tunnel_connector_and_caddy
+#   (set_up_the_server: true): the packages, Caddy, and the tunnel
+#   connector.
+#   Caddy lists the live web container of every app server.
+#   The connector joins the tunnel only once each app answers through
+#   Caddy on the server receiving the role.
+# - deploy switches Caddy to the new web containers
+#   (requests_go_to_the_new_release: true), on every server of the
+#   environment that runs Caddy at once.
+# - remove_server takes an app server out of Caddy's list.
+# deploy and remove_server change Caddy only where Caddy runs.
+# After step 4 of operating_procedures/add_load_balancer_servers.md removes
+# Caddy from the app servers, an app server's role call changes nothing.
+# Only every_server sets up the servers receiving
+# tunnel_connector_and_caddy, so only every_server passes the tunnel token.
+inputs:
+  send_app_requests_to_the_status_page: {type: boolean, default: false}
+  status_page_host_name: {type: string, default: "status.example.com"}
+  set_up_the_server:                        # true only from every_server: the packages and the tunnel connector
+    type: boolean
+    required: true
+  requests_go_to_the_new_release:           # true only at deploy's switch: Caddy lists the new web containers
+    type: boolean
+    required: true
+  apps:                                     # vars.apps from mmx_project_settings.yml
+    type: mapping
+    required: true
+  public_host_names:                        # each app's host name,
+    # from the inventory, for the receiving server's environment:
+    # production or staging
+    type: mapping
+    required: true
+  app_servers_of_the_environment:           # the outputs of find_the_live_and_new_web_ports: each app server's private_ip, live_web_containers, and new_web_containers
+    type: mapping
+    required: true
+  # Only with set_up_the_server: true.
+  cloudflare_tunnel_token:                  # the tunnel token for
+    # the receiving server's environment: production or staging
+    type: string
+    required: false
+    secret: true
+
+node_tasks:
+  # Caddy and cloudflared come from their vendors' apt repositories, because
+  # Debian 13 ships Caddy 2.6.2 from 2022 and has no cloudflared. The signing
+  # keys are committed as the vendors publish them.
+  # Caddy's signing key is in
+  # roles/tunnel_connector_and_caddy/files/caddy_apt_signing_key.asc, from
+  # https://dl.cloudsmith.io/public/caddy/stable/gpg.key.
+  # Cloudflare's signing key is in the systems repository's
+  # files_used_by_several_roles/, because util01's role installs
+  # cloudflared too. Cloudflare's key comes from
+  # https://pkg.cloudflare.com/cloudflare-public-v2.gpg.
+  # Caddy and cloudflared updates arrive with the security updates, because
+  # every_server's unattended-upgrades settings allow Caddy's and
+  # Cloudflare's apt repositories.
+  - id: add_the_caddy_apt_repository
+    when: "{{ .inputs.set_up_the_server }}"
+    apt_repository:
+      name: caddy
+      uris: [https://dl.cloudsmith.io/public/caddy/stable/deb/debian]
+      suites: [any-version]
+      components: [main]
+      signing_key_source: files/caddy_apt_signing_key.asc
+  - id: add_the_cloudflared_apt_repository
+    when: "{{ .inputs.set_up_the_server }}"
+    apt_repository:
+      name: cloudflared
+      uris: [https://pkg.cloudflare.com/cloudflared]
+      suites: [any]
+      components: [main]
+      signing_key_source: ../../files_used_by_several_roles/cloudflare_apt_signing_key.gpg
+  # The packages stay outside the blocks that start Caddy and cloudflared.
+  # As a result, MMX does not restart Caddy or cloudflared again after
+  # unattended-upgrades updated and restarted the service between runs.
+  # curl asks each app's health URL through Caddy, below.
+  - id: install_caddy_cloudflared_and_curl
+    when: "{{ .inputs.set_up_the_server }}"
+    apt_package:
+      packages:
+        - {name: caddy, version: newest_when_first_installed}
+        - {name: cloudflared, version: newest_when_first_installed}
+        - {name: curl, version: newest_when_first_installed}
+
+  # Caddy. The new Caddyfile is checked before replacing the live Caddyfile.
+  # A reload drops no connection. Requests Caddy is already forwarding
+  # finish with the web containers already handling the requests.
+  # New requests follow the list of web containers in the new Caddyfile.
+  - when:
+      any:
+        - "{{ .inputs.set_up_the_server }}"
+        - path_exists: /etc/caddy/Caddyfile
+    task_block:
+      id: caddy
+      changes:
+        - id: write_the_caddyfile
+          file:
+            path: /etc/caddy/Caddyfile
+            template: files/Caddyfile
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: caddy validate --adapter caddyfile --config "$NEW_FILE"
+                dryrun: caddy validate --adapter caddyfile --config "$NEW_FILE"
+                env:
+                  NEW_FILE: "{{ .new_file.path }}"
+        # Caddy's own unit doesn't restart Caddy after a crash, and the tunnel
+        # connector stops with Caddy (BindsTo= below). Without this, one crash
+        # takes the site down until a person starts Caddy again.
+        - id: restart_caddy_after_a_crash
+          systemd_unit:
+            name: caddy.service
+            drop_in: restart_after_a_crash.conf
+            content: |
+              # Managed by MMX from roles/tunnel_connector_and_caddy/main.yml in the systems repository.
+              [Service]
+              Restart=on-failure
+              RestartSec=5s
+      activate:
+        - id: run_caddy
+          systemd_service:
+            name: caddy
+            state: running
+            start_at_boot: true
+            refresh: reload
+      verify:
+        - id: wait_until_caddy_accepts_connections
+          wait_for:
+            tcp_port_accepts_connections: 80
+            wait_at_most: 10s
+
+  # A server whose tunnel connector isn't installed yet, such as a new one,
+  # joins the tunnel only once each app answers through Caddy here: the
+  # moment it joins, Cloudflare may send it every request.
+  - id: wait_until_each_app_answers_through_caddy_before_joining_the_tunnel
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: {path_exists: /etc/systemd/system/cloudflared.service}
+    loop: "{{ .inputs.apps }}"
+    as: app
+    wait_for:
+      command_succeeds: >-
+        test "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5
+        --header "Host: $PUBLIC_HOST_NAME" --header 'X-Forwarded-Proto: https'
+        "http://127.0.0.1$HEALTH_URL_PATH")" = 200
+      env:
+        PUBLIC_HOST_NAME: "{{ .inputs.public_host_names[.app.key] }}"
+        HEALTH_URL_PATH: "{{ .app.value.health_url_path }}"
+      wait_at_most: 2m
+
+  # cloudflared uses the tunnel token for the receiving server's environment
+  # to connect to Cloudflare. For each public host name, cloudflared sends
+  # requests to Caddy on the server receiving tunnel_connector_and_caddy.
+  # The tunnel is locally managed: /etc/cloudflared/config.yml holds the
+  # routes from the systems repository.
+  # cloudflared's systemd unit is bound to Caddy. When Caddy stops on a
+  # server, cloudflared leaves the tunnel, so Cloudflare sends the server's
+  # requests to the remaining connectors. Caddy's start brings the connector
+  # back.
+  - id: create_the_cloudflared_settings_directory
+    when: "{{ .inputs.set_up_the_server }}"
+    directory:
+      path: /etc/cloudflared
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: cloudflared_tunnel_connector
+    when: "{{ .inputs.set_up_the_server }}"
+    task_block:
+      id: cloudflared
+      changes:
+        - id: write_the_tunnel_routes
+          file:
+            path: /etc/cloudflared/config.yml
+            template: files/cloudflared_config.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: cloudflared tunnel --config "$NEW_FILE" ingress validate
+                dryrun: cloudflared tunnel --config "$NEW_FILE" ingress validate
+                env:
+                  NEW_FILE: "{{ .new_file.path }}"
+        # systemd reads /etc/cloudflared/tunnel_token.env as root before
+        # cloudflared starts.
+        - id: write_the_tunnel_token
+          file:
+            path: /etc/cloudflared/tunnel_token.env
+            content: "TUNNEL_TOKEN={{ .inputs.cloudflare_tunnel_token }}\n"
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: install_the_cloudflared_unit
+          systemd_unit:
+            name: cloudflared.service
+            content: |
+              # Managed by MMX from roles/tunnel_connector_and_caddy/main.yml in the systems repository.
+              [Unit]
+              Description=Cloudflare Tunnel connector for the apps
+              After=network-online.target caddy.service
+              Wants=network-online.target
+              # Caddy stops: cloudflared stops too, and leaves the tunnel.
+              BindsTo=caddy.service
+
+              [Service]
+              Type=notify
+              # It needs no privileges: it dials out and talks to Caddy.
+              DynamicUser=yes
+              EnvironmentFile=/etc/cloudflared/tunnel_token.env
+              # apt updates it; on the stop signal it lets the requests in
+              # flight finish for up to 30 seconds (its grace period). Its
+              # readiness, http://127.0.0.1:20241/ready, answers 200 while it
+              # holds a connection to Cloudflare: a load-balancer server's
+              # check cloudflared_is_connected_to_cloudflare asks it.
+              ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel --metrics 127.0.0.1:20241 --config /etc/cloudflared/config.yml run
+              Restart=on-failure
+              RestartSec=5s
+
+              [Install]
+              # caddy.service: Caddy's start starts cloudflared again.
+              WantedBy=multi-user.target caddy.service
+      activate:
+        - id: run_cloudflared
+          systemd_service:
+            name: cloudflared
+            state: running
+            start_at_boot: true

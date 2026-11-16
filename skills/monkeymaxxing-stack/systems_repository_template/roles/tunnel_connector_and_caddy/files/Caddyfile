@@ -1,0 +1,78 @@
+{{- /*
+  Caddy on a server that brings an environment's requests in: an app server
+  until the load-balancer servers carry production's requests, a
+  load-balancer server, or staging01. cloudflared on the same server brings
+  the requests in from Cloudflare, and for each app Caddy sends each request
+  to a healthy web container on any app server of the environment, over
+  WireGuard. It reads the role inputs apps, public_host_names,
+  app_servers_of_the_environment (each app server's private address and the
+  live and new web container of each app), and
+  requests_go_to_the_new_release, which only the deploy's switch sets.
+*/ -}}
+{{- $web_containers := ternary "new_web_containers" "live_web_containers" .inputs.requests_go_to_the_new_release -}}
+# Managed by MMX from roles/tunnel_connector_and_caddy/files/Caddyfile in the systems repository.
+{
+	# The admin API listens on a socket that only root and Caddy can open,
+	# not on a loopback port: the apps' containers share this server's
+	# network. A reload (caddy reload, which systemctl reload runs) finds the
+	# socket in this file.
+	admin unix//var/lib/caddy/admin.socket
+	# Cloudflare holds the certificates; the tunnel carries plain HTTP to Caddy.
+	auto_https off
+	# Only cloudflared on this server reaches Caddy.
+	default_bind 127.0.0.1
+	servers {
+		# Keep the X-Forwarded-For and X-Forwarded-Proto headers that
+		# cloudflared passes on from Cloudflare, so an app sees the user's
+		# address and that the request came in over HTTPS.
+		trusted_proxies static 127.0.0.1/32
+	}
+}
+{{- range $app_name, $app := .inputs.apps }}
+{{- $public_host_name := index $.inputs.public_host_names $app_name }}
+{{- if not $public_host_name }}{{ fail (printf "public_host_names has no host name for %s in this environment" $app_name) }}{{ end }}
+
+# {{ $app_name }}: the web containers that serve it, on every app server.
+http://{{ $public_host_name }} {
+{{- if $.inputs.send_app_requests_to_the_status_page }}
+	header Cache-Control "no-store"
+	redir https://{{ $.inputs.status_page_host_name }}/ 302
+{{- else }}
+	reverse_proxy {
+{{- range $server_name, $server := $.inputs.app_servers_of_the_environment }}
+		to {{ $server.private_ip }}:{{ (index (index $server $web_containers) $app_name).web_port }}
+{{- end }}
+		# Each request goes to the web container with the fewest requests in
+		# flight through this Caddy, one of them at random on a tie. An app
+		# server with more CPUs runs more worker processes (WEB_CONCURRENCY
+		# in roles/app_server/files/web_container.container), finishes its
+		# requests sooner, and so takes a bigger share; round_robin would
+		# give a big server and a small one the same share. Like every
+		# policy, it picks only among the containers that both health checks
+		# below count as up, and a retry within lb_try_duration picks again
+		# the same way. A container that answers errors fast without failing
+		# its health URL would draw more requests: the health URL is what
+		# takes it out.
+		lb_policy least_conn
+		# A container that refuses a connection, such as one restarting,
+		# is skipped for 2 seconds, and the request tries another one.
+		# While none answers, a request waits up to 15 seconds for one.
+		# Longer took the whole app down: a run that restarts each server's
+		# container in turn, a second apart, left every Caddy with none for
+		# 30 seconds. A server that dies is skipped once its health URL
+		# fails, within 5 seconds.
+		fail_duration 2s
+		lb_try_duration 15s
+		# Each container's health URL, every 5 seconds, asked the way a
+		# user's request arrives.
+		health_uri {{ $app.health_url_path }}
+		health_interval 5s
+		health_timeout 3s
+		health_headers {
+			Host {{ $public_host_name }}
+			X-Forwarded-Proto https
+		}
+	}
+{{- end }}
+}
+{{- end }}

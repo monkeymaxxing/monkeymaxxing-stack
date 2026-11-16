@@ -1,0 +1,35 @@
+{{- /*
+  The triage user's sudo lines for the fleet hub's readings, on util01:
+  /etc/sudoers.d/triage-reads-fleet-readings. The triage agent reads the
+  past week's readings of the check group that warned (triage_agent_rules.md, "A
+  trigger's warning names its operating procedure"), and mmwatchdog fleet readings reads
+  root's measurement history, so each line allows exactly one server's
+  group for the last 7 days, as JSON. sudo refuses any other argument, such
+  as another configuration directory. It reads the role input
+  inventory_nodes, whose vars hold the flag of each group a server is in,
+  such as is_app_server: true; the inventory's own false flags aren't there.
+*/ -}}
+# Managed by MMX from roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings in
+# the systems repository. The triage user may read, as root, the past week's
+# readings of each server's capacity check groups, each with exactly these
+# arguments.
+{{- range $name, $node := .inputs.inventory_nodes }}
+{{- if and (hasKey $node.vars "is_app_server") $node.vars.is_app_server }}
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} app_server_capacity --last 7d --json
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} job_containers --last 7d --json
+{{- end }}
+{{- if and (hasKey $node.vars "is_database_server") $node.vars.is_database_server }}
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} database_server_capacity --last 7d --json
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} postgres --last 7d --json
+{{- end }}
+{{- if and (hasKey $node.vars "is_jobs_server") $node.vars.is_jobs_server }}
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} jobs_server_capacity --last 7d --json
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} job_containers --last 7d --json
+{{- end }}
+{{- if and (hasKey $node.vars "is_load_balancer_server") $node.vars.is_load_balancer_server }}
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} load_balancer_server_capacity --last 7d --json
+{{- end }}
+{{- if and (hasKey $node.vars "is_util_server") $node.vars.is_util_server }}
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} util_server_capacity --last 7d --json
+{{- end }}
+{{- end }}

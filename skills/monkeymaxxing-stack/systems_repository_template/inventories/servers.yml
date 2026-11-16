@@ -1,0 +1,251 @@
+# Every server in the company's system: production servers, systems desks,
+# staging01 when the team has one, and temporary restore servers.
+# One inventory gives every server one view of the whole system.
+# util01 serves production, and staging01 when it exists, and watches every
+# server.
+# SSH uses each server's WireGuard address. public_ipv4_address holds the
+# provider address for WireGuard packets and provider-script matching.
+# All WireGuard addresses lie inside vars.wireguard_network.
+# restore01 uses vars.restore01_private_ip and peers only with util01.
+# Replace public examples in 203.0.113.0/24 with provider addresses.
+vars:
+  # Choose a private /16 unused by the servers' other networks and by any
+  # other Stack system on a team laptop. Every WireGuard address lies inside
+  # wireguard_network. The third number is the server group (AGENTS.md,
+  # "Server names and private addresses").
+  wireguard_network: 10.20.0.0/16
+  # Each server pool is an inventory group with its address block here,
+  # inside wireguard_network. Every server is in exactly one pool, and its
+  # private_ip lies inside the pool's block.
+  # systems_desk_laptops and database_moving_in are blocks for machines
+  # outside the inventory's groups.
+  private_ip_ranges:
+    util_server: 10.20.0.1/32               # util01 alone
+    staging_server: 10.20.0.2/32            # staging01 alone, when the team has it
+    app_servers: 10.20.1.0/24
+    database_servers: 10.20.2.0/24
+    jobs_servers: 10.20.3.0/24
+    load_balancer_servers: 10.20.4.0/24
+    systems_desks: 10.20.9.0/24
+    systems_desk_laptops: 10.20.10.0/24
+    database_moving_in: 10.20.11.0/24
+  restore01_private_ip: 10.20.8.1           # the restore drill's temporary server
+  # The UDP port WireGuard listens on, on every server and systems desk.
+  # 51820 is WireGuard's usual port. It is above 1024, so WireGuard needs no
+  # capability to bind it and no AppArmor rule allows it: on Ubuntu 26.04
+  # (and later Debian releases) AppArmor confines wg-quick, and its profile
+  # refuses a port below 1024. The outside world still reaches WireGuard on
+  # UDP 443: files_used_by_several_roles/wireguard_udp_443_redirect.nft
+  # redirects 443 to this port, and a laptop's Endpoint and every provider
+  # firewall keep 443 (hotel and office networks let UDP 443 out). Servers
+  # and desks use Endpoint <public_ipv4_address>:51820 for each other, with no
+  # connection tracking for that traffic
+  # (files_used_by_several_roles/wireguard_notrack_between_servers_and_desks.nft
+  # says why): a redirected flow stalled a peer for 12+ minutes after a reload.
+  wireguard_listen_port: 51820
+
+  # Which server pools connect to which, on which TCP ports, over WireGuard.
+  # Each line opens the firewall of every to_pool server to every from_pool
+  # server on its tcp_ports, and makes the two pools WireGuard peers in
+  # both directions. Write one line for each connection, in the direction
+  # it is opened, with why it is needed.
+  # only_while_this_setting_is_false names a setting in
+  # mmx_project_settings.yml; the line counts only while that setting is
+  # false.
+  # Every server also gets, without a line here
+  # (roles/work_out_who_this_server_talks_to/main.yml): WireGuard peers
+  # util01 and every systems desk; SSH from both; MMX's port 7443 from
+  # util01; WireGuard's UDP port (wireguard_listen_port) from anywhere; and it reaches util01's
+  # fleet hub (8445) and MMHotline (8484). util01 peers with every server.
+  connections_between_server_pools:
+    - from_pool: app_servers
+      to_pool: database_servers
+      tcp_ports: [5432, 6432]
+      why: The apps' web and job containers use Postgres, directly on 5432 or through PgBouncer on 6432. Nothing listens on 6432 until PgBouncer runs.
+    - from_pool: jobs_servers
+      to_pool: database_servers
+      tcp_ports: [5432, 6432]
+      why: The apps' job containers on the jobs servers use Postgres the same way.
+    - from_pool: database_servers
+      to_pool: database_servers
+      tcp_ports: [5432]
+      why: Each replica copies the primary's changes.
+    - from_pool: util_server
+      to_pool: database_servers
+      tcp_ports: [5432]
+      why: util01's failover monitor checks each database server, and the triage agent reads from Postgres.
+    - from_pool: database_servers
+      to_pool: util_server
+      tcp_ports: [5432]
+      why: Each database server registers with the failover monitor's Postgres on util01.
+    - from_pool: app_servers
+      to_pool: app_servers
+      tcp_ports: ["8001:8099"]
+      only_while_this_setting_is_false: tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers
+      why: While the app servers run the tunnel connector and Caddy, Caddy on each app server sends requests to every app server's web containers.
+    - from_pool: load_balancer_servers
+      to_pool: app_servers
+      tcp_ports: ["8001:8099"]
+      why: Caddy on each load-balancer server sends requests to every app server's web containers.
+  # Requested image tags; the coding agent deploys. A tag is the app's full
+  # Git commit, 40 lowercase hexadecimal characters: one tag then always names
+  # one image, so every server of a pool runs the same image. The playbooks
+  # refuse any other tag.
+  # staging stays {} until operating_procedures/add_staging01.md fills in
+  # staging01's tags and host names; the lock-out and the reboot playbook
+  # read it.
+  deployed_image_tags:
+    production:
+      shop: "3f2a1c97d4e85b60a1c2d3e4f5061728394a5b6c"
+    staging: {}
+  public_host_names:
+    production:
+      shop: shop.example.com
+    staging: {}
+
+  # Which group a server is in, one flag for each group: false in the
+  # inventory's top-level vars, true in each group's vars. A role cannot ask
+  # which groups its server is in, so the playbooks pass the flags to the
+  # roles that choose a server's software and settings by its group. The
+  # firewall and the WireGuard peers come from
+  # connections_between_server_pools instead.
+  # Each pool's group also names its MMWatchdog check file with
+  # mmwatchdog_check_file, such as app_servers.yml in mmwatchdog_checks/.
+  # Every server gets every_server.yml and its pool's file; util01's own
+  # role installs util_server.yml, and playbooks/systems_desk.yml installs
+  # systems_desks.yml.
+  is_systems_desk: false
+  is_app_server: false
+  is_database_server: false
+  is_util_server: false
+  is_staging_server: false
+  is_jobs_server: false
+  is_load_balancer_server: false
+
+nodes:
+  desk01:
+    address: 127.0.0.1                    # the desk manages itself
+    ssh_user: root
+    connection: ssh_only
+    ssh_identity_file: /root/.ssh/systems_desk_self_management_key
+    ssh_known_hosts: ssh/known_hosts
+    ssh_config: ssh/desk01
+    vars:
+      public_ipv4_address: 203.0.113.91
+      private_ip: 10.20.9.1
+      wireguard_public_key: "urzzcMKwVZ9bM84MmgWUjMRxOTNn2PDtEF5it/uZFQ4="
+      person_unix_username: alex
+      # The public half of this desk's production key, also in root_ssh_public_keys.
+      production_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIR+J8OoEVNHl3P/KSWFruheEQaq8Cgw/PziDAinSTJJ alex on desk01
+      allowed_laptops:
+        - laptop_name: work-laptop
+          wireguard_public_key: "IUKgB/tUTa5m1zF4S5Q2+YM4Ktdtpv9rBtIiHDfqDC4="
+          private_ip: 10.20.10.1
+          ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIORZZg3NlYdxJ28janK/DsJ1O0O2YgF7KN2aiEPskegs alex@work-laptop"
+
+  util01:
+    address: 10.20.0.1                    # WireGuard address for SSH
+    https_address: https://10.20.0.1:7443   # MMX's HTTPS, over WireGuard only
+    ssh_user: root
+    ssh_known_hosts: ssh/known_hosts
+    ssh_config: ssh/config
+    vars:
+      public_ipv4_address: 203.0.113.1
+      # The provider's server type and location this server was created
+      # with, from the create script's receipt. Every server but the systems
+      # desks and restore01 records both: a replacement of a failed server is
+      # created with the same type in the same location, and every_server
+      # refuses a server without them.
+      server_type: cx23
+      location: fsn1
+      private_ip: 10.20.0.1                 # util01's WireGuard address
+      # The setup machine records the public key before the first MMX run.
+      wireguard_public_key: "PFHMlKh61wvN0/mEnwE2mCdTk3PCQmr/u0lh3F8JkT0="
+
+  app001:
+    address: 10.20.1.1
+    https_address: https://10.20.1.1:7443
+    ssh_user: root
+    ssh_known_hosts: ssh/known_hosts
+    ssh_config: ssh/config
+    vars:
+      public_ipv4_address: 203.0.113.11
+      server_type: cx33
+      location: fsn1
+      private_ip: 10.20.1.1
+      wireguard_public_key: "ZxyZitx4fq2p2omFOcF+fIsM4eUqdKy8pjgZ99jx1EI="
+
+  db01:
+    address: 10.20.2.1
+    https_address: https://10.20.2.1:7443
+    ssh_user: root
+    ssh_known_hosts: ssh/known_hosts
+    ssh_config: ssh/config
+    vars:
+      public_ipv4_address: 203.0.113.21
+      server_type: cx23
+      location: fsn1
+      private_ip: 10.20.2.1
+      wireguard_public_key: "W4MVmeNMv9vw3FJUc9fGBUxhKPQrS17V6L96pYaVUUM="
+
+groups:
+  systems_desks:
+    nodes: [desk01]
+    vars:
+      is_systems_desk: true
+  app_servers:
+    nodes: [app001]
+    vars:
+      is_app_server: true
+      mmwatchdog_check_file: app_servers.yml
+  database_servers:
+    nodes: [db01]
+    vars:
+      is_database_server: true
+      mmwatchdog_check_file: database_servers.yml
+  # The jobs servers, a later step: each runs production's job containers.
+  # A new jobs server joins WireGuard at first boot and receives its role
+  # peers in the first MMX run.
+  # The app servers stop running job containers once
+  # job_containers_run_only_on_the_jobs_servers is true
+  # (operating_procedures/add_jobs_servers.md, "Adding jobs servers").
+  jobs_servers:
+    nodes: []
+    vars:
+      is_jobs_server: true
+      mmwatchdog_check_file: jobs_servers.yml
+  util_server:
+    nodes: [util01]
+    vars:
+      is_util_server: true
+  # staging01, the test server: every role on one server. The Stack starts
+  # without it; operating_procedures/add_staging01.md adds it. While the
+  # group is empty, each fleet stage that selects only staging_server
+  # skips itself.
+  staging_server:
+    nodes: []
+    vars:
+      is_staging_server: true
+      # staging01 runs Postgres like a database server, so it gets their checks.
+      mmwatchdog_check_file: database_servers.yml
+  # lb01 and lb02 are added in a later step to run production's tunnel
+  # connector and Caddy. At first, the app servers keep running the tunnel
+  # connector and Caddy alongside lb01 and lb02. Once
+  # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers is
+  # true, the app servers stop running the tunnel connector and Caddy.
+  # See operating_procedures/add_load_balancer_servers.md,
+  # "Adding load-balancer servers".
+  # Until lb01 and lb02 are added, load_balancer_servers stays empty, so
+  # firewall rules and WireGuard peers that name the group name no server.
+  load_balancer_servers:
+    nodes: []
+    vars:
+      is_load_balancer_server: true
+      mmwatchdog_check_file: load_balancer_servers.yml
+  # restore01 never appears here: the restore drill and the row recovery
+  # (playbooks/recover_rows_from_a_restored_copy.yml) add it only to a
+  # throwaway clone of util01's copy, for the length of one run.
+  # During recovery after every database server is lost, the group holds
+  # the new database server until restore_database has restored the server.
+  database_restore_servers:
+    nodes: []

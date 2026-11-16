@@ -1,0 +1,15 @@
+# Managed by MMX from the systems repository (roles/util_server). Git's
+# settings for the triage agent's user on util01. MMHotline makes the agent's
+# copy of the systems repository for each run; the agent's commits there are
+# signed with the triage agent's SSH key, whose public half is
+# triage_ssh_public_key, so util01 accepts them in one_time_playbooks/ and
+# triage_agent_notes/ only. The address ends in .invalid, a name that no
+# mailbox can have: it only names the commits.
+[user]
+	name = util01, the triage agent
+	email = mmhotline-triage-agent@util01.invalid
+	signingkey = /var/lib/mmhotline-triage-agent/.ssh/id_ed25519
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = true

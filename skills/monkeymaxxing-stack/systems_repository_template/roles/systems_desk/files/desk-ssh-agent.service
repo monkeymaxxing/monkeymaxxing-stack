@@ -1,0 +1,19 @@
+[Unit]
+Description=Persistent production SSH and Git signing agent
+[Service]
+Type=forking
+User={{ .inputs.person_unix_username }}
+Group=desk-buttons
+RuntimeDirectory=desk-ssh-agent
+RuntimeDirectoryMode=0750
+UMask=0007
+Environment=SSH_AUTH_SOCK=/run/desk-ssh-agent/private.sock
+# -P with a pattern that matches no file refuses every PKCS#11 and security
+# key library. The relay passes the whole agent protocol on, so without it
+# a desk-buttons member could make this person-owned agent load a library.
+# The desk's production key is a plain key file and needs no library.
+ExecStart=/usr/bin/ssh-agent -P /nonexistent/* -a /run/desk-ssh-agent/private.sock
+ExecStartPost=/usr/bin/ssh-add /home/{{ .inputs.person_unix_username }}/.ssh/production_key
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

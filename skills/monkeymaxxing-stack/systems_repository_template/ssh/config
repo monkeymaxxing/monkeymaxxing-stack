@@ -1,0 +1,13 @@
+# OpenSSH settings for this system's servers. MMX and util01 use this file
+# from the repository root. People use the desk's own SSH file from any
+# folder (initial_setup/02_set_up_the_laptop_and_the_systems_desk.md).
+Host *
+  # Trust only the host keys committed in this repository, so the systems desk and
+  # util01 always trust the same keys. The path starts at the repository root.
+  UserKnownHostsFile ssh/known_hosts
+  # Refuse a new or changed host key instead of asking: a key is trusted only
+  # once it is added to ssh/known_hosts and committed.
+  StrictHostKeyChecking yes
+  # Keep the addresses readable in ssh/known_hosts, so the entries of a
+  # replaced server can be found and deleted.
+  HashKnownHosts no

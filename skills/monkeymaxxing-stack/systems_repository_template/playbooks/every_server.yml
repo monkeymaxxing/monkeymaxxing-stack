@@ -1,0 +1,1801 @@
+# Brings every server to what this repository says. util01 runs every_server
+# after the coding agent commits and pushes settings, inventory, roles,
+# files_used_by_several_roles/, playbooks/every_server.yml, check groups,
+# MMHotline's mmhotline_settings.yml, or the vault.
+# MMX runs the fleet stages in the order listed below. Each fleet stage
+# applies a role or runs the listed node tasks on the selected servers.
+# restore01 is in no fleet stage: the restore drill sets up restore01.
+#
+# MMX excludes a server that failed a fleet stage from every remaining
+# fleet stage in playbooks/every_server.yml. So a server that joined
+# MMWatchdog's fleet hub before joins the hub again before the role stages
+# below, and a new server joins before the apps' stages. Then a role that
+# fails, such as an app whose new image does not start, leaves MMWatchdog
+# watching the server where the role failed.
+#
+# The fleet stages of staging01 skip themselves while the group
+# staging_server is empty (skip_when_no_nodes_are_selected), as the Stack
+# starts; operating_procedures/add_staging01.md adds staging01.
+#
+# The roles learn which groups a server is in from the inventory's flags,
+# such as is_app_server, which each fleet stage passes as inputs.
+#
+# The database_server stage writes changed Postgres settings and reloads
+# Postgres. Settings that support reload take effect during every_server.
+# Settings that need a restart, such as shared_buffers, remain written but
+# inactive until Postgres restarts. The database server's task names each
+# setting waiting for a restart. Run update_database_servers to restart
+# Postgres in the order that playbooks/update_database_servers.yml defines.
+command_line_vars:
+  # The first line of /etc/systems-desk/everyone-locked-out, the record that
+  # the lock-out button, sudo lock-everyone-out, leaves on the desk where the
+  # person pressed it: the desk that keeps access, its WireGuard address, its
+  # WireGuard public key and its production SSH public key, from the
+  # inventory at the press, after the button checked the address and both
+  # keys against the desk's own files. The undo removes the file.
+  # Only run-mmx-on-the-servers sets it, on that desk, and refuses it from its
+  # caller; every other run, util01's included, leaves it empty.
+  lock_out_button_record_on_this_desk: {type: string, default: ""}
+fleet_stages:
+  # A released Stack version pins a real release of each program; a
+  # SHA-256 of zeros marks a copy of a Stack checkout that is not a
+  # release. MMX checks every download of a run before the run starts,
+  # so a zero pin of a program this playbook downloads stops the run
+  # earlier, with MMX's "size or SHA-256 mismatch" and nothing changed.
+  # This refusal gives the plain reason for the other pins. Reason: a
+  # hand-filled pin could name any build.
+  - id: refuse_programs_pinned_without_a_release
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: no_pin_has_a_sha256_of_zeros
+        loop: "{{ .vars.stack_software }}"
+        as: program
+        assert:
+          that: {not: {equals: ["{{ .program.value.sha256 }}", "0000000000000000000000000000000000000000000000000000000000000000"]}}
+          message: >-
+            stack_software.{{ .program.key }} in mmx_project_settings.yml has a
+            SHA-256 of zeros: this systems repository was copied from a Stack
+            checkout that is not a released version, so no published release
+            fits the pin. Copy stack_software from the template of a released
+            Stack version, a tag such as 2026-11, whose pins hold each
+            program's real release. Nothing changed.
+
+  # The schedule settings in mmx_project_settings.yml, checked before any
+  # server changes. Each message gives the reason for the limit.
+  - id: validate_the_schedule_settings
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: nightly_work_starts_at_is_a_utc_time_with_room_before_midnight
+        assert:
+          that:
+            matches: ["{{ .vars.nightly_work_starts_at }}", '^([01][0-9]:[0-5][0-9]|20:(0[0-9]|1[0-4]))$']
+          message: >-
+            nightly_work_starts_at in mmx_project_settings.yml is "{{ .vars.nightly_work_starts_at }}".
+            Use a UTC time as "HH:MM" from 00:00 to 20:14, such as "01:00".
+            The last nightly job starts 3 hours 45 minutes after it, and all
+            of them must start before midnight UTC. Nothing changed.
+      - id: restore_drill_time_limit_is_from_1_to_24_hours
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.restore_drill_time_limit_hours }}", 1]
+              - number_at_most: ["{{ .vars.restore_drill_time_limit_hours }}", 24]
+          message: >-
+            restore_drill_time_limit_hours in mmx_project_settings.yml is "{{ .vars.restore_drill_time_limit_hours }}".
+            Use a whole number of hours from 1 to 24, such as 6. restore01 is
+            paid by the hour, and a drill must finish well before the next
+            week's drill. Nothing changed.
+      - id: check_new_commits_on_main_every_minutes_is_from_1_to_59
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.check_new_commits_on_main_every_minutes }}", 1]
+              - number_at_most: ["{{ .vars.check_new_commits_on_main_every_minutes }}", 59]
+          message: >-
+            check_new_commits_on_main_every_minutes in mmx_project_settings.yml is "{{ .vars.check_new_commits_on_main_every_minutes }}".
+            Use a whole number of minutes from 1 to 59, such as 5. The job's
+            systemd schedule repeats within each hour, so 59 is the longest
+            gap it can express. Nothing changed.
+      - id: weekly_work_day_is_a_weekday_name
+        assert:
+          that:
+            matches: ["{{ .vars.weekly_work_day }}", '^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$']
+          message: >-
+            weekly_work_day in mmx_project_settings.yml is "{{ .vars.weekly_work_day }}".
+            Use a lowercase weekday name, such as sunday. Nothing changed.
+      - id: maintenance_window_weekday_is_a_weekday_name
+        assert:
+          that:
+            matches: ["{{ .vars.maintenance_window.weekday }}", '^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$']
+          message: >-
+            maintenance_window.weekday in mmx_project_settings.yml is "{{ .vars.maintenance_window.weekday }}".
+            Use a lowercase weekday name, such as tuesday. Nothing changed.
+      - id: maintenance_window_starts_at_a_utc_time
+        assert:
+          that:
+            matches: ["{{ .vars.maintenance_window.starts_at }}", '^([01][0-9]|2[0-3]):[0-5][0-9]$']
+          message: >-
+            maintenance_window.starts_at in mmx_project_settings.yml is "{{ .vars.maintenance_window.starts_at }}".
+            Use a UTC time as "HH:MM", such as "21:00". Nothing changed.
+      - id: uploads_copy_every_hours_divides_a_day
+        assert:
+          that:
+            any:
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 1]}
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 2]}
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 3]}
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 4]}
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 6]}
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 8]}
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 12]}
+              - {number_equals: ["{{ .vars.backups.uploads_copy_every_hours }}", 24]}
+          message: >-
+            backups.uploads_copy_every_hours in mmx_project_settings.yml is "{{ .vars.backups.uploads_copy_every_hours }}".
+            Use one of 1, 2, 3, 4, 6, 8, 12 or 24, such as 24 for one copy every
+            night: the copies fall at the same hours every day only when the
+            interval divides 24 hours. Nothing changed.
+      - id: hidden_uploads_warning_settings_are_in_range
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.backups.warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files }}", 0]
+              - number_at_most: ["{{ .vars.backups.warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files }}", 100]
+              - number_at_least: ["{{ .vars.backups.warn_about_hidden_uploads_only_when_an_app_has_at_least_files }}", 0]
+          message: >-
+            backups.warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files is
+            "{{ .vars.backups.warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files }}" and
+            backups.warn_about_hidden_uploads_only_when_an_app_has_at_least_files is
+            "{{ .vars.backups.warn_about_hidden_uploads_only_when_an_app_has_at_least_files }}" in mmx_project_settings.yml.
+            Use a number of percent from 0 to 100, such as 10, and a number of
+            files of at least 0, such as 100. Nothing changed.
+      - id: maintenance_window_length_is_from_30_to_1440_minutes
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.maintenance_window.length_minutes }}", 30]
+              - number_at_most: ["{{ .vars.maintenance_window.length_minutes }}", 1440]
+          message: >-
+            maintenance_window.length_minutes in mmx_project_settings.yml is "{{ .vars.maintenance_window.length_minutes }}".
+            Use a whole number of minutes from 30 to 1440, such as 60. The only
+            app server reboots for updates only inside the window, and the
+            reboot needs about 25 minutes of it: the check waits 10 minutes,
+            the triage agent about 1, MMHotline's warning 10 by default, and
+            the reboot under a minute. A window longer than a day is no
+            longer a quiet time, and users would see reboots on most days.
+            Nothing changed.
+  # what_the_triage_agent_may_do_without_a_person and triage_agent_server_work
+  # in mmx_project_settings.yml, checked before any server changes, because
+  # mmhotline_settings.yml and the reboot check of every_server.yml are
+  # rendered from them. Each message gives the reason for the limit.
+  - id: validate_what_the_triage_agent_may_do_without_a_person
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: what_the_triage_agent_may_do_without_a_person_is_one_of_the_three_answers
+        assert:
+          that:
+            matches: ["{{ .vars.what_the_triage_agent_may_do_without_a_person }}", '^(every_fix_waits_for_a_person|routine_fixes|routine_fixes_and_server_work)$']
+          message: >-
+            what_the_triage_agent_may_do_without_a_person in mmx_project_settings.yml is
+            "{{ .vars.what_the_triage_agent_may_do_without_a_person }}". Use one of
+            every_fix_waits_for_a_person, routine_fixes or routine_fixes_and_server_work;
+            the comment beside the setting says what each one lets the triage
+            agent do. Nothing changed.
+      # The same three pools as the refusal in
+      # server_management_scripts/replace_failed_servers.
+      - id: the_triage_agent_replaces_no_database_server_util01_or_staging01
+        loop: "{{ .vars.triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces }}"
+        as: pool
+        assert:
+          that:
+            matches: ["{{ .pool }}", '^(app_servers|jobs_servers|load_balancer_servers)$']
+          message: >-
+            triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces
+            in mmx_project_settings.yml names {{ .pool }}. The triage agent
+            replaces failed servers of app_servers, jobs_servers and
+            load_balancer_servers only; list some of them, or [] to turn the
+            replacement off. A database server's replacement copies data and
+            changes the failover formation, util01 runs MMX itself, and
+            staging01 holds staging's database, so a person replaces them.
+            Nothing changed.
+      - id: tries_to_replace_a_failed_server_is_at_least_1
+        assert:
+          that:
+            number_at_least: ["{{ .vars.triage_agent_server_work.tries_to_replace_a_failed_server }}", 1]
+          message: >-
+            triage_agent_server_work.tries_to_replace_a_failed_server in
+            mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.tries_to_replace_a_failed_server }}".
+            Use a whole number of at least 1, such as 2; to turn the
+            replacement off, set pools_whose_failed_servers_the_triage_agent_replaces
+            to []. Nothing changed.
+      - id: hours_after_a_replacement_is_at_least_0
+        assert:
+          that:
+            number_at_least: ["{{ .vars.triage_agent_server_work.hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person }}", 0]
+          message: >-
+            triage_agent_server_work.hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person
+            in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person }}".
+            Use a whole number of hours of at least 0, such as 24. Nothing changed.
+      - id: minutes_between_the_warning_and_a_reboot_is_from_1_to_1440
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}", 1]
+              - number_at_most: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}", 1440]
+          message: >-
+            triage_agent_server_work.minutes_between_the_warning_and_a_reboot in
+            mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}".
+            Use a whole number of minutes from 1 to 1440, such as 10: MMHotline
+            accepts a warning's wait from 1 minute to one day. Nothing changed.
+      - id: sos_waits_for_a_server_replacement_minutes_is_from_0_to_60
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}", 0]
+              - number_at_most: ["{{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}", 60]
+          message: >-
+            triage_agent_server_work.sos_waits_for_a_server_replacement_minutes
+            in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}".
+            Use a whole number of minutes from 0 to 60, such as 10: 0 turns the
+            longer wait off, and MMHotline stops an MMX run after one hour.
+            Nothing changed.
+      - id: warn_waits_for_the_triage_agent_minutes_is_from_0_to_15
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 0]
+              - number_at_most: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 15]
+          message: >-
+            triage_agent_server_work.warn_waits_for_the_triage_agent_minutes
+            in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}".
+            Use a whole number of minutes from 0 to 15, such as 3: 0 turns
+            holding off, and 15 is the longest MMHotline holds a warning.
+            Nothing changed.
+      # Adding and removing app servers with the load. The reasons for each
+      # range are beside the settings in mmx_project_settings.yml.
+      - id: the_smallest_number_of_app_servers_is_from_1_to_the_largest
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.growth_limits.app_servers.smallest_number_of_servers }}", 1]
+              - number_at_most: ["{{ .vars.growth_limits.app_servers.smallest_number_of_servers }}", "{{ .vars.growth_limits.app_servers.largest_number_of_servers }}"]
+          message: >-
+            growth_limits.app_servers.smallest_number_of_servers in
+            mmx_project_settings.yml is "{{ .vars.growth_limits.app_servers.smallest_number_of_servers }}",
+            and largest_number_of_servers is "{{ .vars.growth_limits.app_servers.largest_number_of_servers }}".
+            Use a whole number from 1 to the largest number, such as 1, or 2
+            once the second app server keeps the site up while one fails.
+            Nothing changed.
+      - id: minutes_between_the_warning_and_adding_or_removing_an_app_server_is_from_1_to_1440
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}", 1]
+              - number_at_most: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}", 1440]
+          message: >-
+            triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server
+            in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}".
+            Use a whole number of minutes from 1 to 1440, such as 10: MMHotline
+            accepts a warning's wait from 1 minute to one day. Nothing changed.
+      - id: minutes_of_high_load_before_an_app_server_is_added_is_at_least_5
+        assert:
+          that:
+            number_at_least: ["{{ .vars.triage_agent_server_work.minutes_of_high_load_before_an_app_server_is_added }}", 5]
+          message: >-
+            triage_agent_server_work.minutes_of_high_load_before_an_app_server_is_added
+            in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.minutes_of_high_load_before_an_app_server_is_added }}".
+            Use a whole number of minutes of at least 5, such as 15: the app
+            servers' CPU readings come every 5 minutes, so a shorter time holds
+            no reading. Nothing changed.
+      - id: days_of_low_load_before_an_app_server_is_removed_is_from_1_to_7
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.triage_agent_server_work.days_of_low_load_before_an_app_server_is_removed }}", 1]
+              - number_at_most: ["{{ .vars.triage_agent_server_work.days_of_low_load_before_an_app_server_is_removed }}", 7]
+          message: >-
+            triage_agent_server_work.days_of_low_load_before_an_app_server_is_removed
+            in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.days_of_low_load_before_an_app_server_is_removed }}".
+            Use a whole number of days from 1 to 7, such as 7: the fleet hub
+            keeps 8 days of readings. Nothing changed.
+      - id: cpu_percent_below_which_the_app_pool_can_spare_a_server_is_from_1_to_69
+        assert:
+          that:
+            all:
+              - number_at_least: ["{{ .vars.triage_agent_server_work.cpu_percent_below_which_the_app_pool_can_spare_a_server }}", 1]
+              - number_at_most: ["{{ .vars.triage_agent_server_work.cpu_percent_below_which_the_app_pool_can_spare_a_server }}", 69]
+          message: >-
+            triage_agent_server_work.cpu_percent_below_which_the_app_pool_can_spare_a_server
+            in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.cpu_percent_below_which_the_app_pool_can_spare_a_server }}".
+            Use a whole number from 1 to 69, such as 50: at 70 or more, the
+            smaller pool would ask for the removed server again at once.
+            Nothing changed.
+  # jq and Python 3, on every server, after the checks that need neither:
+  # the checks below read the settings with jq on util01, and
+  # work_out_who_this_server_talks_to runs Python 3 on each server, before
+  # the every_server role. A fresh server, util01 included, may have
+  # neither: Debian 13's cloud image has no jq. Without jq, a check that
+  # reads jq's output in $(...) would also pass without checking anything.
+  - id: install_jq_and_python3
+    nodes: all
+    except_nodes: [database_restore_servers, systems_desks]
+    node_tasks:
+      - id: install_jq_and_python3
+        apt_package:
+          packages:
+            - {name: jq, version: newest_when_first_installed}
+            - {name: python3, version: newest_when_first_installed}
+
+  # No two apps share a database_name, and no two servers share a private_ip
+  # or a wireguard_public_key. The pg_hba.conf templates drop a repeated
+  # database_name without a message, so two apps would silently share one
+  # database, role and password. A repeated private_ip or key from a
+  # copied node block would fail only as a confusing network error.
+  - id: validate_that_apps_and_servers_are_not_listed_twice
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: no_two_apps_share_a_database_name_and_no_two_servers_share_an_address_or_key
+        shell:
+          # The same read-only program runs in a run and in a dryrun.
+          script: bash -c "$PROGRAM"
+          dryrun: bash -c "$PROGRAM"
+          env:
+            PROGRAM: |
+              problems=$(jq -nr --argjson apps "$APPS" --argjson nodes "$INVENTORY_NODES" '
+                def twice($label): group_by(.value) | map(select(length > 1))[]
+                  | "\($label) \(.[0].value) is used by \([.[].name] | join(" and "))";
+                ([$apps | to_entries[] | {name: .key, value: .value.database_name}] | twice("database_name")),
+                ([$nodes | to_entries[] | select(.value.vars.private_ip != null) | {name: .key, value: .value.vars.private_ip}] | twice("private_ip")),
+                ([$nodes | to_entries[] | select(.value.vars.wireguard_public_key != null) | {name: .key, value: .value.vars.wireguard_public_key}] | twice("wireguard_public_key"))')
+              if [ -n "$problems" ]; then
+                printf '%s\n' "$problems" >&2
+                printf 'Give each app its own database_name in mmx_project_settings.yml, and each server its own private_ip and wireguard_public_key in inventories/servers.yml. Two apps with one database_name would share one database, role and password; two servers with one address or key would break the WireGuard network. Nothing changed.\n' >&2
+                exit 1
+              fi
+            APPS: "{{ .vars.apps }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+          changed_when: false
+      # An app's database_connections_per_worker_process, when the app sets
+      # it, is a whole number from 1: add_an_app_server_for_the_load counts
+      # Postgres's connections with it, and a wrong value would let an app
+      # server be added past what Postgres accepts (the reason beside the
+      # setting in mmx_project_settings.yml).
+      - id: database_connections_per_worker_process_is_a_whole_number_from_1
+        shell:
+          # The same read-only program runs in a run and in a dryrun.
+          script: bash -c "$PROGRAM"
+          dryrun: bash -c "$PROGRAM"
+          env:
+            PROGRAM: |
+              problems=$(jq -nr --argjson apps "$APPS" '
+                $apps | to_entries[] | select(.value | has("database_connections_per_worker_process"))
+                | select(.value.database_connections_per_worker_process | (type == "number" and . >= 1 and . == floor) | not)
+                | "apps.\(.key).database_connections_per_worker_process in mmx_project_settings.yml is \(.value.database_connections_per_worker_process | tojson)."')
+              if [ -n "$problems" ]; then
+                printf '%s\n' "$problems" >&2
+                printf 'Use a whole number from 1, the size of the app'"'"'s database pool in one process, such as 10; or leave the key out for a Rails app, which then counts RAILS_MAX_THREADS. Nothing changed.\n' >&2
+                exit 1
+              fi
+            APPS: "{{ .vars.apps }}"
+          changed_when: false
+      # Every production and staging server records the provider's server
+      # type and location it was created with, vars.server_type and
+      # vars.location, so a replacement is created with the same type in
+      # the same place even when the provider no longer lists the failed
+      # server. Systems desks and the servers of database_restore_servers
+      # are left out: no playbook replaces them.
+      - id: every_server_records_its_server_type_and_location
+        shell:
+          # The same read-only program runs in a run and in a dryrun.
+          script: bash -c "$PROGRAM"
+          dryrun: bash -c "$PROGRAM"
+          env:
+            PROGRAM: |
+              missing=$(jq -nr --argjson nodes "$INVENTORY_NODES" --argjson groups "$INVENTORY_GROUPS" '
+                (($groups.systems_desks // []) + ($groups.database_restore_servers // [])) as $left_out
+                | $nodes | to_entries[] | select(.key as $name | $left_out | index($name) | not)
+                | [(if (.value.vars.server_type // "") == "" then "server_type" else empty end),
+                   (if (.value.vars.location // "") == "" then "location" else empty end)] as $keys
+                | select($keys | length > 0)
+                | "\(.key) has no \($keys | join(" and "))"')
+              if [ -n "$missing" ]; then
+                printf '%s in inventories/servers.yml.\n' "$missing" >&2
+                printf 'Add vars.server_type and vars.location to each server named above: the provider'"'"'s server type and location the server was created with, such as server_type: cx33 and location: fsn1 at Hetzner Cloud (the provider script'"'"'s receipt holds both). A replacement of a failed server is created with the same type in the same location. Nothing changed.\n' >&2
+                exit 1
+              fi
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+          changed_when: false
+      # MMHotline trusts the commits that root_ssh_public_keys signed
+      # (mmhotline_settings.yml, triage_agent.trusted_commit_signing_public_keys).
+      # The key part, without the comment, decides: the same key with
+      # another comment is the same key.
+      - id: count_the_root_ssh_public_keys_that_are_the_triage_key
+        shell:
+          # The same read-only program runs in a run and in a dryrun.
+          script: bash -c "$PROGRAM"
+          dryrun: bash -c "$PROGRAM"
+          env:
+            PROGRAM: |
+              jq -nr --argjson keys "$ROOT_SSH_PUBLIC_KEYS" --arg triage "$TRIAGE_SSH_PUBLIC_KEY" '
+                def key_part: sub("^\\s+"; "") | [splits("\\s+")] | .[0:2] | join(" ");
+                ($triage | key_part) as $triage_key | [$keys[] | select(key_part == $triage_key)] | length'
+            ROOT_SSH_PUBLIC_KEYS: "{{ .vars.root_ssh_public_keys }}"
+            TRIAGE_SSH_PUBLIC_KEY: "{{ .vars.triage_ssh_public_key }}"
+          changed_when: false
+      - id: the_triage_key_is_not_among_the_root_ssh_public_keys
+        assert:
+          that:
+            number_equals: ["{{ .node_tasks.count_the_root_ssh_public_keys_that_are_the_triage_key.stdout }}", 0]
+          message: >-
+            root_ssh_public_keys in mmx_project_settings.yml holds the triage
+            agent's key, triage_ssh_public_key. Remove the key from
+            root_ssh_public_keys. MMHotline trusts every commit that a key in
+            root_ssh_public_keys signed, whatever the commit changes, so the
+            triage agent could change any file without a person's review,
+            and the key would also log in as root on every server. Nothing
+            changed.
+  # connections_between_server_pools and the server pools, checked before
+  # any server changes: every server in exactly one pool, inside the pool's
+  # address block, and every line naming pools, ports and a reason.
+  # The every_server stage runs the same role on each server for its own
+  # peers and firewall rules.
+  - id: validate_the_connections_between_server_pools
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - role: work_out_who_this_server_talks_to
+        inputs:
+          inventory_nodes: "{{ .inventory.nodes }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          private_ip_ranges: "{{ .vars.private_ip_ranges }}"
+          wireguard_listen_port: "{{ .vars.wireguard_listen_port }}"
+          connections_between_server_pools: "{{ .vars.connections_between_server_pools }}"
+          settings_named_in_the_connections:
+            tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          everyone_locked_out_except_desk: "{{ .vars.everyone_locked_out_except_desk }}"
+          database_moving_in: "{{ .vars.database_moving_in }}"
+  - id: validate_database_moving_in
+    nodes: util_server
+    when: {not: {equals: ["{{ .vars.database_moving_in }}", {}]}}
+    on_node_failure: stop_run
+    node_tasks:
+      - role: validate_database_moving_in
+        inputs:
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          private_ip_ranges: "{{ .vars.private_ip_ranges }}"
+          wireguard_network: "{{ .vars.wireguard_network }}"
+          database_servers: "{{ .inventory.groups.database_servers }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+          apps: "{{ .vars.apps }}"
+          apps_connect_through_pgbouncer: "{{ .vars.apps_connect_through_pgbouncer.production }}"
+  # Load-balancer servers, a later step (operating_procedures/add_load_balancer_servers.md, "Adding load-balancer
+  # servers"). When
+  # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers is true,
+  # take_the_tunnel_connector_and_caddy_off_the_app_servers makes the app
+  # servers leave the tunnel and removes Caddy. Then every_server stops the
+  # app servers' WireGuard peering with each other. While an app server's
+  # connector still brings requests in, Caddy on the app server reaches
+  # every app server. While the setting is false,
+  # check_that_the_load_balancer_servers_carry_the_requests and
+  # take_the_tunnel_connector_and_caddy_off_the_app_servers do nothing.
+  #
+  # First, each load-balancer server's MMWatchdog checks the tunnel
+  # connector's connection to Cloudflare and each app's response through
+  # Caddy on the load-balancer server. A failed check
+  # produces a successful MMX task with carries_the_requests set to false.
+  # So a load-balancer server that fails a check, as during a database
+  # failover, still gets the rest of the run. A new load-balancer server
+  # without MMWatchdog also gets the rest of the run. Only an app server
+  # that still runs a tunnel connector reads carries_the_requests.
+  - id: check_that_the_load_balancer_servers_carry_the_requests
+    nodes: load_balancer_servers
+    # Before adding load-balancer servers.
+    skip_when_no_nodes_are_selected: true
+    when: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+    node_tasks:
+      - id: run_the_checks_of_the_tunnel_connector_and_caddy_now
+        shell:
+          script: test -x /usr/local/bin/mmwatchdog || exit 4; exec /usr/local/bin/mmwatchdog check-now tunnel_connector_and_caddy
+          dryrun: test -x /usr/local/bin/mmwatchdog || exit 4; exec /usr/local/bin/mmwatchdog check-now tunnel_connector_and_caddy
+          # 1: a check failed. 3: a check could not determine whether the
+          # tunnel connector and Caddy passed. 4: MMWatchdog did not answer,
+          # or is not installed yet. None confirms that the load-balancer
+          # server can carry requests, so carries_the_requests is false.
+          success_exit_codes: [0, 1, 3, 4]
+          changed_when: false
+    outputs:
+      carries_the_requests: {equals: ["{{ .node_tasks.run_the_checks_of_the_tunnel_connector_and_caddy_now.exit_code }}", 0]}
+
+  # Then every app server at once: cloudflared lets requests in flight
+  # finish and leaves the tunnel. So Cloudflare sends every new request to
+  # the load-balancer servers. MMX then uninstalls Caddy and cloudflared
+  # and removes the Caddy and cloudflared apt repositories.
+  # An app server whose connector still runs keeps the connector when a
+  # load-balancer server did not pass the checks above: the app server then
+  # fails check_that_each_load_balancer_server_carries_the_requests.
+  # MMX excludes the failed app server from the remaining fleet stages,
+  # so the app server keeps peering with the remaining app servers too.
+  - id: take_the_tunnel_connector_and_caddy_off_the_app_servers
+    nodes: app_servers
+    when: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+    node_tasks:
+      - id: refuse_without_load_balancer_servers
+        assert:
+          that:
+            not: {equals: ["{{ .inventory.groups.load_balancer_servers }}", []]}
+          message: >-
+            tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers
+            is true in mmx_project_settings.yml, but load_balancer_servers
+            holds no server, so nothing would bring the requests in. Set it
+            back to false; it is set to true only in the last commit of
+            "Adding load-balancer servers" in operating_procedures/add_load_balancer_servers.md.
+      - id: check_that_each_load_balancer_server_carries_the_requests
+        when: {path_exists: /etc/cloudflared/config.yml}
+        loop: "{{ .inventory.groups.load_balancer_servers }}"
+        as: load_balancer_server
+        # A load-balancer server that MMX could not reach has no answer,
+        # so check_that_each_load_balancer_server_carries_the_requests fails.
+        assert:
+          that: "{{ .outputs.check_that_the_load_balancer_servers_carry_the_requests[.load_balancer_server].carries_the_requests }}"
+          message: >-
+            {{ .load_balancer_server }} did not pass its checks of the tunnel
+            connector and Caddy in this run, so this app server keeps its
+            tunnel connector. On {{ .load_balancer_server }}, as root,
+            mmwatchdog check-now tunnel_connector_and_caddy says why.
+      - id: stop_the_tunnel_connector
+        systemd_service:
+          name: cloudflared
+          state: stopped
+          start_at_boot: false
+      - id: remove_the_unit_of_the_tunnel_connector
+        systemd_unit:
+          name: cloudflared.service
+          state: absent
+      - id: remove_the_tunnel_routes_and_token
+        directory:
+          path: /etc/cloudflared
+          state: absent
+          also_delete_everything_inside: true
+      # Uninstalling the Caddy package stops the app server's Caddy service.
+      # No request reaches Caddy once the app server's tunnel connector stops.
+      - id: remove_caddy_and_cloudflared
+        apt_package:
+          packages:
+            - {name: caddy}
+            - {name: cloudflared}
+          state: absent
+          also_delete_its_config_files: true
+      - id: remove_the_caddy_apt_repository
+        apt_repository:
+          name: caddy
+          state: absent
+      - id: remove_the_cloudflared_apt_repository
+        apt_repository:
+          name: cloudflared
+          state: absent
+
+  # The every_server role, on every server at once: its name, SSH, the
+  # firewall and the WireGuard network of its pool, updates, and the
+  # MMWatchdog release. First each server works out its own peers and
+  # firewall rules from connections_between_server_pools.
+  - id: every_server
+    nodes: all
+    except_nodes: [database_restore_servers, systems_desks]
+    node_tasks:
+      # Only the person starts or undoes a lock-out, with the lock-out button
+      # on their own desk. The role everyone_locked_out below applies the
+      # lock-out state from everyone_locked_out_except_desk on every run, so
+      # without these checks a pushed inventory line would lock everyone out
+      # through an ordinary run, from any desk or from util01, with no person
+      # involved; a pushed change to the desk that keeps access, or to its
+      # WireGuard address, WireGuard public key or production SSH public key,
+      # would hand the servers' admission to another desk or key; and a pushed
+      # removal would let the undo's keys in without the button's key
+      # comparison. Every other desk is cut off at the servers during a
+      # lock-out, so only the desk that keeps access reaches them, and these
+      # checks compare the inventory with that desk's record of the press.
+      # They are the first tasks of this fleet stage, so a run with
+      # --only-fleet-stages or --limit passes them too, util01's timers and
+      # MMHotline's runs included. A server that fails them is left out of the
+      # later fleet stages. util01's daily server settings comparison reads
+      # whether the first task runs, from mmx explain, to skip its dryrun
+      # during a lock-out.
+      - id: a_lock_out_starts_only_with_the_lock_out_button
+        when: {not: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}}
+        assert:
+          that: {not: {equals: ["{{ .vars.lock_out_button_record_on_this_desk }}", ""]}}
+          message: >-
+            everyone_locked_out_except_desk in inventories/servers.yml names
+            {{ .vars.everyone_locked_out_except_desk }}, and the lock-out button has
+            not run on the machine that runs this command. Only you start a lock-out:
+            run sudo lock-everyone-out in your own terminal on
+            {{ .vars.everyone_locked_out_except_desk }}. During a lock-out, util01
+            runs nothing, and the coding agent on
+            {{ .vars.everyone_locked_out_except_desk }} runs every_server with
+            sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only.
+            Nothing changed.
+      # The same line that playbooks/lock_everyone_out.yml writes into the
+      # record at the press.
+      - id: a_lock_out_keeps_the_desk_and_keys_the_lock_out_button_checked
+        when: {not: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}}
+        assert:
+          that:
+            equals:
+              - "{{ .vars.lock_out_button_record_on_this_desk }}"
+              - "{{ .vars.everyone_locked_out_except_desk }} {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.private_ip }} {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.wireguard_public_key }} {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.production_ssh_public_key }}"
+          message: >-
+            The lock-out button on this desk recorded the desk that keeps access, its
+            WireGuard address, its WireGuard public key and its production SSH public key
+            as "{{ .vars.lock_out_button_record_on_this_desk }}". inventories/servers.yml
+            now says "{{ .vars.everyone_locked_out_except_desk }}
+            {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.private_ip }}
+            {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.wireguard_public_key }}
+            {{ .inventory.nodes[.vars.everyone_locked_out_except_desk].vars.production_ssh_public_key }}".
+            Only you change the desk or the keys that keep access during a lock-out: if
+            you made the change, run sudo lock-everyone-out in your own terminal on the
+            desk that keeps access, which checks the values again; otherwise restore the
+            values in inventories/servers.yml and push. Nothing changed.
+      - id: a_lock_out_is_undone_only_with_the_lock_out_button
+        when: {equals: ["{{ .vars.everyone_locked_out_except_desk }}", ""]}
+        assert:
+          that: {equals: ["{{ .vars.lock_out_button_record_on_this_desk }}", ""]}
+          message: >-
+            The lock-out button locked everyone out from this desk, and
+            inventories/servers.yml no longer sets everyone_locked_out_except_desk.
+            Only you undo a lock-out: run sudo lock-everyone-out again in your own
+            terminal on this desk. Nothing changed.
+      - id: who_this_server_talks_to
+        role: work_out_who_this_server_talks_to
+        inputs:
+          inventory_nodes: "{{ .inventory.nodes }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          private_ip_ranges: "{{ .vars.private_ip_ranges }}"
+          wireguard_listen_port: "{{ .vars.wireguard_listen_port }}"
+          connections_between_server_pools: "{{ .vars.connections_between_server_pools }}"
+          settings_named_in_the_connections:
+            tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          everyone_locked_out_except_desk: "{{ .vars.everyone_locked_out_except_desk }}"
+          database_moving_in: "{{ .vars.database_moving_in }}"
+      - role: every_server
+        inputs:
+          wireguard_listen_port: "{{ .vars.wireguard_listen_port }}"
+          everyone_locked_out_except_desk: "{{ .vars.everyone_locked_out_except_desk }}"
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          is_app_server: "{{ .vars.is_app_server }}"
+          is_database_server: "{{ .vars.is_database_server }}"
+          is_util_server: "{{ .vars.is_util_server }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          is_jobs_server: "{{ .vars.is_jobs_server }}"
+          is_load_balancer_server: "{{ .vars.is_load_balancer_server }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          wireguard_peer_names: "{{ .node_tasks.who_this_server_talks_to.outputs.wireguard_peer_names }}"
+          incoming_firewall_rules: "{{ .node_tasks.who_this_server_talks_to.outputs.incoming_firewall_rules }}"
+          peers_with_the_database_moving_in: "{{ .node_tasks.who_this_server_talks_to.outputs.peers_with_the_database_moving_in }}"
+          shared_root_console_password_hash: "{{ .secrets.shared_root_console_password_hash }}"
+          root_ssh_public_keys: "{{ .vars.root_ssh_public_keys }}"
+          triage_ssh_public_key: "{{ .vars.triage_ssh_public_key }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names }}"
+
+  # util01: MMX, MMWatchdog's fleet hub, the Linux accounts for MMHotline and
+  # the triage agent, the private pages, and the timers. MMHotline comes in
+  # the mmhotline stage just after the hub's join code is read.
+  # util_server runs before the remaining roles to prepare the fleet hub
+  # and pg_auto_failover's failover monitor. The monitor decides which
+  # database server is primary. The monitor and hub must exist before
+  # database servers register with the monitor and MMWatchdog nodes join
+  # the hub.
+  - id: util_server
+    nodes: util_server
+    node_tasks:
+      - role: util_server
+        inputs:
+          everyone_locked_out_except_desk: "{{ .vars.everyone_locked_out_except_desk }}"
+          is_database_server: "{{ .vars.is_database_server }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          private_ip: "{{ .vars.private_ip }}"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          production_formation_node_names: "{{ .inventory.groups.database_servers }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+          autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names }}"
+          public_site_checks_run: "{{ .vars.public_site_checks_run }}"
+          util01_private_page_host_names: "{{ .vars.util01_private_page_host_names }}"
+          systems_repository: "{{ .vars.systems_repository }}"
+          triage_agent_coding_agent: "{{ .vars.triage_agent_coding_agent }}"
+          codex_release: "{{ .vars.stack_software.codex }}"
+          stack_software: "{{ .vars.stack_software }}"
+          systems_desk_coding_agent: "{{ .vars.systems_desk_coding_agent }}"
+          mmx_release: "{{ .vars.stack_software.mmx }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          mmx_vault_passphrase: "{{ .secrets.mmx_vault_passphrase }}"
+          pushover_application_token: "{{ .secrets.pushover_application_token }}"
+          pushover_user_or_group_key: "{{ .secrets.mmwatchdog_pushover_user_or_group_key }}"
+          mmhotline_signing_secret_of_the_fleet_hub: "{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub }}"
+          cloudflare_tunnel_token: "{{ .secrets.util01_cloudflare_tunnel_token }}"
+          provider_api_token: "{{ .secrets.util01_provider_api_token }}"
+          backups: "{{ .vars.backups }}"
+          nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
+          weekly_work_day: "{{ .vars.weekly_work_day }}"
+          check_new_commits_on_main_every_minutes: "{{ .vars.check_new_commits_on_main_every_minutes }}"
+          app_pool_load_settings:
+            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
+            app_servers: "{{ .inventory.groups.app_servers }}"
+            growth_limits: "{{ .vars.growth_limits.app_servers }}"
+            triage_agent_server_work: "{{ .vars.triage_agent_server_work }}"
+
+  # MMWatchdog's fleet hub on util01 hands out its join code, which holds the
+  # hub's address, its certificate's fingerprint, and the join secret.
+  # The join code travels to the remaining servers through MMX's memory
+  # and is never saved. So a rebuilt hub's new code reaches every server
+  # at the next run.
+  - id: read_the_mmwatchdog_fleet_hub_join_code
+    nodes: util_server
+    node_tasks:
+      - id: mmwatchdog_fleet_hub_join_code
+        shell:
+          script: printf '%s' "$(/usr/local/bin/mmwatchdog fleet join-code)"
+          dryrun: printf '%s' "$(/usr/local/bin/mmwatchdog fleet join-code)"
+          output_is_secret: true
+          changed_when: false
+    outputs:
+      join_code: "{{ .node_tasks.mmwatchdog_fleet_hub_join_code.stdout }}"
+
+  # MMHotline on util01, and Litestream, which copies MMHotline's database to
+  # its backup bucket. The mmhotline stage defines MMHotline's node tasks
+  # in playbooks/every_server.yml rather than in a role, for two reasons:
+  #
+  # - MMHotline's settings template, mmhotline_settings.yml at the
+  #   repository's root, reads each vault key named in the template.
+  #   A role's template reads only the role's inputs. MMX evaluates every
+  #   secret input when calling a role, even before the settings template
+  #   has a section that uses the secret. For example, initial setup step 8
+  #   (set up alerts and backup checks) creates the status page's key.
+  #   Initial setup step 7 (configure the servers for the first time) runs
+  #   before the status page's key exists.
+  # - MMHotline can temporarily refuse settings from the rendered
+  #   /etc/mmhotline/mmhotline_settings.yml. For example, MMHotline refuses
+  #   a new Pushover token while an emergency message is still open.
+  #   MMHotline also refuses to remove a person from people while the
+  #   person owns a claimed incident. A settings
+  #   refusal fails apply_the_mmhotline_settings, so util01's run fails with
+  #   MMHotline's reason. The coding agent corrects the cause and reruns
+  #   every_server to apply the settings.
+  #
+  #   apply_the_mmhotline_settings stays near the end of the run, after the
+  #   servers' work, so a refusal holds back only the restore drill's first
+  #   start (start_the_restore_drill_until_one_has_passed).
+  #
+  # On a new util01, Litestream restores MMHotline's database before the
+  # MMHotline installation. So the installation never starts an empty
+  # MMHotline database that Litestream would copy over the existing backup.
+  # MMX writes /etc/mmhotline/mmhotline_settings.yml before the installation,
+  # because MMHotline refuses to install without the settings file.
+  # /etc/mmhotline/mmhotline_settings.yml belongs to the group mmhotline,
+  # which roles/util_server makes.
+  #
+  # roles/util_server also prepares the systems repository's clone once the
+  # Git host accepts the mmhotline Linux account's SSH key. MMHotline needs
+  # no clone to receive alerts, but the restore drill waits for the clone.
+  # every_server already set up the WireGuard address MMHotline listens on.
+  # The mmhotline stage needs no app databases or app containers, so
+  # MMHotline starts before the database and app stages, instead of holding
+  # alerts through the database and app setup.
+  - id: mmhotline
+    nodes: util_server
+    node_tasks:
+      - id: create_the_mmhotline_settings_directory
+        directory:
+          path: /etc/mmhotline
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: create_the_litestream_program_directory
+        directory:
+          path: /usr/local/lib/litestream
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: create_the_litestream_releases_directory
+        directory:
+          path: /usr/local/lib/litestream/releases
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: create_the_mmhotline_program_directory
+        directory:
+          path: /usr/local/lib/mmhotline
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: create_the_mmhotline_releases_directory
+        directory:
+          path: /usr/local/lib/mmhotline/releases
+          owner: root
+          group: root
+          permissions_mode: "0755"
+
+      # MMHotline's database backup: /etc/mmhotline/backup.env and Litestream.
+      # Changing the backup settings or the Litestream release restarts
+      # mmhotline-backup if the backup service runs. On a new util01,
+      # MMHotline's installation below writes and starts mmhotline-backup.
+      - task_block:
+          id: mmhotline_backup
+          changes:
+            - id: write_the_mmhotline_backup_settings
+              file:
+                path: /etc/mmhotline/backup.env
+                template: files_used_by_several_roles/mmhotline_backup.env
+                owner: root
+                group: root
+                permissions_mode: "0600"
+            - id: unpack_the_litestream_release
+              unpack_archive:
+                url: "{{ .vars.stack_software.litestream.download_url }}"
+                sha256: "{{ .vars.stack_software.litestream.sha256 }}"
+                path: "/usr/local/lib/litestream/releases/{{ .vars.stack_software.litestream.version }}"
+            # MMHotline's backup unit runs /usr/local/bin/litestream.
+            - id: use_the_litestream_release_program
+              symlink:
+                path: /usr/local/bin/litestream
+                target: "/usr/local/lib/litestream/releases/{{ .vars.stack_software.litestream.version }}/litestream"
+          activate:
+            - id: restart_the_mmhotline_backup_after_a_change
+              systemd_service:
+                name: mmhotline-backup
+                state: do_not_start_or_stop
+                refresh: restart
+
+      # While util01 has no MMHotline database, Litestream restores the
+      # latest backed-up copy of /var/lib/mmhotline/mmhotline.db.
+      # With no backup yet, as during initial setup, Litestream skips the
+      # restore. MMHotline's installation then creates the MMHotline database.
+      # The task prints which of the two happened. After a changed
+      # mmhotline_backup_replica_url, a rebuilt util01 finds no copy at the
+      # new address and MMHotline starts empty, with no contact methods, so an
+      # SOS could reach nobody. Read the line on a rebuild
+      # (operating_procedures/rebuild_the_utility_server_util01.md).
+      # The task reads the backup's keys, so MMX would show its output as
+      # [redacted]; output_holds_no_secret shows the line, with any secret
+      # value replaced. Neither printf nor Litestream prints a key.
+      - id: restore_the_mmhotline_database_from_its_backup
+        shell:
+          script: |
+            /usr/local/bin/litestream restore -if-replica-exists -o /var/lib/mmhotline/mmhotline.db "$MMHOTLINE_BACKUP_REPLICA_URL"
+            if [ -e /var/lib/mmhotline/mmhotline.db ]; then
+              printf 'restored mmhotline.db from the backup at %s\n' "$MMHOTLINE_BACKUP_REPLICA_URL"
+            else
+              printf 'the backup at %s holds no copy of mmhotline.db: MMHotline will start with an empty database\n' "$MMHOTLINE_BACKUP_REPLICA_URL"
+            fi
+          dryrun: printf 'would restore mmhotline.db from %s, if the backup holds a copy\n' "$MMHOTLINE_BACKUP_REPLICA_URL"
+          output_holds_no_secret: true
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline
+          env:
+            MMHOTLINE_BACKUP_REPLICA_URL: "{{ .vars.backups.mmhotline_backup_replica_url }}"
+            LITESTREAM_ACCESS_KEY_ID: "{{ .secrets.mmhotline_backup_access_key_id }}"
+            LITESTREAM_SECRET_ACCESS_KEY: "{{ .secrets.mmhotline_backup_secret_access_key }}"
+          skip_if_this_path_exists: /var/lib/mmhotline/mmhotline.db
+      - id: unpack_the_mmhotline_release
+        unpack_archive:
+          url: "{{ .vars.stack_software.mmhotline.download_url }}"
+          sha256: "{{ .vars.stack_software.mmhotline.sha256 }}"
+          path: "/usr/local/lib/mmhotline/releases/{{ .vars.stack_software.mmhotline.version }}"
+          unpack_without_wrapping_folder: true
+
+      # MMX writes /etc/mmhotline/mmhotline_settings.yml, readable by the
+      # mmhotline Linux account through the group mmhotline. Only root can
+      # change /etc/mmhotline/mmhotline_settings.yml. The pinned MMHotline
+      # release checks a candidate settings file before MMX replaces the
+      # installed settings file, also in a dryrun from a systems desk.
+      # A mistake shows before the push: write_the_mmhotline_settings fails
+      # and names each problem by key, such as
+      # "triage_agent.reasoning_effort: required".
+      #
+      # Because /etc/mmhotline/mmhotline_settings.yml holds secrets, MMX
+      # hides the write_the_mmhotline_settings diff; the check's own output
+      # it shows, with every secret value replaced by [redacted], because
+      # MMHotline's check never prints a secret's value (output_holds_no_secret).
+      # Node tasks after write_the_mmhotline_settings
+      # read no secret, so MMX shows the later node tasks' results.
+      - id: write_the_mmhotline_settings
+        file:
+          path: /etc/mmhotline/mmhotline_settings.yml
+          template: mmhotline_settings.yml
+          owner: root
+          group: mmhotline
+          permissions_mode: "0640"
+          secret_readable_by_group: true
+          check_new_file:
+            shell:
+              script: '"/usr/local/lib/mmhotline/releases/$MMHOTLINE_VERSION/mmhotline" settings check --settings-file "$NEW_FILE"'
+              dryrun: '"/usr/local/lib/mmhotline/releases/$MMHOTLINE_VERSION/mmhotline" settings check --settings-file "$NEW_FILE"'
+              env:
+                MMHOTLINE_VERSION: "{{ .vars.stack_software.mmhotline.version }}"
+                NEW_FILE: "{{ .new_file.path }}"
+              output_holds_no_secret: true
+      # MMHotline's install copies its program to /usr/local/bin/mmhotline,
+      # writes its units, the backup unit too, and starts them. The install
+      # command runs when the installed program differs from the pinned
+      # release: on a new util01 and after the pin changes. When no MMHotline
+      # database exists, MMHotline creates the database using team_name from
+      # /etc/mmhotline/mmhotline_settings.yml.
+      - id: install_the_mmhotline_release
+        shell:
+          script: '"/usr/local/lib/mmhotline/releases/$MMHOTLINE_VERSION/mmhotline" install'
+          dryrun: printf 'would install MMHotline %s\n' "$MMHOTLINE_VERSION"
+          env:
+            MMHOTLINE_VERSION: "{{ .vars.stack_software.mmhotline.version }}"
+          skip_if_this_command_succeeds:
+            script: cmp -s "/usr/local/lib/mmhotline/releases/$MMHOTLINE_VERSION/mmhotline" /usr/local/bin/mmhotline
+            true_exit_codes: [0]
+            false_exit_codes: [1, 2]    # the programs differ, or /usr/local/bin/mmhotline is missing
+      # MMHotline takes alerts on util01's WireGuard address
+      # (alert_intake_listen_address in mmhotline_settings.yml), which wg0
+      # holds, so at boot MMHotline waits for wg0, as MMWatchdog's hub does.
+      # The drop-in orders the next boot; the running MMHotline needs no
+      # restart for it.
+      - id: start_mmhotline_after_the_wireguard_network
+        systemd_unit:
+          name: mmhotline.service
+          drop_in: 10-after-wireguard.conf
+          content: |
+            # Managed by MMX from playbooks/every_server.yml in the systems repository.
+            [Unit]
+            After=wg-quick@wg0.service
+            Wants=wg-quick@wg0.service
+      # run_mmhotline is outside any node task block's activate, so changing
+      # /etc/mmhotline/mmhotline_settings.yml does not restart MMHotline at
+      # run_mmhotline. settings apply restarts MMHotline for settings that
+      # need a restart. apply_the_mmhotline_settings asks the running
+      # MMHotline to test and apply changed settings.
+      - id: run_mmhotline
+        systemd_service:
+          name: mmhotline
+          state: running
+          start_at_boot: true
+      - id: run_the_mmhotline_backup
+        systemd_service:
+          name: mmhotline-backup
+          state: running
+          start_at_boot: true
+
+      - id: remove_earlier_litestream_releases
+        directory:
+          path: /usr/local/lib/litestream/releases
+          delete_everything_inside_except: ["{{ .vars.stack_software.litestream.version }}"]
+      - id: remove_earlier_mmhotline_releases
+        directory:
+          path: /usr/local/lib/mmhotline/releases
+          delete_everything_inside_except: ["{{ .vars.stack_software.mmhotline.version }}"]
+
+  # Before the roles below, mmwatchdog_joined_node updates the hub join code
+  # and MMWatchdog settings on every previously joined server, all at once.
+  # So a database server that fails database_server after util01 was rebuilt
+  # already reports to the new hub. Without the early join, MMX would skip
+  # the failed server's later join stage. The failed server would keep the
+  # old hub's join code, with no hub receiving the server's reports.
+  #
+  # A new server joins in the stages after the roles below, because the
+  # checks need programs and Linux accounts created by the roles.
+  # For example, MMWatchdog's validation of MMWatchdog settings looks up
+  # Postgres's postgres account. The mmwatchdog_joined_node inputs match
+  # the inputs in the later MMWatchdog join stages below.
+  - id: mmwatchdog_joins_the_fleet_hub_before_the_roles
+    nodes: all
+    except_nodes: [util_server, database_restore_servers, systems_desks]
+    node_tasks:
+      - role: mmwatchdog_joined_node
+        when: {path_exists: /etc/mmwatchdog/mmwatchdog_node_settings.yml}
+        inputs:
+          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          is_app_server: "{{ .vars.is_app_server }}"
+          is_database_server: "{{ .vars.is_database_server }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          is_jobs_server: "{{ .vars.is_jobs_server }}"
+          is_load_balancer_server: "{{ .vars.is_load_balancer_server }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          job_containers_run_only_on_the_jobs_servers: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+          tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
+          reboot_check_settings:
+            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
+            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
+            maintenance_window: "{{ .vars.maintenance_window }}"
+
+  # The database servers, before the apps that use them: Postgres under
+  # pg_auto_failover in the formation production, the apps' databases, and
+  # the backups. The stage runs one database server at a time, in name order.
+  # When creating the formation, the first database server becomes primary.
+  # Each database server added to the formation copies the primary and
+  # joins as a replica. An ordinary run keeps the current primary.
+  # A failure, such as Postgres failing to start, stops the stage at the
+  # failed database server while the remaining database servers keep serving.
+  #
+  # Because the stage runs in name order, after util01 is rebuilt the
+  # current primary registers first with the new failover monitor, in an
+  # MMX run of the primary's own
+  # (operating_procedures/replace_a_server.md, "Replacing a server").
+  - id: database_server
+    nodes: database_servers
+    max_nodes_at_once: 1
+    on_node_failure: stop_fleet_stage
+    node_tasks:
+      - role: database_server
+        inputs:
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          set_up_the_server: true
+          nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
+          weekly_work_day: "{{ .vars.weekly_work_day }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          apps: "{{ .vars.apps }}"
+          pg_auto_failover_node_state: present
+          private_ip: "{{ .vars.private_ip }}"
+          monitor_host_name: "{{ .inventory.nodes.util01.vars.private_ip }}"
+          autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+          replication_password: "{{ .secrets.pg_auto_failover_replication_password }}"
+          # In database_server, Postgres restarts for new settings only on
+          # a newly created pg_auto_failover node. update_database_servers
+          # handles settings that need a restart on existing nodes.
+          restart_postgresql_for_new_settings: never
+          app_server_addresses: "{{ .vars.private_ip_ranges.app_servers }}"
+          jobs_servers: "{{ .inventory.groups.jobs_servers }}"
+          jobs_server_addresses: "{{ .vars.private_ip_ranges.jobs_servers }}"
+          backups: "{{ .vars.backups }}"
+          backup_bucket_name: "{{ .vars.backups.production_bucket }}"
+          backup_bucket_key_id: "{{ .secrets.pgbackrest_b2_write_key_id }}"
+          backup_bucket_application_key: "{{ .secrets.pgbackrest_b2_write_application_key }}"
+          backup_repository_cipher_passphrase: "{{ .secrets.pgbackrest_repository_cipher_passphrase }}"
+          # One line for each app's database: its login password.
+          database_passwords:
+            shop: "{{ .secrets.shop_database_password }}"
+
+  # staging01's Postgres: a cluster managed by Debian's Postgres packaging
+  # tools on Debian, outside pg_auto_failover, with staging's own database
+  # passwords, so staging01 holds no production secret. No backups: staging
+  # holds only the seed command's invented data. Its apps connect from
+  # staging01's own address.
+  - id: database_server_on_staging01
+    nodes: staging_server
+    skip_when_no_nodes_are_selected: true     # a team without staging01
+    node_tasks:
+      - role: database_server
+        inputs:
+          set_up_the_server: true
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          apps: "{{ .vars.apps }}"
+          private_ip: "{{ .vars.private_ip }}"
+          app_server_addresses: "{{ .vars.private_ip }}/32"
+          database_passwords:
+            shop: "{{ .secrets.staging_shop_database_password }}"
+
+  # PgBouncer, a later step (operating_procedures/add_pgbouncer.md, "Adding PgBouncer"): in front of
+  # each database server's own Postgres, one server at a time, once
+  # pgbouncer_runs_in_front_of_postgres is true. The apps connect through
+  # PgBouncer only where apps_connect_through_pgbouncer says so.
+  - id: pgbouncer
+    nodes: database_servers
+    when: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+    max_nodes_at_once: 1
+    on_node_failure: stop_fleet_stage
+    node_tasks:
+      - role: pgbouncer
+        inputs:
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          apps: "{{ .vars.apps }}"
+          private_ip: "{{ .vars.private_ip }}"
+          addresses_pgbouncer_logs_in_from: "{{ .vars.private_ip_ranges.database_servers }}"
+
+  # pgbouncer_on_staging01 sets up PgBouncer in front of staging01's Postgres
+  # cluster, so staging's apps meet PgBouncer before production's apps do.
+  - id: pgbouncer_on_staging01
+    nodes: staging_server
+    when: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+    skip_when_no_nodes_are_selected: true     # a team without staging01
+    node_tasks:
+      - role: pgbouncer
+        inputs:
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          apps: "{{ .vars.apps }}"
+          private_ip: "{{ .vars.private_ip }}"
+          addresses_pgbouncer_logs_in_from: "{{ .vars.private_ip }}/32"
+
+  # MMWatchdog joins the hub on every server except util01 and restore01.
+  # New database servers join in
+  # mmwatchdog_joins_the_fleet_hub_after_the_roles_on_the_database_servers.
+  # New app servers, jobs servers, and staging01 join in
+  # mmwatchdog_joins_the_fleet_hub_after_the_roles. New load-balancer servers
+  # join after tunnel_connector_and_caddy, in a separate join stage below.
+  # On previously joined servers, the later join stages change nothing
+  # after mmwatchdog_joins_the_fleet_hub_before_the_roles.
+  #
+  # Each new server joins only after the preceding role stages on the new
+  # server finish. The preceding roles create the programs and accounts
+  # needed to validate MMWatchdog settings. App and jobs servers join before
+  # app_server and jobs_server, which run later. A server that fails a fleet
+  # stage starts no remaining fleet stage in playbooks/every_server.yml.
+  #
+  # If a database server fails database_server, stop_fleet_stage keeps the
+  # remaining database servers from starting database_server. MMX still
+  # sends database servers skipped because of another database server's
+  # failure to later stages. requires holds back the skipped database
+  # servers, so no new database server joins before Postgres exists.
+  # Each staging01 stage runs on staging01 alone, so only a failure on
+  # staging01 prevents staging01 from joining.
+  #
+  # The mmwatchdog_joined_node inputs match in these fleet stages:
+  # mmwatchdog_joins_the_fleet_hub_before_the_roles,
+  # mmwatchdog_joins_the_fleet_hub_after_the_roles_on_the_database_servers,
+  # and mmwatchdog_joins_the_fleet_hub_after_the_roles.
+  - id: mmwatchdog_joins_the_fleet_hub_after_the_roles_on_the_database_servers
+    nodes: database_servers
+    requires:
+      same_node: [database_server]
+    node_tasks:
+      - role: mmwatchdog_joined_node
+        inputs:
+          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          is_app_server: "{{ .vars.is_app_server }}"
+          is_database_server: "{{ .vars.is_database_server }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          is_jobs_server: "{{ .vars.is_jobs_server }}"
+          is_load_balancer_server: "{{ .vars.is_load_balancer_server }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          job_containers_run_only_on_the_jobs_servers: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+          tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
+          reboot_check_settings:
+            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
+            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
+            maintenance_window: "{{ .vars.maintenance_window }}"
+  - id: mmwatchdog_joins_the_fleet_hub_after_the_roles
+    nodes: all
+    except_nodes: [util_server, database_restore_servers, database_servers, load_balancer_servers, systems_desks]
+    node_tasks:
+      - role: mmwatchdog_joined_node
+        inputs:
+          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          is_app_server: "{{ .vars.is_app_server }}"
+          is_database_server: "{{ .vars.is_database_server }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          is_jobs_server: "{{ .vars.is_jobs_server }}"
+          is_load_balancer_server: "{{ .vars.is_load_balancer_server }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          job_containers_run_only_on_the_jobs_servers: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+          tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
+          reboot_check_settings:
+            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
+            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
+            maintenance_window: "{{ .vars.maintenance_window }}"
+
+  # The app servers of production. First each server says which web
+  # container of each app is live (the one Caddy sends requests to) and which
+  # port is free for the next deploy, because every Caddy's list names the
+  # live web container of every app server. playbooks/deploy.yml runs
+  # find_the_live_and_new_web_ports to collect the live containers and ports.
+  #
+  # First every app server says which release it runs (recorded_live_images;
+  # a new server runs none). Then each server finds its ports. A new app
+  # server takes the first recorded release of the pool, like the jobs
+  # servers, not deployed_image_tags: after a deploy that stopped at the memory
+  # check, deployed_image_tags names a release the pool does not run, and
+  # users would get 404 errors for the CSS and JavaScript of the other release.
+  # With no recorded release anywhere (the first app server) it takes
+  # deployed_image_tags, the release the first run starts.
+  - id: find_the_releases_the_app_servers_run
+    nodes: app_servers
+    node_tasks:
+      - id: install_the_program_that_finds_the_live_web_ports
+        file:
+          path: /usr/local/sbin/find_live_web_ports
+          source: roles/app_server/files/find_live_web_ports
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: find_the_live_and_new_web_ports
+        shell:
+          script: /usr/local/sbin/find_live_web_ports
+          dryrun: /usr/local/sbin/find_live_web_ports
+          env:
+            APPS: "{{ .vars.apps }}"
+            DEPLOYED_IMAGE_TAGS: "{{ .vars.deployed_image_tags.production }}"
+          # Only reads. On a new server a dryrun has not installed the
+          # program yet, so the dryrun reports this check not_checked, and the
+          # tasks that read its answer too, instead of failing (exit 3).
+          changed_when: false
+      # A server that runs another release than deployed_image_tags names
+      # differs from the repository: a deploy that stopped halfway, a rollback done by hand,
+      # or an edited inventory. This task then reports a change, so the daily
+      # server settings comparison exits 2.
+      - id: report_the_apps_not_on_the_deployed_image_tags
+        shell:
+          script: printf '%s\n' "$APPS_NOT_ON_THE_DEPLOYED_IMAGE_TAGS" >&2; printf '%s\n' "$NUMBER_OF_APPS"
+          dryrun: printf '%s\n' "$APPS_NOT_ON_THE_DEPLOYED_IMAGE_TAGS" >&2; printf '%s\n' "$NUMBER_OF_APPS"
+          env:
+            APPS_NOT_ON_THE_DEPLOYED_IMAGE_TAGS: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.apps_not_on_the_deployed_image_tags }}"
+            NUMBER_OF_APPS: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.number_of_apps_not_on_the_deployed_image_tags }}"
+          changed_when: {number_greater_than: ["{{ .this_node_task.stdout_json }}", 0]}
+    outputs:
+      recorded_live_images: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.recorded_live_images }}"
+
+  - id: find_the_live_and_new_web_ports_on_the_app_servers
+    nodes: app_servers
+    node_tasks:
+      # Before changing apps on app servers or jobs servers, refuse a
+      # production app setup that selects PgBouncer while PgBouncer is off.
+      # The app database settings would name PgBouncer's unused port.
+      # Job containers have no health URL, so no job-container health check
+      # would stop the run on a failed database connection. jobs_server
+      # reads the first app server's output from
+      # find_the_live_and_new_web_ports_on_the_app_servers. So refusing to
+      # collect the app server's ports also prevents jobs_server from running.
+      - id: refuse_the_apps_through_pgbouncer_while_it_is_off
+        when: "{{ .vars.apps_connect_through_pgbouncer.production }}"
+        assert:
+          that: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+          message: >-
+            apps_connect_through_pgbouncer.production is true in
+            mmx_project_settings.yml, but pgbouncer_runs_in_front_of_postgres
+            is false, so production's apps would connect to PgBouncer's
+            port, where no managed PgBouncer serves them. Set it back to
+            false; it is set to true only once PgBouncer runs (operating_procedures/add_pgbouncer.md,
+            "Adding PgBouncer").
+      - id: install_the_program_that_finds_the_live_web_ports
+        file:
+          path: /usr/local/sbin/find_live_web_ports
+          source: roles/app_server/files/find_live_web_ports
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: find_the_live_and_new_web_ports
+        shell:
+          script: /usr/local/sbin/find_live_web_ports
+          dryrun: /usr/local/sbin/find_live_web_ports
+          env:
+            APPS: "{{ .vars.apps }}"
+            DEPLOYED_IMAGE_TAGS: "{{ .vars.deployed_image_tags.production }}"
+            APP_SERVERS: "{{ .inventory.groups.app_servers }}"
+            LIVE_IMAGES_BY_APP_SERVER: "{{ .outputs.find_the_releases_the_app_servers_run }}"
+          changed_when: false
+    outputs:
+      private_ip: "{{ .vars.private_ip }}"
+      live_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.live_web_containers }}"
+      new_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.new_web_containers }}"
+
+  # Every Caddy that runs in production points at the live web containers
+  # the app servers recorded. app_server then removes web containers on
+  # ports not recorded as live. If a deploy stops after recording the new
+  # release but before every Caddy switches, a Caddy still uses old ports.
+  # app_server removes the containers on those old ports.
+  #
+  # The tunnel_connector_and_caddy role updates only existing Caddy instances.
+  # So pointing Caddy at the live containers changes nothing on a new system
+  # or new server without Caddy.
+  # The tunnel_connector_and_caddy stage below sets up Caddy and the tunnel
+  # connector.
+  - id: point_every_caddy_at_the_live_web_containers
+    nodes: [app_servers, load_balancer_servers]
+    node_tasks:
+      - role: tunnel_connector_and_caddy
+        inputs:
+          send_app_requests_to_the_status_page: "{{ .vars.send_app_requests_to_the_status_page }}"
+          status_page_host_name: "{{ .vars.status_page_host_name }}"
+          set_up_the_server: false
+          requests_go_to_the_new_release: false
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports_on_the_app_servers }}"
+
+  # The jobs servers, a later step (operating_procedures/add_jobs_servers.md, "Adding jobs servers"): each
+  # app's job container, on the live release of the first app server.
+  # A jobs server starts job containers in the first run. Workers cannot
+  # reach Postgres until the jobs server's WireGuard public key is committed
+  # and pushed, and the second run configures the WireGuard peers.
+  # From the second run, jobs-server job containers process jobs alongside
+  # app-server job containers until
+  # job_containers_run_only_on_the_jobs_servers is true.
+  #
+  # jobs_server runs before app_server, so a run updates job containers on
+  # jobs servers before stopping and removing app-server job containers.
+  # MMX updates one jobs server at a time. If a jobs server fails the stage,
+  # the remaining jobs servers keep the job containers already running.
+  - id: jobs_server
+    nodes: jobs_servers
+    skip_when_no_nodes_are_selected: true     # before the first jobs server
+    max_nodes_at_once: 1
+    on_node_failure: stop_fleet_stage
+    node_tasks:
+      - role: jobs_server
+        inputs:
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          set_up_the_server: true
+          nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
+          weekly_work_day: "{{ .vars.weekly_work_day }}"
+          apps: "{{ .vars.apps }}"
+          job_containers: "{{ .outputs.find_the_live_and_new_web_ports_on_the_app_servers[.inventory.groups.app_servers[0]].live_web_containers }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+          database_servers: "{{ .inventory.groups.database_servers }}"
+          apps_connect_through_pgbouncer: "{{ .vars.apps_connect_through_pgbouncer.production }}"
+          # The app_secrets entries match app_secrets in the app_server
+          # role call below, so job containers read the apps' production
+          # secrets.
+          app_secrets:
+            shop_database_password: "{{ .secrets.shop_database_password }}"
+            shop_SECRET_KEY_BASE: "{{ .secrets.shop_SECRET_KEY_BASE }}"
+            shop_STRIPE_API_KEY: "{{ .secrets.shop_STRIPE_API_KEY }}"
+            shop_R2_ACCESS_KEY_ID: "{{ .secrets.shop_R2_ACCESS_KEY_ID }}"
+            shop_R2_SECRET_ACCESS_KEY: "{{ .secrets.shop_R2_SECRET_ACCESS_KEY }}"
+
+  # One app server at a time, so a change that restarts the apps' containers
+  # leaves the other app servers serving. If an app server fails the
+  # app_server fleet stage, the remaining app servers keep the containers
+  # already running.
+  - id: app_server
+    nodes: app_servers
+    max_nodes_at_once: 1
+    on_node_failure: stop_fleet_stage
+    node_tasks:
+      # With job_containers_run_only_on_the_jobs_servers true, MMX would
+      # stop and remove app-server job containers. Without a jobs server,
+      # no job containers would remain to process jobs. An app whose
+      # jobs_command is "" has no job container, so the run refuses only
+      # when at least one app has a jobs_command.
+      - id: refuse_to_move_the_jobs_to_no_jobs_server
+        loop: "{{ .vars.apps }}"
+        as: app
+        when:
+          all:
+            - "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+            - not: {equals: ["{{ .app.value.jobs_command }}", ""]}
+        assert:
+          that:
+            not: {equals: ["{{ .inventory.groups.jobs_servers }}", []]}
+          message: >-
+            job_containers_run_only_on_the_jobs_servers is true in
+            mmx_project_settings.yml, but jobs_servers holds no server, so
+            nothing would run the jobs of the app {{ .app.key }}. Fix it in one of two
+            ways. To keep the jobs on the app servers, set
+            job_containers_run_only_on_the_jobs_servers to false. To move
+            the jobs to jobs servers, add a jobs server first
+            (operating_procedures/add_jobs_servers.md, "Adding jobs servers").
+            An app whose jobs_command is "" has no jobs and never causes
+            this refusal.
+      - role: app_server
+        inputs:
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          set_up_the_server: true
+          nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
+          weekly_work_day: "{{ .vars.weekly_work_day }}"
+          release_step: keep_the_running_release
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports_on_the_app_servers }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+          job_containers_run_only_on_the_jobs_servers: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+          database_servers: "{{ .inventory.groups.database_servers }}"
+          apps_connect_through_pgbouncer: "{{ .vars.apps_connect_through_pgbouncer.production }}"
+          # One line for each app's database password and each name in the
+          # app's secrets_from_vault. Each app server receives only the
+          # secrets named in the app_secrets mapping below.
+          app_secrets:
+            shop_database_password: "{{ .secrets.shop_database_password }}"
+            shop_SECRET_KEY_BASE: "{{ .secrets.shop_SECRET_KEY_BASE }}"
+            shop_STRIPE_API_KEY: "{{ .secrets.shop_STRIPE_API_KEY }}"
+            shop_R2_ACCESS_KEY_ID: "{{ .secrets.shop_R2_ACCESS_KEY_ID }}"
+            shop_R2_SECRET_ACCESS_KEY: "{{ .secrets.shop_R2_SECRET_ACCESS_KEY }}"
+
+  # Production's tunnel connector and Caddy: on the app servers until
+  # tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers is true,
+  # and on the load-balancer servers. app_server runs first and starts the
+  # first web containers on a new system. Then tunnel_connector_and_caddy
+  # sets up Caddy on each selected server. A new server's tunnel connector
+  # joins the tunnel only after every app answers through Caddy on the new
+  # server.
+  #
+  # MMX configures one selected app server or load-balancer server at a
+  # time. A connector restart, such as for a new tunnel token, leaves the
+  # remaining app servers and load-balancer servers with running connectors
+  # receiving requests. After a failure, servers not yet processed in
+  # tunnel_connector_and_caddy keep the connectors and Caddy already running.
+  - id: tunnel_connector_and_caddy
+    nodes: [app_servers, load_balancer_servers]
+    when:
+      any:
+        - "{{ .vars.is_load_balancer_server }}"
+        - not: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+    max_nodes_at_once: 1
+    on_node_failure: stop_fleet_stage
+    node_tasks:
+      - role: tunnel_connector_and_caddy
+        inputs:
+          send_app_requests_to_the_status_page: "{{ .vars.send_app_requests_to_the_status_page }}"
+          status_page_host_name: "{{ .vars.status_page_host_name }}"
+          set_up_the_server: true
+          requests_go_to_the_new_release: false
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports_on_the_app_servers }}"
+          cloudflare_tunnel_token: "{{ .secrets.apps_cloudflare_tunnel_token }}"
+
+  # New load-balancer servers join MMWatchdog's fleet hub after the tunnel
+  # connector and Caddy run, because the tunnel_connector_and_caddy check
+  # group checks the connector and Caddy. Joining before the
+  # tunnel_connector_and_caddy stage, alongside the app servers, produced
+  # two warnings during the first two load-balancer setup runs.
+  # The first run creates the load-balancer
+  # server's WireGuard key, but tunnel_connector_and_caddy fails without
+  # private-network access.
+  # Stages that need the private network fail on any new server until the
+  # new server's WireGuard public key is committed and pushed.
+  #
+  # The second run configures WireGuard peers, then Caddy and the tunnel
+  # connector, so the new load-balancer server joins MMWatchdog in the
+  # second run. requires holds back a load-balancer server skipped because
+  # another app server or load-balancer server failed
+  # tunnel_connector_and_caddy (on_node_failure: stop_fleet_stage).
+  # A previously joined load-balancer server rejoined before the roles, so
+  # a failure in the load-balancer MMWatchdog join stage leaves the server
+  # watched.
+  - id: mmwatchdog_joins_the_fleet_hub_after_the_roles_on_the_load_balancer_servers
+    nodes: load_balancer_servers
+    # Before adding load-balancer servers.
+    skip_when_no_nodes_are_selected: true
+    requires:
+      same_node: [tunnel_connector_and_caddy]
+    node_tasks:
+      - role: mmwatchdog_joined_node
+        inputs:
+          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          is_app_server: "{{ .vars.is_app_server }}"
+          is_database_server: "{{ .vars.is_database_server }}"
+          is_staging_server: "{{ .vars.is_staging_server }}"
+          is_jobs_server: "{{ .vars.is_jobs_server }}"
+          is_load_balancer_server: "{{ .vars.is_load_balancer_server }}"
+          inventory_groups: "{{ .inventory.groups }}"
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.production }}"
+          job_containers_run_only_on_the_jobs_servers: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+          tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: "{{ .vars.tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers }}"
+          pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+          mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
+          reboot_check_settings:
+            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
+            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
+            maintenance_window: "{{ .vars.maintenance_window }}"
+
+  # staging01, with staging's image tags, host names, tunnel, and secrets: the
+  # vault key of each staging secret is the production key with staging_ in
+  # front, so staging01 never holds a production secret. Its apps use the
+  # Postgres on staging01 itself.
+  - id: find_the_live_and_new_web_ports_on_staging01
+    nodes: staging_server
+    skip_when_no_nodes_are_selected: true     # a team without staging01
+    node_tasks:
+      # Before changing apps on staging01, refuse a staging app setup that
+      # selects PgBouncer while PgBouncer is off. The staging app database
+      # settings would name PgBouncer's unused port. staging01 runs web and
+      # job containers, with no separate jobs servers. Job containers have
+      # no health URL, so no job-container health check would stop the run
+      # on a failed database connection.
+      - id: refuse_the_apps_through_pgbouncer_while_it_is_off
+        when: "{{ .vars.apps_connect_through_pgbouncer.staging }}"
+        assert:
+          that: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+          message: >-
+            apps_connect_through_pgbouncer.staging is true in
+            mmx_project_settings.yml, but pgbouncer_runs_in_front_of_postgres
+            is false, so staging's apps would connect to PgBouncer's
+            port, where no managed PgBouncer serves them. Set it back to
+            false; it is set to true only once PgBouncer runs (operating_procedures/add_pgbouncer.md,
+            "Adding PgBouncer").
+      - id: install_the_program_that_finds_the_live_web_ports
+        file:
+          path: /usr/local/sbin/find_live_web_ports
+          source: roles/app_server/files/find_live_web_ports
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: find_the_live_and_new_web_ports
+        shell:
+          script: /usr/local/sbin/find_live_web_ports
+          dryrun: /usr/local/sbin/find_live_web_ports
+          env:
+            APPS: "{{ .vars.apps }}"
+            DEPLOYED_IMAGE_TAGS: "{{ .vars.deployed_image_tags.staging }}"
+          # As in find_the_releases_the_app_servers_run: only reads, so a
+          # dryrun of a new staging01 reports it not_checked (exit 3).
+          changed_when: false
+      - id: report_the_apps_not_on_the_deployed_image_tags
+        shell:
+          script: printf '%s\n' "$APPS_NOT_ON_THE_DEPLOYED_IMAGE_TAGS" >&2; printf '%s\n' "$NUMBER_OF_APPS"
+          dryrun: printf '%s\n' "$APPS_NOT_ON_THE_DEPLOYED_IMAGE_TAGS" >&2; printf '%s\n' "$NUMBER_OF_APPS"
+          env:
+            APPS_NOT_ON_THE_DEPLOYED_IMAGE_TAGS: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.apps_not_on_the_deployed_image_tags }}"
+            NUMBER_OF_APPS: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.number_of_apps_not_on_the_deployed_image_tags }}"
+          changed_when: {number_greater_than: ["{{ .this_node_task.stdout_json }}", 0]}
+    outputs:
+      private_ip: "{{ .vars.private_ip }}"
+      live_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.live_web_containers }}"
+      new_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.new_web_containers }}"
+
+  - id: app_server_on_staging01
+    nodes: staging_server
+    skip_when_no_nodes_are_selected: true     # a team without staging01
+    node_tasks:
+      - role: app_server
+        inputs:
+          set_up_the_server: true
+          nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
+          weekly_work_day: "{{ .vars.weekly_work_day }}"
+          release_step: keep_the_running_release
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.staging }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports_on_staging01 }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+          job_containers_run_only_on_the_jobs_servers: false     # staging has no jobs servers
+          database_servers: "{{ .inventory.groups.staging_server }}"
+          apps_connect_through_pgbouncer: "{{ .vars.apps_connect_through_pgbouncer.staging }}"
+          app_secrets:
+            shop_database_password: "{{ .secrets.staging_shop_database_password }}"
+            shop_SECRET_KEY_BASE: "{{ .secrets.staging_shop_SECRET_KEY_BASE }}"
+            shop_STRIPE_API_KEY: "{{ .secrets.staging_shop_STRIPE_API_KEY }}"
+            shop_R2_ACCESS_KEY_ID: "{{ .secrets.staging_shop_R2_ACCESS_KEY_ID }}"
+            shop_R2_SECRET_ACCESS_KEY: "{{ .secrets.staging_shop_R2_SECRET_ACCESS_KEY }}"
+
+  - id: tunnel_connector_and_caddy_on_staging01
+    nodes: staging_server
+    skip_when_no_nodes_are_selected: true     # a team without staging01
+    node_tasks:
+      - role: tunnel_connector_and_caddy
+        inputs:
+          send_app_requests_to_the_status_page: "{{ .vars.send_app_requests_to_the_status_page }}"
+          status_page_host_name: "{{ .vars.status_page_host_name }}"
+          set_up_the_server: true
+          requests_go_to_the_new_release: false
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names.staging }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports_on_staging01 }}"
+          cloudflare_tunnel_token: "{{ .secrets.staging_apps_cloudflare_tunnel_token }}"
+
+  # The nightly copy of the apps' uploaded files to B2 (roles/uploads_backup),
+  # on the servers that backups.uploads_backup_runs_on names.
+  # uploads_backup_runs_on is [util_server] once the uploads' B2 bucket and
+  # keys exist. Before backup setup, or when no app keeps uploads,
+  # uploads_backup_runs_on is [].
+  # With [], uploads_backup selects no nodes and needs none of the uploads
+  # copy's four vault keys. check_that_the_uploads_are_copied and
+  # uploads_backup follow the server setup stages, so a refusal in
+  # check_that_the_uploads_are_copied holds back no earlier server work.
+  # MMHotline settings and the restore-drill start follow the uploads stages.
+  - id: check_that_the_uploads_are_copied
+    nodes: util_server
+    node_tasks:
+      # An app whose uploads nothing copies would have no backup of them,
+      # and nothing else would say so.
+      - id: refuse_uploads_that_nothing_copies
+        loop: "{{ .vars.apps }}"
+        as: app
+        assert:
+          that:
+            any:
+              - {equals: ["{{ .app.value.production_uploads_r2_bucket }}", ""]}
+              - not: {equals: ["{{ .vars.backups.uploads_backup_runs_on }}", []]}
+          message: >-
+            apps.{{ .app.key }} in mmx_project_settings.yml keeps its
+            uploaded files in the R2 bucket
+            {{ .app.value.production_uploads_r2_bucket }}, but
+            backups.uploads_backup_runs_on is [], so nothing copies them to
+            B2. Make the uploads' B2 bucket and the copy's two keys, put
+            the keys in the vault, then set it to [util_server] (operating_procedures/turn_on_nightly_backups_of_uploaded_files.md,
+            "Turning the uploads' copy on").
+  - id: uploads_backup
+    nodes: "{{ .vars.backups.uploads_backup_runs_on }}"
+    except_nodes: systems_desks
+    # Selects no nodes when no app keeps uploads, or before the uploads'
+    # bucket and keys exist.
+    skip_when_no_nodes_are_selected: true
+    node_tasks:
+      - role: uploads_backup
+        inputs:
+          apps: "{{ .vars.apps }}"
+          backups: "{{ .vars.backups }}"
+          nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
+          weekly_work_day: "{{ .vars.weekly_work_day }}"
+          rclone_release: "{{ .vars.stack_software.rclone }}"
+          uploads_r2_read_only_access_key_id: "{{ .secrets.uploads_r2_read_only_access_key_id }}"
+          uploads_r2_read_only_secret_access_key: "{{ .secrets.uploads_r2_read_only_secret_access_key }}"
+          uploads_backup_b2_write_key_id: "{{ .secrets.uploads_backup_b2_write_key_id }}"
+          uploads_backup_b2_write_application_key: "{{ .secrets.uploads_backup_b2_write_application_key }}"
+
+  # MMHotline applies /etc/mmhotline/mmhotline_settings.yml. The
+  # apply_the_mmhotline_settings stage passes no vault secrets through MMX,
+  # but MMHotline reads the secret-containing settings file. So MMX shows
+  # settings apply output in MMX's history: each part as applied,
+  # unchanged, or not applied with MMHotline's reason, without secret values.
+  #
+  # follow_the_mmhotline_settings_file, a file task with no content, writes
+  # nothing and makes /etc/mmhotline/mmhotline_settings.yml a tracked input
+  # of the mmhotline_settings_file node task block. MMX runs the block's
+  # apply_the_mmhotline_settings after the file's content changed, and again
+  # at each run after an apply that failed.
+  #
+  # MMHotline tests each changed settings part first, for example the triage
+  # agent with one prompt in the agent's sandbox. MMHotline applies settings
+  # parts that pass and keeps earlier settings for parts that fail.
+  # MMHotline exits 1 naming the failed settings parts, which fails
+  # apply_the_mmhotline_settings. A change of
+  # web_url, a listen address, or cloudflare_access restarts MMHotline first,
+  # by itself.
+  #
+  # On the first run, mmhotline_settings_file records the current contents
+  # of /etc/mmhotline/mmhotline_settings.yml as the comparison baseline.
+  # With no earlier baseline, the block runs no activation command.
+  #
+  # On a new util01, MMHotline applies
+  # /etc/mmhotline/mmhotline_settings.yml during startup, and runs the
+  # settings parts' outside tests in the background.
+  # apply_the_mmhotline_settings_once_on_a_new_util01 applies the settings
+  # again before mmhotline_settings_file. MMHotline runs only one apply at
+  # a time, so the explicit apply waits for the startup apply.
+  # The explicit apply then retests each settings part that failed during
+  # startup.
+  #
+  # A settings part that still fails causes the every_server run to fail
+  # with MMHotline's reason. The next every_server attempt retries the apply
+  # until every settings part passes.
+  - id: apply_the_mmhotline_settings
+    nodes: util_server
+    node_tasks:
+      - id: apply_the_mmhotline_settings_once_on_a_new_util01
+        shell:
+          script: exec /usr/local/bin/mmhotline settings apply
+          run_only_once_marker_file: /var/lib/mmx/commands_run_once/apply_the_mmhotline_settings
+      - task_block:
+          id: mmhotline_settings_file
+          changes:
+            - id: follow_the_mmhotline_settings_file
+              file:
+                path: /etc/mmhotline/mmhotline_settings.yml
+                owner: root
+                group: mmhotline
+                permissions_mode: "0640"
+          activate:
+            - id: apply_the_mmhotline_settings
+              shell:
+                script: exec /usr/local/bin/mmhotline settings apply
+                only_when_tracked_inputs_changed: true
+
+  # The weekly restore drill (roles/util_server) starts after every_server
+  # until a restore drill has passed on util01. On a new system, the first
+  # drill starts at the end of the every_server run that built the system,
+  # after the production database's first backup. So MMWatchdog's
+  # restore_drill/a_restore_drill_passed_in_the_last_8_days check on util01
+  # passes from the initial setup. After a failed drill, every_server starts
+  # another drill at the end of each run until a drill passes.
+  # The retry includes the every_server run that applies the correction for
+  # the failed drill.
+  #
+  # The restore drill starts in the background. If an uploads copy is
+  # running or starting, systemd waits for the copy to finish before
+  # starting the drill, because weekly_database_restore_drill.service is
+  # ordered after copy_uploads_to_the_backup_bucket.service. The drill takes
+  # util01's lock, so a drill started by util01's every_server run waits for
+  # the every_server run to end.
+  #
+  # A run from a systems desk holds no lock on util01. The drill starts at once.
+  # The drill's MMX run begins only after creating restore01, which
+  # takes minutes, after start_the_restore_drill_until_one_has_passed. The
+  # minutes usually let the desk's run finish first; nothing waits for
+  # the desk's run.
+  # A new util01 starts the restore drill only after the systems repository
+  # is cloned at /var/lib/mmhotline/systems_repository, where the drill runs.
+  # start_the_restore_drill_until_one_has_passed runs last, so a failure in
+  # start_the_restore_drill_until_one_has_passed holds back no server work.
+  - id: start_the_restore_drill_until_one_has_passed
+    nodes: util_server
+    node_tasks:
+      - id: start_the_restore_drill_in_the_background
+        shell:
+          script: systemctl start --no-block weekly_database_restore_drill.service
+          dryrun: printf 'would start the restore drill, because none has passed on util01 yet\n'
+          skip_if_this_path_exists: /var/lib/restore_drill/latest_passed_drill
+          run_only_if_this_path_exists: /var/lib/mmhotline/systems_repository
+
+  # A new app, jobs or load-balancer server installs its waiting security
+  # updates last, after it serves: on the only app server, a replacement's
+  # site then answers 3 to 7 minutes sooner. The fixes reach no request
+  # path (requests come through the tunnel to Go programs and the app's
+  # own image), only WireGuard's UDP port is public, and the kernel's fix
+  # waits for a reboot either way. A needed reboot follows the existing
+  # paths (reboots_that_may_run_now, the maintenance window, add_a_server.md
+  # step 7). Database servers, util01 and staging01 install theirs in the
+  # every_server role, before their services start. The same marker file as
+  # the role's task, so each server runs this once and every existing
+  # server skips it.
+  - id: install_the_waiting_security_updates_on_new_servers
+    nodes: [app_servers, jobs_servers, load_balancer_servers]
+    skip_when_no_nodes_are_selected: true
+    node_tasks:
+      - id: install_the_waiting_security_updates_on_a_new_server
+        time_limit: 30m
+        shell:
+          script: apt-get update && unattended-upgrade --no-minimal-upgrade-steps
+          dryrun: printf 'would install the waiting security updates, the first time only\n'
+          run_only_once_marker_file: /var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server
+
+  # util01's rule for the load (roles/util_server/files/check-whether-the-load-changes-the-app-pool)
+  # counts an app server's readings only from when the server's waiting
+  # security updates were installed, so the load of installing a new server
+  # (its updates, 86% CPU in a measured replacement) never calls for another
+  # server. The first stage reads the time of the marker file of the role
+  # every_server's task install_the_waiting_security_updates_on_a_new_server
+  # (run by the last fleet stage above, install_the_waiting_security_updates_on_new_servers,
+  # on app servers) on each app server; the second writes it on util01, where the rule can
+  # read it: util01 cannot see the marker on another server. Both stages run
+  # after the stage that installs the updates, the last one before them, so
+  # a run that fails before them records nothing. A file on util01 is never rewritten. An
+  # app server that already exists is recorded at its marker's own time, so
+  # a pool that exists loses no window.
+  # A loop over the app servers, not two plain stages: a run limited to
+  # util01 (`--limit util01`) would exclude a plain stage whose outputs the
+  # util01 stage reads, and MMX refuses that; the loop then has no iteration.
+  - id: record_when_each_app_server_installed_its_waiting_security_updates
+    for_each_node: app_servers
+    as: app_server
+    fleet_stages:
+      - id: read_the_time_of_the_security_updates_marker
+        nodes: "{{ .app_server }}"
+        node_tasks:
+          - id: read_the_marker_file_time
+            shell:
+              script: |
+                marker=/var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server
+                installed_at=""
+                [ ! -e "$marker" ] || installed_at=$(date -u -r "$marker" +%Y-%m-%dT%H:%M:%SZ)
+                jq -nc --arg installed_at "$installed_at" '{installed_at: $installed_at}'
+              changed_when: false
+        outputs:
+          installed_at: "{{ .node_tasks.read_the_marker_file_time.stdout_json.installed_at }}"
+      - id: write_the_time_on_util01
+        nodes: util_server
+        node_tasks:
+          - id: write_the_time_each_app_server_installed_its_waiting_security_updates
+            shell:
+              script: |
+                directory=/var/lib/app_pool_for_the_load/security_updates_installed
+                install -d -m 0755 "$directory"
+                if [ -n "$INSTALLED_AT" ] && [ ! -e "$directory/$APP_SERVER" ]; then
+                  printf '%s\n' "$INSTALLED_AT" > "$directory/$APP_SERVER"
+                fi
+              env:
+                APP_SERVER: "{{ .app_server }}"
+                INSTALLED_AT: "{{ .outputs.read_the_time_of_the_security_updates_marker[.app_server].installed_at }}"
+              dryrun: printf 'would record when %s installed its waiting security updates\n' "$APP_SERVER"

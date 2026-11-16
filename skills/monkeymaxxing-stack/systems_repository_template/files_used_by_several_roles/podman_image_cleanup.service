@@ -1,0 +1,12 @@
+{{- /*
+  The weekly image cleanup's service, on every server that runs the apps'
+  containers: the app servers and staging01 (roles/app_server), and the jobs
+  servers (roles/jobs_server).
+*/ -}}
+# Managed by MMX from files_used_by_several_roles/podman_image_cleanup.service in the systems repository.
+[Unit]
+Description=Delete the container images that no container uses and that were made more than 7 days ago
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/podman image prune --all --force --filter until=168h

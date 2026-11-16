@@ -1,0 +1,84 @@
+# add_an_app_server_for_the_load creates one app server when the load calls
+# for it, inside growth_limits.app_servers in mmx_project_settings.yml, and
+# puts it in the inventory with one commit on main, signed by util01's
+# mmhotline user. every_server, the next run, installs it, and the tunnel
+# and every Caddy send it requests.
+#
+#   add_an_app_server_for_the_load   creates the server and commits it
+#   every_server                     installs it
+#
+# The triage agent requests the two when util01's check
+# app_servers_to_add_for_the_load/no_app_server_waits_to_be_added warns
+# (triage_agent_rules.md, "Adding and removing app servers with the load").
+# With what_the_triage_agent_may_do_without_a_person:
+# routine_fixes_and_server_work, MMHotline runs it after its warning, which
+# waits triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server,
+# unless someone presses Stop: slow pages are no outage. A person runs the
+# same two from a systems desk (operating_procedures/add_an_app_server.md):
+#
+#   ./server_management_scripts/run_mmx_on_util01 run add_an_app_server_for_the_load
+#
+# The load decides, by check-whether-the-load-changes-the-app-pool, the
+# same program as util01's check, so the playbook adds nothing that the
+# check did not call for: "nothing to add" and the reason, exit 0. The
+# program server_management_scripts/add_an_app_server_for_the_load holds the
+# refusals, among them the Postgres connection budget, each step, and what
+# a failure leaves. Every refusal comes before anything is created. The
+# playbook takes no variables, so it can be requested again safely.
+fleet_stages:
+  - id: add_an_app_server_for_the_load
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      # As root: only root may ask the fleet hub.
+      - id: read_the_fleet_hub
+        time_limit: 30m
+        shell:
+          script: server_management_scripts/read_the_fleet_hub_for_server_replacement
+          dryrun: printf 'would read the fleet hub into /var/lib/replace_failed_servers/fleet.json\n'
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          changed_when: false
+      - id: read_the_app_pool_load
+        time_limit: 5m
+        shell:
+          script: server_management_scripts/read_the_app_pool_load --add
+          dryrun: printf 'would decide from the app servers CPU readings whether the load calls for one more app server\n'
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          changed_when: false
+          env:
+            GROWTH_LIMITS: "{{ .vars.growth_limits }}"
+            SERVER_WORK: "{{ .vars.triage_agent_server_work }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+      - id: add_the_app_server
+        # MMX's task limit sends SIGKILL. A standard timeout sends TERM to
+        # the program instead, so its exit trap destroys a server it created
+        # whose commit was not pushed. 30 minutes, fixed, as in
+        # replace_failed_servers: the create, up to 5 minutes for the new
+        # server's SSH, and the pushes take about 10 minutes; the limit keeps
+        # a stuck run well inside MMHotline's one-hour limit for a run.
+        time_limit: null
+        time_limit_per_try: null
+        shell:
+          script: timeout --signal=TERM 30m server_management_scripts/add_an_app_server_for_the_load < /dev/null
+          dryrun: printf 'would create one app server when the load calls for it and commit it to main\n'
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          output_holds_no_secret: true
+          env:
+            GROWTH_LIMITS: "{{ .vars.growth_limits }}"
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            INVENTORY_GROUPS: "{{ .inventory.groups }}"
+            PRIVATE_IP_RANGES: "{{ .vars.private_ip_ranges }}"
+            APPS: "{{ .vars.apps }}"
+            PGBOUNCER_RUNS_IN_FRONT_OF_POSTGRES: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
+            APPS_CONNECT_THROUGH_PGBOUNCER: "{{ .vars.apps_connect_through_pgbouncer }}"
+            JOB_CONTAINERS_RUN_ONLY_ON_THE_JOBS_SERVERS: "{{ .vars.job_containers_run_only_on_the_jobs_servers }}"
+            EVERYONE_LOCKED_OUT_EXCEPT_DESK: "{{ .vars.everyone_locked_out_except_desk }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+            SERVER_IMAGE: "{{ .vars.server_image }}"
+            UTIL01_SSH_KEY_NAME: "{{ .vars.util01_ssh_key_name_at_the_provider }}"
+            UTIL01_WIREGUARD_PUBLIC_KEY: "{{ .inventory.nodes.util01.vars.wireguard_public_key }}"
+            UTIL01_PRIVATE_IP: "{{ .inventory.nodes.util01.vars.private_ip }}"
+            UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inventory.nodes.util01.vars.public_ipv4_address }}"
+            SERVER_PROVIDER_API_TOKEN: "{{ .secrets.util01_provider_api_token }}"

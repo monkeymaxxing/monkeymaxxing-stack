@@ -1,0 +1,82 @@
+#!/bin/bash
+set -euo pipefail
+export HOME=/var/lib/servers-mmx
+export PATH=/usr/local/bin:/usr/bin:/bin
+export SSH_AUTH_SOCK=/run/desk-ssh-agent/socket
+export GIT_SSH_COMMAND='ssh -F /etc/systems-desk/ssh.conf'
+unset MMX_VAULT_PASSWORD
+export MMX_VAULT_PASSWORD_FILE=/etc/systems-desk/vault-passphrase
+refuse() { printf '%s\n' "$1" >&2; exit 64; }
+# Inspect MMX options only. Arguments after -- belong to run-command's command.
+expect_inventory=false
+for argument in "$@"; do
+    [ "$argument" != -- ] || break
+    if "$expect_inventory"; then
+        case "$argument" in servers|servers.yml|inventories/servers.yml) ;; *) refuse 'run-mmx-on-the-servers uses only inventories/servers.yml.';; esac
+        expect_inventory=false
+    fi
+    case "$argument" in
+        -vault-password-file|--vault-password-file|-vault-password-file=*|--vault-password-file=*)
+            refuse 'run-mmx-on-the-servers supplies its own vault passphrase file.';;
+        -inventory|--inventory) expect_inventory=true;;
+        -inventory=*|--inventory=*)
+            case "${argument#*=}" in servers|servers.yml|inventories/servers.yml) ;; *) refuse 'run-mmx-on-the-servers uses only inventories/servers.yml.';; esac;;
+        systems_desk|*/systems_desk|systems_desk.yml|*/systems_desk.yml|desk_name=*|*-var=desk_name=*)
+            refuse 'The person manages the desk with systems_desk.yml; run-mmx-on-the-servers manages servers only.';;
+        *lock_out_button_record_on_this_desk*)
+            refuse 'run-mmx-on-the-servers sets lock_out_button_record_on_this_desk itself, from the lock-out button'"'"'s record on this desk.';;
+    esac
+done
+"$expect_inventory" && refuse 'An inventory name is required.'
+# Keep one stable checkout so status/results retain earlier runs. The lock
+# prevents two button invocations from resetting files during an MMX run.
+exec 9>/var/lib/servers-mmx/run.lock
+flock -n 9 || refuse 'Another run-mmx-on-the-servers command is running. Wait for that command to finish.'
+IFS= read -r remote < /etc/systems-desk/repository-remote
+checkout=/var/lib/servers-mmx/systems_repository
+if [ ! -d "$checkout/.git" ]; then
+    git -c core.hooksPath=/dev/null clone --branch main -- "$remote" "$checkout"
+fi
+cd "$checkout"
+git -c core.hooksPath=/dev/null fetch -- "$remote" refs/heads/main
+commit=$(git rev-parse FETCH_HEAD)
+printf 'Using pushed main commit %s\n' "$commit"
+# Only the button's execution copy is disposable. Keep MMX history.
+git -c core.hooksPath=/dev/null reset --hard "$commit"
+git -c core.hooksPath=/dev/null clean -fdx -e .mmx
+# Settings, apps, vault and inventory come from this pushed commit unchanged.
+# every_server excludes systems_desks in each stage; it reaches production and
+# staging only. An arbitrary committed playbook retains production root power.
+# Desk SSH still accepts only its separate, root-owned self-management key.
+# Force this inventory even if default_inventory names another file.
+# MMX's local commands (version, describe-module, module-usage, init,
+# module-json and new-one-time-playbook) do not accept --inventory.
+# This is argument placement, not a command allow-list: every command runs.
+# The lock-out button leaves /etc/systems-desk/everyone-locked-out, which only
+# root writes, on the desk where the person pressed it, and its undo removes
+# the file. Its first line names the desk that keeps access, its WireGuard
+# address, its WireGuard public key and its production SSH public key, as the
+# button recorded them at the press. every_server refuses a lock-out unless that line equals
+# the same values in the inventory, and refuses the undo while the file exists
+# (its first fleet stage): only the person starts, changes or undoes a lock-out.
+# Written as `COMMAND every_server ...`, as the procedures write it; with the
+# playbook later, the variable stays empty, and every_server refuses during a
+# lock-out instead of applying it.
+lock_out_button_record_on_this_desk=
+[ ! -e /etc/systems-desk/everyone-locked-out ] || lock_out_button_record_on_this_desk=$(head -n 1 /etc/systems-desk/everyone-locked-out)
+case "${1:-}" in
+    validate|explain|nodes|dryrun|run)
+        if [[ "${2:-}" =~ ^(playbooks/)?every_server(\.yml)?$ ]]; then
+            set -- "$1" --inventory servers --var "lock_out_button_record_on_this_desk=$lock_out_button_record_on_this_desk" "${@:2}"
+        else
+            set -- "$1" --inventory servers "${@:2}"
+        fi;;
+    resume|run-command|status|stop|results|check-one-time-playbooks|complete-one-time-playbook)
+        set -- "$1" --inventory servers "${@:2}";;
+    secrets)
+        case "${2:-}" in
+            edit|passwd|add-random|set|list-keys|diff-keys|usage)
+                set -- "$1" "$2" --inventory servers "${@:3}";;
+        esac;;
+esac
+exec /usr/local/bin/mmx "$@"

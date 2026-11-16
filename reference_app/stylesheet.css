@@ -1,0 +1,57 @@
+body {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 1rem;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #1d2329;
+  background: #f6f7f9;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+
+h2 {
+  margin-top: 2rem;
+  font-size: 1.15rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+}
+
+dt {
+  font-weight: 600;
+}
+
+dd {
+  margin: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #d5d9de;
+}
+
+.problem {
+  padding: 0.5rem 1rem;
+  color: #7a1c1c;
+  background: #fbe4e4;
+  border-left: 4px solid #c43c3c;
+}
+
+button {
+  padding: 0.4rem 1rem;
+  font: inherit;
+}

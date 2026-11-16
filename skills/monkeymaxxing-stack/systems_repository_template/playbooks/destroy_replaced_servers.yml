@@ -1,0 +1,44 @@
+# destroy_replaced_servers destroys each failed server that
+# replace_failed_servers replaced, by the provider ID in the replacement
+# commit's trailer, once the newest new server reports to the fleet hub and
+# passes check-that-this-server-does-its-work. It is the last of the three
+# runs of a replacement (playbooks/replace_failed_servers.yml says the
+# order). Until then, the failed server stays at the provider, powered off,
+# with its disk for evidence.
+#
+#   ./server_management_scripts/run_mmx_on_util01 run destroy_replaced_servers
+#
+# server_management_scripts/destroy_replaced_servers holds the steps and
+# what a rerun does after a failure at each. The playbook takes no
+# variables and can be requested again safely at any time: with nothing to
+# destroy it says so and changes nothing.
+fleet_stages:
+  - id: destroy_the_replaced_servers
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: read_the_fleet_hub
+        time_limit: 30m
+        shell:
+          script: server_management_scripts/read_the_fleet_hub_for_server_replacement
+          dryrun: printf 'would read the fleet hub into /var/lib/replace_failed_servers/fleet.json\n'
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          changed_when: false
+      - id: destroy_the_replaced_servers
+        # 30 minutes, fixed: a destroy waits for the provider, usually under
+        # a minute; the limit keeps a stuck run well inside MMHotline's
+        # one-hour limit for a run.
+        time_limit: 30m
+        shell:
+          script: server_management_scripts/destroy_replaced_servers < /dev/null
+          dryrun: printf 'would destroy each replaced server whose replacement does its work, by the ID in its trailer\n'
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          output_holds_no_secret: true
+          env:
+            INVENTORY_NODES: "{{ .inventory.nodes }}"
+            UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inventory.nodes.util01.vars.public_ipv4_address }}"
+            PRIVATE_IP_RANGES: "{{ .vars.private_ip_ranges }}"
+            EVERYONE_LOCKED_OUT_EXCEPT_DESK: "{{ .vars.everyone_locked_out_except_desk }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+            SERVER_PROVIDER_API_TOKEN: "{{ .secrets.util01_provider_api_token }}"

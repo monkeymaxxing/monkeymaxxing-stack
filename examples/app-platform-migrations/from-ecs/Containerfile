@@ -1,0 +1,14 @@
+FROM node:24.11.0-bookworm-slim@sha256:76d0ed0ed93bed4f4376211e9d8fddac4d8b3fbdb54cc45955696001a3c91152
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && apt-get clean
+RUN curl --fail --silent --show-error https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /usr/local/share/rds-global-bundle.pem
+ENV PGSSLROOTCERT=/usr/local/share/rds-global-bundle.pem
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY --chown=node:node *.mjs ./
+COPY --chown=node:node migrations ./migrations
+COPY --chown=node:node web ./web
+COPY --chown=node:node scripts ./scripts
+USER node
+EXPOSE 8080
+CMD ["node","server.mjs"]

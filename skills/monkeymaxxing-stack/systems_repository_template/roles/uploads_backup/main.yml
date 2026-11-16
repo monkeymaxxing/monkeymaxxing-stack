@@ -1,0 +1,195 @@
+# rclone copies files between storage services. On util01, rclone copies
+# each app's production_uploads_r2_bucket into backups.uploads_bucket every
+# backups.uploads_copy_every_hours hours (24, every night, in the template).
+# The R2 token can only read the apps'
+# buckets. The destination is a B2 bucket locked like the database's backup
+# buckets. The B2 key can list the destination bucket, list and read files,
+# and write files in only the destination bucket, but cannot delete files.
+#
+# every_server's stage uploads_backup runs the uploads_backup role only
+# while backups.uploads_backup_runs_on names util01. So a system whose apps
+# keep no uploads needs neither the uploads' backup bucket nor the copy's
+# keys.
+#
+# The uploads_backup role installs the vendor's release pinned in
+# stack_software in mmx_project_settings.yml: 1.75.2, with at least 1.73
+# required.
+# Debian 13's rclone 1.60 cannot sign in with a key restricted to one
+# bucket as B2 makes them today. rclone 1.73.0 added support for signing in
+# with bucket-restricted B2 keys.
+#
+# Debian 13's rclone 1.60 also lacks the fix in 1.70.3 for finding file
+# versions present in a B2 bucket at a specified past time (--b2-version-at).
+# The weekly database restore drill and restoring an uploaded file use
+# --b2-version-at. See weekly_database_restore_drill and
+# operating_procedures/restore_an_uploaded_file.md.
+inputs:
+  apps:                                     # vars.apps: each app's production_uploads_r2_bucket
+    type: mapping
+    required: true
+  nightly_work_starts_at:                   # vars.nightly_work_starts_at: UTC "HH:MM"; the jobs' order and spacing follow from it
+    type: string
+    required: true
+  weekly_work_day:                          # vars.weekly_work_day: the full backup, the restore drill, the image cleanup
+    type: string
+    required: true
+  backups:                                  # vars.backups: uploads_bucket, uploads_r2_s3_endpoint, uploads_copy_every_hours, and the hidden-files warning's two settings
+    type: mapping
+    required: true
+  rclone_release:                           # version, download_url, and sha256
+    type: mapping
+    required: true
+  uploads_r2_read_only_access_key_id:
+    type: string
+    required: true
+    secret: true
+  uploads_r2_read_only_secret_access_key:
+    type: string
+    required: true
+    secret: true
+  uploads_backup_b2_write_key_id:
+    type: string
+    required: true
+    secret: true
+  uploads_backup_b2_write_application_key:
+    type: string
+    required: true
+    secret: true
+
+node_tasks:
+  - id: create_the_rclone_program_directory
+    directory:
+      path: /usr/local/lib/rclone
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_rclone_releases_directory
+    directory:
+      path: /usr/local/lib/rclone/releases
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: unpack_the_rclone_release
+    unpack_archive:
+      url: "{{ .inputs.rclone_release.download_url }}"
+      sha256: "{{ .inputs.rclone_release.sha256 }}"
+      path: "/usr/local/lib/rclone/releases/{{ .inputs.rclone_release.version }}"
+      unpack_without_wrapping_folder: true
+  - id: use_the_rclone_release_program
+    symlink:
+      path: /usr/local/bin/rclone
+      target: "/usr/local/lib/rclone/releases/{{ .inputs.rclone_release.version }}/rclone"
+  - id: remove_earlier_rclone_releases
+    directory:
+      path: /usr/local/lib/rclone/releases
+      delete_everything_inside_except: ["{{ .inputs.rclone_release.version }}"]
+
+  # After every app's copy passes, the copy program writes the copy's start
+  # time to latest_passed_copy in /var/lib/uploads_backup.
+  # A full copy uploads every file again and records the start time in
+  # /var/lib/uploads_backup/latest_passed_full_copy after passing.
+  # curl runs the uploads key check
+  # (operating_procedures/turn_on_nightly_backups_of_uploaded_files.md).
+  - id: install_curl_for_the_uploads_key_check
+    apt_package:
+      packages:
+        - {name: curl, version: newest_when_first_installed}
+
+  # MMWatchdog's checks of util01 read the age of
+  # latest_passed_copy and latest_passed_full_copy.
+  - id: create_the_uploads_backup_directory
+    directory:
+      path: /var/lib/uploads_backup
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0755"
+  - id: install_the_program_that_copies_the_uploads_to_the_backup_bucket
+    file:
+      path: /usr/local/sbin/copy_uploads_to_the_backup_bucket
+      source: files/copy_uploads_to_the_backup_bucket
+      owner: root
+      group: root
+      permissions_mode: "0755"
+
+  # One copy every backups.uploads_copy_every_hours hours, one of 1, 2, 3, 4,
+  # 6, 8, 12 and 24, so the copies fall at the same hours every day. One copy
+  # starts an hour after the database's backups start: nightly_work_starts_at
+  # plus one hour, in UTC (02:00 in the template). With 24, the schedule is
+  # that one time, "*-*-* 02:00:00 UTC"; with 6 it is "*-*-* 02/6:00:00 UTC",
+  # 02:00, 08:00, 14:00 and 20:00. systemd's hour/step starts at the given hour
+  # and stops at 23, so the first hour is the start hour's remainder after
+  # dividing by the interval.
+  # A run is stopped after 23 hours, so a hung run does not hold back the
+  # next day's copy; while a run lasts, systemd starts no second one.
+  # MMWatchdog warns uploads_copy_every_hours plus 2 hours after the last
+  # copy that passed.
+  # The time is worked out before write_the_rclone_settings_of_the_uploads_backup:
+  # MMX hides the output of every node task that starts after a node task
+  # that writes secrets on the server, and refuses a hidden value in a
+  # schedule.
+  - id: work_out_the_time_of_the_uploads_copy
+    shell:
+      # The same read-only program runs in a run and in a dryrun.
+      script: bash -c "$PROGRAM"
+      dryrun: bash -c "$PROGRAM"
+      env:
+        PROGRAM: |
+          time=$(date -u -d "2000-01-01 $NIGHTLY_WORK_STARTS_AT UTC + 60 minutes" +%H:%M)
+          hour=$((10#${time%:*})) minute=${time#*:}
+          # no trailing newline: a calendar value must be one line
+          if [ "$EVERY_HOURS" = 24 ]; then
+            printf '%02d:%s:00' "$hour" "$minute"
+          else
+            printf '%02d/%s:%s:00' "$((hour % EVERY_HOURS))" "$EVERY_HOURS" "$minute"
+          fi
+        NIGHTLY_WORK_STARTS_AT: "{{ .inputs.nightly_work_starts_at }}"
+        EVERY_HOURS: "{{ .inputs.backups.uploads_copy_every_hours }}"
+      changed_when: false
+
+  # The node tasks starting with
+  # write_the_rclone_settings_of_the_uploads_backup read secrets.
+
+  # An rclone remote is a named storage connection. The uploads_r2 remote
+  # connects to the apps' R2 buckets, and uploads_backup to the B2 backup
+  # bucket. The remotes and keys go in
+  # /var/lib/mmhotline/uploads_backup_rclone.conf, in the mmhotline user's
+  # home, readable only by the mmhotline user. The nightly copy and the
+  # weekly database restore drill run as mmhotline and read
+  # /var/lib/mmhotline/uploads_backup_rclone.conf.
+  - id: write_the_rclone_settings_of_the_uploads_backup
+    file:
+      path: /var/lib/mmhotline/uploads_backup_rclone.conf
+      template: files/uploads_backup_rclone.conf
+      owner: mmhotline
+      group: mmhotline
+      permissions_mode: "0600"
+  - id: copy_the_uploads_to_the_backup_bucket_on_schedule
+    systemd_scheduled_job:
+      name: copy_uploads_to_the_backup_bucket
+      systemd_calendar_schedule: "*-*-* {{ .node_tasks.work_out_the_time_of_the_uploads_copy.stdout }} UTC"
+      run_missed_job_after_downtime: true
+      stop_a_run_after: 23h
+      run_as_user_account: mmhotline
+      run_from_directory: /var/lib/mmhotline
+      script: exec /usr/local/sbin/copy_uploads_to_the_backup_bucket
+      env:
+        APPS: "{{ .inputs.apps }}"
+        UPLOADS_BACKUP_BUCKET: "{{ .inputs.backups.uploads_bucket }}"
+        WARN_WHEN_ONE_COPY_HIDES_MORE_THAN_PERCENT: "{{ .inputs.backups.warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files }}"
+        WARN_ONLY_WHEN_AN_APP_HAS_AT_LEAST_FILES: "{{ .inputs.backups.warn_about_hidden_uploads_only_when_an_app_has_at_least_files }}"
+  # Until a copy has passed on util01, each MMX run that applies the
+  # uploads_backup role starts a copy at once, in the background.
+  # After the first copy passes, MMWatchdog's checks of the copy can pass
+  # from the day the uploads backup is turned on instead of warning.
+  # If the first copy fails, the MMX run that applies the fix starts a copy
+  # again. If a copy is still running, systemd leaves the running copy in
+  # place instead of starting a second copy.
+  #
+  # The first weekly database restore drill waits for the uploads backup
+  # job to finish (roles/util_server), because the drill compares an
+  # uploaded file with the copy in backups.uploads_bucket.
+  - id: start_the_copy_until_one_has_passed
+    shell:
+      script: systemctl start --no-block copy_uploads_to_the_backup_bucket.service
+      dryrun: printf 'would start a copy of the uploads, because none has passed on this server yet\n'
+      skip_if_this_path_exists: /var/lib/uploads_backup/latest_passed_copy

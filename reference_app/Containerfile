@@ -1,0 +1,34 @@
+# The reference app's image: one static Go program on a small base image
+# with no shell, run as a user without privileges. Build it with Podman or
+# Docker, and give it the release, such as the commit that CI built:
+#
+#   podman build --build-arg RELEASE="$(git rev-parse --short HEAD)" --tag reference-app .
+#
+# A build makes an image for the machine it runs on. The stack's servers
+# are x86-64, as CI's machines are; on another machine add
+# --platform linux/amd64.
+#
+# Each base image is pinned by its digest, so every build uses exactly the
+# image that was reviewed; the tag in front of the digest is for the reader.
+
+FROM docker.io/library/golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9 AS build
+WORKDIR /source
+# The modules first, so a change to the code alone reuses their layer.
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG RELEASE
+RUN test -n "$RELEASE" || { echo 'Give the release: --build-arg RELEASE=<the commit>' >&2; exit 1; } \
+ && CGO_ENABLED=0 go build -trimpath -ldflags "-X main.release=$RELEASE" -o /image/usr/local/bin/reference_app .
+# The asset files, under their fingerprinted names, in /app/assets: the
+# directory assets in the web server's working directory.
+WORKDIR /image/app
+RUN /image/usr/local/bin/reference_app write-assets
+
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99
+COPY --from=build /image/ /
+WORKDIR /app
+USER nonroot
+# No ENTRYPOINT: the stack gives the other subcommands as the container's
+# command, such as `podman run IMAGE reference_app migrate`.
+CMD ["reference_app", "web"]

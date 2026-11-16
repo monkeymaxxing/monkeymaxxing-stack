@@ -1,0 +1,765 @@
+# Postgres on the database servers, and on staging01 for staging: the
+# cluster; the apps' databases and their login roles; who may log in
+# (pg_hba.conf); the triage user's read-only role; and, on the database
+# servers, pgBackRest, which sends every change and the backups to
+# production's B2 bucket. staging01 has no backups: staging holds only the
+# seed command's invented data, and a new staging01 gets its data from the
+# seed command again (operating_procedures/replace_staging01.md).
+#
+# The database servers run Postgres under pg_auto_failover, which keeps a
+# primary and its replicas in the formation production and promotes a
+# replica when the primary fails. The failover monitor that decides which
+# server is the primary runs on util01 (roles/util_server). Each database
+# server is a node in the formation, with a Postgres cluster. A node's name
+# in the formation is the database server's name.
+# The first server becomes the primary; a server that joins later copies
+# the primary and becomes a replica, with synchronous replication:
+# the primary confirms a write only
+# once a replica holds it too.
+#
+# staging01 (is_staging_server) runs the cluster main, created by Debian's
+# Postgres packaging tools. The cluster main runs
+# outside pg_auto_failover. The monitor has one login, autoctl_node, for
+# every formation, and with it a node can fail over and remove nodes in any
+# formation, production's too: a staging01 in a formation would hold that
+# power. Staging tests the apps and their migrations, not failover.
+#
+# Three playbooks call the database_server role:
+# - every_server sets the server up (set_up_the_server: true).
+# - update_database_servers puts a replica into pg_auto_failover maintenance
+#   before updates, so the primary stops waiting for the replica's copy of
+#   each write. update_database_servers ends pg_auto_failover maintenance
+#   after the updates. In pg_auto_failover maintenance, and on a server
+#   alone in its formation, update_database_servers also restarts Postgres
+#   for settings that wait for a restart
+#   (restart_postgresql_for_new_settings).
+# - remove_server puts a replica into maintenance before it leaves the
+#   formation.
+# update_database_servers and remove_server pass set_up_the_server: false,
+# so the database_server role skips the setup tasks. database_server still
+# sets variables, waits for the monitor, runs
+# postgres_under_pg_auto_failover, and detects the primary.
+# postgres_under_pg_auto_failover uses the state
+# named by pg_auto_failover_node_state and the restart allowed by
+# restart_postgresql_for_new_settings.
+inputs:
+  database_moving_in: {type: mapping, default: {}}
+  set_up_the_server:                        # true only from every_server
+    type: boolean
+    required: true
+  nightly_work_starts_at:                   # vars.nightly_work_starts_at: UTC "HH:MM"; the jobs' order and spacing follow from it
+    type: string
+    required: false
+  weekly_work_day:                          # vars.weekly_work_day: the full backup, the restore drill, the image cleanup
+    type: string
+    required: false
+  is_staging_server:                        # staging01: Debian's own cluster, outside pg_auto_failover
+    type: boolean
+    required: true
+  postgresql_major_version:
+    type: integer
+    required: true
+  apps:                                     # vars.apps from mmx_project_settings.yml: each app's database_name
+    type: mapping
+    required: true
+  private_ip:                               # the database server's or
+    # staging01's WireGuard address, the only address where that server's
+    # Postgres listens
+    type: string
+    required: true
+  # Only on the database servers, for pg_auto_failover's node.
+  pg_auto_failover_node_state:              # present, or in_maintenance
+    # With in_maintenance, the primary no longer waits for the replica
+    # on the database server running database_server.
+    type: string
+    required: false
+  monitor_host_name:                        # util01's WireGuard address, where the failover monitor answers
+    type: string
+    required: false
+  autoctl_node_password:                    # the monitor's login autoctl_node, with which every node reaches the monitor
+    type: string
+    required: false
+    secret: true
+  replication_password:                     # the login pgautofailover_replicator, with which a replica copies from the primary
+    type: string
+    required: false
+    secret: true
+  # What pg_auto_failover_node does with a setting that takes effect only
+  # when Postgres restarts: never from every_server and remove_server, so
+  # the setting waits; on_a_replica from update_database_servers while a
+  # replica is in maintenance, and on_a_replica_or_a_node_alone for a
+  # server alone in its formation.
+  restart_postgresql_for_new_settings:
+    type: string
+    required: false
+  # Only with set_up_the_server: true.
+  app_server_addresses:                     # where the apps connect from, as one pg_hba.conf address: the app servers' range, or staging01 itself
+    type: string
+    required: false
+  # Only on the database servers, with set_up_the_server: true.
+  jobs_servers:                             # the inventory group jobs_servers: their range gets a login line while it holds a server
+    type: list
+    required: false
+  jobs_server_addresses:                    # where the job containers
+    # connect from on the jobs servers, as one pg_hba.conf address:
+    # the jobs servers' address range
+    type: string
+    required: false
+  backups:                                  # vars.backups from mmx_project_settings.yml, on the database servers: the B2 bucket's S3 endpoint and region
+    type: mapping
+    required: false
+  backup_bucket_name:                       # production's bucket, on the database servers
+    type: string
+    required: false
+  database_passwords:                       # each app database's login password, by database name, such as shop
+    type: mapping
+    required: false
+    secret: true
+  backup_bucket_key_id:                     # the B2 application key that can write only to backup_bucket_name: its keyID
+    type: string
+    required: false
+    secret: true
+  backup_bucket_application_key:            # the B2 application key
+    # for backup_bucket_name
+    type: string
+    required: false
+    secret: true
+  backup_repository_cipher_passphrase:      # pgBackRest uses the passphrase
+    # to encrypt every file before the file leaves the server
+    type: string
+    required: false
+    secret: true
+
+node_tasks:
+  # Where each kind of cluster keeps its files. pg_autoctl is the program
+  # that manages a Postgres cluster for pg_auto_failover. pg_autoctl keeps
+  # the node's settings in the node's Postgres data directory. A restore
+  # puts a lost server's data back at the original data directory's path
+  # because pg_autoctl writes absolute paths into the cluster's settings.
+  # For example, pg_autoctl writes absolute paths for the TLS files.
+  # Debian's cluster keeps its settings in /etc/postgresql, apart from its
+  # data.
+  - id: name_the_files_of_the_pg_auto_failover_node
+    when: {not: "{{ .inputs.is_staging_server }}"}
+    set_vars:
+      data_directory: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}/pg_auto_failover_node"
+      pg_hba_file: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}/pg_auto_failover_node/pg_hba.conf"
+  # staging01's cluster is staging's only one, so it always takes the writes.
+  - id: name_the_files_of_debians_own_cluster
+    when: "{{ .inputs.is_staging_server }}"
+    set_vars:
+      data_directory: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}/main"
+      pg_hba_file: "/etc/postgresql/{{ .inputs.postgresql_major_version }}/main/pg_hba.conf"
+      is_the_primary: true
+  # The differential backups run on the six days other than weekly_work_day
+  # (differential_backup_every_other_day below).
+  - id: name_the_days_other_than_each_day
+    set_vars:
+      days_other_than:
+        monday: tuesday,wednesday,thursday,friday,saturday,sunday
+        tuesday: monday,wednesday,thursday,friday,saturday,sunday
+        wednesday: monday,tuesday,thursday,friday,saturday,sunday
+        thursday: monday,tuesday,wednesday,friday,saturday,sunday
+        friday: monday,tuesday,wednesday,thursday,saturday,sunday
+        saturday: monday,tuesday,wednesday,thursday,friday,sunday
+        sunday: monday,tuesday,wednesday,thursday,friday,saturday
+
+  # Setting the server up, from every_server. -------------------------------
+
+  # Installing postgresql-17 creates Debian's own cluster main on port 5432.
+  # On a database server, pg_auto_failover's node needs port 5432, so
+  # /etc/postgresql-common/createcluster.conf disables creation of main.
+  # /etc/postgresql-common/createcluster.conf must exist before the package
+  # is installed. staging01 keeps Debian's cluster.
+  - id: create_the_postgresql_common_settings_directory
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    directory:
+      path: /etc/postgresql-common
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: keep_the_postgres_package_from_creating_a_cluster
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    file:
+      path: /etc/postgresql-common/createcluster.conf
+      content: "# Managed by MMX: pg_auto_failover creates the cluster.\ncreate_main_cluster = false\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  # Postgres, pgBackRest, and pg_autoctl come from Debian. Updates to
+  # Postgres and pg_auto_failover restart the database, so every_server
+  # excludes the Postgres and pg_auto_failover packages from the database
+  # servers' daily security updates. update_database_servers installs the
+  # excluded updates in the team's weekly database maintenance window.
+  # needrestart finds the services that still use a replaced file after an
+  # update, and update_database_servers restarts those services with
+  # needrestart. On staging01, Postgres updates with the daily security
+  # updates: staging serves no customers.
+  - id: install_postgres_and_needrestart
+    when: "{{ .inputs.set_up_the_server }}"
+    apt_package:
+      packages:
+        - {name: "postgresql-{{ .inputs.postgresql_major_version }}", version: newest_when_first_installed}
+        - {name: needrestart, version: newest_when_first_installed}
+  - id: install_pgbackrest
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    apt_package:
+      packages:
+        - {name: pgbackrest, version: newest_when_first_installed}
+  - id: install_pg_auto_failover
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    apt_package:
+      packages:
+        - {name: pg-auto-failover-cli, version: newest_when_first_installed}
+  # pg_autoctl keeps a backup directory beside the data directory, so the
+  # directory that holds both belongs to postgres.
+  - id: create_the_directory_of_the_data_directory
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    directory:
+      path: "/var/lib/postgresql/{{ .inputs.postgresql_major_version }}"
+      owner: postgres
+      group: postgres
+      permissions_mode: "0755"
+
+  # The node, at every call, on the database servers. -----------------------
+
+  # The node's service is pgautofailover.service: pg_autoctl's keeper, which
+  # runs Postgres and does what the monitor assigns. A server that joins
+  # copies the primary with pg_basebackup, which first waits for a
+  # checkpoint on the primary: up to a few minutes.
+  #
+  # postgres_under_pg_auto_failover waits for a settled formation at the
+  # task's start and again after a change. Each formation wait lasts at most
+  # five minutes. A settled formation has finished changing states, with
+  # running nodes healthy in the states assigned by the monitor. So a stage
+  # running one server at a time starts the next server on a settled
+  # formation.
+  #
+  # The 20-minute time_limit of postgres_under_pg_auto_failover allows for
+  # the copy and the formation waits. Every node has equal priority, so the
+  # monitor promotes whichever replica is healthy, and each replica takes
+  # part in synchronous replication. While the only replica is
+  # down or in maintenance, the primary stops waiting for it, and writes go
+  # on.
+  #
+  # Postgres listens only on the server's WireGuard address, so no other
+  # address of the server reaches it, whatever the firewall says.
+  # pg_auto_failover_node also replaces trust authentication in pg_hba.conf
+  # on every run. initdb, the program that creates a Postgres cluster,
+  # writes six local login lines using trust. With trust, any local account
+  # can log in as any Postgres role without a password.
+  # pg_auto_failover_node gives the six lines Debian's own methods: peer
+  # through the local socket, requiring the matching account name, and a
+  # password through loopback.
+  # The failover monitor answers only over WireGuard, which reaches a new
+  # database server only after its key is committed and util01's limited run
+  # applies it (step 3 of operating_procedures/add_a_server.md).
+  # Before WireGuard reaches the new database server, the task
+  # wait_until_the_failover_monitor_on_util01_answers_over_wireguard stops
+  # the run within 30 seconds, instead of pg_autoctl waiting out 10 minutes.
+  - id: wait_until_the_failover_monitor_on_util01_answers_over_wireguard
+    when: {not: "{{ .inputs.is_staging_server }}"}
+    wait_for:
+      tcp_port_accepts_connections: 5432
+      tcp_host: "{{ .inputs.monitor_host_name }}"
+      wait_at_most: 30s
+  # pg_auto_failover_node receives Postgres settings in postgresql_settings.
+  # pg_auto_failover_node first writes the settings into
+  # /etc/postgresql/pg_auto_failover_node_settings.conf. The last line of
+  # postgresql.conf includes
+  # /etc/postgresql/pg_auto_failover_node_settings.conf,
+  # so the postgresql_settings values override pg_autoctl's values.
+  # pg_auto_failover_node then has Postgres check each value and reloads
+  # Postgres.
+  # /etc/postgresql/pg_auto_failover_node_settings.conf lies outside the
+  # data directory, so each server keeps values sized from the server's own
+  # memory. A switchover, a failover, and a replica's copy rewrite
+  # postgresql.conf, but never
+  # /etc/postgresql/pg_auto_failover_node_settings.conf.
+  # - shared_buffers, Postgres's own buffers: a quarter of the server's
+  #   memory, rounded down to a step of 128 MB, and at least 128 MB.
+  #   Rounding avoids changing shared_buffers and requiring a restart when
+  #   a kernel changes MemTotal by a little. Postgres's default, 128 MB,
+  #   holds little of a real database, so Postgres's buffers would miss most
+  #   reads while the operating system's page cache holds the data, and
+  #   MMWatchdog's recorded cache_hit_percent would stay low. The page cache uses memory available after
+  #   Postgres's buffers and other memory use.
+  #
+  #   When a bigger server replaces a database server, the new node gets
+  #   shared_buffers calculated from the bigger server's memory. staging01
+  #   keeps shared_buffers at the default 128 MB because staging01 runs
+  #   every role on one small server. Assigning a quarter of staging01's
+  #   memory to Postgres would reduce the memory available for the apps'
+  #   two releases during a deploy.
+  # - Archiving: Postgres hands each finished segment of its write-ahead
+  #   log, the record of every change, to pgBackRest, which sends it to the
+  #   bucket. archive_timeout targets a segment switch every 60 seconds
+  #   when there is database activity. Uploads can take longer or fail.
+  #   Restore tests measure recovery. archive_timeout does not guarantee
+  #   a maximum of one minute of lost data.
+  #   A replica archives nothing until it becomes the primary.
+  # shared_buffers and archive_mode take effect only when Postgres restarts,
+  # and a restart drops every connection of the apps. A node created by
+  # postgres_under_pg_auto_failover restarts with shared_buffers and
+  # archive_mode at once, because the new node serves nobody yet.
+  # On an existing node, restart_postgresql_for_new_settings decides whether
+  # to restart Postgres for settings that need a restart. every_server
+  # passes never, so the settings wait for update_database_servers.
+  # pg_auto_failover_node reports the waiting settings in
+  # postgresql_settings_waiting_for_a_restart and in the task's reason.
+  # update_database_servers puts each replica into pg_auto_failover
+  # maintenance, restarts the replica, then ends pg_auto_failover
+  # maintenance. update_database_servers restarts a server alone in the
+  # formation in place.
+  # pg_auto_failover_node never restarts the primary of a formation with a
+  # replica, because restarting the primary would cause a failover.
+  # pg_auto_failover_node refuses the restart and restores
+  # /etc/postgresql/pg_auto_failover_node_settings.conf, so the earlier
+  # settings stay in effect.
+  - id: postgres_under_pg_auto_failover
+    when: {not: "{{ .inputs.is_staging_server }}"}
+    pg_auto_failover_node:
+      name: "{{ .node.name }}"
+      state: "{{ .inputs.pg_auto_failover_node_state }}"
+      data_directory: "{{ .vars.data_directory }}"
+      postgresql_major_version: "{{ .inputs.postgresql_major_version }}"
+      port: 5432
+      host_name: "{{ .inputs.private_ip }}"
+      listen_address: "{{ .inputs.private_ip }}"
+      monitor_host_name: "{{ .inputs.monitor_host_name }}"
+      monitor_port: 5432
+      autoctl_node_password: "{{ .inputs.autoctl_node_password }}"
+      replication_password: "{{ .inputs.replication_password }}"
+      formation: production
+      candidate_priority: 50
+      replication_quorum: true
+      postgresql_settings:
+        shared_buffers: {percent_of_memory: 25, rounded_down_to_mib: 128, at_least_mib: 128}
+        archive_mode: "on"
+        archive_command: pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main archive-push %p
+        archive_timeout: 60
+      restart_postgresql_for_new_settings: "{{ .inputs.restart_postgresql_for_new_settings }}"
+    time_limit: 20m
+  # Postgres binds its address when it starts, so at boot its service waits
+  # for wg0, which holds the address. The drop-in changes the unit that the
+  # node task above writes. On the next boot, systemd starts
+  # pgautofailover.service after wg-quick@wg0.service. Changing the boot
+  # order needs no restart of the running pgautofailover.service.
+  - id: start_pg_auto_failover_after_the_wireguard_network
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    systemd_unit:
+      name: pgautofailover.service
+      drop_in: 10-after-wireguard.conf
+      content: |
+        # Managed by MMX from roles/database_server/main.yml in the systems repository.
+        [Unit]
+        After=wg-quick@wg0.service
+        Wants=wg-quick@wg0.service
+  # The primary is the node to which the monitor has assigned a state that
+  # accepts database writes. After a failover, the old primary's own report
+  # may still say primary.
+  - id: name_whether_this_server_is_the_primary
+    when: {not: "{{ .inputs.is_staging_server }}"}
+    set_vars:
+      is_the_primary: "{{ .node_tasks.postgres_under_pg_auto_failover.is_primary }}"
+
+  # Debian's cluster, on staging01. -----------------------------------------
+
+  # postgresql.service starts each of Debian's clusters at boot;
+  # postgresql@17-main.service is the cluster itself.
+  - id: start_debians_clusters_at_boot
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .inputs.is_staging_server }}"
+    systemd_service:
+      name: postgresql
+      state: running
+      start_at_boot: true
+  - id: run_debians_cluster_main
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .inputs.is_staging_server }}"
+    systemd_service:
+      name: "postgresql@{{ .inputs.postgresql_major_version }}-main"
+      state: running
+  # staging01's Postgres cluster listens only on staging01's WireGuard
+  # address, as set by the cluster's conf.d below. So at boot staging01's
+  # Postgres cluster waits for wg0, as a database server's node does.
+  - id: start_debians_cluster_main_after_the_wireguard_network
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .inputs.is_staging_server }}"
+    systemd_unit:
+      name: "postgresql@{{ .inputs.postgresql_major_version }}-main.service"
+      drop_in: 10-after-wireguard.conf
+      content: |
+        # Managed by MMX from roles/database_server/main.yml in the systems repository.
+        [Unit]
+        After=wg-quick@wg0.service
+        Wants=wg-quick@wg0.service
+  - id: wait_until_debians_cluster_accepts_connections
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .inputs.is_staging_server }}"
+    wait_for:
+      command_succeeds: '"/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/pg_isready" --quiet --port 5432'
+      env:
+        POSTGRESQL_MAJOR_VERSION: "{{ .inputs.postgresql_major_version }}"
+      wait_at_most: 60s
+
+  # Setting the server up, from every_server. -------------------------------
+
+  # Who may log in, in pg_hba.conf, the first matching line deciding. The
+  # local logins are Debian's own: through the local socket an account logs
+  # in only as the role of its own name (peer), and through the loopback
+  # address only with a password. staging01's cluster gets the local socket
+  # and loopback login rules from Debian's package. On a database server,
+  # pg_auto_failover_node writes the local socket and loopback login rules
+  # in place of initdb's trust lines, and pg_autoctl adds lines for the
+  # monitor and for replication. pg_autoctl, MMX's modules, pgBackRest,
+  # and MMWatchdog's checks log in through the local socket as postgres, and
+  # the triage user as triage. Rotation proves each app password through
+  # the private listener from this server's own private address. A replica
+  # copies pg_hba.conf from the primary when the replica joins.
+  #
+  # The apps' login rules live outside the data directory, in
+  # /etc/postgresql/pg_hba_logins_of_the_apps.conf. pg_hba.conf includes
+  # /etc/postgresql/pg_hba_logins_of_the_apps.conf (Postgres 16 and later).
+  # The postgres_logins task block manages and tracks the whole apps' login
+  # file, so postgres_logins tracks no file that pg_autoctl changes.
+  #
+  # pg_autoctl's keeper adds two lines to pg_hba.conf on each existing node
+  # for each node that joins the formation. The existing nodes' stage has
+  # already ended when pg_autoctl adds the lines and reloads Postgres.
+  # pg_rewind brings a former primary's data back in line with the new
+  # primary after a switchover. pg_rewind replaces pg_hba.conf with the new
+  # primary's pg_hba.conf. A joining replica copies pg_hba.conf from the
+  # current primary.
+  #
+  # If the apps' rules lived in pg_hba.conf, the postgres_logins block's
+  # record of pg_hba.conf would differ after each node join and switchover.
+  # Then the daily server settings comparison's dryrun (compare_every_server_with_the_repository on
+  # util01) would report a reload that nothing needs.
+  #
+  # include_the_logins_of_the_apps_in_pg_hba_conf runs before
+  # postgres_logins, so the postgres_logins reload loads the include line
+  # too. The include_if_exists line lets Postgres load pg_hba.conf while
+  # /etc/postgresql/pg_hba_logins_of_the_apps.conf is missing. A cluster
+  # copied by a replica or brought back by a restore already has the include
+  # line before the database_server role writes the apps' login file.
+  # The apps' rules match none of the other rules, because an app logs in
+  # with the app's password from where the app runs.
+  - id: include_the_logins_of_the_apps_in_pg_hba_conf
+    when: "{{ .inputs.set_up_the_server }}"
+    line:
+      path: "{{ .vars.pg_hba_file }}"
+      line: include_if_exists /etc/postgresql/pg_hba_logins_of_the_apps.conf
+      insert_at_end_of_file: true
+  - id: postgres_logins
+    when: "{{ .inputs.set_up_the_server }}"
+    task_block:
+      id: postgres_logins
+      changes:
+        # Each app's role can log in to the app's database with a password
+        # from the app servers' range, or from staging01's own address.
+        # On a database server while jobs_servers holds a server, the apps'
+        # roles can also log in from the jobs servers' range. Once no jobs
+        # server is left, the jobs servers' login rules are removed.
+        - id: write_the_logins_of_the_apps
+          file:
+            path: /etc/postgresql/pg_hba_logins_of_the_apps.conf
+            template: files/pg_hba_logins_of_the_apps.conf
+            owner: root
+            group: postgres
+            permissions_mode: "0640"
+      activate:
+        # Postgres reads pg_hba.conf again without dropping a connection.
+        - id: reload_postgres
+          shell:
+            script: '"/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/psql" --no-psqlrc --quiet --port 5432 --command "select pg_reload_conf()"'
+            run_as_user_account: postgres
+            env:
+              POSTGRESQL_MAJOR_VERSION: "{{ .inputs.postgresql_major_version }}"
+            only_when_tracked_inputs_changed: true
+
+  # The apps' databases and their logins, and the triage user's role, on the
+  # primary; the replicas get them through replication. Each database's
+  # collation is C.UTF-8, which sorts by code point and never changes with
+  # the operating system's C library. So a replica on a newer Debian release
+  # reads indexes built on a primary running the older Debian release.
+  - id: read_only_role_of_the_triage_user
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .vars.is_the_primary }}"
+    postgresql_role:
+      name: triage
+      can_log_in: true
+      superuser: false
+      can_create_databases: false
+      can_create_roles: false
+      can_start_replication: false
+      member_of_roles: [pg_monitor]           # reads the statistics views; no grant on any table
+      member_of_roles_not_listed: remove
+  - id: login_role_of_each_app
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .vars.is_the_primary }}"
+    loop: "{{ .inputs.apps }}"
+    as: app
+    postgresql_role:
+      name: "{{ .app.value.database_name }}"
+      password: "{{ .inputs.database_passwords[.app.value.database_name] }}"
+      can_log_in: true
+      superuser: false
+      can_create_databases: false
+      can_create_roles: false
+      can_start_replication: false
+      member_of_roles: []
+      member_of_roles_not_listed: remove
+  - id: database_of_each_app
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .vars.is_the_primary }}"
+    loop: "{{ .inputs.apps }}"
+    as: app
+    postgresql_database:
+      name: "{{ .app.value.database_name }}"
+      owner: "{{ .app.value.database_name }}"
+      encoding: UTF8
+      locale: C.UTF-8
+      template_database: template0
+
+  # SET ROLE does not load role defaults. The postgres-owned subscription
+  # can apply changes while a fresh app login reports read-only.
+  - id: keep_the_apps_read_only_on_the_database_copy
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .vars.is_the_primary }}"
+        - not: {equals: ["{{ .inputs.database_moving_in }}", {}]}
+    shell:
+      script: |
+        python3 -I - <<'PYTHON'
+        import json, os, subprocess
+        apps = json.loads(os.environ['APPS'])
+        moving = json.loads(os.environ['DATABASE_MOVING_IN'])
+        def sql(text, database='postgres'):
+            return subprocess.check_output(['psql','-XAt','-v','ON_ERROR_STOP=1','-d',database], input=text, text=True).strip()
+        for app in moving['apps']:
+            name = apps[app]['database_name']
+            literal = "'"+name.replace("'", "''")+"'"
+            identifier = '"'+name.replace('"', '""')+'"'
+            # Only while the copy is not finished: the database is empty or
+            # still subscribed to the old one. After the switch neither holds,
+            # and fencing again would stop every write to the live database.
+            subscribed = sql("SELECT count(*) FROM pg_subscription WHERE subname='database_moving_in' AND subdbid=(SELECT oid FROM pg_database WHERE datname="+literal+")") != '0'
+            empty = sql("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p','S','v','m','f') AND n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema'", name) == '0'
+            if not (subscribed or empty):
+                print('Left '+name+' as it is: its move into the Stack is finished. Remove database_moving_in.')
+                continue
+            if sql("SELECT coalesce('default_transaction_read_only=on'=ANY(rolconfig),false) FROM pg_roles WHERE rolname="+literal) != 't':
+                sql('ALTER ROLE '+identifier+' SET default_transaction_read_only = on')
+            # Existing PgBouncer backends have the previous role defaults.
+            pids = json.loads(sql("SELECT coalesce(json_agg(pid),'[]') FROM pg_stat_activity WHERE usename="+literal))
+            if pids:
+                numbers = ','.join(str(int(pid)) for pid in pids)
+                sql('SELECT pg_terminate_backend(pid,5000) FROM pg_stat_activity WHERE pid IN ('+numbers+')')
+                if sql('SELECT count(*) FROM pg_stat_activity WHERE pid IN ('+numbers+')') != '0':
+                    raise SystemExit('An existing app session still has the old writable default. End the session before continuing the database copy.')
+            print('Kept '+name+' read-only on the Stack copy.')
+        PYTHON
+      run_as_user_account: postgres
+      env:
+        APPS: "{{ .inputs.apps }}"
+        DATABASE_MOVING_IN: "{{ .inputs.database_moving_in }}"
+
+  # pgBackRest's settings name the bucket, the bucket's key, and the
+  # encryption passphrase for pgBackRest's backup storage in B2.
+  # files_used_by_several_roles/pgbackrest.conf supplies the settings for
+  # /etc/pgbackrest/pgbackrest.conf. playbooks/restore_database.yml writes
+  # /etc/pgbackrest/pgbackrest.conf from
+  # files_used_by_several_roles/pgbackrest.conf too, so a restore reads the
+  # backup storage the backups wrote.
+  # The group postgres reads /etc/pgbackrest/pgbackrest.conf on the server,
+  # because pgBackRest runs as postgres.
+  - id: create_the_pgbackrest_settings_directory
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    directory:
+      path: /etc/pgbackrest
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: name_the_pgbackrest_settings
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    set_vars:
+      pgbackrest_settings:
+        b2_s3_endpoint: "{{ .inputs.backups.b2_s3_endpoint }}"
+        b2_region: "{{ .inputs.backups.b2_region }}"
+        bucket_name: "{{ .inputs.backup_bucket_name }}"
+        bucket_key_id: "{{ .inputs.backup_bucket_key_id }}"
+        bucket_application_key: "{{ .inputs.backup_bucket_application_key }}"
+        repository_cipher_passphrase: "{{ .inputs.backup_repository_cipher_passphrase }}"
+        data_directory: "{{ .vars.data_directory }}"
+        keep_database_backups_for_days: "{{ .inputs.backups.keep_database_backups_for_days }}"
+        lock_backups_against_deletion_for_days: "{{ .inputs.backups.lock_backups_against_deletion_for_days }}"
+        keep_prior_file_versions_in_buckets_for_days: "{{ .inputs.backups.keep_prior_file_versions_in_buckets_for_days }}"
+  - id: write_the_pgbackrest_settings
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    file:
+      path: /etc/pgbackrest/pgbackrest.conf
+      template: ../../files_used_by_several_roles/pgbackrest.conf
+      owner: root
+      group: postgres
+      permissions_mode: "0640"
+      secret_readable_by_group: true
+
+  # On staging01, listen_addresses_of_debians_cluster writes the listen
+  # address into the cluster's conf.d. Debian's postgresql.conf reads
+  # conf.d last, so the setting in conf.d overrides postgresql.conf.
+  # A change restarts Postgres at once because staging serves no customers.
+  # Postgres listens only on staging01's WireGuard address, where
+  # staging01's apps connect.
+  - id: listen_addresses_of_debians_cluster
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - "{{ .inputs.is_staging_server }}"
+    task_block:
+      id: listen_addresses_of_debians_cluster
+      changes:
+        - id: write_the_listen_settings
+          file:
+            path: "/etc/postgresql/{{ .inputs.postgresql_major_version }}/main/conf.d/listen_addresses.conf"
+            content: |
+              # Managed by MMX from roles/database_server/main.yml in the systems repository.
+              listen_addresses = '{{ .inputs.private_ip }}'
+            owner: postgres
+            group: postgres
+            permissions_mode: "0644"
+      activate:
+        - id: restart_debians_cluster_main
+          systemd_service:
+            name: "postgresql@{{ .inputs.postgresql_major_version }}-main"
+            state: running
+            refresh: restart
+      verify:
+        - id: wait_until_debians_cluster_accepts_connections_again
+          wait_for:
+            command_succeeds: '"/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/pg_isready" --quiet --port 5432'
+            env:
+              POSTGRESQL_MAJOR_VERSION: "{{ .inputs.postgresql_major_version }}"
+            wait_at_most: 60s
+
+  # The backups. files/back_up_the_database_on_the_primary checks that the
+  # server running the backup program is the primary. On a replica,
+  # files/back_up_the_database_on_the_primary does nothing.
+  - id: install_the_program_that_backs_up_the_primary
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    file:
+      path: /usr/local/sbin/back_up_the_database_on_the_primary
+      template: files/back_up_the_database_on_the_primary
+      owner: root
+      group: root
+      permissions_mode: "0755"
+
+  # The stanza main is pgBackRest's name for this environment's cluster, its
+  # backups, and its archive in the bucket. pgbackrest_stanza creates the
+  # stanza main on the primary, then checks that a segment of the
+  # write-ahead log reaches the bucket. A new stanza gets a first full
+  # backup at once, so MMWatchdog's
+  # backups/latest_backup_is_less_than_26_hours_old check
+  # passes from the first day.
+  - id: pgbackrest_stanza_main
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+        - "{{ .vars.is_the_primary }}"
+    pgbackrest_stanza:
+      stanza: main
+      config_file: /etc/pgbackrest/pgbackrest.conf
+  - id: first_full_backup_of_a_new_stanza
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+        - "{{ .vars.is_the_primary }}"
+        - "{{ .node_tasks.pgbackrest_stanza_main.created }}"
+    shell:
+      script: /usr/local/sbin/back_up_the_database_on_the_primary full
+      run_as_user_account: postgres
+    time_limit: 1h
+
+  # A full backup every weekly_work_day and a differential backup, of what changed
+  # since the full backup, on the other six days, at nightly_work_starts_at
+  # (UTC, 01:00 in the template). The full backup runs on weekly_work_day.
+  # Every database server runs pgbackrest_full_backup.timer and
+  # pgbackrest_differential_backup.timer, so the backups follow the primary
+  # after a failover. A timer whose time passed while the server was off
+  # runs when the server next starts.
+  # pgBackRest keeps full backups for backups.keep_database_backups_for_days,
+  # so a restore reaches any moment of that period (files_used_by_several_roles/pgbackrest.conf).
+  - id: full_backup_every_week
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    systemd_scheduled_job:
+      name: pgbackrest_full_backup
+      systemd_calendar_schedule: "{{ .inputs.weekly_work_day }} *-*-* {{ .inputs.nightly_work_starts_at }}:00"
+      run_missed_job_after_downtime: true
+      run_as_user_account: postgres
+      script: exec /usr/local/sbin/back_up_the_database_on_the_primary full
+  # systemd has no "every day except", so the role looks up the six days
+  # other than weekly_work_day in days_other_than, at the top of the role.
+  # The schedule is not the output of a node task: MMX hides the output of
+  # every node task that starts after write_the_pgbackrest_settings, which
+  # writes secrets on the server, and refuses a hidden value in a schedule.
+  - id: differential_backup_every_other_day
+    when:
+      all:
+        - "{{ .inputs.set_up_the_server }}"
+        - not: "{{ .inputs.is_staging_server }}"
+    systemd_scheduled_job:
+      name: pgbackrest_differential_backup
+      systemd_calendar_schedule: "{{ .vars.days_other_than[.inputs.weekly_work_day] }} *-*-* {{ .inputs.nightly_work_starts_at }}:00"
+      run_missed_job_after_downtime: true
+      run_as_user_account: postgres
+      script: exec /usr/local/sbin/back_up_the_database_on_the_primary diff

@@ -1,0 +1,270 @@
+# The drill stops after restore_drill_time_limit_hours (mmx_project_settings.yml).
+# The restore step in playbooks/restore_database.yml has no limit of its
+# own, so this limit alone bounds a drill's restore. A recovery by hand has
+# no time limit either: a large database must not be cut off mid-restore.
+# The timer holds the utility copy's shared lock for the whole playbook.
+# Run through the scheduled service, so the lock also covers the pull.
+#
+# The drill gives way to MMHotline. While MMHotline waits for the lock, for
+# a run the triage agent or a person asked for, it keeps the marker
+# /var/lib/mmhotline/systems_repository.lock.waiting, and the wait counts
+# toward that run's one-hour limit. The drill looks for the marker once
+# before it creates anything, then every 5 seconds. When it finds one, it
+# ends: it destroys restore01 first, so the restore ends with its server
+# and the lock is free as soon as the later steps end, then stops its inner
+# MMX run (mmx stop, exit 3 is expected: restore01 is gone), waits for the
+# inner mmx process to exit (30 s, then TERM, 10 s, then KILL), tells MMX that
+# restore01's work is gone (mmx mark-node-work-failed --node restore01; exit 2,
+# 3 or 4 is a failed cleanup, written to latest_result.json as
+# cleanup_failure_reason), removes the runtime peer, records the waiting line
+# as gave_way_to in latest_result.json, and exits 75. A failed cleanup exits 1,
+# never 75. The scheduled service exits 75 too, and systemd runs the drill
+# again 2 hours later (roles/util_server/main.yml). Releasing only the lock
+# would not help: this run's MMX job holds util01 for the whole drill, so a
+# waiting every_server would be refused as busy, and every_server would
+# remove the runtime peer for restore01.
+fleet_stages:
+  - id: restore_and_check_the_backups
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: create_restore_check_and_destroy_the_owned_server
+        # MMX's task limit sends SIGKILL. A standard timeout sends TERM
+        # to the drill instead, allowing the EXIT trap to destroy restore01.
+        # bash reads the drill from file descriptor 3, not standard input:
+        # a command that reads standard input, such as ssh, would read the
+        # rest of the drill, and the drill would end early.
+        time_limit: null
+        time_limit_per_try: null
+        shell:
+          script: |
+            timeout --signal=TERM "${RESTORE_DRILL_TIME_LIMIT_HOURS}h" bash /dev/fd/3 3<<'DRILL' </dev/null
+            set -euo pipefail
+            state_dir=/var/lib/restore_drill
+            repository=/var/lib/mmhotline/systems_repository
+            export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
+            started_at=$(date -u +%FT%TZ)
+            started_seconds=$(date +%s)
+            repository_as_of=${started_at/T/ }
+            repository_as_of=${repository_as_of%Z}+00
+            work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
+            receipt=$work_dir/created_server.json
+            waiting_marker=/var/lib/mmhotline/systems_repository.lock.waiting
+            restore_pid=
+            restore_public_key=
+            watcher_pid=
+            owned_server_destroyed=
+            cleanup_failure_reason=
+            # The steps the drill shares with replace_failed_servers.
+            . "$repository/server_management_scripts/steps_for_a_server_this_run_creates.bash"
+            . "$repository/server_management_scripts/steps_for_reading_the_providers_list.bash"
+            destroy_owned_server() { destroy_the_owned_server "$receipt" restore01; }
+            # Prints the marker's line when MMHotline wrote the marker during
+            # the next $1 seconds. MMHotline rewrites the marker every second
+            # while it waits, so a marker it did not rewrite is left over from
+            # an MMHotline that stopped mid-wait, and the drill ignores it.
+            # Every MMHotline waiter counts, a short fetch included: while the
+            # drill holds the lock, a short fetch, such as the one that starts
+            # a triage agent run, waits as long as an MMX run. util01's own
+            # scheduled jobs ask MMHotline nothing while the lock is held
+            # (roles/util_server/main.yml), so they never end a drill.
+            line_of_a_waiting_mmhotline() {
+              touch "$work_dir/checked_for_a_waiting_mmhotline"
+              sleep "$1"
+              [ "$waiting_marker" -nt "$work_dir/checked_for_a_waiting_mmhotline" ] && grep -m 1 . "$waiting_marker" 2>/dev/null
+            }
+            cleanup() {
+              result=$?
+              trap - EXIT
+              trap '' INT TERM HUP
+              [ -z "$watcher_pid" ] || kill "$watcher_pid" 2>/dev/null || true
+              gave_way_to=
+              if [ "$result" -ne 0 ] && [ -s "$work_dir/gave_way_to" ]; then
+                gave_way_to=$(head -n 1 "$work_dir/gave_way_to")
+                result=0
+                printf 'restore drill: gives way to %s\n' "$gave_way_to"
+                # Destroy restore01 first, so the lock is free as soon as the
+                # steps below end: MMHotline's wait needs nothing else.
+                if destroy_owned_server; then owned_server_destroyed=yes; else result=1; fi
+              fi
+              rm -f -- "$work_dir/first_boot_data.yml" || result=1
+              if [ -n "$restore_pid" ] && kill -0 "$restore_pid" 2>/dev/null; then
+                # The inner run cannot end by itself after restore01 is gone: its
+                # SSH to restore01 waits for a timeout, and it retries while a
+                # confirmation window is open (a restore holds it up to 340 s).
+                # mmx stop asks it to stop and tries restore01 once (10 s).
+                stop_status=0
+                (cd "$work_dir/project" && mmx stop --non-interactive) || stop_status=$?
+                if [ -n "$gave_way_to" ] && [ "$stop_status" -eq 3 ]; then
+                  : # Expected: restore01 was destroyed, so its work stays unconfirmed
+                    # until mmx mark-node-work-failed records it below.
+                elif [ "$stop_status" -ne 0 ]; then
+                  result=1
+                fi
+                if [ -n "$gave_way_to" ]; then
+                  # The inner run's process must end before mmx mark-node-work-failed
+                  # (MMX refuses a run that its own process holds, exit 4). It never
+                  # ends by itself in time: with a confirmation window open (the restore
+                  # changes ufw) it keeps trying for up to 2 minutes plus 340 seconds
+                  # (measured on test servers: 80 s, with KILL always needed). So send TERM at
+                  # once, then KILL after 10 s. Its work is on a destroyed server and
+                  # mmx mark-node-work-failed records the leftover work, so nothing is lost.
+                  kill -TERM "$restore_pid" 2>/dev/null || true
+                  for ((second = 0; second < 10; second++)); do
+                    kill -0 "$restore_pid" 2>/dev/null || break
+                    sleep 1
+                  done
+                  kill -KILL "$restore_pid" 2>/dev/null || true
+                  # A restore whose server is gone fails, as expected after giving way.
+                  wait "$restore_pid" || true
+                else
+                  wait "$restore_pid" || result=1
+                fi
+              fi
+              # After the provider confirmed the destroy and the inner run's process
+              # ended, tell MMX that restore01's work is gone. Exit 0: recorded or
+              # nothing unconfirmed. Exit 2: MMX reached restore01, which the
+              # provider says is destroyed. Exit 3: MMX could not tell. Exit 4: a
+              # command error. Each of 2, 3 and 4 is a failed cleanup.
+              if [ -n "$gave_way_to" ] && [ -n "$owned_server_destroyed" ] && [ -d "$work_dir/project" ]; then
+                mark_status=0
+                (cd "$work_dir/project" && mmx mark-node-work-failed --node restore01 --json --non-interactive) \
+                  > "$work_dir/mark_node_work_failed.json" 2>&1 || mark_status=$?
+                if [ "$mark_status" -ne 0 ]; then
+                  result=1
+                  cleanup_failure_reason="mmx mark-node-work-failed --node restore01 exited $mark_status: $(head -c 300 "$work_dir/mark_node_work_failed.json" | tr '\n' ' ')"
+                  # --json lists the runs it could not record, each with its reason.
+                  runs_not_recorded=$(jq -r '[.runs_not_recorded[]? | "\(.id // "a run"): \(.reason // .)"] | join("; ")' "$work_dir/mark_node_work_failed.json" 2>/dev/null) || runs_not_recorded=""
+                  if [ -n "$runs_not_recorded" ]; then
+                    cleanup_failure_reason="$cleanup_failure_reason; runs not recorded: $runs_not_recorded"
+                  fi
+                  printf 'restore drill: %s\n' "$cleanup_failure_reason" >&2
+                fi
+              fi
+              # A runtime peer belongs to the drill, never the permanent inventory.
+              if [ -n "$restore_public_key" ]; then
+                (cd "$repository" && remove_the_runtime_peer_on_util01 "$restore_public_key") || result=1
+              fi
+              # Remove inventory and host keys only after owned-server cleanup.
+              if [ -n "$owned_server_destroyed" ] || destroy_owned_server; then
+                rm -rf -- "$work_dir/project" || result=1
+              else
+                result=1
+              fi
+              if [ "$result" -eq 0 ]; then
+                rm -rf -- "$work_dir" || result=1
+              fi
+              if [ -n "$gave_way_to" ]; then
+                if [ "$result" -eq 0 ]; then
+                  jq -n --arg started_at "$started_at" --arg gave_way_to "$gave_way_to" \
+                    '{passed:false,started_at:$started_at,gave_way_to:$gave_way_to}' > "$state_dir/latest_result.json.new"
+                  printf 'restore drill gave way and cleaned up; the scheduled service runs it again later\n'
+                  result=75
+                else
+                  jq -n --arg started_at "$started_at" --arg gave_way_to "$gave_way_to" --arg attempt_dir "$work_dir" --arg cleanup_failure_reason "$cleanup_failure_reason" \
+                    '{passed:false,started_at:$started_at,gave_way_to:$gave_way_to,attempt_dir:$attempt_dir} + (if $cleanup_failure_reason == "" then {} else {cleanup_failure_reason:$cleanup_failure_reason} end)' > "$state_dir/latest_result.json.new"
+                  echo "restore drill gave way, but its cleanup failed; read the journal and $work_dir" >&2
+                fi
+              elif [ "$result" -eq 0 ]; then
+                jq -n --arg started_at "$started_at" --argjson restore_duration_seconds "$duration" \
+                  --argjson seconds_of_writes_missing_at_most "$write_age" \
+                  '{passed:true,started_at:$started_at,restore_duration_seconds:$restore_duration_seconds,seconds_of_writes_missing_at_most:$seconds_of_writes_missing_at_most}' > "$state_dir/latest_result.json.new"
+              else
+                result=1
+                jq -n --arg started_at "$started_at" --arg attempt_dir "$work_dir" \
+                  '{passed:false,started_at:$started_at,attempt_dir:$attempt_dir}' > "$state_dir/latest_result.json.new"
+                echo "restore drill failed; read the journal and $work_dir" >&2
+              fi
+              mv "$state_dir/latest_result.json.new" "$state_dir/latest_result.json"
+              if [ "$result" -eq 0 ]; then
+                printf '%s restore and uploads checks passed; owned server destroyed\n' "$(date -u +%FT%TZ)" > "$state_dir/latest_passed_drill.new"
+                mv "$state_dir/latest_passed_drill.new" "$state_dir/latest_passed_drill"
+              fi
+              exit "$result"
+            }
+            trap cleanup EXIT
+            trap 'exit 130' INT
+            trap 'exit 143' TERM HUP
+            # Give way at once, before anything exists, or watch every 5 seconds.
+            # The watcher's TERM runs cleanup after the command that runs then;
+            # the longest of those is the create script's wait for restore01's
+            # boot, about a minute.
+            if line=$(line_of_a_waiting_mmhotline 2); then
+              printf '%s\n' "$line" > "$work_dir/gave_way_to"
+              exit 75
+            fi
+            (
+              trap - EXIT INT TERM HUP
+              until line=$(line_of_a_waiting_mmhotline 5); do :; done
+              printf '%s\n' "$line" > "$work_dir/gave_way_to"
+              kill -TERM "$$"
+            ) < /dev/null > /dev/null 2>&1 &
+            watcher_pid=$!
+            cd "$repository"
+            refuse_when_a_restore_server_exists
+            # restore01 peers only with util01. The public key in the attempt
+            # directory lets cleanup remove the runtime peer after an abrupt loss.
+            umask 077
+            write_the_first_boot_data "$RESTORE01_PRIVATE_IP" "[$(util01_as_a_peer)]" \
+              "$work_dir/first_boot_data.yml" "$work_dir/wireguard_public_key"
+            restore_public_key=$(cat "$work_dir/wireguard_public_key")
+            add_a_runtime_peer_on_util01 "$restore_public_key" "$RESTORE01_PRIVATE_IP"
+            create_the_owned_server restore01 "$SERVER_TYPE" "$LOCATION" "$RESTORE01_PRIVATE_IP" \
+              "$restore_public_key" "$work_dir/first_boot_data.yml" "$receipt"
+            rm -f -- "$work_dir/first_boot_data.yml"
+            public_ipv4_address=$(jq -er '.public_ipv4_address | strings | select(length > 0)' "$receipt")
+            address=$RESTORE01_PRIVATE_IP
+            git clone --quiet --no-hardlinks --local . "$work_dir/project"
+            cd "$work_dir/project"
+            # The source inventory stays unchanged.
+            add_restore01_to_the_inventory_of_this_clone "$address" "$public_ipv4_address" "$restore_public_key"
+            # First SSH trust is safe only over the authenticated WireGuard peer.
+            # Strict checking resumes for every MMX connection after enrollment.
+            # Reuse the utility copy's MMX history; the snapshot can be discarded later.
+            ln -s "$repository/.mmx" .mmx
+            accept_the_host_key_over_wireguard "$address"
+            mmx run restore_database --non-interactive --json \
+              --var restore_mode=copy_on_restore01 --var server_name=restore01 --var recover_to=latest \
+              --var "read_backup_bucket_as_of=$repository_as_of" > "$work_dir/restore_result.json" &
+            restore_pid=$!
+            wait "$restore_pid"
+            restore_pid=
+            outputs=$(jq -ce '[.entries[] | select(.fleet_stage == "check_the_restored_copy" and .node == "restore01") | .response.outputs] | last | select(.answered_the_check_queries_at != null)' "$work_dir/restore_result.json")
+            answered_seconds=$(date -d "$(jq -r '.answered_the_check_queries_at' <<< "$outputs")" +%s)
+            duration=$((answered_seconds - started_seconds))
+            write_age=$(jq -c '.seconds_of_writes_missing_at_most' <<< "$outputs")
+            printf 'restore_duration_seconds=%s; seconds_of_writes_missing_at_most=%s (null means no replayed transaction)\n' "$duration" "$write_age"
+            apps_with_uploads=$(jq -r 'to_entries[] | select(.value.production_uploads_r2_bucket != "") | [.key,.value.production_uploads_r2_bucket] | @tsv' <<< "$APPS")
+            if [ -n "$apps_with_uploads" ]; then
+              last_copy=$(cat /var/lib/uploads_backup/latest_passed_copy)
+              while IFS=$'\t' read -r app bucket; do
+                rclone --config /var/lib/mmhotline/uploads_backup_rclone.conf lsf \
+                  --recursive --files-only --use-server-modtime --min-age "$last_copy" \
+                  "uploads_r2:$bucket" | shuf -n 1 > "$work_dir/sample.txt"
+                if [ ! -s "$work_dir/sample.txt" ]; then
+                  printf '%s has no eligible uploaded file; no sample compared\n' "$app"
+                  continue
+                fi
+                rclone --config /var/lib/mmhotline/uploads_backup_rclone.conf check \
+                  --download --one-way "--b2-version-at=$started_at" --files-from-raw "$work_dir/sample.txt" \
+                  "uploads_r2:$bucket" "uploads_backup:$UPLOADS_BUCKET/$app"
+              done <<< "$apps_with_uploads"
+            fi
+            DRILL
+          dryrun: printf 'would create restore01, restore frozen backups, check data and uploads, then destroy the owned server\n'
+          run_as_user_account: mmhotline
+          run_from_directory: /var/lib/mmhotline/systems_repository
+          output_holds_no_secret: true
+          env:
+            SERVER_TYPE: "{{ .vars.restore_drill_server_type }}"
+            LOCATION: "{{ .vars.restore_drill_location }}"
+            SERVER_IMAGE: "{{ .vars.server_image }}"
+            UTIL01_SSH_KEY_NAME: "{{ .vars.util01_ssh_key_name_at_the_provider }}"
+            UTIL01_WIREGUARD_PUBLIC_KEY: "{{ .inventory.nodes.util01.vars.wireguard_public_key }}"
+            RESTORE01_PRIVATE_IP: "{{ .vars.restore01_private_ip }}"
+            UTIL01_PRIVATE_IP: "{{ .inventory.nodes.util01.vars.private_ip }}"
+            UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inventory.nodes.util01.vars.public_ipv4_address }}"
+            RESTORE_DRILL_TIME_LIMIT_HOURS: "{{ .vars.restore_drill_time_limit_hours }}"
+            APPS: "{{ .vars.apps }}"
+            UPLOADS_BUCKET: "{{ .vars.backups.uploads_bucket }}"
+            SERVER_PROVIDER_API_TOKEN: "{{ .secrets.util01_provider_api_token }}"

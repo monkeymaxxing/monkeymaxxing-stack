@@ -1,0 +1,23 @@
+ARG NODE_IMAGE=docker.io/library/node:24-bookworm-slim@sha256:a43f7fc3e52e87d12a905f46eea0275def84ca8f2981a5b53fed44d7fb398ee0
+FROM ${NODE_IMAGE} AS build
+WORKDIR /app
+ENV npm_config_cache=/tmp/npm
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+RUN npm test && npm run build && npm run typecheck
+RUN npm prune --omit=dev --no-audit --no-fund
+
+FROM ${NODE_IMAGE}
+ARG RELEASE=development
+LABEL org.opencontainers.image.revision=${RELEASE}
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build --chown=node:node /app/.output ./.output
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/lib ./lib
+COPY --from=build --chown=node:node /app/scripts ./scripts
+COPY --from=build --chown=node:node /app/migrations ./migrations
+USER node
+CMD ["node", "scripts/web.mjs"]

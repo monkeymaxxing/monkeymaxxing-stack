@@ -1,0 +1,447 @@
+{{- /*
+  MMWatchdog's check groups for util01, the fleet hub: util01's own size,
+  the public sites as users reach them, the weekly restore drill, new
+  releases of the pinned programs, and the nightly copy of the apps'
+  uploads. This
+  file is an MMX template: MMX renders it on util01 into
+  /etc/mmwatchdog/check_groups/util_server.yml. It reads the role inputs apps,
+  public_host_names (the inventory's public_host_names), public_site_checks_run,
+  backups, whose uploads_backup_runs_on decides whether the uploads'
+  checks are here, stack_software, triage_agent_coding_agent and
+  systems_desk_coding_agent for the pinned programs' release checks, and
+  app_pool_load_settings and inventory_nodes for the checks that add and
+  remove app servers with the load.
+*/ -}}
+# Managed by MMX from mmwatchdog_checks/util_server.yml in the systems repository.
+# To be woken for a check, set that check's alert_severity to sos. warn tells
+# a person during the day; sos wakes the person on call, which a small team
+# turns on check by check. The checks a careful team raises first: the
+# backups, write-ahead log archiving, and the restore drill. Each value below
+# has its reason beside it; change a value only with a reason of your own.
+check_groups:
+  # Each reading covers the 5 minutes since the previous reading. A warning
+  # goes out after 15 minutes past a limit.
+  util_server_capacity:
+    check_every: 5m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 15m
+    recovered_after_healthy_for: 5m
+    checks:
+      # For CPU use above 70%, memory use above 70%, or a disk above 70%
+      # full, rebuild util01 as a bigger server
+      # (operating_procedures/rebuild_the_utility_server_util01.md).
+      # Reason for 70% (CPU, memory, disk): util01 runs the fleet hub, MMHotline, the server settings comparison, and the restore drill, and
+      # rebuilding it as a bigger server takes planning. Reason for warn: slow, not down.
+      cpu_is_below_70_percent:
+        node_resource: cpu
+        fail_when_measurement_above:
+          cpu_used_percent: 70
+        alert_severity: warn
+      memory_is_below_70_percent:
+        node_resource: memory
+        fail_when_measurement_above:
+          memory_used_percent: 70
+        alert_severity: warn
+      disks_are_below_70_percent_full:
+        every_disk_and_network_filesystem:
+          filesystems_to_ignore: []
+        fail_when_measurement_above:
+          space_used_percent: 70
+        alert_severity: warn
+
+  # MMWatchdog's public_sites checks request each app's health URL as users
+  # do: through the app's public host name, DNS, Cloudflare, and the tunnel.
+  # The public_sites checks detect failures in DNS, Cloudflare, or the
+  # tunnel that checks directly on the app servers do not see.
+  # Staging's host names are behind Cloudflare Access, so the public_sites
+  # check group does not check staging's host names.
+  # public_site_checks_run is false until chapter 9 (go live): before then
+  # the domain can still be Pending and the app is not announced, and each
+  # failing check could send an sos alert that wakes the person on call for a system that was
+  # never live. Chapter 9 sets public_site_checks_run to true in
+  # mmx_project_settings.yml, and util01's next every_server run adds the
+  # check group.
+{{- if .inputs.public_site_checks_run }}
+  # The four times below are defaults; a team changes them here.
+  # check_every 15s and alert_after_failing_for 30s by default: the SOS goes
+  # out 30 to 45 seconds after the site stops answering, and a failure of a
+  # few seconds cannot cause it. Reason, measured on test servers: one request
+  # every 2 seconds for an hour through a Cloudflare tunnel failed twice
+  # within 6 seconds while Cloudflare replaced two tunnel connections, with a
+  # healthy app behind them, and no failure lasted across two checks 15
+  # seconds apart.
+  # time_limit_per_run 5s by default: the slowest good answer in the same
+  # measurement took 0.4 seconds, so an answer that needs more than 5
+  # seconds counts as a failure, and one run always ends before the next
+  # run starts.
+  # recovered_after_healthy_for 30s by default, the same length as
+  # alert_after_failing_for: two good answers in a row end the SOS, and a
+  # single good answer between failures does not.
+  public_sites:
+    check_every: 15s
+    time_limit_per_run: 5s
+    alert_after_failing_for: 30s
+    recovered_after_healthy_for: 30s
+    checks:
+{{- range $app_name, $app := .inputs.apps }}
+      {{ $app_name }}_answers_at_its_public_host_name:
+        http:
+          url: https://{{ index $.inputs.public_host_names.production $app_name }}{{ $app.health_url_path }}
+        alert_severity: sos
+{{- end }}
+{{- end }}
+
+  # Each time the weekly restore drill passes, the drill updates
+  # /var/lib/restore_drill/latest_passed_drill. Before the first drill,
+  # the missing /var/lib/restore_drill/latest_passed_drill makes the
+  # a_restore_drill_passed_in_the_last_8_days check fail.
+  # The MMX run that sets up the restore_drill check group starts the first
+  # drill at the end of the run (playbooks/every_server.yml).
+  # The 2h warning delay gives the first drill time to pass before
+  # MMWatchdog warns.
+  restore_drill:
+    check_every: 1h
+    time_limit_per_run: 10s
+    alert_after_failing_for: 2h
+    recovered_after_healthy_for: 0s
+    checks:
+      # What to do: the triage agent finds out why the drill did not pass.
+      # Reason for 8 days: the drill is weekly, plus a day of slack. A drill
+      # that gave way to MMHotline runs again 2 hours later, inside the
+      # slack; one that gives way every time still warns. Reason for warn:
+      # the backups may still restore, but nobody has proven it this week. A careful team raises this check to sos.
+      a_restore_drill_passed_in_the_last_8_days:
+        file:
+          path: /var/lib/restore_drill/latest_passed_drill
+        fail_when_measurement_above:
+          file_age_days: 8
+        alert_severity: warn
+
+  # New releases of the programs pinned in stack_software
+  # (mmx_project_settings.yml), without a coding agent: one check per pinned
+  # program that util01's settings install, written from stack_software
+  # below, compares the pin with the newest release at the program's release
+  # source, GitHub's releases/latest, taken from the pin's download_url.
+  # releases/latest leaves out pre-releases and drafts, so a pre-release
+  # never warns; a program pinned at a pre-release warns when the release
+  # it leads to is out. The triage agent starts only for a warning, and
+  # reads the release notes (triage_agent_rules.md, "A newer release of a
+  # pinned program"). Programs from vendors' apt repositories, such as
+  # Caddy, update themselves and need no check. A pin whose download_url is
+  # not a GitHub release gets no check; the comment below names it, and the
+  # scheduled software review covers it when the team turns the review on.
+  # codex is checked only while triage_agent_coding_agent or
+  # systems_desk_coding_agent is codex, and rclone only while
+  # backups.uploads_backup_runs_on names util01, because only then does the
+  # system install the program.
+  #
+  # A warning goes out once and stays open, without repeating, until the
+  # pin names the newest release; a later release while it is open sends
+  # no new alert. MMWatchdog has no way to quiet one release of one check:
+  # a team that will not take a release leaves the warning open, and the
+  # weekly system review reads it
+  # (operating_procedures/do_the_weekly_system_review.md).
+  #
+  # Each check asks its source up to 3 times, 5 seconds apart, with 10
+  # seconds for each answer, so a short outage or a slow answer is no
+  # failure. A source that still does not answer is not a new release: the
+  # program's check passes, and release_sources_answer below fails instead.
+  # A source that answers "not found" counts as an answer with no release:
+  # GitHub answers so for a project that has published only pre-releases.
+  #
+  # check_every 1h by default. Reason: a release an hour late changes
+  # nothing. GitHub allows 60 requests an hour from one address without a
+  # sign-in; each program costs 2 requests an hour (its check and
+  # release_sources_answer), so the template's 6 checked programs (7 with
+  # codex) make 12 (14) requests an hour, 48 (46) under the limit; when
+  # every request fails and is tried 3 times, 36 (42). Each further pinned
+  # program adds 2, or 6 when every request fails.
+  # time_limit_per_run 5m: release_sources_answer asks every source in turn,
+  # at most 40 seconds each.
+  # alert_after_failing_for 0s for a newer release: the release is there
+  # until the pin moves, so waiting adds nothing.
+  # Reason for warn: a new release is no outage; the triage agent's report
+  # raises a release that fixes a flaw attackers exploit now to sos.
+{{- define "ask_for_the_newest_release" }}
+            # ask_for_the_newest_release OWNER/REPO: sets newest_tag and
+            # release_page and returns 0 when the source answered, or sets
+            # no_answer and returns 1.
+            ask_for_the_newest_release() {
+              local attempt response http_status_code body curl_exit_code
+              newest_tag='' release_page='' no_answer=''
+              for attempt in 1 2 3; do
+                [ "$attempt" = 1 ] || sleep 5
+                curl_exit_code=0
+                response=$(curl --silent --location --max-time 10 \
+                  --header 'Accept: application/vnd.github+json' \
+                  --write-out '\n%{http_code}' "https://api.github.com/repos/$1/releases/latest") || curl_exit_code=$?
+                if [ "$curl_exit_code" != 0 ]; then
+                  no_answer="no answer, curl exit code $curl_exit_code"
+                  continue
+                fi
+                http_status_code=${response##*$'\n'}
+                body=${response%$'\n'*}
+                case "$http_status_code" in
+                  200)
+                    if newest_tag=$(printf '%s' "$body" | jq --raw-output --exit-status '.tag_name | strings') \
+                        && release_page=$(printf '%s' "$body" | jq --raw-output '.html_url // empty'); then
+                      return 0
+                    fi
+                    newest_tag=''
+                    no_answer='the answer holds no tag_name' ;;
+                  404) return 0 ;;
+                  *) no_answer="HTTP $http_status_code: $(printf '%s' "$body" | jq --raw-output '.message // empty' 2>/dev/null | head -c 300)" ;;
+                esac
+              done
+              return 1
+            }
+{{- end }}
+  pinned_program_releases:
+    check_every: 1h
+    time_limit_per_run: 5m
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 0s
+    checks:
+{{- $checked_programs := dict }}
+{{- range $program, $release := .inputs.stack_software }}
+{{- $installed := true }}
+{{- if eq $program "codex" }}{{ $installed = or (eq $.inputs.triage_agent_coding_agent "codex") (eq $.inputs.systems_desk_coding_agent "codex") }}{{ end }}
+{{- if eq $program "rclone" }}{{ $installed = not (empty $.inputs.backups.uploads_backup_runs_on) }}{{ end }}
+{{- if $installed }}
+{{- if regexMatch "^https://github[.]com/[^/]+/[^/]+/releases/download/" $release.download_url }}
+{{- $_ := set $checked_programs $program (regexReplaceAll "^https://github[.]com/([^/]+/[^/]+)/releases/download/.*$" $release.download_url "${1}") }}
+{{- else }}
+      # {{ $program }}: no check, because its download_url is not a GitHub release.
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $program, $repository := $checked_programs }}
+{{- $release := index $.inputs.stack_software $program }}
+      {{ $program }}_pin_is_the_newest_release:
+        shell:
+          script: |
+{{- template "ask_for_the_newest_release" }}
+            # version_is_newer NEWEST PINNED: a release without a pre-release
+            # part, such as 1.2.0, is newer than its pre-release 1.2.0-rc.1.
+            version_is_newer() {
+              [ "$1" != "$2" ] || return 1
+              if [ "${1%%-*}" != "${2%%-*}" ]; then
+                [ "$(printf '%s\n%s\n' "${1%%-*}" "${2%%-*}" | sort -V | tail -n 1)" = "${1%%-*}" ]
+                return
+              fi
+              [ "$1" != "${1%%-*}" ] || return 0
+              [ "$2" != "${2%%-*}" ] || return 1
+              [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
+            }
+            pinned={{ $release.version | squote }}
+            if ! ask_for_the_newest_release {{ $repository | squote }}; then
+              echo "{{ $repository }} did not answer ($no_answer), so this run learned no release; release_sources_answer warns when it stays so for a day."
+              exit 0
+            fi
+            if [ -z "$newest_tag" ]; then
+              echo "{{ $repository }} has published no release that is not a pre-release; stack_software.{{ $program }} pins $pinned."
+              exit 0
+            fi
+            newest=${newest_tag#"${newest_tag%%[0-9]*}"}
+            if version_is_newer "$newest" "$pinned"; then
+              echo "{{ $program }} has a newer release, $newest; stack_software.{{ $program }} in mmx_project_settings.yml pins $pinned. Release notes: $release_page. Update it with operating_procedures/add_or_update_a_program_from_outside_the_distribution.md, \"Updating a program from outside the distribution\"."
+              exit 1
+            fi
+            echo "{{ $program }}: the pin, $pinned, is the newest release, $newest."
+        alert_severity: warn
+{{- end }}
+      # Fails when a release source above did not answer, after 3 tries,
+      # such as a refused or rate-limited request or a project that moved.
+      # Reason for 24h: a source that is down for a day means the team no
+      # longer learns of that program's releases; a shorter outage changes
+      # nothing. Reason for warn: nothing is down.
+      release_sources_answer:
+        shell:
+          script: |
+{{- template "ask_for_the_newest_release" }}
+            sources_that_did_not_answer=0
+{{- range $program, $repository := $checked_programs }}
+            if ! ask_for_the_newest_release {{ $repository | squote }}; then
+              echo "{{ $program }}'s release source, {{ $repository }} at GitHub, did not answer: $no_answer"
+              sources_that_did_not_answer=1
+            fi
+{{- end }}
+            exit "$sources_that_did_not_answer"
+        alert_after_failing_for: 24h
+        alert_severity: warn
+
+  # MMHotline's own database holds the on-call settings, changes to who is
+  # on call, and alert history. Litestream copies MMHotline's database to
+  # MMHotline's B2 bucket through the unit mmhotline-backup.
+  # A running unit is no proof that B2 has stored the backup data.
+  # Litestream keeps running while a revoked key or a refusing bucket turns
+  # every upload down. MMHotline's command compares what
+  # Litestream captured with what the bucket holds, so an idle MMHotline,
+  # which writes nothing for hours, passes too.
+  # MMWatchdog checks every 5 minutes, so the first failed check comes
+  # between 0 and 5 minutes after the backup stops.
+  # The first failed check starts the 10-minute warning delay.
+  # MMWatchdog therefore sends a warning 10 to 15 minutes after the stop.
+  # At worst, MMHotline's changes go about 15 minutes without a backup
+  # before anyone hears.
+  # With a 10-minute check interval and a 20-minute warning delay, a stopped
+  # backup on test servers warned only after 34 minutes.
+  mmhotline_backup:
+    check_every: 5m
+    time_limit_per_run: 60s
+    alert_after_failing_for: 10m
+    recovered_after_healthy_for: 0s
+    checks:
+      # Litestream captures changes only while it runs.
+      # Reason for warn: MMHotline keeps working while its backup is down; only the changes since the stop are at risk.
+      mmhotline_backup_runs:
+        systemd_unit_state:
+          systemd_unit: mmhotline-backup.service
+          fail_when: the_unit_is_not_active
+        alert_severity: warn
+      # Exit 1: a change captured more than 5 minutes ago isn't in the
+      # bucket; exit 3: the bucket can't be read. What to do: the triage agent
+      # reads why in journalctl -u mmhotline-backup on util01.
+      # As root: MMHotline's backup settings, /etc/mmhotline/backup.env,
+      # are root's alone, and the command only reads them and the bucket.
+      the_backup_holds_every_change_captured_5_minutes_ago:
+        shell:
+          script: /usr/local/bin/mmhotline backup check-uploads
+          run_as_user_account: root
+        alert_severity: warn
+        no_alerts_or_recovery_actions_while_these_checks_fail: [mmhotline_backup/mmhotline_backup_runs]
+{{- if .inputs.backups.uploads_backup_runs_on }}
+
+  # The copy sends the apps' uploads to B2 every
+  # backups.uploads_copy_every_hours hours while
+  # backups.uploads_backup_runs_on names util01. After every app's copy
+  # passes, the copy updates /var/lib/uploads_backup/latest_passed_copy.
+  # After a full copy passes for every app, the copy also updates
+  # /var/lib/uploads_backup/latest_passed_full_copy.
+  # A full copy writes every file again when no full copy has passed yet,
+  # or when the last successful full copy is more than 6 days old.
+  # /var/lib/uploads_backup/latest_passed_copy and
+  # /var/lib/uploads_backup/latest_passed_full_copy do not exist before the
+  # first copy. The MMX run that sets up the uploads_backup check group
+  # starts the first copy at the end of the run (roles/uploads_backup).
+  # The 2h warning delay gives the first copy time to pass before
+  # MMWatchdog warns.
+  # The checks run every 10 minutes, so each copy's count of hidden files
+  # is read at least once even with a copy every hour; a check of a file
+  # costs nothing.
+  uploads_backup:
+    check_every: 10m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 2h
+    recovered_after_healthy_for: 0s
+    checks:
+      # Reason for uploads_copy_every_hours plus 2 hours: one copy interval,
+      # and 2 hours for a slow copy.
+      # What to do: the triage agent finds out why the copy did not pass, from
+      # journalctl -u copy_uploads_to_the_backup_bucket on util01.
+      a_copy_passed_within_the_copy_interval_plus_2_hours:
+        file:
+          path: /var/lib/uploads_backup/latest_passed_copy
+        fail_when_measurement_above:
+          file_age_hours: {{ add .inputs.backups.uploads_copy_every_hours 2 }}
+        alert_severity: warn
+      # Without a full copy for more than 8 days, a file unchanged since the
+      # last full copy can outlast the bucket's lock
+      # (backups.lock_backups_against_deletion_for_days, at least 8).
+      # The backup then remains in B2 without protection against deletion
+      # or modification, while the apps still have the file.
+      # What to do: the triage agent finds out why the copy did not pass,
+      # from journalctl -u copy_uploads_to_the_backup_bucket on util01.
+      a_full_copy_passed_in_the_last_8_days:
+        file:
+          path: /var/lib/uploads_backup/latest_passed_full_copy
+        fail_when_measurement_above:
+          file_age_days: 8
+        alert_severity: warn
+      # Each copy writes a line for each app whose copy hid more than
+      # backups.warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files
+      # of the files in the app's folder, once the folder held at least
+      # backups.warn_about_hidden_uploads_only_when_an_app_has_at_least_files
+      # (roles/uploads_backup/files/copy_uploads_to_the_backup_bucket). The
+      # line names the app, the two numbers and the procedure. The next copy
+      # rewrites the file, so the warning closes by itself.
+      # Reason for no delay: the state lasts one copy interval.
+      # Reason for warn, not sos: the files stay restorable for
+      # backups.keep_prior_file_versions_in_buckets_for_days, and a
+      # customer's own bulk delete would otherwise wake a person for nothing.
+      # What to do: the triage agent reads the line and the app's records
+      # and logs, and tells the person whether the deletion looks intended;
+      # if not, operating_procedures/restore_an_uploaded_file.md,
+      # "Restore all of an app's uploaded files".
+      the_latest_copy_hid_no_unusual_share_of_an_apps_files:
+        shell:
+          script: |
+            file=/var/lib/uploads_backup/apps_whose_latest_copy_hid_an_unusual_share
+            if [ -s "$file" ]; then cat "$file"; exit 1; fi
+        alert_after_failing_for: 0s
+        alert_severity: warn
+{{- end }}
+{{- $load := .inputs.app_pool_load_settings }}
+{{- if eq ($load.what_the_triage_agent_may_do_without_a_person | default "") "routine_fixes_and_server_work" }}
+{{- $arguments := printf "--smallest-number-of-servers %v --largest-number-of-servers %v --minutes-of-high-load %v --days-of-low-load %v --cpu-percent-below-which-the-app-pool-can-spare-a-server %v" $load.growth_limits.smallest_number_of_servers $load.growth_limits.largest_number_of_servers $load.triage_agent_server_work.minutes_of_high_load_before_an_app_server_is_added $load.triage_agent_server_work.days_of_low_load_before_an_app_server_is_removed $load.triage_agent_server_work.cpu_percent_below_which_the_app_pool_can_spare_a_server }}
+{{- range $load.app_servers }}{{ $arguments = printf "%s --app-server %s:%s" $arguments . (index $.inputs.inventory_nodes . "vars" "server_type") }}{{ end }}
+
+  # Only with what_the_triage_agent_may_do_without_a_person:
+  # routine_fixes_and_server_work. Without it no check exists, so no triage
+  # agent starts for a change of the app pool that only a person may make.
+  # Each check fails when check-whether-the-load-changes-the-app-pool,
+  # which the playbook runs too, says the change may run now: one more app
+  # server when the pool's CPU stayed above its headroom limit for
+  # triage_agent_server_work.minutes_of_high_load_before_an_app_server_is_added,
+  # one fewer when the smaller pool would have carried the busiest readings
+  # of days_of_low_load_before_an_app_server_is_removed with a server to
+  # spare. The triage agent then requests add_an_app_server_for_the_load or
+  # remove_server, and MMHotline runs it after its warning unless someone
+  # presses Stop. The add check fails also when the load calls for one more
+  # app server and the pool already holds its largest number: then a person
+  # must choose (a higher largest number, bigger servers, or jobs servers),
+  # and with this answer the app servers' own CPU warning is only info, so
+  # this check is the one alert that tells the team. A removal that a pool
+  # of mixed server types stops raises nothing: the weekly review shows it.
+  # Reason for warn: a warn alert starts a triage session, and an info alert
+  # never does; a warn wakes nobody. One alert for the pool, not one for each
+  # app server. The warn reaches the phone once, at normal priority; the
+  # triage agent's progress reports go at info, without a sound.
+  # Reason for alert_after_failing_for 0s and recovered_after_healthy_for 0s:
+  # the program already looks back over the whole window. Right after a
+  # change the window starts again, the check is healthy and its alert
+  # closes, so the next change brings a new alert and a new session.
+  # Reason for check_every 1m for adding: users of a busy site wait, so the
+  # alert follows the window within a minute. For removing, 1h: nothing
+  # waits for a removal, and each run reads days of readings.
+  app_servers_to_add_for_the_load:
+    check_every: 1m
+    time_limit_per_run: 30s
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 0s
+    checks:
+      no_app_server_waits_to_be_added:
+        shell:
+          run_as_user_account: root
+          script: |
+            status=0
+            why=$(/usr/local/bin/check-whether-the-load-changes-the-app-pool --add {{ $arguments }}) || status=$?
+            printf '%s\n' "$why"
+            case $status in 0|2) exit 1 ;; 1) exit 0 ;; *) exit "$status" ;; esac
+        alert_severity: warn
+  app_servers_to_remove_for_the_load:
+    check_every: 1h
+    time_limit_per_run: 5m
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 0s
+    checks:
+      no_app_server_waits_to_be_removed:
+        shell:
+          run_as_user_account: root
+          script: |
+            status=0
+            why=$(/usr/local/bin/check-whether-the-load-changes-the-app-pool --remove {{ $arguments }}) || status=$?
+            printf '%s\n' "$why"
+            case $status in 0) exit 1 ;; 1|2) exit 0 ;; *) exit "$status" ;; esac
+        alert_severity: warn
+{{- end }}

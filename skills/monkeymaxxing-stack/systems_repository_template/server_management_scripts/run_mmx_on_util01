@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Run MMX on util01 at the clean, pushed main commit of the systems desk.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+fail() { printf 'run_mmx_on_util01: %s; nothing ran\n' "$*" >&2; exit 1; }
+[ "$#" -gt 0 ] || fail 'give MMX arguments, such as run every_server'
+address=$(mmx nodes --json | jq -er '.nodes[] | select(.name == "util01") | .address') || fail 'cannot find util01 in the inventory'
+# status, stop, and results read or stop a run that may hold the lock, so
+# they skip the lock and the commit checks: they change no setting.
+# commit-reviews runs MMHotline's commit-reviews command on util01 as root:
+# list, show, mark-reviewed or trust-through. It needs no clean, pushed desk
+# copy and takes no lock, because MMHotline takes the lock itself.
+commit=none
+case $1 in
+  status|stop|results) ;;
+  commit-reviews)
+    case ${2:-} in
+      list|show|mark-reviewed|trust-through) ;;
+      *) fail 'give list, show, mark-reviewed or trust-through after commit-reviews' ;;
+    esac ;;
+  *)
+    changes=$(git status --porcelain) || fail "git status failed"
+    [ -z "$changes" ] || fail 'commit the working tree changes first'
+    git fetch --quiet origin main || fail 'git fetch origin main failed'
+    [ "$(git symbolic-ref --quiet --short HEAD)" = main ] || fail 'check out main first'
+    commit=$(git rev-parse HEAD)
+    # main moves without the desk: the triage agent pushes its notes, and
+    # replace_failed_servers and destroy_replaced_servers push commits.
+    [ "$commit" = "$(git rev-parse refs/remotes/origin/main)" ] || fail 'HEAD must equal pushed main: run git pull --rebase, and push your own commits if any, then run this again'
+    printf 'run_mmx_on_util01: %s on util01 at %s\n' "$*" "$commit" >&2 ;;
+esac
+# Bash quoting keeps spaces and shell characters in MMX arguments literal.
+ssh -F ssh/config "root@$address" "bash -s -- $(printf '%q ' "$commit" "$@")" <<'REMOTE'
+set -euo pipefail
+commit=$1; shift
+[ "$1" != commit-reviews ] || exec mmhotline "$@"
+# Ask MMHotline before taking the lock: MMHotline's check takes the lock
+# itself and waits for it without a time limit, so a check made while
+# holding the lock would wait forever. MMHotline fetches, sends one warning
+# for each commit that newly waits for review, and moves its checkout
+# forward to the trusted commit. The helper never moves the checkout.
+if [ "$commit" != none ]; then
+  status=0
+  answer=$(mmhotline commit-reviews check --commit-id "$commit" --json) || status=$?
+  if [ "$status" -gt 1 ] || ! trusted=$(jq -er '.commit_check.trusted_through_commit_id' <<< "$answer" 2> /dev/null); then
+    printf 'run_mmx_on_util01: MMHotline did not answer the commit check (exit %s), so nobody can tell whether util01 may run %s; nothing ran. On util01, systemctl status mmhotline says why.\n' "$status" "${commit:0:12}" >&2
+    exit 1
+  fi
+  if [ "$trusted" != "$commit" ]; then
+    {
+      printf 'run_mmx_on_util01: these commits on main wait for review, and util01 runs nothing past them:\n'
+      # Only IDs, MMHotline's own reason, and the review page: the author and
+      # message are pushed text, which commit-reviews show prints safely.
+      jq -r '.commit_check.commits_waiting_for_review[] | "  \(.commit_id) \(.reason): \(.review_url)"' <<< "$answer"
+      printf 'A commit no trusted key signed may be under the triage agent'"'"'s review for a short time: wait for the review'"'"'s alert in MMHotline and run this again, or review the commit with the person now. To review with the person, show the person each commit (git show COMMIT, and ./server_management_scripts/run_mmx_on_util01 commit-reviews show --commit-id COMMIT for MMHotline'"'"'s reason and the triage agent'"'"'s report) and ask for a decision. Only after the person decides to keep a commit: ./server_management_scripts/run_mmx_on_util01 commit-reviews mark-reviewed --commit-id COMMIT. Then run this again. Nothing ran.\n'
+    } >&2
+    exit 1
+  fi
+fi
+exec sudo -H -u mmhotline bash -c '
+set -euo pipefail
+commit=$1; shift
+cd /var/lib/mmhotline/systems_repository
+export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
+case $1 in
+  status|stop) command=$1; shift; exec mmx "$command" --non-interactive "$@" ;;
+  results) exec mmx "$@" ;;
+esac
+exec 9>> /var/lib/mmhotline/systems_repository.lock
+# While the lock is busy, say every minute who holds it and how to stop
+# that run; re-read the holder, because the holder can change.
+if ! flock --nonblock 9; then
+  minutes=0
+  while true; do
+    holder=$(cat /var/lib/mmhotline/systems_repository.lock)
+    case $minutes in
+      0) waited= ;;
+      1) waited=" (waited 1 minute)" ;;
+      *) waited=" (waited $minutes minutes)" ;;
+    esac
+    printf "run_mmx_on_util01: waiting for util01'"'"'s lock%s. Lock holder: %s. If the holder is an MMX run, ./server_management_scripts/run_mmx_on_util01 status shows its run ID; if this change is urgent, ./server_management_scripts/run_mmx_on_util01 stop RUN_ID stops that run.\n" "$waited" "${holder:-another process on util01 (no holder line)}" >&2
+    flock --wait 60 9 && break
+    minutes=$((minutes + 1))
+  done
+fi
+# Redirection empties the previous holder line. Quoting keeps one line.
+printf -v mmx_arguments "%q " "$@"
+printf "run_mmx_on_util01: mmx %s; user %s; process %s; started %s\n" "$mmx_arguments" "$(id -un)" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+changes=$(git status --porcelain)
+[ -z "$changes" ] || { echo "util01 has uncommitted changes; nothing ran" >&2; exit 1; }
+[ "$(git symbolic-ref --quiet --short HEAD)" = main ] || { echo "util01 must be on main; nothing ran" >&2; exit 1; }
+# MMHotline moved the checkout to the trusted commit. A newer push that
+# MMHotline trusts can move it past the desk commit: pull on the desk first.
+[ "$(git rev-parse HEAD)" = "$commit" ] || { echo "util01 is at $(git rev-parse --short=12 HEAD), not at the systems desk commit ${commit:0:12}; pull on the systems desk and run again; nothing ran" >&2; exit 1; }
+command=$1; shift
+case $command in
+  run|dryrun|resume|run-command|check-one-time-playbooks|complete-one-time-playbook)
+    exec mmx "$command" --non-interactive "$@" ;;
+  *) exec mmx "$command" "$@" ;;
+esac
+' run_mmx_on_util01 "$commit" "$@"
+REMOTE

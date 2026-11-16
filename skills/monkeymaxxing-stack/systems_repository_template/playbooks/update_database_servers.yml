@@ -1,0 +1,434 @@
+# Installs the database servers' updates in the team's weekly window, with
+# no outage once db02 exists, and restarts Postgres for each setting that
+# waits for a restart, such as a new shared_buffers:
+#
+#   ./server_management_scripts/run_mmx_on_util01 run update_database_servers
+#
+# An update of Postgres or pg_auto_failover restarts Postgres. After a
+# kernel update, the server reboot restarts Postgres. A PgBouncer update
+# restarts PgBouncer and drops the apps' connections through PgBouncer on
+# the database server being updated.
+#
+# So the database servers' daily security updates exclude Postgres,
+# pg_auto_failover, the kernel, and PgBouncer
+# (roles/every_server/files/unattended_upgrades.conf).
+# Only update_database_servers installs the excluded updates.
+#
+# every_server restarts Postgres for changed settings only on a database
+# node created by the current every_server run, before the node serves apps.
+# On existing nodes, every_server writes the settings and reloads Postgres.
+# Settings that take effect only at a restart wait for
+# update_database_servers. With replicas, update_database_servers restarts
+# each replica in pg_auto_failover maintenance. The primary stops waiting
+# for a replica in pg_auto_failover maintenance, so writes continue.
+# The old primary restarts only after the switchover. In order:
+#   1. util01's failover monitor says which database server is the primary
+#      (pg_auto_failover_monitor's primary_node_name).
+#      While util01's failover monitor names no primary, as for some seconds
+#      of a failover, the task refuse_while_the_monitor_names_no_primary
+#      stops the run. MMWatchdog has not yet suppressed any server's check
+#      alerts.
+#   2. Each replica is updated in turn. MMWatchdog first suppresses the
+#      replica's check alerts. Then postgres_under_pg_auto_failover in
+#      roles/database_server waits, at most five minutes, for the production
+#      formation, the database group, to settle before entering
+#      pg_auto_failover maintenance, and fails the run when the formation
+#      has not settled by then.
+#
+#      database_server puts the replica in pg_auto_failover maintenance, so
+#      writes continue. Then database_server restarts Postgres for settings
+#      that require a restart
+#      (restart_postgresql_for_new_settings: on_a_replica).
+#      Next, MMX installs every update. If an update requires a reboot,
+#      MMX reboots the replica. Otherwise, MMX restarts each service still
+#      using a replaced file, Postgres included.
+#
+#      Then end_the_maintenance_of_the_replica ends pg_auto_failover
+#      maintenance. pg_auto_failover starts Postgres if Postgres stayed
+#      stopped, and database_server waits until the replica has caught up.
+#      A repeated update_database_servers run starts at step 1.
+#      During each replica's turn, end_the_maintenance_of_the_replica ends
+#      any pg_auto_failover maintenance left by the stopped run.
+#
+#      With no update and no setting that requires a Postgres restart, the
+#      replica still enters and leaves pg_auto_failover maintenance.
+#      MMWatchdog still suppresses check alerts, and database_server waits
+#      until the replica has caught up.
+#   3. Once every replica is out of pg_auto_failover maintenance again,
+#      show_the_database_servers_and_their_health reads util01's failover
+#      monitor and names the replica that step 4 makes the primary: the
+#      first healthy replica by name
+#      (roles/database_server/files/show_the_database_servers_and_their_health).
+#   4. A switchover makes an updated replica the primary, and waits until
+#      the old primary has caught up as a replica. The switchover loses no
+#      write because replication is synchronous. The apps' write connections
+#      to the old primary break. The Postgres driver opens new write
+#      connections to the new primary by itself. MMX then checks that each
+#      app answers through the app's public host name.
+#   5. The old primary, now a replica, as in step 2.
+# With db01 alone, step 2 has no replica to update. Step 3 names no replica
+# for a switchover, so MMX skips step 4 and updates db01 in step 5.
+# db01 updates without pg_auto_failover maintenance. A restart or reboot
+# of db01 is a short outage in the team's weekly maintenance period.
+# A restart required by changed settings also causes a short outage
+# (restart_postgresql_for_new_settings: on_a_replica_or_a_node_alone).
+#
+# Each database server's alerts are paused during its own turn only (an
+# MMWatchdog maintenance window on the whole server): its check alerts,
+# reminders about its open check incidents, and the fleet hub's alert that
+# it stopped reporting while it reboots. The pause starts at the turn's first
+# task and ends at the turn's last, when the server has caught up again.
+# During the switchover of step 4, every database server's alerts are
+# paused again, as in switch_database_primary, and the pause ends right
+# after it.
+#
+# The maintenance on command finishes successfully once the fleet hub
+# accepts the server's MMWatchdog maintenance period in a report.
+# If the hub does not accept the maintenance period within 25 seconds,
+# the command exits with 1, the pause ends again at once, and the run
+# stops, before pg_auto_failover maintenance and updates.
+# Each pause lasts at most as long as the run waits for that server, so a
+# run that stops or dies halfway leaves no server's alerts paused longer
+# than the run would have waited (the numbers are beside each pause).
+#
+# staging01 and util01 are outside the production inventory group
+# database_servers, although staging01 and util01 also run Postgres.
+# The daily security updates on staging01 and util01 include Postgres.
+fleet_stages:
+  # 1. failover_monitor_with_the_production_formation configures the monitor
+  # and production formation as the task with the matching id in
+  # roles/util_server/main.yml does. The inputs match, so the task applies
+  # no settings beyond util01's own runs.
+  - id: read_which_database_server_is_the_primary
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: failover_monitor_with_the_production_formation
+        pg_auto_failover_monitor:
+          data_directory: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_monitor"
+          postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+          port: 5432
+          host_name: "{{ .vars.private_ip }}"
+          listen_address: "{{ .vars.private_ip }}"
+          autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+          formation: production
+          node_names: "{{ .inventory.groups.database_servers }}"
+          nodes_not_listed: remove
+      # Without a primary, update_each_replica's when condition would select
+      # every database server. MMWatchdog would suppress each selected
+      # server's check alerts before pg_auto_failover_node refused the
+      # request to put the selected server in pg_auto_failover maintenance.
+      - id: refuse_while_the_monitor_names_no_primary
+        assert:
+          that:
+            not: {equals: ["{{ .node_tasks.failover_monitor_with_the_production_formation.primary_node_name }}", ""]}
+          message: >-
+            The failover monitor on util01 names no primary of the formation
+            production, most likely because a failover is going on. Nothing
+            changed. Run update_database_servers again once
+            `sudo -u postgres pg_autoctl show state --pgdata
+            /var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_monitor
+            --formation production` on util01 shows one node as primary, or
+            as single while it is alone.
+    outputs:
+      primary_node_name: "{{ .node_tasks.failover_monitor_with_the_production_formation.primary_node_name }}"
+
+  # 2.
+  - id: update_each_replica
+    for_each_node: database_servers
+    as: database_server
+    when:
+      not: {equals: ["{{ .database_server }}", "{{ .outputs.read_which_database_server_is_the_primary.util01.primary_node_name }}"]}
+    on_node_failure: stop_run
+    fleet_stages:
+      - id: install_the_updates_of_the_replica
+        nodes: "{{ .database_server }}"
+        node_tasks:
+          # The alert pause of this server's turn. --for 75m: the longest the
+          # run waits for this server, plus a margin: database_server's
+          # pg_auto_failover node task, at most 20m, and its 30s wait for
+          # the monitor, twice (into and out of pg_auto_failover
+          # maintenance): 41m; the updates, about 15m on a small server
+          # (operating_procedures/add_a_server.md); the restarts of the
+          # services that use a replaced file, about 5m; the reboot's
+          # wait_at_most 10m; and 4m for the hub's acceptance and the stages'
+          # start. The updates and the restarts have no time limit on
+          # purpose: stopping apt halfway leaves a database server's
+          # packages broken. So their minutes are measured, not bounded.
+          # tests/alert_pauses_test.py checks the sum.
+          - task_block:
+              id: pause_the_alerts_of_the_replica
+              changes:
+                - id: hold_the_alerts_of_the_replica
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 75m --reason "update_database_servers"
+              on_failure:
+                - id: end_the_alert_pause_that_the_hub_does_not_know
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+          # In maintenance the primary doesn't wait for this replica, so a
+          # restart that a change of its settings needs interrupts no write.
+          - role: database_server
+            inputs:
+              set_up_the_server: false
+              pg_auto_failover_node_state: in_maintenance
+              restart_postgresql_for_new_settings: on_a_replica
+              private_ip: "{{ .vars.private_ip }}"
+              monitor_host_name: "{{ .inventory.nodes.util01.vars.private_ip }}"
+              is_staging_server: "{{ .vars.is_staging_server }}"
+              postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+              autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+              replication_password: "{{ .secrets.pg_auto_failover_replication_password }}"
+              apps: "{{ .vars.apps }}"
+          # When the updates or the restarts fail, the alert pause ends at
+          # once, so the server's alerts say what is wrong while the run
+          # reports the failure too.
+          - task_block:
+              id: install_the_updates_and_restart_what_uses_them
+              changes:
+                - id: install_every_update
+                  apt_package:
+                    upgrade_all_packages_within_their_version_rules: true
+                    also_remove_packages_no_longer_needed: true
+                # A reboot below restarts everything anyway.
+                - id: restart_each_service_that_uses_a_replaced_file
+                  shell:
+                    script: needrestart -r a
+                    skip_if_this_path_exists: /var/run/reboot-required
+              on_failure:
+                - id: end_the_alert_pause_after_the_failed_updates
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+          - id: reboot_when_an_update_asks_for_it
+            reboot:
+              run_only_if_this_path_exists: /var/run/reboot-required
+              wait_at_most: 10m
+      - id: end_the_maintenance_of_the_replica
+        nodes: "{{ .database_server }}"
+        node_tasks:
+          - role: database_server
+            inputs:
+              set_up_the_server: false
+              pg_auto_failover_node_state: present
+              restart_postgresql_for_new_settings: never
+              private_ip: "{{ .vars.private_ip }}"
+              monitor_host_name: "{{ .inventory.nodes.util01.vars.private_ip }}"
+              is_staging_server: "{{ .vars.is_staging_server }}"
+              postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+              autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+              replication_password: "{{ .secrets.pg_auto_failover_replication_password }}"
+              apps: "{{ .vars.apps }}"
+          # The server has caught up: its turn, and its alert pause, end.
+          - id: end_the_alert_pause_of_the_replica
+            shell:
+              script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+
+  # 3. MMX's modules wait for a settled formation but name no switchover
+  # target. show_the_database_servers_and_their_health selects the replica.
+  # show_the_database_servers_and_their_health fails if the formation is
+  # not settled, including when a replica remains in pg_auto_failover
+  # maintenance. So read_the_production_formation runs after step 2, which
+  # ends pg_auto_failover maintenance left by an interrupted run.
+  # Reading the formation before step 2 would stop every run after one that
+  # stopped with a replica in pg_auto_failover maintenance, before step 2
+  # could end the leftover maintenance.
+  - id: read_the_production_formation
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: install_the_program_that_shows_the_database_formation
+        file:
+          path: /usr/local/sbin/show_the_database_servers_and_their_health
+          source: roles/database_server/files/show_the_database_servers_and_their_health
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: production_formation
+        shell:
+          script: /usr/local/sbin/show_the_database_servers_and_their_health --monitor-data-directory "$MONITOR_DATA_DIRECTORY" --formation production
+          dryrun: /usr/local/sbin/show_the_database_servers_and_their_health --monitor-data-directory "$MONITOR_DATA_DIRECTORY" --formation production
+          run_as_user_account: postgres
+          env:
+            MONITOR_DATA_DIRECTORY: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_monitor"
+          changed_when: false
+    outputs:
+      switch_to_node_name: "{{ .node_tasks.production_formation.stdout_json.switch_to_node_name }}"
+
+  # 4. Every database server's alerts are paused for the switchover, as in
+  # switch_database_primary: without the pause, every switchover on test
+  # servers sent warnings that wake nobody, such as
+  # write_ahead_log_archiving/archived_within_5_minutes while the old
+  # primary restarted as a replica. The pause lasts the longest the run
+  # waits for the switchover, plus a margin: make_the_updated_replica_the_primary's
+  # time_limit of 20 minutes, one minute for each app's answer, and 2
+  # minutes for the hub's acceptance and the stages' start: 22 plus the
+  # number of apps. tests/alert_pauses_test.py checks the sum.
+  - id: pause_the_alerts_of_the_database_servers_for_the_switchover
+    nodes: database_servers
+    when:
+      not: {equals: ["{{ .outputs.read_the_production_formation.util01.switch_to_node_name }}", ""]}
+    on_node_failure: stop_run
+    node_tasks:
+      - task_block:
+          id: pause_the_alerts_of_the_database_server
+          changes:
+            - id: hold_the_alerts_of_the_database_server
+              shell:
+                script: |
+                  pause_minutes=$((22 + $(jq -n --argjson apps "$APPS" '$apps | length')))
+                  /usr/local/bin/mmwatchdog maintenance on --every-check-group --for "${pause_minutes}m" --reason "update_database_servers"
+                env:
+                  APPS: "{{ .vars.apps }}"
+          on_failure:
+            - id: end_the_alert_pause_that_the_hub_does_not_know
+              shell:
+                script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+
+  # pg_auto_failover_primary waits, at most five minutes each, for a
+  # settled formation before the switchover and until the old primary has
+  # caught up as a replica after it. A failed switchover stops the run, and
+  # the database servers' pause then ends with its own minutes, the time the
+  # run would have waited.
+  - id: switch_the_primary_to_an_updated_replica
+    nodes: util_server
+    when:
+      not: {equals: ["{{ .outputs.read_the_production_formation.util01.switch_to_node_name }}", ""]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: make_the_updated_replica_the_primary
+        pg_auto_failover_primary:
+          monitor_data_directory: "/var/lib/postgresql/{{ .vars.postgresql_major_version }}/pg_auto_failover_monitor"
+          formation: production
+          node_name: "{{ .outputs.read_the_production_formation.util01.switch_to_node_name }}"
+        time_limit: 20m
+      - id: wait_until_each_app_answers_through_its_public_host_name
+        loop: "{{ .vars.apps }}"
+        as: app
+        wait_for:
+          url_responds: "https://{{ .vars.public_host_names.production[.app.key] }}{{ .app.value.health_url_path }}"
+          expected_http_status_codes: [200]
+          wait_at_most: 60s
+
+  # The switchover's pause ends on every database server once each app
+  # answers again.
+  - id: end_the_alert_pause_of_the_switchover
+    nodes: database_servers
+    when:
+      not: {equals: ["{{ .outputs.read_the_production_formation.util01.switch_to_node_name }}", ""]}
+    node_tasks:
+      - id: end_the_maintenance_of_mmwatchdog
+        shell:
+          script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+
+  # 5. Enter pg_auto_failover maintenance only after a replica took over.
+  # db01 alone cannot enter pg_auto_failover maintenance.
+  - id: update_the_old_primary
+    for_each_node: database_servers
+    as: database_server
+    when:
+      equals: ["{{ .database_server }}", "{{ .outputs.read_which_database_server_is_the_primary.util01.primary_node_name }}"]
+    on_node_failure: stop_run
+    fleet_stages:
+      - id: install_the_updates_of_the_old_primary
+        nodes: "{{ .database_server }}"
+        node_tasks:
+          # The alert pause of this server's turn, as for a replica. --for 75m: the longest the
+          # run waits for this server, plus a margin: database_server's
+          # pg_auto_failover node task, at most 20m, and its 30s wait for
+          # the monitor, twice (into and out of pg_auto_failover
+          # maintenance): 41m; the updates, about 15m on a small server
+          # (operating_procedures/add_a_server.md); the restarts of the
+          # services that use a replaced file, about 5m; the reboot's
+          # wait_at_most 10m; and 4m for the hub's acceptance and the stages'
+          # start. The updates and the restarts have no time limit on
+          # purpose: stopping apt halfway leaves a database server's
+          # packages broken. So their minutes are measured, not bounded.
+          # tests/alert_pauses_test.py checks the sum.
+          - task_block:
+              id: pause_the_alerts_of_the_old_primary
+              changes:
+                - id: hold_the_alerts_of_the_old_primary
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 75m --reason "update_database_servers"
+              on_failure:
+                - id: end_the_alert_pause_that_the_hub_does_not_know
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+          # After the switchover, the old primary is a replica. As in step 2,
+          # put the old primary in pg_auto_failover maintenance and restart
+          # Postgres for settings that require a restart.
+          - id: put_the_old_primary_into_maintenance
+            when:
+              not: {equals: ["{{ .outputs.read_the_production_formation.util01.switch_to_node_name }}", ""]}
+            role: database_server
+            inputs:
+              set_up_the_server: false
+              pg_auto_failover_node_state: in_maintenance
+              restart_postgresql_for_new_settings: on_a_replica
+              private_ip: "{{ .vars.private_ip }}"
+              monitor_host_name: "{{ .inventory.nodes.util01.vars.private_ip }}"
+              is_staging_server: "{{ .vars.is_staging_server }}"
+              postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+              autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+              replication_password: "{{ .secrets.pg_auto_failover_replication_password }}"
+              apps: "{{ .vars.apps }}"
+          # db01 alone, with no replica to take over: a restart that a
+          # change of its settings needs is a few seconds of failed
+          # requests, in the team's weekly maintenance period.
+          - id: load_the_settings_of_the_only_database_server
+            when:
+              equals: ["{{ .outputs.read_the_production_formation.util01.switch_to_node_name }}", ""]
+            role: database_server
+            inputs:
+              set_up_the_server: false
+              pg_auto_failover_node_state: present
+              restart_postgresql_for_new_settings: on_a_replica_or_a_node_alone
+              private_ip: "{{ .vars.private_ip }}"
+              monitor_host_name: "{{ .inventory.nodes.util01.vars.private_ip }}"
+              is_staging_server: "{{ .vars.is_staging_server }}"
+              postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+              autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+              replication_password: "{{ .secrets.pg_auto_failover_replication_password }}"
+              apps: "{{ .vars.apps }}"
+          # When the updates or the restarts fail, the alert pause ends at
+          # once, so the server's alerts say what is wrong while the run
+          # reports the failure too.
+          - task_block:
+              id: install_the_updates_and_restart_what_uses_them
+              changes:
+                - id: install_every_update
+                  apt_package:
+                    upgrade_all_packages_within_their_version_rules: true
+                    also_remove_packages_no_longer_needed: true
+                # A reboot below restarts everything anyway.
+                - id: restart_each_service_that_uses_a_replaced_file
+                  shell:
+                    script: needrestart -r a
+                    skip_if_this_path_exists: /var/run/reboot-required
+              on_failure:
+                - id: end_the_alert_pause_after_the_failed_updates
+                  shell:
+                    script: /usr/local/bin/mmwatchdog maintenance off --every-check-group
+          - id: reboot_when_an_update_asks_for_it
+            reboot:
+              run_only_if_this_path_exists: /var/run/reboot-required
+              wait_at_most: 10m
+      - id: end_the_maintenance_of_the_old_primary
+        nodes: "{{ .database_server }}"
+        node_tasks:
+          - role: database_server
+            inputs:
+              set_up_the_server: false
+              pg_auto_failover_node_state: present
+              restart_postgresql_for_new_settings: never
+              private_ip: "{{ .vars.private_ip }}"
+              monitor_host_name: "{{ .inventory.nodes.util01.vars.private_ip }}"
+              is_staging_server: "{{ .vars.is_staging_server }}"
+              postgresql_major_version: "{{ .vars.postgresql_major_version }}"
+              autoctl_node_password: "{{ .secrets.pg_auto_failover_autoctl_node_password }}"
+              replication_password: "{{ .secrets.pg_auto_failover_replication_password }}"
+              apps: "{{ .vars.apps }}"
+          # The server has caught up: its turn, and its alert pause, end.
+          - id: end_the_alert_pause_of_the_old_primary
+            shell:
+              script: /usr/local/bin/mmwatchdog maintenance off --every-check-group

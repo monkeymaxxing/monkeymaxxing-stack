@@ -1,0 +1,85 @@
+{{- /*
+  An app's job container, as a Quadlet file: it runs the app's jobs_command,
+  on staging01, the app servers, and the jobs servers (roles/app_server and
+  roles/jobs_server). It reads the loop variable job_container (key: the
+  app's name; value: the image of the release it runs, which each role
+  picks) and the role input apps. An app whose jobs_command is "" has no
+  background jobs and no job container: the roles never render this file
+  for it. The app's jobs_connect_directly_to_postgres
+  says whether its jobs reach Postgres directly, with the database settings
+  direct to Postgres read last, or as the web containers do, through
+  PgBouncer once the environment connects through it.
+*/ -}}
+{{- $app_name := .job_container.key -}}
+{{- $app := index .inputs.apps $app_name -}}
+{{- if not (hasKey $app "jobs_command") }}{{ fail (printf "apps.%s in mmx_project_settings.yml has no jobs_command: add the command that starts the app's job worker, or \"\" for an app with no background jobs" $app_name) }}{{ end -}}
+{{- if eq $app.jobs_command "" }}{{ fail (printf "apps.%s has jobs_command \"\" (no background jobs), so it has no job container: the role that renders this file skips the app. This message means a role did not skip it." $app_name) }}{{ end -}}
+{{- if not (hasKey $app "jobs_connect_directly_to_postgres") }}{{ fail (printf "apps.%s in mmx_project_settings.yml has no jobs_connect_directly_to_postgres: add it, true or false" $app_name) }}{{ end -}}
+{{- $stop_seconds := 30 -}}
+{{- if hasKey $app "seconds_a_job_gets_to_finish_when_stopped" -}}{{- $stop_seconds = $app.seconds_a_job_gets_to_finish_when_stopped -}}{{- end -}}
+{{- if not (regexMatch "^[0-9]+$" (toString $stop_seconds)) }}{{ fail (printf "apps.%s.seconds_a_job_gets_to_finish_when_stopped is %v. Use a whole number of seconds from 10 to 3600, such as 30. Nothing changed." $app_name $stop_seconds) }}{{ end -}}
+{{- if or (lt (int $stop_seconds) 10) (gt (int $stop_seconds) 3600) }}{{ fail (printf "apps.%s.seconds_a_job_gets_to_finish_when_stopped is %v. Use a whole number of seconds from 10 to 3600. Below 10 seconds a worker cannot finish even a short job before the kill; above an hour a deploy would wait too long for one stuck job. Nothing changed." $app_name $stop_seconds) }}{{ end -}}
+# Managed by MMX from files_used_by_several_roles/jobs_container.container in the systems repository.
+[Unit]
+Description={{ $app_name }} job container
+
+[Container]
+ContainerName={{ $app_name }}-jobs
+Image={{ .job_container.value.image }}
+# The server's own network, as the web containers have.
+Network=host
+EnvironmentFile=/etc/{{ $app_name }}/{{ $app_name }}_settings.env
+EnvironmentFile=/etc/{{ $app_name }}/{{ $app_name }}.env
+{{- if $app.jobs_connect_directly_to_postgres }}
+# The app's jobs need a whole Postgres session, which PgBouncer's transaction
+# mode doesn't keep: this file's DATABASE_URL and DATABASE_READ_URL, at
+# Postgres's own port, win over the secrets file's.
+EnvironmentFile=/etc/{{ $app_name }}/{{ $app_name }}_database_direct_to_postgres.env
+{{- end }}
+Exec={{ $app.jobs_command }}
+LogDriver=journald
+# The container's file system is read-only: a file the app writes to its
+# own disk would vanish at the next deploy (each deploy starts a new
+# container and removes the old one), so the app fails at once instead,
+# in staging, with "read-only file system". Podman mounts /tmp, /run and
+# /dev as memory-backed temporary directories (ReadOnlyTmpfs). An app that
+# needs another scratch path lists it in its writable_temporary_directories
+# in mmx_project_settings.yml; each is a memory-backed directory too, empty
+# at every start and writable by any user (mode 1777, as /tmp is, because
+# the apps' images run as different users). Keep nothing there that must
+# last: use Postgres or object storage.
+ReadOnly=true
+ReadOnlyTmpfs=true
+{{- if hasKey $app "writable_temporary_directories" }}
+{{- range $app.writable_temporary_directories }}
+Tmpfs={{ . }}:mode=1777
+{{- end }}
+{{- end }}
+# Root inside the container is not root on the server. Podman picks an
+# unused, unprivileged range of user ids for this container (UserNS=auto,
+# from the containers range in /etc/subuid and /etc/subgid, which the
+# every_server role writes), and each container gets its own range. An
+# app that breaks out of its container is then a user that owns no file
+# and no process on the server. Together with the AppArmor profile below,
+# which makes a break-out harder, this makes one less harmful. Rootless
+# Podman is not used, because on Debian it refuses any AppArmor profile.
+UserNS=auto
+# The apps need no Linux capability: they listen on ports above 1024, and
+# a container on the server's own network shouldn't be able to change it.
+# With every capability dropped and no way to gain privileges, a
+# compromised app can't reconfigure the server's network or read files
+# that aren't mounted into it.
+DropCapability=all
+NoNewPrivileges=true
+# The every_server role loads the same confined profile for every app process.
+PodmanArgs=--security-opt=apparmor=monkeymaxxing-app-containers
+# The stop signal, then up to seconds_a_job_gets_to_finish_when_stopped (30
+# when the app sets none) for a worker to finish its current job; a job queue
+# in Postgres runs a job again whose worker did not finish.
+StopTimeout={{ int $stop_seconds }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

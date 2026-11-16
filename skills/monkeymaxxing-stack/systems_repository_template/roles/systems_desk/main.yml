@@ -1,0 +1,1117 @@
+# A person's systems desk. Production never applies every_server here.
+inputs:
+  # This desk's WireGuard address, from the inventory.
+  private_ip: {type: string, required: true}
+  wireguard_listen_port: {type: integer, required: true}   # from inventories/servers.yml
+  # Not passed: the shared notrack template names it, but a desk renders an include
+  # of a file that update-this-desks-wireguard-peers writes (the template says why).
+  inventory_nodes: {type: mapping, default: {}}
+  person_unix_username: {type: string, required: true}
+  mmwatchdog_release: {type: mapping, required: true}
+  allowed_laptops: {type: list, required: true}
+  systems_desk_laptop_addresses: {type: string, required: true}
+  mmx_release: {type: mapping, required: true}
+  mmhotline_release: {type: mapping, required: true}
+  set_up_outside_services_release: {type: mapping, required: true}
+  # From systems_desk_coding_agent in mmx_project_settings.yml: claude_code
+  # or codex, and the Codex release pinned in stack_software.codex.
+  systems_desk_coding_agent: {type: string, required: true}
+  codex_release: {type: mapping, required: true}
+  systems_repository: {type: mapping, required: true}
+  # The keys whose commit signatures Git on this desk accepts (files/allowed-signers).
+  root_ssh_public_keys: {type: list, required: true}
+  provider_api_url: {type: string, default: "https://api.hetzner.cloud/v1/"}
+  # From systems_desk_provider_api_authentication: token_in_a_header, where
+  # the API proxy adds the token on 127.0.0.1:8081, or
+  # ovhcloud_signed_requests, aws_signed_requests or
+  # google_cloud_service_account_tokens, where it signs the requests with the
+  # one credential file of every such value.
+  provider_api_authentication: {type: string, required: true}
+  # From phone_code_lockout in mmx_project_settings.yml: the numbers for
+  # fail2ban's jail (files/phone_code_jail.conf checks each value).
+  phone_code_lockout: {type: mapping, required: true}
+  # The shared update templates read these flags.
+  is_systems_desk: {type: boolean, default: true}
+  is_database_server: {type: boolean, default: false}
+  is_util_server: {type: boolean, default: false}
+node_tasks:
+  - id: check_the_systems_desk_coding_agent_setting
+    assert:
+      that:
+        any:
+          - {equals: ["{{ .inputs.systems_desk_coding_agent }}", claude_code]}
+          - {equals: ["{{ .inputs.systems_desk_coding_agent }}", codex]}
+      message: >-
+        systems_desk_coding_agent in mmx_project_settings.yml is
+        "{{ .inputs.systems_desk_coding_agent }}". It must be claude_code or
+        codex. Nothing changed.
+  - id: check_the_systems_desk_provider_api_authentication_setting
+    assert:
+      that:
+        any:
+          - {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+          - {equals: ["{{ .inputs.provider_api_authentication }}", ovhcloud_signed_requests]}
+          - {equals: ["{{ .inputs.provider_api_authentication }}", aws_signed_requests]}
+          - {equals: ["{{ .inputs.provider_api_authentication }}", google_cloud_service_account_tokens]}
+      message: >-
+        systems_desk_provider_api_authentication in mmx_project_settings.yml is
+        "{{ .inputs.provider_api_authentication }}". It must be token_in_a_header,
+        ovhcloud_signed_requests, aws_signed_requests or
+        google_cloud_service_account_tokens, as the provider guide says. Nothing changed.
+  # MMWatchdog's apt_security_updates reads this successful-refresh stamp.
+  # Debian does not write the stamp by default. The hook must exist before
+  # any package task can refresh apt's lists.
+  - id: write_the_successful_package_list_refresh_stamp_hook
+    file:
+      path: /etc/apt/apt.conf.d/15update-stamp
+      content: |
+        APT::Update::Post-Invoke-Success {"touch /var/lib/apt/periodic/update-success-stamp 2>/dev/null || true";};
+      owner: root
+      group: root
+      permissions_mode: "0644"
+
+  - id: install_the_desk_packages
+    apt_package:
+      packages:
+        - {name: git, version: newest_when_first_installed}
+        - {name: podman, version: newest_when_first_installed} # build and push app images without CI
+        - {name: uidmap, version: newest_when_first_installed} # rootless Podman user namespaces
+        - {name: passt, version: newest_when_first_installed}  # pasta, which rootless Podman needs for a container's network
+        - {name: aardvark-dns, version: newest_when_first_installed}  # name lookup on a podman network (a test database); Debian's podman only Recommends it
+        - {name: curl, version: newest_when_first_installed}   # account setup through native APIs
+        - {name: jq, version: newest_when_first_installed}   # server_management_scripts/run_mmx_on_util01 reads JSON
+        - {name: gitleaks, version: newest_when_first_installed} # the secret scan of secrets_in_the_vault_scoped_by_role
+        - {name: openssh-client, version: newest_when_first_installed}
+        - {name: socat, version: newest_when_first_installed}
+        - {name: ca-certificates, version: newest_when_first_installed}
+        - {name: sudo, version: newest_when_first_installed}
+        - {name: openssh-server, version: newest_when_first_installed}
+        - {name: libpam-google-authenticator, version: newest_when_first_installed}
+        - {name: libqrencode4, version: newest_when_first_installed}
+        - {name: oathtool, version: newest_when_first_installed}
+        - {name: fail2ban, version: newest_when_first_installed}
+        - {name: python3-systemd, version: newest_when_first_installed}
+        - {name: python3-yaml, version: newest_when_first_installed} # review-and-apply-the-systems-desk-settings reads the inventory
+        - {name: nftables, version: newest_when_first_installed}
+        # Phone codes depend on the clock: a desk clock that drifts locks the
+        # person out, so the desk keeps its own time sync, whatever the image has.
+        - {name: systemd-timesyncd, version: newest_when_first_installed}
+        - {name: wireguard-tools, version: newest_when_first_installed}
+        - {name: unattended-upgrades, version: newest_when_first_installed}
+        - {name: needrestart, version: newest_when_first_installed}
+        # gpg prints a vendor's apt signing key's fingerprint before the key
+        # enters a role (operating_procedures/add_or_update_a_program_from_outside_the_distribution.md).
+        - {name: gnupg, version: newest_when_first_installed}
+  # Earlier desks ran nginx for the API access, and, at a provider whose
+  # requests are signed, the same proxy under its earlier name,
+  # provider-api-signing-proxy.service. The API proxy (provider_api_proxy
+  # below) does that job now, so nginx goes, with its settings, and the
+  # earlier unit is stopped and deleted, before the proxy takes 127.0.0.1:8081
+  # and 8082. A desk without them changes nothing here. Reason for naming
+  # nginx-common: on Debian 12 and 13 the settings file /etc/nginx/nginx.conf
+  # belongs to nginx-common, which the package nginx pulls in, so purging
+  # nginx alone leaves it (seen on a real desk). Both Debian
+  # releases list no other nginx package among nginx's dependencies.
+  - id: stop_the_earlier_provider_api_signing_proxy_service
+    when: {path_exists: /etc/systemd/system/provider-api-signing-proxy.service}
+    systemd_service: {name: provider-api-signing-proxy, state: stopped, start_at_boot: false}
+  - when: {path_exists: /etc/systemd/system/provider-api-signing-proxy.service}
+    task_block:
+      id: remove_the_earlier_provider_api_signing_proxy_unit
+      changes:
+        - id: delete_the_earlier_provider_api_signing_proxy_unit_file
+          file: {path: /etc/systemd/system/provider-api-signing-proxy.service, state: absent}
+      activate:
+        - id: forget_the_earlier_provider_api_signing_proxy_unit
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+  - id: remove_nginx_which_the_api_proxy_replaced
+    apt_package:
+      packages: [{name: nginx}, {name: nginx-common}]
+      state: absent
+      also_delete_its_config_files: true
+  # What no package owns: the settings file the earlier role wrote, and the
+  # directories left empty. rmdir deletes only an empty directory, so a
+  # person's own files under /etc/nginx stay and keep the directory.
+  - id: delete_the_nginx_settings_file_the_earlier_role_wrote
+    file: {path: /etc/nginx/nginx.conf, state: absent}
+  - id: delete_the_empty_nginx_directories
+    shell:
+      script: rmdir /etc/nginx/sites-enabled /etc/nginx/sites-available /etc/nginx/snippets /etc/nginx/conf.d /etc/nginx 2>/dev/null || true
+      dryrun: 'true'
+      changed_when: false
+  - id: keep_the_desk_clock_synchronized
+    systemd_service: {name: systemd-timesyncd, state: running, start_at_boot: true}
+  - id: set_the_desk_name
+    hostname: {name: "{{ .node.name }}"}
+  # The desk's own name resolves, at Debian's address for the host's own
+  # name, so sudo does not print "unable to resolve host desk01". The
+  # provider's first boot wrote /etc/hosts with the name the desk was
+  # created with, and cloud-init no longer runs after the first boot.
+  - id: write_the_desk_name_into_the_hosts_file
+    file:
+      path: /etc/hosts
+      content: |
+        # Managed by MMX from roles/systems_desk/main.yml in the systems repository.
+        127.0.0.1 localhost
+        127.0.1.1 {{ .node.name }}
+        ::1 localhost ip6-localhost ip6-loopback
+        ff02::1 ip6-allnodes
+        ff02::2 ip6-allrouters
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: create_the_persons_account
+    user:
+      name: "{{ .inputs.person_unix_username }}"
+      create_home_directory: true
+      home: "/home/{{ .inputs.person_unix_username }}"
+      shell: /bin/bash
+  # The person administers their own desk; its private management key stays root-only.
+  - id: allow_the_person_to_manage_the_desk_as_root
+    file:
+      path: /etc/sudoers.d/systems-desk-person
+      content: "{{ .inputs.person_unix_username }} ALL=(ALL:ALL) NOPASSWD: ALL\n"
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -c -f "$NEW_FILE"
+          dryrun: visudo -c -f "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+  - id: protect_the_persons_home
+    directory:
+      path: "/home/{{ .inputs.person_unix_username }}"
+      owner: "{{ .inputs.person_unix_username }}"
+      group: "{{ .inputs.person_unix_username }}"
+      permissions_mode: "0700"
+  # The bootstrap copies the systems repository into the person's home as
+  # root, before the person's account exists. Make each such copy the
+  # person's own, so the person's commands and Git can write it.
+  - id: make_the_copied_systems_repository_the_persons_own
+    shell:
+      script: |
+        set -eu
+        changed=0
+        for settings in /home/"$PERSON"/*/mmx_project_settings.yml; do
+          [ -f "$settings" ] && [ ! -L "$settings" ] || continue
+          repository=${settings%/mmx_project_settings.yml}
+          if [ -n "$(find "$repository" -xdev ! -user "$PERSON" -print -quit)" ]; then
+            chown -R --no-dereference "$PERSON:$PERSON" -- "$repository"
+            printf 'Made %s the property of %s.\n' "$repository" "$PERSON"
+            changed=1
+          fi
+        done
+        [ "$changed" = 0 ] || exit 2
+      dryrun: |
+        for settings in /home/"$PERSON"/*/mmx_project_settings.yml; do
+          [ -f "$settings" ] || continue
+          repository=${settings%/mmx_project_settings.yml}
+          if [ -n "$(find "$repository" -xdev ! -user "$PERSON" -print -quit)" ]; then
+            printf 'would make %s the property of %s\n' "$repository" "$PERSON"; exit 2
+          fi
+        done
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+      env: {PERSON: "{{ .inputs.person_unix_username }}"}
+  - id: create_the_persons_ssh_directory
+    directory:
+      path: "/home/{{ .inputs.person_unix_username }}/.ssh"
+      owner: "{{ .inputs.person_unix_username }}"
+      group: "{{ .inputs.person_unix_username }}"
+      permissions_mode: "0700"
+  # install_the_buttons_vault_passphrase below writes
+  # /etc/systems-desk/vault-passphrase (root:servers-mmx 0640) from the
+  # person's own passphrase file. set-up-outside-services (personal-token server-provider,
+  # and cloudflare for the desk's Cloudflare token) writes each
+  # *-api-token.conf (root:root 0600), restarts the API proxy, and
+  # checks a request through it. Each token file contains only one line,
+  # which the proxy reads: proxy_set_header Authorization "Bearer TOKEN";
+  # For a provider whose requests are signed, such as OVHcloud, personal-token
+  # server-provider writes the API proxy's credential file instead
+  # (provider_api_proxy below).
+  - id: create_the_shared_ssh_socket_group
+    group: {name: desk-buttons}
+  - id: create_the_coding_agent_account
+    user:
+      name: coding-agent
+      create_home_directory: true
+      home: /home/coding-agent
+      shell: /bin/bash
+      supplementary_groups: [desk-buttons]
+      supplementary_groups_not_listed: remove
+  # Rootless Podman talks to the user's systemd (sd-bus) for a container's
+  # cgroup. coding-agent starts through sudo, with no login session, so
+  # without lingering every podman build RUN step failed with "sd-bus call:
+  # Permission denied". Lingering starts the user's systemd
+  # at boot and keeps it. MMX has no module for it: systemd_service starts
+  # a unit in a user's systemd and so turns lingering on, but this desk
+  # runs no unit there. The linger file is where loginctl records it.
+  - id: keep_the_coding_agents_user_session_running
+    shell:
+      script: |
+        [ -e /var/lib/systemd/linger/coding-agent ] && exit 0
+        loginctl enable-linger coding-agent
+        exit 2
+      dryrun: |
+        [ -e /var/lib/systemd/linger/coding-agent ] && exit 0
+        printf 'would run: loginctl enable-linger coding-agent\n'
+        exit 2
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+  - id: create_the_servers_mmx_account
+    user:
+      name: servers-mmx
+      create_home_directory: true
+      home: /var/lib/servers-mmx
+      shell: /usr/sbin/nologin
+      supplementary_groups: [desk-buttons]
+      supplementary_groups_not_listed: remove
+  - id: protect_the_mmx_execution_directory
+    directory: {path: /var/lib/servers-mmx, owner: servers-mmx, group: servers-mmx, permissions_mode: "0700"}
+  - id: create_the_buttons_settings_directory
+    directory: {path: /etc/systems-desk, owner: root, group: root, permissions_mode: "0755"}
+  - id: create_the_persons_production_key
+    ssh_key_pair:
+      for_user_account: "{{ .inputs.person_unix_username }}"
+      private_key_path: "/home/{{ .inputs.person_unix_username }}/.ssh/production_key"
+      key_type: ed25519
+  - id: publish_only_the_production_public_key
+    file:
+      path: /etc/systems-desk/production_key.pub
+      content: "{{ .node_tasks.create_the_persons_production_key.public_key }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: pin_the_systems_repository_remote
+    file:
+      path: /etc/systems-desk/repository-remote
+      content: "{{ .inputs.systems_repository.ssh_url }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: trust_the_git_hosts_verified_keys
+    file:
+      path: /etc/systems-desk/git-known-hosts
+      template: files/git-known-hosts
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: install_the_buttons_ssh_settings
+    file: {path: /etc/systems-desk/ssh.conf, source: files/ssh.conf, owner: root, group: root, permissions_mode: "0644"}
+  # Each login's SSH agent: the coding agent's relay socket, and the person's
+  # own agent, which signs the person's commits with the production key.
+  - id: install_the_login_profile_with_each_accounts_ssh_agent
+    file: {path: /etc/profile.d/desk-buttons.sh, template: files/desk-buttons-profile.sh, owner: root, group: root, permissions_mode: "0644"}
+  - id: install_the_coding_agent_git_settings
+    file: {path: /etc/systems-desk/coding-agent-gitconfig, source: files/coding-agent-gitconfig, owner: root, group: root, permissions_mode: "0644"}
+  # The one allowed signers file on the desk, which the person's repository
+  # (set-up-the-systems-repository) and the coding agent's Git settings
+  # name. Each desk review rewrites it from root_ssh_public_keys, so a desk
+  # that joins or leaves reaches it at this desk's next desk review.
+  - id: write_the_keys_whose_commit_signatures_git_accepts
+    file: {path: /etc/systems-desk/allowed-signers, template: files/allowed-signers, owner: root, group: root, permissions_mode: "0644"}
+  - id: install_the_repository_setup_command
+    file: {path: /usr/local/bin/set-up-coding-agent-repository, source: files/set-up-coding-agent-repository, owner: root, group: root, permissions_mode: "0755"}
+  - id: install_the_run_mmx_on_the_servers_command
+    file: {path: /usr/local/bin/run-mmx-on-the-servers, source: files/run-mmx-on-the-servers, owner: root, group: root, permissions_mode: "0755"}
+  # The person's desk review. It runs the desk playbook as root only after
+  # the person reviews what changed since the last desk review. Reason: an
+  # outside attacker who can push to the Git host must not get root on the
+  # desk that holds the person's production key, phone-code secret and
+  # tokens. Installed here, by a reviewed run, so a pushed change to it shows
+  # in the review before it applies.
+  - id: install_the_desk_review_command
+    file: {path: /usr/local/bin/review-and-apply-the-systems-desk-settings, source: files/review-and-apply-the-systems-desk-settings, owner: root, group: root, permissions_mode: "0755"}
+  # The person's one command that finishes the copied systems repository:
+  # Git, signing, origin, the vault, and the first push.
+  - id: install_the_repository_finishing_command
+    file: {path: /usr/local/bin/set-up-the-systems-repository, source: files/set-up-the-systems-repository, owner: root, group: root, permissions_mode: "0755"}
+  # The lock-out button runs as root on this desk and on every server. It
+  # runs only these copies, which this desk review installs, never the pushed
+  # ones. Reason: an outside attacker who can push to the Git host must not
+  # get root on this desk, or on every server, through the lock-out; a pushed
+  # change to the lock-out, or to a file it installs on the servers, reaches
+  # root only through the person's desk review. The pulled repository
+  # supplies only data, such as the inventory, whose servers the lock-out
+  # button shows the person at each press.
+  - id: install_the_lock_out_button
+    file: {path: /usr/local/bin/lock-everyone-out, source: files/lock-everyone-out, owner: root, group: root, permissions_mode: "0755"}
+  - id: create_the_reviewed_lock_out_copy_directories
+    loop: [playbooks, server_management_scripts, roles, roles/every_server, roles/every_server/files, roles/util_server, roles/util_server/files]
+    as: directory_name
+    directory:
+      path: "/usr/local/lib/systems-desk/lock-everyone-out/{{ .directory_name }}"
+      create_missing_parent_directories: true
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  - id: copy_the_reviewed_lock_out_playbook
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/playbooks/lock_everyone_out.yml, source: ../../playbooks/lock_everyone_out.yml, owner: root, group: root, permissions_mode: "0600"}
+  - id: copy_the_reviewed_first_lock_out_script
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/server_management_scripts/start_break_in_lockout.py, source: ../../server_management_scripts/start_break_in_lockout.py, owner: root, group: root, permissions_mode: "0600"}
+  # What the lock-out installs on the servers from outside its own roles:
+  # the servers' WireGuard peers, the triage user's sudo rules, which the
+  # undo restores, and MMHotline's settings, which the lock-out applies on
+  # util01 without the triage agent.
+  - id: copy_the_reviewed_files_the_lock_out_installs_on_the_servers
+    loop:
+      - {source: ../every_server/files/wireguard_wg0.conf, path: roles/every_server/files/wireguard_wg0.conf}
+      - {source: ../every_server/files/sudoers_triage, path: roles/every_server/files/sudoers_triage}
+      - {source: ../util_server/files/sudoers_triage_mmwatchdog_fleet_readings, path: roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings}
+      - {source: ../../mmhotline_settings.yml, path: mmhotline_settings.yml}
+    as: copy
+    file:
+      path: "/usr/local/lib/systems-desk/lock-everyone-out/{{ .copy.path }}"
+      source: "{{ .copy.source }}"
+      owner: root
+      group: root
+      permissions_mode: "0600"
+  # The evidence copy reads this desk's own logs as root, so it too runs
+  # only as this reviewed copy, with the reviewed SSH settings beside it.
+  - id: copy_the_reviewed_evidence_script
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/server_management_scripts/save_break_in_evidence.py, source: ../../server_management_scripts/save_break_in_evidence.py, owner: root, group: root, permissions_mode: "0600"}
+  - id: copy_the_reviewed_lock_out_roles_and_ssh_settings
+    loop:
+      - {source: ../everyone_locked_out, path: roles/everyone_locked_out}
+      - {source: ../systems_desk_lockout, path: roles/systems_desk_lockout}
+      # Works out each server's peers during the lock-out.
+      - {source: ../work_out_who_this_server_talks_to, path: roles/work_out_who_this_server_talks_to}
+      - {source: ../../ssh, path: ssh}
+    as: copy
+    directory:
+      path: "/usr/local/lib/systems-desk/lock-everyone-out/{{ .copy.path }}"
+      source: "{{ .copy.source }}"
+      also_delete_entries_not_in_source: true
+      owner: root
+      group: root
+      permissions_mode: "0700"
+      file_permissions_mode: "0600"
+  # The desk's WireGuard peers for the servers follow pushed main with
+  # nothing from the person: the coding agent runs this after each change to
+  # the inventory's servers. It runs as root, so it is installed here, by a
+  # reviewed run, and it reads the pushed inventory only as data.
+  - id: install_the_wireguard_peers_command
+    file: {path: /usr/local/bin/update-this-desks-wireguard-peers, source: files/update-this-desks-wireguard-peers, owner: root, group: root, permissions_mode: "0755"}
+  - id: allow_the_coding_agent_the_wireguard_peers_command_without_arguments
+    file:
+      path: /etc/sudoers.d/update-this-desks-wireguard-peers
+      content: "coding-agent ALL=(root) NOPASSWD: /usr/local/bin/update-this-desks-wireguard-peers \"\"\n"
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -c -f "$NEW_FILE"
+          dryrun: visudo -c -f "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+  - id: allow_only_the_mmx_button_through_sudo
+    file:
+      path: /etc/sudoers.d/servers-mmx
+      content: "coding-agent ALL=(servers-mmx) NOPASSWD: /usr/local/bin/run-mmx-on-the-servers *\n"
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -c -f "$NEW_FILE"
+          dryrun: visudo -c -f "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+  - task_block:
+      id: production_ssh_agent
+      changes:
+        - id: install_the_persistent_ssh_agent
+          file: {path: /etc/systemd/system/desk-ssh-agent.service, template: files/desk-ssh-agent.service, owner: root, group: root, permissions_mode: "0644"}
+        - id: install_the_shared_socket_relay
+          file: {path: /etc/systemd/system/desk-ssh-agent-relay.service, template: files/desk-ssh-agent-relay.service, owner: root, group: root, permissions_mode: "0644"}
+      activate:
+        - id: load_the_ssh_agent_units
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: start_the_persistent_ssh_agent
+          systemd_service: {name: desk-ssh-agent, state: running, start_at_boot: true, refresh: restart}
+        - id: start_the_shared_socket_relay
+          systemd_service: {name: desk-ssh-agent-relay, state: running, start_at_boot: true, refresh: restart}
+  # The coding agent's button and the lock-out button open the vault with
+  # a root-owned copy of the person's vault passphrase, which
+  # set-up-the-systems-repository makes. The copy follows the person's file,
+  # such as after a passphrase change. A desk serves one systems repository.
+  - id: install_the_buttons_vault_passphrase
+    shell:
+      script: |
+        set -eu
+        found=$(find "/home/$PERSON/.config/monkeymaxxing-stack" -maxdepth 1 -type f -user "$PERSON" -name '*_mmx_vault_passphrase' 2>/dev/null || true)
+        [ -n "$found" ] || exit 0
+        if [ "$(printf '%s\n' "$found" | wc -l)" != 1 ]; then
+          printf 'This desk has more than one vault passphrase in /home/%s/.config/monkeymaxxing-stack: %s. A desk serves one systems repository; move the other away.\n' "$PERSON" "$(printf '%s ' $found)" >&2
+          exit 1
+        fi
+        target=/etc/systems-desk/vault-passphrase
+        if cmp -s -- "$found" "$target" && [ "$(stat -c %U:%G:%a "$target")" = root:servers-mmx:640 ]; then exit 0; fi
+        install -o root -g servers-mmx -m 0640 -- "$found" "$target"
+        printf 'Installed the vault passphrase for the buttons as %s.\n' "$target"
+        exit 2
+      dryrun: |
+        found=$(find "/home/$PERSON/.config/monkeymaxxing-stack" -maxdepth 1 -type f -user "$PERSON" -name '*_mmx_vault_passphrase' 2>/dev/null || true)
+        [ -n "$found" ] || exit 0
+        target=/etc/systems-desk/vault-passphrase
+        if cmp -s -- "$found" "$target" && [ "$(stat -c %U:%G:%a "$target")" = root:servers-mmx:640 ]; then exit 0; fi
+        printf 'would install the vault passphrase for the buttons as %s\n' "$target"
+        exit 2
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+      env: {PERSON: "{{ .inputs.person_unix_username }}"}
+  - id: create_the_mmx_program_directory
+    directory:
+      path: /usr/local/lib/mmx
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_mmx_releases_directory
+    directory:
+      path: /usr/local/lib/mmx/releases
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: unpack_the_mmx_release
+    unpack_archive:
+      url: "{{ .inputs.mmx_release.download_url }}"
+      sha256: "{{ .inputs.mmx_release.sha256 }}"
+      path: "/usr/local/lib/mmx/releases/{{ .inputs.mmx_release.version }}"
+      unpack_without_wrapping_folder: true
+  - id: use_the_mmx_release_program
+    symlink:
+      path: /usr/local/bin/mmx
+      target: "/usr/local/lib/mmx/releases/{{ .inputs.mmx_release.version }}/mmx"
+
+  # The MMHotline program, for posting to the status page from the desk
+  # when util01 is down. No MMHotline server runs on the desk.
+  - id: create_the_mmhotline_program_directory
+    directory:
+      path: /usr/local/lib/mmhotline
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_mmhotline_releases_directory
+    directory:
+      path: /usr/local/lib/mmhotline/releases
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: unpack_the_mmhotline_release
+    unpack_archive:
+      url: "{{ .inputs.mmhotline_release.download_url }}"
+      sha256: "{{ .inputs.mmhotline_release.sha256 }}"
+      path: "/usr/local/lib/mmhotline/releases/{{ .inputs.mmhotline_release.version }}"
+      unpack_without_wrapping_folder: true
+  - id: use_the_mmhotline_release_program
+    symlink:
+      path: /usr/local/bin/mmhotline
+      target: "/usr/local/lib/mmhotline/releases/{{ .inputs.mmhotline_release.version }}/mmhotline"
+
+  # The Stack's command for the account and secret setup, which the person
+  # runs in their own terminal. It refuses to run as coding-agent.
+  - id: create_the_set_up_outside_services_program_directory
+    directory:
+      path: /usr/local/lib/set-up-outside-services
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_set_up_outside_services_releases_directory
+    directory:
+      path: /usr/local/lib/set-up-outside-services/releases
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: unpack_the_set_up_outside_services_release
+    unpack_archive:
+      url: "{{ .inputs.set_up_outside_services_release.download_url }}"
+      sha256: "{{ .inputs.set_up_outside_services_release.sha256 }}"
+      path: "/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outside_services_release.version }}"
+      unpack_without_wrapping_folder: true
+  - id: use_the_set_up_outside_services_release_program
+    symlink:
+      path: /usr/local/bin/set-up-outside-services
+      target: "/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outside_services_release.version }}/set-up-outside-services"
+  # The API proxy, the desk's one program between the coding agent
+  # and the outside APIs. On 127.0.0.1:8081 it adds the person's server
+  # provider token, or signs each request with the person's credential
+  # (provider_api_authentication other than token_in_a_header), and forwards
+  # the request to the provider's API address. On 127.0.0.1:8082 it adds the
+  # desk's Cloudflare token and forwards the request to Cloudflare's API.
+  # set-up-outside-services personal-token server-provider and cloudflare
+  # write the root-only files, root:root 0600, and restart the proxy. systemd
+  # runs the proxy under an account of its own (DynamicUser) and hands it a
+  # copy of each file that only that account reads (LoadCredential). Reason:
+  # the coding agent uses the tokens without reading them, so a mistake or a
+  # leak of its conversation never carries them. The unit names the release
+  # it runs and the provider's address, so a new release or address restarts
+  # the proxy.
+  - task_block:
+      id: provider_api_proxy
+      changes:
+        - id: install_the_provider_api_proxy_service
+          file: {path: /etc/systemd/system/provider-api-proxy.service, template: files/provider-api-proxy.service, owner: root, group: root, permissions_mode: "0644"}
+      activate:
+        - id: load_the_provider_api_proxy_service
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: restart_a_running_provider_api_proxy
+          systemd_service: {name: provider-api-proxy, state: do_not_start_or_stop, refresh: restart}
+  # The desk keeps only the provider credential that its setting uses.
+  # Reason: after a move to another provider, a working credential for the
+  # account the team left would otherwise stay on the desk, unused and
+  # forgotten. The person's token file gets the new provider's token from
+  # set-up-outside-services personal-token server-provider.
+  - id: remove_the_api_signing_credential_when_the_provider_takes_a_token_in_a_header
+    when: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+    file: {path: /etc/systems-desk/provider-api-signing-credential.json, state: absent}
+  - id: remove_the_provider_api_token_when_the_provider_signs_requests
+    when:
+      not: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+    file: {path: /etc/systems-desk/provider-api-token.conf, state: absent}
+  - id: protect_the_provider_api_signing_credential
+    when: {path_exists: /etc/systems-desk/provider-api-signing-credential.json}
+    file: {path: /etc/systems-desk/provider-api-signing-credential.json, owner: root, group: root, permissions_mode: "0600"}
+  - id: protect_provider_api_token_conf
+    when: {path_exists: /etc/systems-desk/provider-api-token.conf}
+    file: {path: /etc/systems-desk/provider-api-token.conf, owner: root, group: root, permissions_mode: "0600"}
+  - id: protect_cloudflare_api_token_conf
+    when: {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
+    file: {path: /etc/systems-desk/cloudflare-api-token.conf, owner: root, group: root, permissions_mode: "0600"}
+  # The proxy starts once every file its unit hands it exists: Cloudflare's,
+  # and the provider's token file or credential file. Missing files leave it
+  # stopped, so neither port answers without its token.
+  - id: keep_the_provider_api_proxy_stopped_until_its_files_are_ready
+    when:
+      not:
+        all:
+          - {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
+          - any:
+              - all:
+                  - {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+                  - {path_exists: /etc/systems-desk/provider-api-token.conf}
+              - all:
+                  - not: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+                  - {path_exists: /etc/systems-desk/provider-api-signing-credential.json}
+    systemd_service: {name: provider-api-proxy, state: stopped, start_at_boot: false}
+  - id: start_the_provider_api_proxy_when_its_files_are_ready
+    when:
+      all:
+        - {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
+        - any:
+            - all:
+                - {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+                - {path_exists: /etc/systems-desk/provider-api-token.conf}
+            - all:
+                - not: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+                - {path_exists: /etc/systems-desk/provider-api-signing-credential.json}
+    systemd_service: {name: provider-api-proxy, state: running, start_at_boot: true}
+  # The run fails when 127.0.0.1:8081 or 127.0.0.1:8082 is not served by the
+  # proxy, or is served by anything while a file is missing. Reason: a
+  # program that holds a port keeps running without the proxy, and systemd
+  # and MMX report the start as a success, so the coding agent would lose an
+  # API with nothing reported. It also fails while nginx runs or its
+  # settings file exists, so a desk review catches an nginx that the package
+  # removal above did not remove.
+  - id: check_which_program_serves_the_api_ports
+    shell:
+      script: |
+        set -eu
+        if systemctl is-active --quiet nginx.service || [ -e /etc/nginx/nginx.conf ]; then
+          printf 'nginx is still on this desk (running, or /etc/nginx/nginx.conf exists), but the API proxy serves 127.0.0.1:8081 and 127.0.0.1:8082 now. The package removal in this desk review did not remove it. Read this desk review'"'"'s output for remove_nginx_which_the_api_proxy_replaced, fix what it says, and run the desk review again.\n' >&2
+          exit 1
+        fi
+        expected=provider-api-proxy
+        [ -e /etc/systems-desk/cloudflare-api-token.conf ] || expected=
+        if [ "$AUTHENTICATION" = token_in_a_header ]; then
+          [ -e /etc/systems-desk/provider-api-token.conf ] || expected=
+        else
+          [ -e /etc/systems-desk/provider-api-signing-credential.json ] || expected=
+        fi
+        for _ in $(seq 30); do
+          listeners=$(ss -Hltnp 'sport = :8081 or sport = :8082')
+          if [ -z "$expected" ]; then
+            [ -n "$listeners" ] || exit 0
+          else
+            main_pid=$(systemctl show --property MainPID --value "$expected.service")
+            ports=$(printf '%s\n' "$listeners" | grep -c "pid=$main_pid," || true)
+            [ "$ports" -eq 2 ] && [ "$(printf '%s\n' "$listeners" | wc -l)" -eq 2 ] && exit 0
+          fi
+          sleep 1
+        done
+        if [ -z "$expected" ]; then
+          printf '127.0.0.1:8081 and 127.0.0.1:8082, where the coding agent reaches the server provider'"'"'s API and Cloudflare'"'"'s API, should have no program yet, because a token or credential file is missing (systems_desk_provider_api_authentication is %s), but after 30 seconds this program listens there: %s\n' "$AUTHENTICATION" "$listeners" >&2
+        else
+          printf '127.0.0.1:8081 and 127.0.0.1:8082, where the coding agent reaches the server provider'"'"'s API and Cloudflare'"'"'s API, should both be served by %s.service (systems_desk_provider_api_authentication is %s), but after 30 seconds the programs there are: %s\n' "$expected" "$AUTHENTICATION" "${listeners:-none}" >&2
+        fi
+        printf 'Run the desk review again. If this repeats, read: journalctl -u provider-api-proxy --since -10min\n' >&2
+        exit 1
+      dryrun: 'true'
+      changed_when: false
+      env: {AUTHENTICATION: "{{ .inputs.provider_api_authentication }}"}
+
+  # The coding agent that systems_desk_coding_agent picks. Claude Code comes
+  # from its apt repository and updates with the security updates. Codex has
+  # no apt repository, so the desk unpacks the release pinned in
+  # stack_software.codex, checked against its SHA-256, as util01 does for
+  # the triage agent (roles/util_server/main.yml), and links codex, its
+  # helper and rg into /usr/local/bin. An unpacked release takes about
+  # 520 MB, so earlier ones are deleted after the links move.
+  - id: add_the_claude_code_apt_repository
+    when: {equals: ["{{ .inputs.systems_desk_coding_agent }}", claude_code]}
+    apt_repository:
+      name: claude-code
+      uris: [https://downloads.claude.ai/claude-code/apt/stable]
+      suites: [stable]
+      components: [main]
+      signing_key_source: ../util_server/files/claude_code_apt_signing_key.asc
+  - id: install_claude_code_for_the_coding_agent
+    when: {equals: ["{{ .inputs.systems_desk_coding_agent }}", claude_code]}
+    apt_package:
+      packages: [{name: claude-code, version: newest_when_first_installed}]
+  - when: {equals: ["{{ .inputs.systems_desk_coding_agent }}", codex]}
+    task_block:
+      id: install_codex_for_the_coding_agent
+      changes:
+        - id: create_the_codex_releases_directory
+          directory:
+            path: /usr/local/lib/codex/releases
+            create_missing_parent_directories: true
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - id: unpack_the_codex_release
+          unpack_archive:
+            url: "{{ .inputs.codex_release.download_url }}"
+            sha256: "{{ .inputs.codex_release.sha256 }}"
+            path: "/usr/local/lib/codex/releases/{{ .inputs.codex_release.version }}"
+        - id: use_the_codex_release_programs
+          loop:
+            - {name: codex, in_release: bin/codex}
+            - {name: codex-code-mode-host, in_release: bin/codex-code-mode-host}
+            - {name: rg, in_release: codex-path/rg}
+          as: program
+          symlink:
+            path: "/usr/local/bin/{{ .program.name }}"
+            target: "/usr/local/lib/codex/releases/{{ .inputs.codex_release.version }}/{{ .program.in_release }}"
+        - id: delete_the_earlier_codex_releases
+          directory:
+            path: /usr/local/lib/codex/releases
+            owner: root
+            group: root
+            permissions_mode: "0755"
+            delete_everything_inside_except: ["{{ .inputs.codex_release.version }}"]
+  - id: install_the_command_that_starts_the_coding_agent
+    file: {path: /usr/local/bin/start-the-coding-agent, template: files/start-the-coding-agent, owner: root, group: root, permissions_mode: "0755"}
+  - id: add_the_superlogical_rex_apt_repository
+    apt_repository:
+      name: rex
+      uris: [https://pkgs.superlogical.com/rex/apt]
+      suites: [preview]
+      components: [main]
+      signing_key_url: https://pkgs.superlogical.com/rex/keys/rex-archive-keyring.gpg
+      # The marker at the end of the next line makes the weekly secret scan
+      # (gitleaks) skip the line: the SHA-256 of Rex's published signing key
+      # is public, not a secret.
+      signing_key_sha256: 07a92e758ac2fc189efa17c24bf3df70d75e4216f6c262283a5c812377deb83e # gitleaks:allow
+  # Debian's unrelated Perl package is also called rex. MMX writes apt
+  # preferences that allow only this version pattern, including on updates.
+  - id: install_superlogicals_rex_preview
+    apt_package:
+      packages: [{name: rex, version: "0.1.0~preview.*"}]
+  # Only the person's SSH phone-code door reaches Rex. Do not activate
+  # the package's shared account or its separate login server.
+  - id: stop_the_packaged_rex_socket
+    systemd_service: {name: rex.socket, state: stopped, start_at_boot: false}
+  - id: stop_the_packaged_rex_login_socket
+    systemd_service: {name: rex-login-server.socket, state: stopped, start_at_boot: false}
+  - id: stop_the_packaged_rex_service
+    systemd_service: {name: rex.service, state: stopped, start_at_boot: false}
+  - id: stop_the_packaged_rex_login_service
+    systemd_service: {name: rex-login-server.service, state: stopped, start_at_boot: false}
+  - task_block:
+      id: persistent_rex_sessions
+      changes:
+        - id: install_the_persons_rex_service
+          file: {path: /etc/systemd/system/rex-desk.service, template: files/rex-desk.service, owner: root, group: root, permissions_mode: "0644"}
+      activate:
+        - id: load_the_rex_desk_service
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: start_the_persons_rex_service
+          systemd_service: {name: rex-desk, state: running, start_at_boot: true, refresh: restart}
+  - id: allow_exactly_the_allowed_laptops_ssh_keys
+    file:
+      path: "/home/{{ .inputs.person_unix_username }}/.ssh/authorized_keys"
+      template: files/laptop_authorized_keys
+      owner: "{{ .inputs.person_unix_username }}"
+      group: "{{ .inputs.person_unix_username }}"
+      permissions_mode: "0600"
+  - id: create_the_root_owned_self_management_key
+    ssh_key_pair:
+      for_user_account: root
+      private_key_path: /root/.ssh/systems_desk_self_management_key
+      key_type: ed25519
+  - id: install_the_phone_code_setup_command
+    file:
+      path: /usr/local/bin/set-up-the-phone-code
+      template: files/set-up-the-phone-code
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # The person creates this file. MMX supplies no secret and never copies it.
+  # PAM updates its rate and reuse state, so preserve all existing content.
+  - id: keep_the_phone_code_and_its_live_state
+    when: {path_exists: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"}
+    file:
+      path: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"
+      content: ""
+      if_file_exists: keep_existing_content
+      owner: "{{ .inputs.person_unix_username }}"
+      group: "{{ .inputs.person_unix_username }}"
+      # 0400, the mode google-authenticator and PAM write, so a run after a
+      # login reports no change.
+      permissions_mode: "0400"
+  # The server peers that update-this-desks-wireguard-peers wrote, which
+  # wg0's file copies (files/wireguard_wg0.conf says why). Empty on a new
+  # desk until the Git host knows the desk's key.
+  - id: keep_a_file_for_this_desks_server_peers
+    file:
+      path: /etc/systems-desk/wireguard-server-peers.conf
+      content: ""
+      if_file_exists: keep_existing_content
+      owner: root
+      group: root
+      permissions_mode: "0600"
+  # Fill that file from pushed main before this run rewrites wg0, with the
+  # peers command's own fetch and checks and this run's reviewed laptops.
+  # Reason: on a desk from an earlier Stack version, or a rebuilt desk, the
+  # file is empty, and a wg0 without the server peers cuts this desk, which
+  # is also MMX's controller here, off from the servers; MMX then restores
+  # the old wg0 and fails the run. A server value the command refuses stops
+  # the run here, before wg0 changes. Before the Git host knows this desk's
+  # key, as at the bootstrap, the file stays as it is.
+  - id: write_this_desks_server_peers_from_pushed_main
+    shell:
+      script: exec /usr/local/bin/update-this-desks-wireguard-peers --only-write-the-server-peers-file "$ALLOWED_LAPTOPS"
+      dryrun: printf 'would write /etc/systems-desk/wireguard-server-peers.conf from the servers of pushed main\n'
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+      env: {ALLOWED_LAPTOPS: "{{ .inputs.allowed_laptops }}"}
+  - id: read_this_desks_server_peers
+    read_file: {path: /etc/systems-desk/wireguard-server-peers.conf, content_is_secret: false}
+  # WireGuard listens on wireguard_listen_port (inventories/servers.yml says
+  # why), and the outside world reaches it on UDP 443. The redirect and the
+  # desk firewall, which admits the real port, come before the
+  # wireguard_interface task below, which may change ListenPort: a peer that
+  # still sends to UDP 443 then never meets a closed port. The unit loads
+  # the redirect before wg-quick@wg0.service on every boot. The redirect is
+  # a table of its own, so it leaves the desk firewall's table alone.
+  - task_block:
+      id: wireguard_udp_443_redirect
+      changes:
+        # nftables is also installed with the desk's other packages above.
+        - id: write_the_udp_443_redirect
+          file:
+            path: /etc/wireguard/wireguard_udp_443_redirect.nft
+            template: ../../files_used_by_several_roles/wireguard_udp_443_redirect.nft
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: nft --check --file "$NEW_FILE"
+                dryrun: nft --check --file "$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+        # Servers and desks reach each other on WireGuard's own port with no
+        # connection tracking (the file says why). It lists the public address
+        # of every inventory node, so a new server or desk joins with an
+        # ordinary run: every_server, and each desk's next desk review.
+        # The addresses the desk skips tracking for: only
+        # update-this-desks-wireguard-peers writes the file, with the server
+        # peers (the template says why). Empty on a new desk, until it runs.
+        - id: keep_a_file_for_this_desks_notrack_addresses
+          file:
+            path: /etc/systems-desk/wireguard-notrack-addresses.nft
+            content: ""
+            if_file_exists: keep_existing_content
+            owner: root
+            group: root
+            permissions_mode: "0600"
+        - id: write_the_wireguard_notrack_table
+          file:
+            path: /etc/wireguard/wireguard_notrack_between_servers_and_desks.nft
+            template: ../../files_used_by_several_roles/wireguard_notrack_between_servers_and_desks.nft
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: nft --check --file "$NEW_FILE"
+                dryrun: nft --check --file "$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+        - id: install_the_udp_443_redirect_unit
+          systemd_unit:
+            name: wireguard-udp-443-redirect.service
+            template: ../../files_used_by_several_roles/wireguard_udp_443_redirect.service
+        # MMX applies a changed ListenPort live, with systemctl reload. Linux
+        # picks NAT only for a flow's first packet, so a peer's keepalive flow
+        # to UDP 443 that began before the redirect stays unredirected and never
+        # recovers (seen on test servers). Forgetting those flows lets the next packet be
+        # redirected.
+        - id: install_conntrack
+          apt_package:
+            packages:
+              - {name: conntrack, version: newest_when_first_installed}
+        - id: forget_udp_443_flows_after_a_port_change
+          systemd_unit:
+            name: wg-quick@wg0.service
+            drop_in: forget_udp_443_flows_after_a_port_change.conf
+            content: |
+              # Managed by MMX. After WireGuard starts or reloads, forget the old
+              # UDP 443 flows (a flow keeps the NAT choice of its first packet).
+              # The leading "-" ignores exit 1 when no flow exists.
+              [Service]
+              ExecStartPost=-/usr/sbin/conntrack -D -p udp --orig-port-dst 443
+              ExecReload=-/usr/sbin/conntrack -D -p udp --orig-port-dst 443
+      activate:
+        - id: reload_the_systemd_units_for_the_wireguard_drop_in
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: run_the_udp_443_redirect
+          systemd_service:
+            name: wireguard-udp-443-redirect.service
+            state: running
+            start_at_boot: true
+            refresh: restart
+  - task_block:
+      id: desk_firewall
+      changes:
+        - id: write_the_desk_firewall
+          file:
+            path: /etc/nftables.conf
+            template: files/firewall.nft
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: nft --check --file "$NEW_FILE"
+                dryrun: nft --check --file "$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+      activate:
+        - id: enable_the_desk_firewall
+          systemd_service: {name: nftables, state: running, start_at_boot: true, refresh: reload}
+  - id: join_the_wireguard_network
+    wireguard_interface:
+      name: wg0
+      template: files/wireguard_wg0.conf
+  - task_block:
+      id: turn_off_multicast_name_resolution
+      changes:
+        - id: create_the_resolver_settings_directory
+          directory: {path: /etc/systemd/resolved.conf.d, owner: root, group: root, permissions_mode: "0755"}
+        - id: turn_off_llmnr_and_multicast_dns
+          file:
+            path: /etc/systemd/resolved.conf.d/50-systems-desk.conf
+            content: |
+              [Resolve]
+              LLMNR=no
+              MulticastDNS=no
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      activate:
+        - id: restart_the_resolver_if_installed
+          when: {path_exists: /lib/systemd/system/systemd-resolved.service}
+          systemd_service: {name: systemd-resolved, state: running, refresh: restart}
+  - id: allow_only_the_self_management_key_for_root
+    authorized_keys:
+      for_user_account: root
+      keys: ["{{ .node_tasks.create_the_root_owned_self_management_key.public_key }}"]
+      keys_not_listed: remove
+      replace_options_of_listed_keys: true
+  - task_block:
+      id: phone_code_door
+      changes:
+        - id: write_the_phone_code_pam_policy
+          file: {path: /etc/pam.d/sshd, source: files/sshd_pam, owner: root, group: root, permissions_mode: "0644"}
+        - id: write_the_desk_sshd_policy
+          file: {path: /etc/ssh/sshd_config.d/00-systems-desk.conf, template: files/sshd.conf, owner: root, group: root, permissions_mode: "0644"}
+        - id: create_the_ssh_service_drop_in_directory
+          directory: {path: /etc/systemd/system/ssh.service.d, owner: root, group: root, permissions_mode: "0755"}
+        - id: start_ssh_after_wireguard
+          file:
+            path: /etc/systemd/system/ssh.service.d/wireguard.conf
+            content: |
+              [Unit]
+              Requires=wg-quick@wg0.service
+              After=wg-quick@wg0.service
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      validate:
+        - id: check_the_sshd_policy
+          shell: {script: sshd -t, dryrun: sshd -t, changed_when: false}
+      activate:
+        - id: reload_the_systemd_units
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: stop_socket_activation_of_ssh_if_installed
+          when: {path_exists: /lib/systemd/system/ssh.socket}
+          systemd_service: {name: ssh.socket, state: stopped, start_at_boot: false}
+        - id: reload_ssh_with_the_private_door
+          systemd_service: {name: ssh, state: running, start_at_boot: true, refresh: restart}
+  - task_block:
+      id: phone_code_ban
+      changes:
+        - id: write_the_phone_code_filter
+          file: {path: /etc/fail2ban/filter.d/systems-desk-phone-code.conf, template: files/phone_code_filter.conf, owner: root, group: root, permissions_mode: "0644"}
+        - id: write_the_phone_code_jail
+          file: {path: /etc/fail2ban/jail.d/systems-desk-phone-code.local, template: files/phone_code_jail.conf, owner: root, group: root, permissions_mode: "0644"}
+      validate:
+        - id: check_fail2ban_settings
+          shell: {script: fail2ban-client -t, dryrun: fail2ban-client -t, changed_when: false}
+      activate:
+        - id: start_the_phone_code_jail
+          systemd_service: {name: fail2ban, state: running, start_at_boot: true, refresh: restart}
+
+  - id: refresh_package_lists_and_upgrade_every_day
+    file:
+      path: /etc/apt/apt.conf.d/20auto-upgrades
+      content: |
+        APT::Periodic::Update-Package-Lists "1";
+        APT::Periodic::Unattended-Upgrade "1";
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: write_the_unattended_upgrades_settings
+    file:
+      path: /etc/apt/apt.conf.d/52unattended-upgrades-local
+      template: ../every_server/files/unattended_upgrades.conf
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  # needrestart restarts the services that still use an old library after an
+  # update. Debian does not install needrestart by default, so the package
+  # task above installs needrestart explicitly.
+  - id: create_the_needrestart_settings_directory
+    directory:
+      path: /etc/needrestart/conf.d
+      create_missing_parent_directories: true
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: write_when_needrestart_restarts_services
+    file:
+      path: /etc/needrestart/conf.d/50-monkeymaxxing-stack.conf
+      template: ../every_server/files/needrestart.conf
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  # A new server's image can be months old, with a hundred security updates
+  # waiting. The new server's first MMX run installs waiting security updates
+  # at once, using the update settings in files/unattended_upgrades.conf
+  # and the service restart policy in files/needrestart.conf.
+  # The first MMX run does not leave the security updates to the next
+  # morning's timer. The reboot that an update asks for comes in the operating
+  # procedure that adds the server, right after its setup
+  # (operating_procedures/add_a_server.md, step 7).
+  # time_limit 30m: a months-old image's hundred updates took 3 to 7
+  # minutes on Debian 13 on a small server, up to 15 on Ubuntu 26.04; 30
+  # leave room for a slow mirror and stop a run that hangs on the network.
+  - id: install_the_waiting_security_updates_on_a_new_server
+    time_limit: 30m
+    shell:
+      script: apt-get update && unattended-upgrade
+      dryrun: printf 'would install the waiting security updates, the first time only\n'
+      run_only_once_marker_file: /var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server
+  - id: run_the_daily_package_list_refresh
+    systemd_service:
+      name: apt-daily.timer
+      state: running
+      start_at_boot: true
+  - id: run_the_daily_unattended_upgrade
+    systemd_service:
+      name: apt-daily-upgrade.timer
+      state: running
+      start_at_boot: true
+
+  # Until a run of this desk playbook has finished once, the person has not
+  # had the chance to enroll the phone code, so a run only says how. A rerun
+  # of an unfinished first run, such as at the bootstrap, is still the first.
+  - id: show_the_first_login_phone_code_setup_command
+    when:
+      all:
+        - not: {path_exists: /etc/systems-desk/first-desk-playbook-run-finished}
+        - not: {path_exists: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"}
+    shell:
+      script: printf 'Log in as %s and run /usr/local/bin/set-up-the-phone-code to add your phone code. Until then, login needs only your allowed laptop key.\n' "$PERSON"
+      dryrun: printf 'The first login sets up the phone code with /usr/local/bin/set-up-the-phone-code.\n'
+      changed_when: false
+      env: {PERSON: "{{ .inputs.person_unix_username }}"}
+  # After the first finished run, a missing secret must never pass as setup:
+  # PAM's nullok would let the laptop key alone in.
+  - id: require_phone_code_enrollment_after_the_first_run
+    when:
+      all:
+        - {path_exists: /etc/systems-desk/first-desk-playbook-run-finished}
+        - not: {path_exists: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"}
+    assert:
+      that: false
+      message: >-
+        The phone code is missing. Log in as {{ .inputs.person_unix_username }} and run
+        /usr/local/bin/set-up-the-phone-code. Scan the QR code, save the
+        secret in your password manager, and confirm a code from your phone.
+
+  - id: create_the_mmwatchdog_group
+    group:
+      name: mmwatchdog
+      system: true
+  # MMWatchdog runs its shell checks as the mmwatchdog user account.
+  - id: create_the_mmwatchdog_check_account
+    user:
+      name: mmwatchdog
+      system: true
+      primary_group: mmwatchdog
+      home: /var/lib/mmwatchdog-checks
+      create_home_directory: false
+  - id: create_the_home_of_the_mmwatchdog_check_account
+    directory:
+      path: /var/lib/mmwatchdog-checks
+      owner: mmwatchdog
+      group: mmwatchdog
+      permissions_mode: "0700"
+  - id: create_the_mmwatchdog_program_directory
+    directory:
+      path: /usr/local/lib/mmwatchdog
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_mmwatchdog_releases_directory
+    directory:
+      path: /usr/local/lib/mmwatchdog/releases
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # MMWatchdog's modules of the project's own. The stack has none, and
+  # MMWatchdog needs /usr/local/lib/mmwatchdog/external_modules anyway.
+  - id: create_the_mmwatchdog_external_modules_directory
+    directory:
+      path: /usr/local/lib/mmwatchdog/external_modules
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: unpack_the_mmwatchdog_release
+    unpack_archive:
+      url: "{{ .inputs.mmwatchdog_release.download_url }}"
+      sha256: "{{ .inputs.mmwatchdog_release.sha256 }}"
+      path: "/usr/local/lib/mmwatchdog/releases/{{ .inputs.mmwatchdog_release.version }}"
+      unpack_without_wrapping_folder: true
+
+  - role: systems_desk_lockout
+  # The last task: the first run of this desk playbook finished, so later
+  # runs require the phone code (require_phone_code_enrollment_after_the_first_run).
+  - id: record_that_the_first_desk_playbook_run_finished
+    file:
+      path: /etc/systems-desk/first-desk-playbook-run-finished
+      content: "A run of the desk playbook finished on this desk. From now on each run requires the person's phone code.\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"

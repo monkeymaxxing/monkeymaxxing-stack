@@ -1,0 +1,12 @@
+{
+  "name": "monkeymaxxing-stack-node-app-files-tests",
+  "private": true,
+  "description": "Only for testing the .mjs files beside it. An app copies the .mjs files it needs, never this file.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "pg": "8.23.1"
+  }
+}

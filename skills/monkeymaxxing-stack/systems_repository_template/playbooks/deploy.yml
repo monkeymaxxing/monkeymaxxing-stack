@@ -1,0 +1,325 @@
+# Deploys the image tags that deployed_image_tags in inventories/servers.yml
+# names for one environment: start the new release beside the old one, then
+# switch (Kamal's pattern). util01 runs deploy when the environment's app
+# servers run image tags different from deployed_image_tags for the
+# environment. After a deploy of the environment fails, util01 runs deploy
+# again after correcting the cause; the coding agent chooses the retry:
+#
+#   ./server_management_scripts/run_mmx_on_util01 run deploy --var environment_name=production
+#   ./server_management_scripts/run_mmx_on_util01 run deploy --var environment_name=staging
+#
+# A rollback is a commit of the previous tag, which runs deploy's steps 1
+# to 7 below. The previous image remains on an app server until the weekly
+# cleanup removes unused images made more than 7 days ago
+# (files_used_by_several_roles/podman_image_cleanup.service).
+#
+# The steps, on the environment's app servers (app_servers for production,
+# staging01 for staging), and on production's jobs servers once it has them:
+#   1. Find each app's live web container on each server, and the free port
+#      for the app's new web container. Check that each server has memory
+#      for one more copy of the server's live web containers. A server
+#      without enough memory stops the deploy before image pulls,
+#      migrations, or changes to running containers.
+#   2. Pull the new images, on the jobs servers too. Nothing changes for
+#      users.
+#   3. Run each app's migrations, once, on the first app server.
+#   4. Start the new web containers beside the old ones, on the free ports,
+#      with the previous release's asset files too, so pages rendered before
+#      the switch can still load the asset files. Wait until every new web
+#      container's health URL returns HTTP 200. A new web container that
+#      fails is removed, users stay on the old web containers, and the run
+#      fails with the reason.
+#   5. Record the new web containers as the live ones, then switch every
+#      Caddy of the environment to them at once: staging01's, or
+#      production's on the app servers and the load-balancer servers.
+#   6. Stop the old web containers, each with 30 seconds to finish its
+#      requests; then the job containers change to the new release, on the
+#      jobs servers once the app servers are done.
+#   7. Check each app through its public host name, the way users reach it.
+command_line_vars:
+  environment_name:                         # production or staging
+    type: string
+  # Step 1's memory check stops a deploy on a server that lacks memory for
+  # the running release and the release being deployed. The rollback of a
+  # release that uses more memory than the release should, as a release
+  # that leaks memory does, can then go ahead without the memory check.
+  # The person must review the memory check's available and needed memory
+  # numbers.
+  # The person must explicitly approve running the rollback without the
+  # memory check:
+  #
+  #   ./server_management_scripts/run_mmx_on_util01 run deploy --var environment_name=production --var skip_the_memory_check=true
+  skip_the_memory_check:
+    type: boolean
+    default: false
+
+fleet_stages:
+  # 1. find_the_live_and_new_web_ports finds each app's live web container
+  # and the free port for the new web container on each server, as
+  # every_server does. Every later step uses the live and new web container
+  # records in live_web_containers and new_web_containers.
+  - id: find_the_live_and_new_web_ports
+    nodes: "{{ .vars.app_server_group_of_environment[.vars.environment_name] }}"
+    node_tasks:
+      - id: install_the_program_that_finds_the_live_web_ports
+        file:
+          path: /usr/local/sbin/find_live_web_ports
+          source: roles/app_server/files/find_live_web_ports
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: find_the_live_and_new_web_ports
+        shell:
+          script: /usr/local/sbin/find_live_web_ports
+          dryrun: /usr/local/sbin/find_live_web_ports
+          env:
+            APPS: "{{ .vars.apps }}"
+            DEPLOYED_IMAGE_TAGS: "{{ .vars.deployed_image_tags[.vars.environment_name] }}"
+          changed_when: false
+    outputs:
+      private_ip: "{{ .vars.private_ip }}"
+      live_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.live_web_containers }}"
+      new_web_containers: "{{ .node_tasks.find_the_live_and_new_web_ports.stdout_json.new_web_containers }}"
+
+  # 1, continued. For the minute of the switch, each server runs the running release's
+  # and the new release's web containers together. Before image pulls,
+  # migrations, or changes to running containers, each server must have
+  # memory available for another copy of the live web containers at current
+  # use. An additional tenth of the server's memory covers growth during
+  # the deploy, including container warm-up, jobs, Postgres on staging01,
+  # and the programs' file cache.
+  # check_that_each_app_server_has_memory_for_the_new_release installs
+  # roles/app_server/files/check_memory_for_the_new_release, just as
+  # find_the_live_and_new_web_ports installs find_live_web_ports. A server
+  # without memory for the additional containers and the spare tenth stops
+  # the run at check_that_each_app_server_has_memory_for_the_new_release.
+  # The failure says what memory the server lacks and names the operating
+  # procedure: another app server, or a bigger server. The outputs give each
+  # server's numbers, which
+  # ./server_management_scripts/run_mmx_on_util01 results --fleet-stage check_that_each_app_server_has_memory_for_the_new_release
+  # shows.
+  - id: check_that_each_app_server_has_memory_for_the_new_release
+    nodes: "{{ .vars.app_server_group_of_environment[.vars.environment_name] }}"
+    when: {not: "{{ .vars.skip_the_memory_check }}"}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: install_the_program_that_checks_memory_for_the_new_release
+        file:
+          path: /usr/local/sbin/check_memory_for_the_new_release
+          source: roles/app_server/files/check_memory_for_the_new_release
+          owner: root
+          group: root
+          permissions_mode: "0755"
+      - id: check_memory_for_the_new_release
+        shell:
+          script: /usr/local/sbin/check_memory_for_the_new_release
+          dryrun: /usr/local/sbin/check_memory_for_the_new_release
+          env:
+            LIVE_WEB_CONTAINERS: "{{ .outputs.find_the_live_and_new_web_ports[.node.name].live_web_containers }}"
+          changed_when: false
+    outputs:
+      memory_available_mib: "{{ .node_tasks.check_memory_for_the_new_release.stdout_json.memory_available_mib }}"
+      memory_needed_mib: "{{ .node_tasks.check_memory_for_the_new_release.stdout_json.memory_needed_mib }}"
+      live_web_containers_mib: "{{ .node_tasks.check_memory_for_the_new_release.stdout_json.live_web_containers_mib }}"
+      margin_mib: "{{ .node_tasks.check_memory_for_the_new_release.stdout_json.margin_mib }}"
+
+  # 2. A server that can't pull stops the deploy before migrations or
+  # changes to running containers.
+  - id: pull_the_new_images
+    nodes: "{{ .vars.app_server_group_of_environment[.vars.environment_name] }}"
+    node_tasks:
+      - id: pull_the_new_image_of_each_app
+        loop: "{{ .vars.apps }}"
+        as: app
+        podman_image:
+          image: "{{ .outputs.find_the_live_and_new_web_ports[.node.name].new_web_containers[.app.key].image }}"
+          pull_image: when_missing
+          registry_username: "{{ .vars.container_registry_read_only_username }}"
+          registry_password: "{{ .secrets.container_registry_read_only_token }}"
+
+  # Production's jobs servers are added by
+  # operating_procedures/add_jobs_servers.md. Jobs servers run production's
+  # job containers, so jobs servers pull the app images selected for the new
+  # web containers. A jobs server that can't pull stops the deploy at
+  # pull_the_new_images_on_the_jobs_servers, before migrations or changes to
+  # running containers.
+  - id: pull_the_new_images_on_the_jobs_servers
+    nodes: jobs_servers
+    skip_when_no_nodes_are_selected: true     # before the first jobs server
+    when: {equals: ["{{ .vars.environment_name }}", production]}
+    on_node_failure: stop_run
+    node_tasks:
+      - id: pull_the_new_image_of_each_app
+        when: {not: {equals: ["{{ .app.value.jobs_command }}", ""]}}     # an app with no jobs has no job container here
+        loop: "{{ .vars.apps }}"
+        as: app
+        podman_image:
+          image: "{{ .outputs.find_the_live_and_new_web_ports[.inventory.groups.app_servers[0]].new_web_containers[.app.key].image }}"
+          pull_image: when_missing
+          registry_username: "{{ .vars.container_registry_read_only_username }}"
+          registry_password: "{{ .secrets.container_registry_read_only_token }}"
+
+  # 3. A one-off container of the new image runs each app's migration
+  # command, on the first app server of the environment. The migrations keep
+  # the running release working (expand, then contract). Each statement
+  # waits at most 5 seconds for a table lock and fails if the lock remains
+  # unavailable (roles/app_server/files/run_app_migrations). A migration
+  # that would hold up live requests therefore stops the deploy at
+  # run_the_migrations, before the switch.
+  - id: run_the_migrations
+    nodes: "{{ .inventory.groups[.vars.app_server_group_of_environment[.vars.environment_name]][0] }}"
+    requires:
+      all_nodes: [pull_the_new_images]
+    node_tasks:
+      - id: run_the_migrations_of_each_app
+        loop: "{{ .vars.apps }}"
+        as: app
+        shell:
+          # set -f: the command's words are split, never expanded as file names.
+          script: set -f; /usr/local/sbin/run_app_migrations "$APP_NAME" "$IMAGE" $MIGRATION_COMMAND
+          env:
+            APP_NAME: "{{ .app.key }}"
+            IMAGE: "{{ .outputs.find_the_live_and_new_web_ports[.node.name].new_web_containers[.app.key].image }}"
+            MIGRATION_COMMAND: "{{ .app.value.migration_command }}"
+
+  # 4. Every app server at once. The app_server role starts each app's new
+  # web container on the free port and waits for its health URL; one that
+  # fails is removed again on its server. Caddy still sends every request to
+  # the old web containers.
+  - id: start_the_new_release_beside_the_old
+    nodes: "{{ .vars.app_server_group_of_environment[.vars.environment_name] }}"
+    requires:
+      all_nodes: [run_the_migrations]
+    node_tasks:
+      - role: app_server
+        inputs:
+          set_up_the_server: false
+          release_step: start_the_new_release_beside_the_old
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names[.vars.environment_name] }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+
+  # 5. Only when every new web container is healthy, two stages. First each
+  # app server records the new port as the live one, the one every Caddy is
+  # about to send its requests to; the next run's
+  # find_the_live_and_new_web_ports reads it.
+  - id: record_the_new_release_as_the_live_one
+    nodes: "{{ .vars.app_server_group_of_environment[.vars.environment_name] }}"
+    requires:
+      all_nodes: [start_the_new_release_beside_the_old]
+    node_tasks:
+      - role: app_server
+        inputs:
+          set_up_the_server: false
+          release_step: send_requests_to_the_new_release
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names[.vars.environment_name] }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+
+  # Then every Caddy of the environment lists the new web containers and
+  # reloads, at once: staging01's for staging; for production, the
+  # load-balancer servers', and the app servers' while they run Caddy (the
+  # tunnel_connector_and_caddy role changes Caddy only where Caddy runs).
+  # A reload drops no connection, so the old and new releases overlap for a
+  # second or two. A Caddy that can't switch stops the run at
+  # send_requests_to_the_new_release.
+  # The old web containers keep running for every Caddy still using the old
+  # ports; the next every_server run brings every Caddy to the recorded live
+  # ports.
+  - id: send_requests_to_the_new_release
+    nodes: "{{ .vars.groups_that_run_caddy_of_environment[.vars.environment_name] }}"
+    requires:
+      all_nodes: [record_the_new_release_as_the_live_one]
+    on_node_failure: stop_run
+    node_tasks:
+      - role: tunnel_connector_and_caddy
+        inputs:
+          send_app_requests_to_the_status_page: "{{ .vars.send_app_requests_to_the_status_page }}"
+          status_page_host_name: "{{ .vars.status_page_host_name }}"
+          set_up_the_server: false
+          requests_go_to_the_new_release: true
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names[.vars.environment_name] }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports }}"
+
+  # When a new web container failed on any server, there is no switch.
+  # remove_the_new_release_where_there_was_no_switch removes the healthy new
+  # web containers on servers that didn't record the new containers as live.
+  # Users stay on the old release, and the run fails with the reason from
+  # step 4.
+  - id: remove_the_new_release_where_there_was_no_switch
+    nodes: "{{ .vars.app_server_group_of_environment[.vars.environment_name] }}"
+    when:
+      not: {equals: ["{{ .fleet_stages.record_the_new_release_as_the_live_one[.node.name].status }}", succeeded]}
+    node_tasks:
+      - role: app_server
+        inputs:
+          set_up_the_server: false
+          release_step: keep_the_running_release
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names[.vars.environment_name] }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+
+  # 6. Only when every Caddy switched (send_requests_to_the_new_release
+  # stops the run otherwise): the old web containers stop, and each app's
+  # job container restarts on the new release.
+  - id: stop_the_old_release
+    nodes: "{{ .vars.app_server_group_of_environment[.vars.environment_name] }}"
+    requires:
+      all_nodes: [record_the_new_release_as_the_live_one]
+    node_tasks:
+      - role: app_server
+        inputs:
+          set_up_the_server: false
+          release_step: stop_the_old_release
+          apps: "{{ .vars.apps }}"
+          public_host_names: "{{ .vars.public_host_names[.vars.environment_name] }}"
+          app_servers_of_the_environment: "{{ .outputs.find_the_live_and_new_web_ports }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+
+  # 6, on production's jobs servers, added by
+  # operating_procedures/add_jobs_servers.md and configured by
+  # roles/jobs_server: only when every app server stopped its old web
+  # containers, each job container changes to the new release, one jobs
+  # server at a time. With two or more jobs servers, the remaining jobs
+  # servers keep taking jobs during each restart.
+  - id: change_the_job_containers_on_the_jobs_servers
+    nodes: jobs_servers
+    skip_when_no_nodes_are_selected: true     # before the first jobs server
+    when: {equals: ["{{ .vars.environment_name }}", production]}
+    max_nodes_at_once: 1
+    on_node_failure: stop_fleet_stage
+    requires:
+      all_nodes: [stop_the_old_release]
+    node_tasks:
+      - role: jobs_server
+        inputs:
+          set_up_the_server: false
+          apps: "{{ .vars.apps }}"
+          job_containers: "{{ .outputs.find_the_live_and_new_web_ports[.inventory.groups.app_servers[0]].new_web_containers }}"
+          container_registry_username: "{{ .vars.container_registry_read_only_username }}"
+          container_registry_password: "{{ .secrets.container_registry_read_only_token }}"
+
+  # 7. Through DNS, Cloudflare, the tunnel, and Caddy, as a user's request
+  # goes. On staging, Cloudflare Access lets the health URL through without
+  # a login, so check_each_app_through_its_public_host_name reaches the
+  # health URL.
+  - id: check_each_app_through_its_public_host_name
+    nodes: "{{ .inventory.groups[.vars.app_server_group_of_environment[.vars.environment_name]][0] }}"
+    requires:
+      all_nodes: [stop_the_old_release]
+    node_tasks:
+      - id: wait_until_each_app_answers_through_its_public_host_name
+        loop: "{{ .vars.apps }}"
+        as: app
+        wait_for:
+          url_responds: "https://{{ .vars.public_host_names[.vars.environment_name][.app.key] }}{{ .app.value.health_url_path }}"
+          expected_http_status_codes: [200]
+          wait_at_most: 60s

@@ -1,0 +1,59 @@
+# Follow operating_procedures/move_a_database_into_the_stack.md first.
+# One fleet stage switches a self-hosted source, the other a source behind a
+# relay: database_moving_in.through_relay, true or false, chooses before the
+# run starts. Only the relay's fleet stage reads
+# database_moving_in_relay_admin_password. MMX needs no secret of a
+# top-level fleet stage whose when is false on every server it selects, from
+# the servers' vars, so a self-hosted move needs no
+# relay password. Keep both fleet stages at the top level and their when on
+# vars only: inside a loop, or with a when that reads a fact, a secret or an
+# output, MMX would ask for the relay password before every switch.
+fleet_stages:
+  - id: validate_database_moving_in
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: require_a_database_moving_in
+        assert:
+          that: {not: {equals: ["{{ .vars.database_moving_in }}", {}]}}
+          message: Set database_moving_in in inventories/servers.yml before moving a database.
+      - role: validate_database_moving_in
+        inputs:
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          private_ip_ranges: "{{ .vars.private_ip_ranges }}"
+          wireguard_network: "{{ .vars.wireguard_network }}"
+          database_servers: "{{ .inventory.groups.database_servers }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+          apps: "{{ .vars.apps }}"
+          apps_connect_through_pgbouncer: "{{ .vars.apps_connect_through_pgbouncer.production }}"
+  - id: switch_to_the_database_moving_in
+    nodes: database_servers
+    when:
+      all:
+        - not: {equals: ["{{ .vars.database_moving_in }}", {}]}
+        - equals: ["{{ .vars.database_moving_in.through_relay }}", false]
+    on_node_failure: stop_run
+    node_tasks:
+      - role: move_database_into_the_stack
+        inputs:
+          action: switch
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          apps: "{{ .vars.apps }}"
+          replication_password: "{{ .secrets.database_moving_in_replication_password }}"
+          superuser_password: "{{ .secrets.database_moving_in_superuser_password }}"
+  - id: switch_to_the_database_moving_in_through_relay
+    nodes: database_servers
+    when:
+      all:
+        - not: {equals: ["{{ .vars.database_moving_in }}", {}]}
+        - equals: ["{{ .vars.database_moving_in.through_relay }}", true]
+    on_node_failure: stop_run
+    node_tasks:
+      - role: move_database_into_the_stack
+        inputs:
+          action: switch_through_relay
+          database_moving_in: "{{ .vars.database_moving_in }}"
+          apps: "{{ .vars.apps }}"
+          replication_password: "{{ .secrets.database_moving_in_replication_password }}"
+          superuser_password: "{{ .secrets.database_moving_in_superuser_password }}"
+          relay_admin_password: "{{ .secrets.database_moving_in_relay_admin_password }}"

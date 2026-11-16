@@ -1,0 +1,436 @@
+#!/usr/bin/python3
+"""Review and apply this systems desk's settings: run playbooks/systems_desk.yml as root, after
+the person reviews what changed in the desk playbook since their last review.
+
+The coding agent pushes to main, and the desk playbook applies main as root on
+the desk that holds the person's production key, phone-code secret and
+tokens. So this command compares what the desk playbook would do now with what
+the person last reviewed, and asks the person, in the person's own
+terminal, only when something changed. The record of the last reviewed
+desk playbook is root-only on this desk, outside the coding agent's reach.
+
+What the desk playbook reads, and so what is compared, comes from MMX itself:
+`mmx explain systems_desk --json` lists every node task of the run with its
+resolved arguments and the rendered text of each template. To that this
+command adds the files that tasks copy without rendering (file.source and
+similar), the inventory's connection settings of the nodes the run
+connects to, and the SSH settings and known-hosts files those name, because
+OpenSSH runs commands from SSH settings. Line numbers and where each value
+came from are left out, so moving a line or editing an unrelated setting
+asks nothing.
+
+The review also shows and records the keys in the project settings that
+the lock-out button's undo lets in on every server, because the lock-out
+button compares the pulled settings with that record.
+
+Run it from your systems repository, as yourself:
+    review-and-apply-the-systems-desk-settings [--only-fleet-stages systems_desk]
+"""
+import datetime
+import difflib
+import hashlib
+import json
+import os
+from pathlib import Path
+import pwd
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+
+INSTALLED_PATH = '/usr/local/bin/review-and-apply-the-systems-desk-settings'
+MMX = '/usr/local/bin/mmx'
+GIT = '/usr/bin/git'
+RUNUSER = '/usr/sbin/runuser'
+# The person's private agent socket: root may use it, and the desk playbook
+# reads util01's join code through it.
+PRIVATE_AGENT_SOCKET = '/run/desk-ssh-agent/private.sock'
+# Root-only, so the coding agent can neither read nor change what the
+# person reviewed.
+RECORD_DIRECTORY = Path('/var/lib/systems-desk/reviewed-desk-refresh')
+PLAYBOOK = 'systems_desk'
+ACCOUNTS_THAT_ARE_NOT_A_PERSON = {'root', 'coding-agent', 'servers-mmx'}
+# Inventory fields that MMX's explain output does not show, but that decide
+# how MMX connects to a node. Files they name are shown by content.
+CONNECTION_FILE_FIELDS = ('ssh_config', 'ssh_known_hosts')
+# Files the review does not show. ssh/known_hosts gains a line with every
+# server added, so showing it would make each new server a change to review,
+# and the desk review should be rare. A host key line only says which key to
+# trust for a server: it runs no command and lets nobody in. The lock-out
+# button takes it from the pull as data for the same reason.
+FILES_NOT_SHOWN = {'ssh/known_hosts'}
+# The project settings that the lock-out button installs on every server as
+# SSH keys when everyone_locked_out_except_desk is removed, the undo: root's
+# authorized keys, and the triage user's key, which MMHotline also takes as
+# the triage agent's commit signing key. The lock-out press itself lets in
+# only the key of the desk that keeps access. The servers' keys and addresses
+# in the inventory the lock-out button shows at each press.
+SETTINGS_THE_BUTTON_LETS_IN = ('root_ssh_public_keys', 'triage_ssh_public_key')
+
+
+class Stop(Exception):
+    """A reason to stop before anything ran. Nothing was recorded."""
+
+
+def visible(text):
+    """Shows control and invisible characters as escapes, so a pushed file
+    cannot move the cursor, recolor, or hide a line in the review."""
+    out = []
+    for character in text:
+        if character.isprintable():
+            out.append(character)
+        elif character == '\t':
+            out.append('\\t')
+        else:
+            out.append('\\u%04x' % ord(character) if ord(character) > 0xff else '\\x%02x' % ord(character))
+    return ''.join(out)
+
+
+def block(text, indent='    | '):
+    return [indent + visible(line) for line in text.split('\n')]
+
+
+def value_lines(field, value):
+    """A value as lines. YAML values that JSON lacks, such as dates, are
+    shown as text."""
+    field = visible(str(field))
+    if isinstance(value, str) and '\n' in value:
+        return ['  %s:' % field] + block(value)
+    if isinstance(value, (dict, list)) and value:
+        rendered = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, default=str)
+        return ['  %s:' % field] + ['    ' + visible(line) for line in rendered.split('\n')]
+    return ['  %s: %s' % (field, visible(json.dumps(value, ensure_ascii=False, default=str)))]
+
+
+def inside(repository, path):
+    """The path, with every symbolic link followed, if it stays inside the
+    repository. MMX reads the target, and a target outside the repository
+    could change after the review."""
+    resolved = path.resolve()
+    if resolved != repository and repository not in resolved.parents:
+        raise Stop('%s points outside the systems repository, to %s. The desk playbook reads only files inside '
+                   'the repository, so remove that link. Nothing ran.' % (path.relative_to(repository), resolved))
+    return resolved
+
+
+def file_lines(repository, path):
+    resolved = inside(repository, path)
+    name = shown_name(repository, path)
+    if name in FILES_NOT_SHOWN:
+        return []
+    if resolved.is_dir():
+        lines = []
+        for child in sorted(resolved.rglob('*')):
+            if child.is_file() or child.is_symlink():
+                lines += file_lines(repository, path/child.relative_to(resolved))
+        return lines
+    data = resolved.read_bytes()
+    try:
+        return ['File %s:' % name] + block(data.decode('utf-8'))
+    except UnicodeDecodeError:
+        return ['File %s: binary, %d bytes, sha256 %s' % (name, len(data), hashlib.sha256(data).hexdigest())]
+
+
+def shown_name(repository, path):
+    return os.path.normpath(path.relative_to(repository).as_posix())
+
+
+def referenced_files(repository, task):
+    """Repository files a task copies as they are, named by an argument
+    such as file.source or apt_repository.signing_key_source. A template's
+    rendered text is already in the explain output, so templates are
+    skipped. Other arguments, such as a service named ssh, name no file."""
+    rendered = {template['field'] for template in task.get('rendered_templates', [])}
+    bases = [repository]
+    source = task.get('source', {}).get('file')
+    if source:
+        bases.insert(0, (repository/source).parent)
+    for argument in task.get('arguments', []):
+        value = argument.get('value')
+        last = argument['field'].rsplit('.', 1)[-1]
+        if not any(word in last for word in ('source', 'template', 'file')):
+            continue
+        if (argument['field'] in rendered or not isinstance(value, str) or not value or '\n' in value
+                or value.startswith('/') or '{{' in value or len(value) > 1024):
+            continue
+        for base in bases:
+            candidate = base/value
+            if (candidate.exists() or candidate.is_symlink()) and candidate.resolve() != repository:
+                yield candidate
+                break
+
+
+def refuse_ssh_settings_includes(repository, path):
+    """Stops the desk review when the desk's SSH settings file has an Include
+    line. OpenSSH reads an included file only when root or the user running
+    ssh owns it, and root runs the desk playbook, so an included file in the
+    person's repository never works there; a root-owned file outside the
+    repository could change after the review. The settings belong in the
+    file itself, which the review shows."""
+    for number, line in enumerate(inside(repository, path).read_text(errors='replace').split('\n'), 1):
+        if re.match(r'\s*include(\s*=|\s)', line, re.IGNORECASE):
+            raise Stop('%s, line %d, has an Include line. The desk playbook takes its SSH settings only from that file, '
+                       'so your review sees every setting: put the included settings into %s itself and remove the '
+                       'Include line. Nothing ran.' % (shown_name(repository, path), number, shown_name(repository, path)))
+
+
+def desk_run_view(repository, explain, inventory):
+    """Everything the desk playbook does, one line per fact, in a stable order."""
+    lines = []
+    files = {}
+    nodes = []
+    for path in ['mmx_project_settings.yml', 'inventories', 'playbooks/%s.yml' % PLAYBOOK]:
+        inside(repository, repository/path)
+    for stage in explain['fleet_stages']:
+        lines.append('Fleet stage %s on %s, selected by %s' % (
+            visible(stage['path']), visible(', '.join(stage['nodes'])), visible(json.dumps(stage['selection']))))
+        nodes += [node for node in stage['nodes'] if node not in nodes]
+        for task in stage['node_tasks']:
+            source = task.get('source', {}).get('file')
+            if source:
+                inside(repository, repository/source)
+            module = 'external_modules/' + task['action']
+            if (repository/module).exists():
+                files[module] = file_lines(repository, repository/module)
+            lines.append('Task %s on %s: %s, %s' % tuple(visible(task.get(key, '')) for key in ('path', 'node', 'action', 'status')))
+            for argument in task.get('arguments', []) + task.get('timing', []):
+                lines += value_lines(argument['field'], argument.get('value'))
+            for template in task.get('rendered_templates', []):
+                if 'text' in template:
+                    lines += ['  %s renders as:' % visible(template['field'])] + block(template['text'])
+                else:
+                    lines.append('  %s does not render: %s' % (visible(template['field']), visible(template.get('not_rendered_because', ''))))
+            for path in referenced_files(repository, task):
+                files[shown_name(repository, path)] = file_lines(repository, path)
+    for node in nodes:
+        settings = {key: value for key, value in (inventory.get('nodes', {}).get(node) or {}).items() if key != 'vars'}
+        lines.append('Connection settings of %s in the inventory' % visible(node))
+        for key in sorted(settings):
+            lines += value_lines(key, settings[key])
+            value = settings[key]
+            if key in CONNECTION_FILE_FIELDS and isinstance(value, str) and not value.startswith('/'):
+                path = repository/value
+                if path.exists() or path.is_symlink():
+                    files[shown_name(repository, path)] = file_lines(repository, path)
+                if key == 'ssh_config' and path.is_file():
+                    refuse_ssh_settings_includes(repository, path)
+    for name in sorted(files):
+        lines += files[name]
+    return lines
+
+
+def lock_out_button_keys_view(settings):
+    """The keys of SETTINGS_THE_BUTTON_LETS_IN in the project settings, one
+    line each, sorted, so a reordered list is no change."""
+    variables = settings.get('vars') or {}
+    lines = ['Keys in mmx_project_settings.yml that the lock-out button lets in']
+    for name in SETTINGS_THE_BUTTON_LETS_IN:
+        value = variables.get(name)
+        values = value if isinstance(value, list) else [value]
+        lines += sorted('  %s: %s' % (name, visible(item if isinstance(item, str) else json.dumps(item, default=str)))
+                        for item in values)
+    return lines
+
+
+def changes(old, new):
+    """A unified diff whose hunks name the task or file they are in."""
+    def header(lines, start, end):
+        """The task, file or server the change is in: a header line the
+        change adds or removes, else the one above the change."""
+        for line in lines[start:end] + list(reversed(lines[:start + 1])):
+            if not line.startswith(' '):
+                return line
+        return '(start)'
+    out = []
+    matcher = difflib.SequenceMatcher(a=old, b=new, autojunk=False)
+    for group in matcher.get_grouped_opcodes(3):
+        tag, i1, i2, j1, j2 = next(opcode for opcode in group if opcode[0] != 'equal')
+        out.append('@@ ' + (header(new, j1, j2) if tag != 'delete' else header(old, i1, i2)))
+        for tag, i1, i2, j1, j2 in group:
+            if tag == 'equal':
+                out += ['  ' + line for line in old[i1:i2]]
+            if tag in ('replace', 'delete'):
+                out += ['- ' + line for line in old[i1:i2]]
+            if tag in ('replace', 'insert'):
+                out += ['+ ' + line for line in new[j1:j2]]
+    return out
+
+
+def find_repository(start):
+    for directory in [start, *start.parents]:
+        if (directory/'mmx_project_settings.yml').is_file():
+            return directory
+    raise Stop('Run review-and-apply-the-systems-desk-settings from your systems repository on this desk, '
+               'for example after cd ~/example_systems. Nothing ran.')
+
+
+def run_as(person, home, arguments, repository):
+    return subprocess.run([RUNUSER, '-u', person, '--', *arguments], cwd=repository, text=True, capture_output=True,
+                          env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': home, 'LANG': 'C.UTF-8'})
+
+
+def current_commit(person, home, repository):
+    head = run_as(person, home, [GIT, 'rev-parse', 'HEAD'], repository)
+    if head.returncode:
+        return 'no commit yet'
+    status = run_as(person, home, [GIT, 'status', '--porcelain'], repository)
+    return head.stdout.strip() + (' plus uncommitted changes' if status.stdout.strip() else '')
+
+
+# The longest the pull from the Git host may take. Reason: long enough for a
+# slow Git host; short, because the lock-out button goes on without the pull,
+# and a break-in must not wait for the Git host.
+PULL_TIME_LIMIT_SECONDS = 30
+
+
+def pull_main_as_the_person(person, repository):
+    """git pull --ff-only origin main, as the person, in the person's
+    repository, with the person's own Git settings and SSH agent. Returns
+    whether the pull worked, and one plain sentence that says what happened
+    or what is in the way."""
+    home = pwd.getpwnam(person).pw_dir
+    if run_as(person, home, [GIT, 'remote', 'get-url', 'origin'], repository).returncode:
+        return True, 'Your systems repository has no origin remote yet, so there is nothing to pull.'
+    pulled = run_as(person, home, ['timeout', '--kill-after=5', str(PULL_TIME_LIMIT_SECONDS), GIT, 'pull', '--ff-only',
+                                   '--quiet', 'origin', 'main'], repository)
+    if pulled.returncode == 0:
+        return True, 'Pulled main from the Git host: your repository is at %s.' % current_commit(person, home, repository)
+    said = ' '.join((pulled.stderr or pulled.stdout).split())[:400] or 'no message'
+    if pulled.returncode in (124, 137):
+        cause = 'the Git host did not answer within %d seconds' % PULL_TIME_LIMIT_SECONDS
+    else:
+        cause = 'git said: %s' % visible(said)
+    return False, 'The pull of main from the Git host did not work (%s).' % cause
+
+
+def read_record(name='desk_run_view'):
+    """The recorded view, desk_run_view or lock_out_button_keys_view, and
+    the commit it was reviewed at."""
+    try:
+        return ((RECORD_DIRECTORY/name).read_text().split('\n'),
+                (RECORD_DIRECTORY/'commit').read_text().strip())
+    except FileNotFoundError:
+        return None, None
+
+
+def write_record(view, commit, keys_view):
+    RECORD_DIRECTORY.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chown(RECORD_DIRECTORY, 0, 0)
+    RECORD_DIRECTORY.chmod(0o700)
+    now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+    for name, text in [('desk_run_view', '\n'.join(view)), ('lock_out_button_keys_view', '\n'.join(keys_view)),
+                       ('commit', '%s, reviewed %s\n' % (commit, now))]:
+        with tempfile.NamedTemporaryFile('w', dir=RECORD_DIRECTORY, delete=False) as out:
+            out.write(text)
+        os.chmod(out.name, 0o600)
+        os.replace(out.name, RECORD_DIRECTORY/name)
+
+
+def ask_the_person(question):
+    """Reads the answer from the terminal of the person who ran this
+    command, never from a pipe: only the person types into that terminal."""
+    try:
+        # Unbuffered: a terminal cannot seek, which a buffered read-write file needs.
+        terminal = open('/dev/tty', 'rb+', buffering=0)
+    except OSError:
+        raise Stop('review-and-apply-the-systems-desk-settings asks you a question, so run it in your own desk terminal. Nothing ran.')
+    with terminal:
+        terminal.write(question.encode())
+        return terminal.readline().decode(errors='replace').strip()
+
+
+def show(lines):
+    if sys.stdout.isatty():
+        colors = {'@': '36', '-': '31', '+': '32'}
+        lines = ['\033[%sm%s\033[0m' % (colors[line[0]], line) if line[:1] in colors else line for line in lines]
+    text = '\n'.join(lines) + '\n'
+    rows = shutil.get_terminal_size((80, 24)).lines
+    if sys.stdout.isatty() and len(lines) > rows - 8 and shutil.which('less'):
+        # LESSSECURE turns off less's shell commands and file opening.
+        subprocess.run(['less', '-R', '-F', '-X'], input=text, text=True, env={'LESSSECURE': '1', 'PATH': '/usr/bin:/bin'})
+    else:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+
+def review(view, commit):
+    """True when the person agreed to run this view, or nothing changed."""
+    old, old_commit = read_record()
+    if old == view:
+        print('What the desk playbook does is the same as at your last desk review (%s). Running it now.' % old_commit, flush=True)
+        return True
+    if old is None:
+        print('This desk has no desk review yet, so there is nothing to compare with.')
+        print('This desk review records what the desk playbook does at %s as reviewed. Later desk reviews show only what changed.' % commit)
+        print('If this desk replaces another desk, check the recent commits on main with your team first.')
+        answer = ask_the_person('Type yes to run the desk playbook and record it as reviewed, or press Enter to stop: ')
+        return answer.lower() == 'yes'
+    diff = changes(old, view)
+    print('What the desk playbook does changed since your last desk review (%s).' % old_commit)
+    print('This desk review runs as root on this desk, where your production key, phone-code secret and tokens are.')
+    print('Anyone who can push to your Git host could change it, so read each change before you agree;')
+    print('your coding agent explains each change it pushed.')
+    print('Lines with - are what the desk playbook did at your last review; lines with + are what this run would do.')
+    print('Each @@ line names the task or file the change is in.')
+    print(flush=True)
+    show(diff)
+    removed = sum(1 for line in diff if line.startswith('- '))
+    added = sum(1 for line in diff if line.startswith('+ '))
+    print('%d lines removed and %d added. If a change is not one you expect, stop and ask your team' % (removed, added))
+    print('or your coding agent what it is for, before you run it.')
+    answer = ask_the_person('Type yes to run the changed desk playbook as root, or press Enter to stop: ')
+    return answer.lower() == 'yes'
+
+
+def main(arguments):
+    only = []
+    if arguments[:1] == ['--only-fleet-stages'] and len(arguments) == 2 and re.fullmatch(r'[a-z0-9_]+(,[a-z0-9_]+)*', arguments[1]):
+        only = arguments
+    elif arguments:
+        raise Stop('Usage: review-and-apply-the-systems-desk-settings [--only-fleet-stages systems_desk]. Nothing ran.')
+    if os.geteuid() != 0:
+        os.execv('/usr/bin/sudo', ['sudo', '--', INSTALLED_PATH, *arguments])
+    person = os.environ.get('SUDO_USER', '')
+    if not person or person in ACCOUNTS_THAT_ARE_NOT_A_PERSON:
+        raise Stop('Run review-and-apply-the-systems-desk-settings as yourself, without sudo, from your systems repository. Nothing ran.')
+    account = pwd.getpwnam(person)
+    repository = find_repository(Path.cwd().resolve())
+    for path in [repository, repository/'mmx_project_settings.yml']:
+        if path.stat().st_uid != account.pw_uid:
+            raise Stop('%s does not belong to %s. Run review-and-apply-the-systems-desk-settings from your own systems repository. '
+                       'Nothing ran.' % (path, person))
+    pulled, reason = pull_main_as_the_person(person, repository)
+    print(reason, flush=True)
+    if not pulled:
+        # Nothing about a desk review is urgent, so it reviews only what is
+        # pushed; the lock-out button goes on instead.
+        raise Stop('Stopped before the review. Pull main yourself, or ask your coding agent why the pull did not work, '
+                   'then run review-and-apply-the-systems-desk-settings again. Nothing ran.')
+    import yaml  # python3-yaml, which the desk role installs
+    desk = socket.gethostname()
+    explained = run_as(person, account.pw_dir, [MMX, 'explain', PLAYBOOK, '--var', 'desk_name=' + desk, '--json'], repository)
+    if explained.returncode:
+        raise Stop('mmx explain could not read the desk playbook:\n%s\nNothing ran.' % explained.stderr.strip())
+    settings = yaml.safe_load((repository/'mmx_project_settings.yml').read_text()) or {}
+    inventory_path = repository/'inventories'/(str(settings.get('default_inventory', '')) + '.yml')
+    inventory = yaml.safe_load(inside(repository, inventory_path).read_text()) or {}
+    keys_view = lock_out_button_keys_view(settings)
+    view = desk_run_view(repository, json.loads(explained.stdout), inventory) + keys_view
+    commit = current_commit(person, account.pw_dir, repository)
+    if not review(view, commit):
+        raise Stop('Stopped. Nothing ran, and nothing was recorded.')
+    write_record(view, commit, keys_view)
+    command = [MMX, 'run', PLAYBOOK, '--var', 'desk_name=' + desk, *only, '--connection', 'ssh_only']
+    print(' '.join(command), flush=True)
+    os.chdir(repository)
+    os.execve(MMX, command, {**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+
+
+if __name__ == '__main__':
+    try:
+        main(sys.argv[1:])
+    except Stop as stop:
+        print(stop, file=sys.stderr)
+        sys.exit(1)

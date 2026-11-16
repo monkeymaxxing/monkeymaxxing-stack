@@ -1,0 +1,32 @@
+{
+  "name": "portal-from-firebase",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node web.mjs",
+    "web": "node web.mjs",
+    "migrate": "node database.mjs",
+    "jobs": "node jobs_runner.mjs",
+    "seed-test-data": "node seed_test_data.mjs",
+    "test": "node --test tests/rehearsal.test.mjs",
+    "test:password": "node --test tests/firebase_password.test.mjs",
+    "verify-export": "node scripts/verify_export.mjs",
+    "import-firebase": "node scripts/import_firebase.mjs",
+    "import-objects": "node scripts/import_objects.mjs",
+    "test:staging": "node --test tests/staging.test.mjs",
+    "export-firebase": "node scripts/export_firebase.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.922.0",
+    "bcryptjs": "3.0.3",
+    "express": "5.3.0",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "firebase-admin": "14.5.0"
+  }
+}

@@ -1,0 +1,94 @@
+{{- /*
+  MMWatchdog's check groups for the load-balancer servers, lb01 and lb02, a
+  later step (operating_procedures/add_load_balancer_servers.md, "Adding load-balancer servers"). This file is an MMX
+  template: MMX renders it on each load-balancer server into
+  /etc/mmwatchdog/check_groups/load_balancer_servers.yml. It reads the role
+  inputs apps and public_host_names (production's), and the server's own
+  facts.
+
+  Cloudflare decides by itself how to split the requests between the two
+  tunnel connectors, and may send every request to one connector, so either
+  load-balancer server may have to carry every request alone. Both
+  load-balancer servers are checked the same way: each server's capacity,
+  and whether the server could take every request at once.
+*/ -}}
+{{- /* The interface of the default route carries the users' requests. */ -}}
+{{- $public_interface := "" -}}
+{{- range .node.network.default_routes -}}{{- if and (eq .family "ipv4") (eq $public_interface "") -}}{{- $public_interface = .interface -}}{{- end -}}{{- end -}}
+# Managed by MMX from mmwatchdog_checks/load_balancer_servers.yml in the systems repository.
+# To be woken for a check, set that check's alert_severity to sos. warn tells
+# a person during the day; sos wakes the person on call, which a small team
+# turns on check by check. The checks a careful team raises first: the
+# backups, write-ahead log archiving, and the restore drill. Each value below
+# has its reason beside it; change a value only with a reason of your own.
+check_groups:
+  # Each reading covers the 5 minutes since the one before; a warning goes
+  # out after 15 minutes past a limit.
+  load_balancer_server_capacity:
+    check_every: 5m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 15m
+    recovered_after_healthy_for: 5m
+    checks:
+      # Operating procedure: bigger load-balancer servers, each replaced in
+      # turn. Each load-balancer server may carry every request alone, so
+      # the CPU warning limit is 70% used: every pool keeps at least 30% of
+      # CPU unused for more work.
+      cpu_is_below_70_percent:
+        node_resource: cpu
+        fail_when_measurement_above:
+          cpu_used_percent: 70
+        alert_severity: warn
+      # Operating procedure: bigger load-balancer servers with a faster
+      # network port, each replaced in turn. Every request Cloudflare cannot
+      # answer from the cache passes the load-balancer server's network
+      # port. The fixed 600 Mbit/s limit
+      # assumes a 1 Gbit/s port, the usual port of a rented server:
+      # 600 Mbit/s is 60% of 1 Gbit/s.
+      network_is_below_60_percent_of_the_port:
+        node_network_interface: {{ $public_interface }}
+        fail_when_measurement_above:
+          received_mbit_per_second: 600
+          sent_mbit_per_second: 600
+        alert_severity: warn
+
+  # Whether the load-balancer server running MMWatchdog can forward requests
+  # now: the server's tunnel connector holds a connection to Cloudflare.
+  # Caddy on the checked load-balancer server reaches a healthy web container
+  # of each app. A spare load-balancer server that fails the checks is found
+  # before the spare is needed.
+  #
+  # The tunnel connector and Caddy checks warn because a healthy remaining
+  # load-balancer server can carry the requests. util01's check of the public
+  # sites wakes a person when lb01 and lb02 fail to serve requests.
+  #
+  # every_server.yml and remove_server.yml run the tunnel_connector_and_caddy
+  # check group with "mmwatchdog check-now" before a step that leaves the
+  # requests to the load-balancer servers.
+  tunnel_connector_and_caddy:
+    check_every: 1m
+    time_limit_per_run: 10s
+    alert_after_failing_for: 2m
+    recovered_after_healthy_for: 1m
+    checks:
+      # cloudflared's readiness, at the metrics address in its unit
+      # (roles/tunnel_connector_and_caddy/main.yml): 200 while it holds at
+      # least one connection to Cloudflare.
+      # Reason for warn: the other load-balancer server carries the requests; util01's check of the public sites wakes a person if none does.
+      cloudflared_is_connected_to_cloudflare:
+        http:
+          url: http://127.0.0.1:20241/ready
+        alert_severity: warn
+{{- range $app_name, $app := .inputs.apps }}
+{{- $public_host_name := index $.inputs.public_host_names $app_name }}
+{{- if not $public_host_name }}{{ fail (printf "public_host_names has no host name for %s in production" $app_name) }}{{ end }}
+      # The app's health URL through Caddy on the load-balancer server,
+      # asked the way cloudflared hands Caddy a user's request.
+      {{ $app_name }}_answers_through_caddy_on_this_server:
+        http:
+          url: http://127.0.0.1{{ $app.health_url_path }}
+          headers:
+            Host: {{ $public_host_name }}
+            X-Forwarded-Proto: https
+        alert_severity: warn
+{{- end }}

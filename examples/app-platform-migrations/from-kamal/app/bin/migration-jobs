@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# The Stack runs one jobs command. Source Kamal uses separate worker/clock roles.
+children = %w[jobs clock].map { |command| Process.spawn(File.join(__dir__, 'portal'), command) }
+stopping = false
+%w[TERM INT].each do |signal|
+  Signal.trap(signal) do
+    stopping = true
+    children.each do |pid|
+      begin
+        Process.kill('TERM', pid)
+      rescue Errno::ESRCH
+      end
+    end
+  end
+end
+pid, status = Process.wait2
+children.delete(pid)
+children.each do |child|
+  begin
+    Process.kill('TERM', child)
+  rescue Errno::ESRCH
+  end
+end
+children.each { |child| Process.wait(child) }
+exit(stopping ? 0 : (status.exitstatus == 0 ? 1 : status.exitstatus || 1))

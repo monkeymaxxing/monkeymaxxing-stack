@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Prints, as JSON, each app's live and new web container on this server.
+#
+# The live web container is the one Caddy sends requests to. Its port is in
+# /var/lib/monkeymaxxing-stack/live_web_ports/<app>, which the app_server role
+# writes each time a deploy, or every_server, records the port that every
+# Caddy then lists (roles/tunnel_connector_and_caddy), and its image is the
+# Image= line of its Quadlet file. The new web container is the other of the app's two
+# web_ports, with the image that deployed_image_tags names. Where an app runs
+# no web container yet, as on a new server, the live one is the first of its
+# web_ports with the live image of the pool: the image of the first app server
+# in APP_SERVERS that already records one for the app, in
+# LIVE_IMAGES_BY_APP_SERVER. Otherwise, with no live release anywhere yet as on
+# the first app server, it is the deployed image.
+#
+# The playbooks run this program in their stage
+# find_the_live_and_new_web_ports and publish its answer, so every role call
+# and every Caddy list in a run works from the same ports.
+#
+# A tag is the full Git commit of the app, 40 lowercase hexadecimal characters.
+# Reason: a short or movable tag could be pushed again for another image, and
+# servers that pull it at different times would run different images. The
+# program refuses any other tag.
+#
+# The output also says which apps run a release other than the one that
+# DEPLOYED_IMAGE_TAGS names: apps_not_on_the_deployed_image_tags, and its
+# length, number_of_apps_not_on_the_deployed_image_tags. every_server reports
+# that as a change, so the daily server settings comparison finds a deploy that stopped
+# halfway or a rollback done by hand. The deploy playbook ignores it, because
+# a deploy runs a release other than the recorded live one on purpose.
+#
+# Input, in environment variables: APPS, the apps from mmx_project_settings.yml,
+# and DEPLOYED_IMAGE_TAGS, the tag of each app in this server's environment,
+# both as JSON. Optional: APP_SERVERS, the app servers in inventory order, as
+# JSON, and LIVE_IMAGES_BY_APP_SERVER, the outputs of the playbook's stage
+# find_the_releases_the_app_servers_run, as JSON: for each app server, an
+# object whose recorded_live_images is the recorded_live_images that an earlier
+# run of this program printed on that server. It only reads.
+
+set -euo pipefail
+
+apps=$(jq -c 'to_entries' <<< "$APPS") || exit 1
+deployed_image_tags=$(jq -c '.' <<< "$DEPLOYED_IMAGE_TAGS") || exit 1
+no_app_servers='[]'
+no_live_images='{}'
+app_servers=$(jq -c '.' <<< "${APP_SERVERS:-$no_app_servers}") || exit 1
+live_images_by_app_server=$(jq -c '.' <<< "${LIVE_IMAGES_BY_APP_SERVER:-$no_live_images}") || exit 1
+containers=()
+recorded_live_images='{}'
+apps_not_on_the_deployed_image_tags='[]'
+while IFS= read -r app; do
+    app_name=$(jq -r '.key' <<< "$app")
+    first_web_port=$(jq -r '.value.web_ports[0]' <<< "$app")
+    second_web_port=$(jq -r '.value.web_ports[1]' <<< "$app")
+    deployed_image=$(jq -nr --argjson app "$app" --argjson tags "$deployed_image_tags" \
+        'if $tags | has($app.key) then $app.value.image + ":" + $tags[$app.key]
+         else error("no deployed image tag for " + $app.key) end') || exit 1
+    deployed_tag=$(jq -r --arg app "$app_name" '.[$app]' <<< "$deployed_image_tags")
+    if [[ ! $deployed_tag =~ ^[0-9a-f]{40}$ ]]; then
+        printf 'the deployed image tag of %s is "%s". Use the full Git commit of the app, 40 lowercase hexadecimal characters, so that one tag always names one image. Nothing changed.\n' \
+            "$app_name" "$deployed_tag" >&2
+        exit 1
+    fi
+    live_web_port=$first_web_port
+    live_image=$(jq -nr --arg app "$app_name" --arg deployed_image "$deployed_image" \
+        --argjson servers "$app_servers" --argjson images "$live_images_by_app_server" \
+        '[$servers[] as $server | $images[$server].recorded_live_images[$app]? // empty][0] // $deployed_image')
+    live_web_port_file="/var/lib/monkeymaxxing-stack/live_web_ports/$app_name"
+    if [[ -e $live_web_port_file ]]; then
+        mapfile -t recorded_ports < "$live_web_port_file"
+        if (( ${#recorded_ports[@]} != 1 )) || [[ ! ${recorded_ports[0]} =~ ^[0-9]+$ ]]; then
+            printf 'the live port file %s must contain one port number written with digits\n' "$live_web_port_file" >&2
+            exit 1
+        fi
+        live_web_port=$((10#${recorded_ports[0]}))
+        if [[ $live_web_port != "$first_web_port" && $live_web_port != "$second_web_port" ]]; then
+            web_ports=$(jq -r '.value.web_ports | "[\(.[0]), \(.[1])]"' <<< "$app")
+            printf "%s's live web container on this server listens on port %s, which is not one of its web_ports %s: keep the live port in web_ports when changing them\n" \
+                "$app_name" "$live_web_port" "$web_ports" >&2
+            exit 1
+        fi
+        quadlet_file="/etc/containers/systemd/$app_name-web-$live_web_port.container"
+        if [[ -e $quadlet_file ]]; then
+            while IFS= read -r line || [[ -n $line ]]; do
+                if [[ $line == Image=* ]]; then
+                    live_image=${line#Image=}
+                    live_image="${live_image#"${live_image%%[![:space:]]*}"}"
+                    live_image="${live_image%"${live_image##*[![:space:]]}"}"
+                fi
+            done < "$quadlet_file"
+        fi
+        recorded_live_images=$(jq -c --arg app "$app_name" --arg image "$live_image" '. + {($app): $image}' <<< "$recorded_live_images")
+        if [[ $live_image != "$deployed_image" ]]; then
+            apps_not_on_the_deployed_image_tags=$(jq -c --arg app "$app_name" '. + [$app]' <<< "$apps_not_on_the_deployed_image_tags")
+        fi
+    fi
+    new_web_port=$first_web_port
+    if [[ $live_web_port == "$first_web_port" ]]; then
+        new_web_port=$second_web_port
+    fi
+    containers+=("$(jq -cn --arg name "$app_name" --arg live_image "$live_image" \
+        --arg deployed_image "$deployed_image" --argjson live_port "$live_web_port" --argjson new_port "$new_web_port" \
+        '{live: {($name): {web_port: $live_port, image: $live_image}},
+          new: {($name): {web_port: $new_port, image: $deployed_image}}}')")
+done < <(jq -c '.[]' <<< "$apps")
+
+printf '%s\n' "${containers[@]}" | jq -cs --argjson recorded "$recorded_live_images" \
+    --argjson not_deployed "$apps_not_on_the_deployed_image_tags" \
+    '{live_web_containers: (map(.live) | add // {}), new_web_containers: (map(.new) | add // {}),
+      recorded_live_images: $recorded,
+      apps_not_on_the_deployed_image_tags: $not_deployed,
+      number_of_apps_not_on_the_deployed_image_tags: ($not_deployed | length)}'

@@ -1,0 +1,5 @@
+Django==6.1.3
+gunicorn
+psycopg[binary]
+django-storages[s3]
+whitenoise

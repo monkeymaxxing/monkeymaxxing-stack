@@ -1,0 +1,5 @@
+.mmx/
+__pycache__/
+*.pyc
+# The built command; build it with go build, never commit it.
+/set_up_outside_services/set_up_outside_services

@@ -1,0 +1,257 @@
+# Works out, for the server it runs on, which servers are its WireGuard
+# peers and which connections its firewall admits on wg0. It reads
+# connections_between_server_pools and private_ip_ranges in
+# inventories/servers.yml, the one place that says which pool talks to
+# which. Each playbook that writes wg0 runs this role first and passes its
+# outputs to the role that writes wg0 and the firewall:
+#   playbooks/every_server.yml         into every_server
+#   playbooks/lock_everyone_out.yml    into everyone_locked_out
+# playbooks/every_server.yml also runs it on util01 first, in the stage
+# validate_the_connections_between_server_pools, so a mistake in the table
+# stops the run before any server changes.
+#
+# A server pool is an inventory group with an address block in
+# private_ip_ranges. Every server outside database_restore_servers must be in
+# exactly one pool, with its private_ip inside the pool's block.
+#
+# Each line of connections_between_server_pools makes every server of
+# from_pool and every server of to_pool WireGuard peers, in both
+# directions, because WireGuard drops packets from a key it doesn't know.
+# Each line opens the firewall of every to_pool server to every from_pool
+# server, on the line's TCP ports. The connecting side needs no rule,
+# because the firewall allows outgoing connections.
+#
+# These rules hold for every pool, so they are code here, not lines:
+#   - every server peers with util01 and every systems desk; util01 peers
+#     with every server that has a private_ip. A systems desk's own peers
+#     for the servers come from update-this-desks-wireguard-peers
+#     (roles/systems_desk), not from this role;
+#   - every server admits SSH (TCP 22) on wg0 from the systems desks' block
+#     and from util01, and WireGuard (UDP wireguard_listen_port, which the redirect
+#     from UDP 443 reaches) from anywhere;
+#   - every server but util01 admits MMX (TCP 7443) on wg0 from util01;
+#   - util01 admits MMWatchdog's fleet hub (TCP 8445) and MMHotline's
+#     signed alerts (TCP 8484) on wg0 from every server of every other pool.
+#     8484 is the alert path a server uses when the fleet hub did not take
+#     an alert in time, so no pool can leave it out by mistake.
+# Two more peers stay code, because they are not pools:
+#   - while everyone_locked_out_except_desk names a desk, every other desk
+#     drops out of every peer list (the lock-out button);
+#   - while database_moving_in is set, the app, jobs and database servers
+#     peer with the old database
+#     (operating_procedures/move_a_database_into_the_stack.md).
+#
+# The program runs the same way in a dryrun and changes nothing on the
+# server. The dryrun still shows only that a server's firewall or wg0 would
+# change, not the rules: the every_server role takes a secret input, so MMX
+# hides its values. After the run, read the peers and rules on the server
+# with wg show wg0 allowed-ips and ufw show added.
+# python3 is on every Debian server from its first boot, because Debian's
+# cloud-init needs it.
+inputs:
+  inventory_nodes:                          # every server of the inventory, with its vars
+    type: mapping
+    required: true
+  inventory_groups:                         # every inventory group and its servers
+    type: mapping
+    required: true
+  private_ip_ranges:                        # from inventories/servers.yml
+    type: mapping
+    required: true
+  connections_between_server_pools:         # from inventories/servers.yml
+    type: list
+    required: true
+  # The value of each setting that a line names in
+  # only_while_this_setting_is_false, by its name in mmx_project_settings.yml.
+  settings_named_in_the_connections:
+    type: mapping
+    required: true
+  everyone_locked_out_except_desk:
+    type: string
+    required: true
+  wireguard_listen_port:                    # from inventories/servers.yml
+    type: integer
+    required: true
+  database_moving_in:
+    type: mapping
+    required: true
+outputs:
+  # The names of this server's WireGuard peers, sorted. They leave out the
+  # server itself and any server without a wireguard_public_key yet.
+  wireguard_peer_names: "{{ .node_tasks.work_out_the_peers_and_the_firewall_rules.stdout_json.wireguard_peer_names }}"
+  # This server's incoming ufw rules: first the rules every server gets, in
+  # a fixed order, then the rest sorted by port and then address.
+  incoming_firewall_rules: "{{ .node_tasks.work_out_the_peers_and_the_firewall_rules.stdout_json.incoming_firewall_rules }}"
+  peers_with_the_database_moving_in: "{{ .node_tasks.work_out_the_peers_and_the_firewall_rules.stdout_json.peers_with_the_database_moving_in }}"
+node_tasks:
+  - id: work_out_the_peers_and_the_firewall_rules
+    shell:
+      script: exec python3 -I -c "$PROGRAM"
+      dryrun: exec python3 -I -c "$PROGRAM"
+      changed_when: false
+      env:
+        SERVER_NAME: "{{ .node.name }}"
+        INVENTORY_NODES: "{{ .inputs.inventory_nodes }}"
+        INVENTORY_GROUPS: "{{ .inputs.inventory_groups }}"
+        PRIVATE_IP_RANGES: "{{ .inputs.private_ip_ranges }}"
+        WIREGUARD_LISTEN_PORT: "{{ .inputs.wireguard_listen_port }}"
+        CONNECTIONS_BETWEEN_SERVER_POOLS: "{{ .inputs.connections_between_server_pools }}"
+        SETTINGS_NAMED_IN_THE_CONNECTIONS: "{{ .inputs.settings_named_in_the_connections }}"
+        EVERYONE_LOCKED_OUT_EXCEPT_DESK: "{{ .inputs.everyone_locked_out_except_desk }}"
+        DATABASE_MOVING_IN: "{{ .inputs.database_moving_in }}"
+        PROGRAM: |
+          import ipaddress, json, os, sys
+
+          server = os.environ['SERVER_NAME']
+          nodes = json.loads(os.environ['INVENTORY_NODES'])
+          groups = json.loads(os.environ['INVENTORY_GROUPS'])
+          ranges = json.loads(os.environ['PRIVATE_IP_RANGES'])
+          lines = json.loads(os.environ['CONNECTIONS_BETWEEN_SERVER_POOLS'])
+          settings = json.loads(os.environ['SETTINGS_NAMED_IN_THE_CONNECTIONS'])
+          desk_that_keeps_access = os.environ['EVERYONE_LOCKED_OUT_EXCEPT_DESK']
+          database_moving_in = json.loads(os.environ['DATABASE_MOVING_IN'])
+
+          DESKS, UTIL, RESTORE = 'systems_desks', 'util_server', 'database_restore_servers'
+          # The servers that use the old database while it moves in.
+          USERS_OF_THE_DATABASE_MOVING_IN = ('app_servers', 'jobs_servers', 'database_servers')
+          LINE_KEYS = ('from_pool', 'to_pool', 'tcp_ports', 'why', 'only_while_this_setting_is_false')
+          TABLE = 'connections_between_server_pools in inventories/servers.yml'
+          problems = []
+
+          def address(text):
+              try:
+                  return ipaddress.ip_address(text)
+              except ValueError:
+                  return None
+
+          # The pools: the inventory groups with an address block. The
+          # other blocks, such as systems_desk_laptops, are for machines
+          # outside the inventory's groups.
+          pools = {}
+          for name, block in ranges.items():
+              if name not in groups:
+                  continue
+              try:
+                  pools[name] = ipaddress.ip_network(block)
+              except (TypeError, ValueError):
+                  problems.append('private_ip_ranges.%s in inventories/servers.yml is %r, which is not an address block. Write it as the other blocks there are written, an address and a prefix length.' % (name, block))
+          for name in (DESKS, UTIL):
+              if name not in ranges:
+                  problems.append('private_ip_ranges in inventories/servers.yml has no address block for %s. Add it as AGENTS.md, "Server names and private addresses", gives it.' % name)
+
+          pool_of = {}
+          for pool in sorted(pools):
+              for member in groups[pool]:
+                  if member in pool_of:
+                      problems.append('%s is in two server pools, %s and %s, in inventories/servers.yml. A server belongs to exactly one pool: the third number of its private_ip names the pool. Remove it from one group.' % (member, pool_of[member], pool))
+                  else:
+                      pool_of[member] = pool
+          for member, pool in sorted(pool_of.items()):
+              private_ip = nodes[member]['vars'].get('private_ip')
+              if address(private_ip) not in pools[pool]:
+                  problems.append('%s has private_ip %s, outside its pool %s, whose block is %s in private_ip_ranges. Give it an unused address inside the block (AGENTS.md, "Server names and private addresses").' % (member, private_ip, pool, pools[pool]))
+          for name in sorted(nodes):
+              if name not in pool_of and name not in groups.get(RESTORE, []):
+                  problems.append('%s is in no server pool in inventories/servers.yml, so it would get no firewall rules and no WireGuard peers. Add it to its pool\'s group. A pool is a group with an address block in private_ip_ranges, such as %s.' % (name, ', '.join(sorted(pools))))
+
+          def port_problem(port):
+              if isinstance(port, bool):
+                  return True
+              if isinstance(port, int):
+                  return not 1 <= port <= 65535
+              if not isinstance(port, str):
+                  return True
+              parts = port.split(':')
+              if not all(part.isdigit() for part in parts) or len(parts) > 2:
+                  return True
+              numbers = [int(part) for part in parts]
+              return not all(1 <= n <= 65535 for n in numbers) or (len(numbers) == 2 and numbers[0] >= numbers[1])
+
+          active_lines = []
+          for number, line in enumerate(lines, 1):
+              if not isinstance(line, dict):
+                  problems.append('Line %d of %s is not a mapping with from_pool, to_pool, tcp_ports and why.' % (number, TABLE))
+                  continue
+              where = 'Line %d of %s (from_pool %s, to_pool %s)' % (number, TABLE, line.get('from_pool'), line.get('to_pool'))
+              unknown = sorted(set(line) - set(LINE_KEYS))
+              if unknown:
+                  problems.append('%s has the key %s. A line has only the keys %s.' % (where, ', '.join(unknown), ', '.join(LINE_KEYS)))
+              for key in ('from_pool', 'to_pool'):
+                  if line.get(key) not in pools:
+                      problems.append('%s: %s is %r, which is not a server pool. A server pool is an inventory group with an address block in private_ip_ranges: %s.' % (where, key, line.get(key), ', '.join(sorted(pools))))
+              if line.get('to_pool') == DESKS:
+                  problems.append('%s: a systems desk\'s firewall admits only its own laptops (roles/systems_desk/files/firewall.nft), so to_pool cannot be systems_desks.' % where)
+              if not isinstance(line.get('why'), str) or not line['why'].strip():
+                  problems.append('%s has no why. Write a sentence that says what uses the connection.' % where)
+              ports = line.get('tcp_ports')
+              if not isinstance(ports, list) or not ports or any(port_problem(p) for p in ports):
+                  problems.append('%s: tcp_ports is %r. Give a list of TCP port numbers, or ranges written "first:last" such as "8001:8099".' % (where, ports))
+              setting = line.get('only_while_this_setting_is_false')
+              if setting is not None:
+                  if setting not in settings:
+                      problems.append('%s: only_while_this_setting_is_false names %r, which the playbooks do not pass in settings_named_in_the_connections. Add the setting there in playbooks/every_server.yml (two places), playbooks/systems_desk.yml and playbooks/lock_everyone_out.yml, or correct its name.' % (where, setting))
+                      continue
+                  if not isinstance(settings[setting], bool):
+                      problems.append('%s: only_while_this_setting_is_false names %s, which is %r, not true or false.' % (where, setting, settings[setting]))
+                      continue
+                  if settings[setting]:
+                      continue
+              active_lines.append(line)
+
+          if server not in pool_of:
+              problems.append('%s is in no server pool in inventories/servers.yml. Add it to its pool\'s group.' % server)
+          if problems:
+              for problem in dict.fromkeys(problems):
+                  print(problem, file=sys.stderr)
+              print('Nothing changed.', file=sys.stderr)
+              sys.exit(1)
+
+          pool = pool_of[server]
+          if pool == UTIL:
+              peers = set(name for name, node in nodes.items() if 'private_ip' in node['vars'])
+          else:
+              peers = set(groups[DESKS]) | set(groups[UTIL])
+              for line in active_lines:
+                  if line['from_pool'] == pool:
+                      peers |= set(groups[line['to_pool']])
+                  if line['to_pool'] == pool:
+                      peers |= set(groups[line['from_pool']])
+          peers.discard(server)
+          peers = set(name for name in peers if nodes[name]['vars'].get('wireguard_public_key'))
+          if desk_that_keeps_access:
+              peers = set(name for name in peers if name not in groups[DESKS] or name == desk_that_keeps_access)
+
+          def private_ip(name):
+              return nodes[name]['vars']['private_ip']
+
+          def wireguard_rule(port, source):
+              return dict(action='allow', port=port, protocol='tcp', incoming_interface='wg0', **dict([('from', source)]))
+
+          rules = []
+          util_addresses = [private_ip(name) for name in groups[UTIL]]
+          rules.append(wireguard_rule(22, ranges[DESKS]))
+          rules += [wireguard_rule(22, a) for a in util_addresses]
+          rules.append(dict(action='allow', port=int(os.environ['WIREGUARD_LISTEN_PORT']), protocol='udp'))
+          if pool != UTIL:
+              rules += [wireguard_rule(7443, a) for a in util_addresses]
+          sources = set()
+          for line in active_lines:
+              if line['to_pool'] == pool:
+                  for member in groups[line['from_pool']]:
+                      for port in line['tcp_ports']:
+                          sources.add((int(port) if str(port).isdigit() else port, private_ip(member)))
+          if pool == UTIL:
+              for member, its_pool in pool_of.items():
+                  if its_pool != UTIL:
+                      sources |= set([(8445, private_ip(member)), (8484, private_ip(member))])
+          def order(source):
+              return (int(str(source[0]).split(':')[0]), ipaddress.ip_address(source[1]))
+          for port, source in sorted(sources, key=order):
+              rule = wireguard_rule(port, source)
+              if rule not in rules:
+                  rules.append(rule)
+
+          print(json.dumps(dict(
+              wireguard_peer_names=sorted(peers),
+              incoming_firewall_rules=rules,
+              peers_with_the_database_moving_in=bool(database_moving_in) and pool in USERS_OF_THE_DATABASE_MOVING_IN)))

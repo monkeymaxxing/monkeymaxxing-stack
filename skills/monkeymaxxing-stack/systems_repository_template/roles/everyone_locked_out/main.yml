@@ -1,0 +1,173 @@
+# Server admission, with one inventory state for the button and ordinary runs.
+inputs:
+  apply_peer_changes: {type: boolean, default: false}
+  # From work_out_who_this_server_talks_to, which leaves out every desk but
+  # the kept one while everyone_locked_out_except_desk is set.
+  wireguard_peer_names: {type: list, required: true}
+  everyone_locked_out_except_desk: {type: string, default: ""}
+  inventory_nodes: {type: mapping, required: true}
+  wireguard_listen_port: {type: integer, required: true}   # the wg0 template reads it
+  inventory_groups: {type: mapping, required: true}
+  root_ssh_public_keys: {type: list, required: true}
+  triage_ssh_public_key: {type: string, required: true}
+node_tasks:
+  - id: install_exactly_the_admitted_root_keys
+    file:
+      path: /root/.ssh/authorized_keys
+      template: files/root_authorized_keys
+      owner: root
+      group: root
+      permissions_mode: "0600"
+  - id: apply_the_incident_peer_list
+    when: "{{ .inputs.apply_peer_changes }}"
+    wireguard_interface:
+      name: wg0
+      template: ../every_server/files/wireguard_wg0.conf
+  - task_block:
+      id: incident_ssh_admission
+      changes:
+        - id: write_the_incident_ssh_admission
+          file:
+            path: /etc/ssh/sshd_config.d/00-incident-lockout.conf
+            template: files/sshd_lockout.conf
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      validate:
+        - id: check_ssh_admission
+          shell: {script: sshd -t, dryrun: sshd -t, changed_when: false}
+      activate:
+        - id: reload_ssh_admission
+          systemd_service: {name: ssh, state: running, refresh: reload}
+  - id: create_the_triage_user
+    when: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+    user:
+      name: triage
+      full_name: The triage agent on util01, read only
+      supplementary_groups: [systemd-journal, adm]
+      supplementary_groups_not_listed: remove
+      shell: /bin/bash
+      create_home_directory: true
+      password_locked: true
+  - id: lock_the_triage_user
+    when: {not: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}}
+    user:
+      name: triage
+      supplementary_groups: []
+      supplementary_groups_not_listed: remove
+      shell: /usr/sbin/nologin
+      create_home_directory: true
+      password_locked: true
+  - id: create_the_triage_ssh_directory
+    directory: {path: /home/triage/.ssh, owner: triage, group: triage, permissions_mode: "0700"}
+  - id: install_exactly_the_admitted_triage_keys
+    file:
+      path: /home/triage/.ssh/authorized_keys
+      template: files/triage_authorized_keys
+      owner: triage
+      group: triage
+      permissions_mode: "0600"
+  - id: restore_triage_read_only_commands
+    when: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+    file:
+      path: /etc/sudoers.d/triage-reads-only
+      source: ../every_server/files/sudoers_triage
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -c -f "$NEW_FILE"
+          dryrun: visudo -c -f "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+  - id: remove_triage_read_only_commands
+    when: {not: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}}
+    loop: [/etc/sudoers.d/triage-reads-only, /etc/sudoers.d/triage-reads-fleet-readings]
+    as: sudoers_file
+    file: {path: "{{ .sudoers_file }}", state: absent}
+  - when: {path_exists: /etc/systemd/system/mmhotline-triage-agent-run.socket}
+    task_block:
+      id: triage_run_admission
+      changes:
+        - id: create_triage_unit_condition_directories
+          loop: [mmhotline-triage-agent-run.socket, "mmhotline-triage-agent-run@.service"]
+          as: unit
+          directory: {path: "/etc/systemd/system/{{ .unit }}.d", owner: root, group: root, permissions_mode: "0755"}
+        - id: retain_the_triage_lockout_across_service_restarts
+          loop: [mmhotline-triage-agent-run.socket, "mmhotline-triage-agent-run@.service"]
+          as: unit
+          file:
+            path: "/etc/systemd/system/{{ .unit }}.d/incident-lockout.conf"
+            content: "[Unit]\nConditionPathExists=!/etc/mmhotline/everyone-locked-out\n"
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      activate:
+        - id: load_the_triage_run_conditions
+          shell: {script: systemctl daemon-reload, dryrun: systemctl daemon-reload, changed_when: false}
+  - id: retain_the_triage_lockout_after_reboot
+    when:
+      all:
+        - path_exists: /etc/systemd/system/mmhotline-triage-agent-run.socket
+        - not: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+    file:
+      path: /etc/mmhotline/everyone-locked-out
+      content: "The incident response disabled triage runs.\n"
+      owner: root
+      group: root
+      permissions_mode: "0600"
+  - id: remove_the_triage_lockout_on_undo
+    when: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+    file: {path: /etc/mmhotline/everyone-locked-out, state: absent}
+  - id: stop_new_triage_runs
+    when:
+      all:
+        - path_exists: /etc/systemd/system/mmhotline-triage-agent-run.socket
+        - not: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+    systemd_service: {name: mmhotline-triage-agent-run.socket, state: stopped, start_at_boot: true}
+  - id: restore_new_triage_runs_on_undo
+    when:
+      all:
+        - path_exists: /etc/systemd/system/mmhotline-triage-agent-run.socket
+        - equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]
+    systemd_service: {name: mmhotline-triage-agent-run.socket, state: running, start_at_boot: true}
+  - id: install_session_termination
+    file:
+      path: /usr/local/sbin/end_untrusted_server_sessions
+      source: files/end_untrusted_server_sessions
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  - id: end_untrusted_server_sessions
+    when: {not: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}}
+    shell:
+      script: |
+        if systemctl cat mmx-https-api.service >/dev/null 2>&1; then
+          if systemctl is-active --quiet mmx-https-api.service; then
+            systemctl kill --kill-whom=all --signal=KILL mmx-https-api.service
+          fi
+          systemctl stop mmx-https-api.service
+        fi
+        exec /usr/local/sbin/end_untrusted_server_sessions "$KEPT_ADDRESS"
+      dryrun: printf '%s\n' 'would end SSH sessions outside the desk that keeps access, MMX HTTPS and triage processes'
+      env:
+        KEPT_ADDRESS: "{{ .inputs.inventory_nodes[.inputs.everyone_locked_out_except_desk].vars.private_ip }}"
+
+  - id: restore_mmx_https_on_undo
+    when:
+      all:
+        - equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]
+        - path_exists: /etc/systemd/system/mmx-https-api.service
+    systemd_service: {name: mmx-https-api, state: running, start_at_boot: true}
+
+  - id: restore_the_triage_fleet_readings_on_util01
+    when:
+      all:
+        - equals: ["{{ .node.name }}", util01]
+        - equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]
+    file:
+      path: /etc/sudoers.d/triage-reads-fleet-readings
+      template: ../util_server/files/sudoers_triage_mmwatchdog_fleet_readings
+      owner: root
+      group: root
+      permissions_mode: "0440"

@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+kept_address=$1
+# logind scopes include detached children of an SSH login, not app services.
+while read -r session; do
+    [ "$(loginctl show-session "$session" -p Service --value)" = sshd ] || continue
+    remote=$(loginctl show-session "$session" -p RemoteHost --value)
+    [ "$remote" = "$kept_address" ] || loginctl terminate-session "$session"
+done < <(loginctl list-sessions --no-legend --no-pager | awk '{print $1}')
+# Also close noninteractive SSH and forwarding-only transports without a login scope.
+ss --tcp --numeric --no-header --kill state established "( sport = :22 and not dst $kept_address )"
+for account in triage mmhotline-triage-agent; do
+    if getent passwd "$account" >/dev/null; then
+        while read -r pid; do kill -KILL "$pid" 2>/dev/null || test ! -d "/proc/$pid"; done < <(ps -u "$account" -o pid=)
+    fi
+done

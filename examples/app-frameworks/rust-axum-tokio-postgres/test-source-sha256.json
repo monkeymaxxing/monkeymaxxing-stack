@@ -1,0 +1,46 @@
+{
+  "isolated_source_sha256": {
+    "check_portal.py": "0db584d5d3941750a925ca8c60871ad65d52726156abd3b255dfc5b9c8561015",
+    "rust/Containerfile": "c1f4db39a450bb4cf43814a700bd5fd0763c0cfaee8856f4536056e8ad67ecef",
+    "rust/Cargo.lock": "df72fcfc61f8380ae213d644b70ac156e2afa355ff4a8410d28b9f57f45771c6",
+    "rust/Cargo.toml": "a615062e6ae6188ff00b3cb5c8a718260de41fb37af259dd7657ba1b8487ce95",
+    "migrations/0002_record_descriptions.sql": "14056a6549689409d05b1638d8a4adb0ea12975362f1b2d356950cfeff2f37e0",
+    "migrations/0001_portal.sql": "b601c80248e069c08123a92651f29562fe3400abbac3b2a2317125c9d2fe3711",
+    "rust/templates/landing.html": "c1d6516dae1d53af7bbdc7b77741ad7d872cf94820e3982639b7058cabb667f5",
+    "rust/templates/portal.html": "0caa706581ee3902d83ec8307512f91f252b7327e66186ad7b712ce93ded1769",
+    "rust/src/main.rs": "f438f61c447c068dbc08eed19b7c15f2538c6d941f90c968319e8fd3aec1b308",
+    "rust/src/database.rs": "51e399562c9ef7aeb4ddd7b93df39e4fea2a6b9ab7f01aaa62160b9924659f3b",
+    "rust/src/storage.rs": "9df138f7158d2fc9e438eadc93c035ad56bdfd986021b2afde055ac570c6f0ae",
+    "rust/src/web.rs": "8fc85638e18300755996f203e538a96cfc7f24404dcc32fc6e35bb28c532ac9c"
+  },
+  "packaged_source_sha256": {
+    "Cargo.lock": "df72fcfc61f8380ae213d644b70ac156e2afa355ff4a8410d28b9f57f45771c6",
+    "Cargo.toml": "a615062e6ae6188ff00b3cb5c8a718260de41fb37af259dd7657ba1b8487ce95",
+    "Containerfile": "3ff908a47c01488e8db91b8cbfdc6b6b99e529858002e400960f5a42dfbd2d40",
+    "check_portal.py": "0db584d5d3941750a925ca8c60871ad65d52726156abd3b255dfc5b9c8561015",
+    "migrations/0001_portal.sql": "b601c80248e069c08123a92651f29562fe3400abbac3b2a2317125c9d2fe3711",
+    "migrations/0002_record_descriptions.sql": "14056a6549689409d05b1638d8a4adb0ea12975362f1b2d356950cfeff2f37e0",
+    "src/database.rs": "421275b3f8ab9be72efc25f614a7ae45867b7db839850c4cd40820d291827323",
+    "src/main.rs": "f438f61c447c068dbc08eed19b7c15f2538c6d941f90c968319e8fd3aec1b308",
+    "src/storage.rs": "9df138f7158d2fc9e438eadc93c035ad56bdfd986021b2afde055ac570c6f0ae",
+    "src/web.rs": "8fc85638e18300755996f203e538a96cfc7f24404dcc32fc6e35bb28c532ac9c",
+    "templates/landing.html": "c1d6516dae1d53af7bbdc7b77741ad7d872cf94820e3982639b7058cabb667f5",
+    "templates/portal.html": "0caa706581ee3902d83ec8307512f91f252b7327e66186ad7b712ce93ded1769"
+  },
+  "seed_test_data_source_sha256": {
+    "Cargo.lock": "df72fcfc61f8380ae213d644b70ac156e2afa355ff4a8410d28b9f57f45771c6",
+    "Cargo.toml": "a615062e6ae6188ff00b3cb5c8a718260de41fb37af259dd7657ba1b8487ce95",
+    "Containerfile": "5c2c8a31dc410a095c1b950c7a388aff21e5d3661b479f59d27df4b4b0dc76da",
+    "check_portal.py": "0db584d5d3941750a925ca8c60871ad65d52726156abd3b255dfc5b9c8561015",
+    "examples/replica_report.rs": "d566d654cc6a9c52c891851a2416cd96e7ab4ca4ef7447c469be0bceefaf248b",
+    "migrations/0001_portal.sql": "b601c80248e069c08123a92651f29562fe3400abbac3b2a2317125c9d2fe3711",
+    "migrations/0002_record_descriptions.sql": "14056a6549689409d05b1638d8a4adb0ea12975362f1b2d356950cfeff2f37e0",
+    "src/database.rs": "304d3155afb25ee33b19739dd62b46be6abb958a63b0fba5e76db943567f6e77",
+    "src/main.rs": "ce795ee65827da25e9f168ec21c289272217270da825fa9db47734a97778ec5f",
+    "src/storage.rs": "9df138f7158d2fc9e438eadc93c035ad56bdfd986021b2afde055ac570c6f0ae",
+    "src/web.rs": "8fc85638e18300755996f203e538a96cfc7f24404dcc32fc6e35bb28c532ac9c",
+    "templates/landing.html": "c1d6516dae1d53af7bbdc7b77741ad7d872cf94820e3982639b7058cabb667f5",
+    "templates/portal.html": "0caa706581ee3902d83ec8307512f91f252b7327e66186ad7b712ce93ded1769",
+    "tests/services.py": "c0e2496197d5323b1c77bc4c712c67eff493089e7b90afe8b4c546f7db14c6e3"
+  }
+}
