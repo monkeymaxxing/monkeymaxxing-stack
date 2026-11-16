@@ -204,10 +204,10 @@ class PinnedProgramReleases(unittest.TestCase):
 
     def test_a_newer_release_fails_and_names_the_program_both_versions_and_the_procedure(self):
         code, output = self.run_script(self.check('mmhotline'), {
-            'monkeymaxxing/mmhotline': [release('v0.1.0', 'monkeymaxxing/mmhotline')]})
+            'monkeymaxxing/mmhotline': [release('v0.1.1', 'monkeymaxxing/mmhotline')]})
         self.assertEqual(code, 1, output)
-        for text in ('mmhotline has a newer release, 0.1.0', 'pins 0.1.0-do-proof.26',
-                     'https://github.com/monkeymaxxing/mmhotline/releases/tag/v0.1.0',
+        for text in ('mmhotline has a newer release, 0.1.1', 'pins 0.1.0',
+                     'https://github.com/monkeymaxxing/mmhotline/releases/tag/v0.1.1',
                      'add_or_update_a_program_from_outside_the_distribution.md'):
             self.assertIn(text, output)
 

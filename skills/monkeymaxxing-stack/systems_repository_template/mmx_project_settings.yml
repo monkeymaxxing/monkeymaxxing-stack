@@ -733,15 +733,15 @@ vars:
     mmx:
       version: "0.1.0"
       download_url: https://github.com/monkeymaxxing/mmx/releases/download/v0.1.0/mmx-0.1.0-linux-amd64.tar.gz
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256: "603b7a7d82bb710906d37dffe788d1c1ea75089fdf63fc2335dc27f2a7152ab4"
     mmwatchdog:
       version: "0.1.0"
       download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.1.0/mmwatchdog-0.1.0-linux-amd64.tar.gz
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256: "06b456c332aabd462eade788cf3dbd812dbe7eb256a58422d41c1bf545cfa180"
     mmhotline:
-      version: "0.1.0-do-proof.26"
-      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.1.0-do-proof.26/mmhotline-0.1.0-do-proof.26-linux-amd64.tar.gz
-      sha256: "abf698fa83396c5d96dfaaa15b9ca2328054afe47d1b8c486af381f50d7f01d1"
+      version: "0.1.0"
+      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.1.0/mmhotline-0.1.0-linux-amd64.tar.gz
+      sha256: "60fefbc099d1f4696e70199ea4257b968b1c8b126fde10f2e068919140d80660"
     # The Stack's command for the account and secret setup on the systems
     # desk (initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md).
     # Its release is the Stack version's, built reproducibly by the Stack
@@ -750,7 +750,7 @@ vars:
     set_up_outside_services:
       version: "2026-11"
       download_url: https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/download/2026-11/set-up-outside-services-2026-11-linux-amd64.tar.gz
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256: "9e64f270be3a63b61d2d515478ef2f0a69fbb4d46807ff7d47077aeae99510b5"
     # MMHotline's backup: use the Litestream version named in the MMHotline
     # repository's docs/how-to/back-up-and-restore-the-database.md, "Set up".
     # Litestream calls its x86-64 archive linux-x86_64; the release's

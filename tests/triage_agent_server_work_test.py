@@ -142,7 +142,7 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         triage_agent.warn_waits_for_the_agent_minutes. The pin names the release that does all of this."""
         settings = (T/'mmx_project_settings.yml').read_text()
         version = re.search(r'(?m)^    mmhotline:\n      version: "(.*?)"', settings)[1]
-        self.assertEqual(version, '0.1.0-do-proof.26')
+        self.assertEqual(version, '0.1.0')
 
     def test_the_held_warn_wait_comes_from_the_stack_setting_for_every_answer(self):
         settings = (T/'mmx_project_settings.yml').read_text()

@@ -213,7 +213,6 @@ class RowRecovery(unittest.TestCase):
     # The refusals: nothing is created.
     def test_values_that_do_not_fit_are_refused_before_anything_is_created(self):
         for values, message in (({'rows_where': ' '}, 'rows_where is empty'),
-                                ({'table': ''}, 'table is empty'),
                                 ({'recover_to': 'latest'}, 'not latest'),
                                 ({'database_name': 'someone_elses'}, "no app's database_name"),
                                 ({'when_a_primary_key_exists': 'overwrite'}, 'give skip_the_row or change_nothing')):
@@ -236,6 +235,11 @@ class RowRecovery(unittest.TestCase):
                                 text=True, capture_output=True, stdin=subprocess.DEVNULL)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('rows_where', result.stderr)
+        # An empty value for a variable with no default is refused by MMX itself, naming the variable.
+        result = subprocess.run([self.mmx, 'explain', 'recover_rows_from_a_restored_copy', '--json', '--var', 'table='],
+                                cwd=TEMPLATE, text=True, capture_output=True, stdin=subprocess.DEVNULL)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--var table= gives an empty value', result.stderr)
 
     def test_a_failed_restore_still_destroys_restore01(self):
         result, commands, sent, leftovers = self.run_recovery(RESTORE_EXIT='1')
