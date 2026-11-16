@@ -750,7 +750,7 @@ vars:
     set_up_outside_services:
       version: "2026-11"
       download_url: https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/download/2026-11/set-up-outside-services-2026-11-linux-amd64.tar.gz
-      sha256: "9e64f270be3a63b61d2d515478ef2f0a69fbb4d46807ff7d47077aeae99510b5"
+      sha256: "756a37c727e6c590ba248804cd6879ffc2323d409bfcea5eccccca84e01532eb"
     # MMHotline's backup: use the Litestream version named in the MMHotline
     # repository's docs/how-to/back-up-and-restore-the-database.md, "Set up".
     # Litestream calls its x86-64 archive linux-x86_64; the release's

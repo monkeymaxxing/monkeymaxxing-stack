@@ -36,6 +36,8 @@ mkdir -p "$work/$name" "$output_directory"
 cp "$source_directory/../LICENSE" "$work/$name/LICENSE"
 chmod 0755 "$work/$name/set-up-outside-services"
 chmod 0644 "$work/$name/LICENSE"
+# The directory too: mkdir follows the umask, which differs between machines.
+chmod 0755 "$work/$name"
 tar --sort=name --mtime='2026-01-01 00:00:00Z' --owner=0 --group=0 --numeric-owner \
   -C "$work" -cf - "$name" | gzip -n -9 > "$output_directory/$name.tar.gz"
 cd "$output_directory"
