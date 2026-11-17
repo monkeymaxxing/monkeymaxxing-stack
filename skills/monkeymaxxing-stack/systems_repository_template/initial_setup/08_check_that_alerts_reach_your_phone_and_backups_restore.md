@@ -245,7 +245,7 @@ You do the rest. It takes about 15 minutes.
 
    **Check:** `secrets usage` shows both keys as defined.
 
-8. **Apply the settings.** Run `every_server` with the desk's button, as
+8. **Apply the settings.** Run `every_server` with `util01`'s helper, as
    a desk job ([Making a change](../AGENTS.md#making-a-change)). The run
    writes `/etc/mmhotline/mmhotline_settings.yml`, and its
    `apply_the_mmhotline_settings` stage runs `mmhotline settings apply`.

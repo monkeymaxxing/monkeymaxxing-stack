@@ -394,10 +394,10 @@ chapter.
    > First, I wait for the first restore drill to finish.
 
    ```sh
-   # This systems desk, in the systems repository; these runs execute on the systems desk,
-   # because util01's helper refuses until run 2 has applied MMHotline's settings:
-   sudo -n -u servers-mmx run-mmx-on-the-servers run update_database_servers --connection ssh_only
-   sudo -n -u servers-mmx run-mmx-on-the-servers run reboot_servers_after_updates --connection ssh_only
+   # This systems desk, in the systems repository; these runs execute on util01,
+   # through its helper, which works from run 2 on and waits for the drill's lock:
+   ./server_management_scripts/run_mmx_on_util01 run update_database_servers
+   ./server_management_scripts/run_mmx_on_util01 run reboot_servers_after_updates
    ```
 
    Each run must pass before the next starts. The first command includes
