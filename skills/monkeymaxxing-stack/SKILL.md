@@ -37,7 +37,9 @@ instructions, "you" is you, the coding agent, and the person is "the
 person".
 
 For a new system, start [chapter 1 (answer two questions)](systems_repository_template/initial_setup/01_answer_two_questions.md)
-with its first question. The person has already chosen the stack, so do
+with [its one approval](systems_repository_template/initial_setup/01_answer_two_questions.md#first-one-approval-for-the-setups-commands),
+so the person approves the setup's commands once instead of at every step,
+then its first question. The person has already chosen the stack, so do
 not explain the whole project first. [Chapter 0](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
 holds the map, for when the person asks.
 
@@ -62,6 +64,25 @@ after**, with the result and the link where the person sees the result. A
 step with no message says why in one line. Say each message when its step
 comes, in your own words, with the team's own names and links. Do not
 present the whole chapter before its first action.
+
+In every reply:
+
+- Put each screen the person acts on in your own reply, whole. The person
+  never sees your commands or their output. When you then wait for the
+  person's result, put the screen first and whole in the reply's text,
+  then start the wait: Claude Code shows text before a long command
+  starts. The chapters give each wait, its time limit and what to say when
+  the limit passes. An agent that does not show its text before a command
+  ends its reply with the screen instead, and the person says "done".
+- Confirm each answer the person gives in your next reply, one line each,
+  and use it from then on.
+- Ask before choosing a name the person will see, such as the app's
+  address. Recommend the domain itself when the person named a domain.
+- When you list your changes, name every file that changed or is new.
+
+The first time you name the desk, explain it in one sentence: "Your desk
+is a small server of your own that holds the keys to your servers. I work
+through it and never copy the keys."
 
 Share detail from a step's instructions only when the person needs the
 detail for an action or asks for detail. The reasons a person may ask

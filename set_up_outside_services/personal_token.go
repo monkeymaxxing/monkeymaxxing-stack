@@ -306,9 +306,17 @@ func writeProxyFileWithSudo(request proxyFileRequest) error {
 	}
 	command := exec.Command("sudo", arguments...)
 	command.Stdin = strings.NewReader(request.Token + "\n")
-	command.Stdout, command.Stderr = os.Stdout, os.Stderr
+	// The root step's lines are for the coding agent, not the person's
+	// screen; a failure brings its last line, the reason, into the error.
+	var output bytes.Buffer
+	command.Stdout, command.Stderr = &output, &output
 	if err := command.Run(); err != nil {
-		return fmt.Errorf("the API proxy kept its old token: the root step failed (%v)", err)
+		lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+		reason := strings.TrimPrefix(lines[len(lines)-1], "Stopped: ")
+		if reason == "" {
+			reason = err.Error()
+		}
+		return fmt.Errorf("the API proxy kept its old token: the root step failed: %s", trimPeriod(reason))
 	}
 	return nil
 }

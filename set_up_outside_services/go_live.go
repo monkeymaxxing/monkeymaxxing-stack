@@ -170,6 +170,9 @@ func (g *goLive) prepare() error {
 	if g.results.Finished {
 		return nil
 	}
+	// A new run has not stopped yet; the coding agent waits for finished or
+	// stopped_with, so an earlier run's reason must not end its wait.
+	g.results.StoppedWith = ""
 	if g.providerCredential, err = g.readProviderCredential(); err != nil {
 		return err
 	}
@@ -363,8 +366,13 @@ func (g *goLive) refused(service, item string, err error, advice string) {
 		g.e.say("%s", capitalize(trimPeriod(err.Error()))+".")
 	}
 	g.e.say("%s", advice)
+	g.e.say(stillWaitingHere)
 	g.e.say("")
 }
+
+// stillWaitingHere follows each refusal: a hidden prompt shows nothing
+// while the person types, so without it the screen looks finished.
+const stillWaitingHere = "The setup is still running.  It waits for you at the line below."
 
 // Account 2 of 4: Cloudflare.
 
@@ -719,14 +727,47 @@ Do this now:
 Then paste the two values here.
 
 `, region, g.passwordManager()))
+	if err := g.askForTheMasterKey(endpoint); err != nil {
+		return "", err
+	}
+	err = e.quietly(func() error { return e.setUpBackblaze(g.b2, plan, g.saved, g.oldKeys) })
+	if err != nil {
+		return "", err
+	}
+	return stepDone, nil
+}
+
+// askForTheMasterKeyAgain is for a rerun whose Backblaze screen was done in
+// an earlier run: the master key is never kept, so the recovery bundle's
+// copy at Backblaze needs it once more.
+func (g *goLive) askForTheMasterKeyAgain() error {
+	g.e.show(fmt.Sprintf(`
+Paste your Backblaze master key again.
+
+What this is for:
+  The setup needs it once more, to put a copy of your recovery bundle into your locked backup bucket.  It does not keep the key.
+
+Do this now:
+  1. Find the keyID and applicationKey, if you saved them in %s.
+     If you did not, open  App Keys  at Backblaze and press  Generate New Master Application Key.
+  2. Paste the two values here.
+
+`, g.passwordManager()))
+	return g.askForTheMasterKey(g.settings.Vars.Backups.B2S3Endpoint)
+}
+
+// askForTheMasterKey asks until Backblaze accepts a master key in an account
+// the person keeps, and signs in with it.
+func (g *goLive) askForTheMasterKey(endpoint string) error {
+	e := g.e
 	for g.b2 == nil {
 		keyID, err := g.askVisible("  keyID: ")
 		if err != nil {
-			return "", err
+			return err
 		}
 		applicationKey, err := g.askHidden("  applicationKey (hidden): ")
 		if err != nil {
-			return "", err
+			return err
 		}
 		client, err := authorizeB2(e.b2AuthorizeURL, keyID, applicationKey)
 		var refusal *apiError
@@ -734,24 +775,76 @@ Then paste the two values here.
 		case errors.As(err, &refusal):
 			g.refused("Backblaze", "key", err, "Check that you copied both values whole, then paste them again.")
 		case err != nil:
-			return "", err
+			return err
 		case len(missingCapabilities(client.capabilities)) > 0:
 			g.refused("Backblaze", "key", errors.New("this key is not the master key: it cannot make buckets and keys"),
 				"Press  Generate New Master Application Key,  and paste its two values.")
 		default:
-			g.b2 = client
+			e.say("Backblaze accepted the key.")
+			keep, err := g.keepTheAccountsRegion(client, endpoint)
+			if err != nil {
+				return err
+			}
+			if keep {
+				g.b2 = client
+			}
 		}
 	}
-	e.say("Backblaze accepted the key.")
-	if !g.b2.hasS3Endpoint(endpoint) {
-		// The region cannot change, so the settings follow the account.
-		g.note("b2_s3_endpoint", strings.TrimPrefix(g.b2.s3APIURL, "https://"))
+	return nil
+}
+
+// keepTheAccountsRegion asks the person, when the account's region differs
+// from the planned one, whether to carry on with the account or make a new
+// one in the planned region. The region cannot change, so carrying on makes
+// the settings follow the account.
+func (g *goLive) keepTheAccountsRegion(client *b2Client, endpoint string) (bool, error) {
+	accountEndpoint := strings.TrimPrefix(client.s3APIURL, "https://")
+	if client.hasS3Endpoint(endpoint) {
+		return true, nil
 	}
-	err = e.quietly(func() error { return e.setUpBackblaze(g.b2, plan, g.saved, g.oldKeys) })
-	if err != nil {
-		return "", err
+	if g.results.ForTheCodingAgent["b2_s3_endpoint"] == accountEndpoint {
+		// The person chose this account in an earlier run.
+		return true, nil
 	}
-	return stepDone, nil
+	account, planned := backblazeRegionName(accountEndpoint), backblazeRegionName(endpoint)
+	if account == "" {
+		account = accountEndpoint
+	}
+	if planned == "" {
+		planned = endpoint
+	}
+	g.e.show(fmt.Sprintf(`
+Your Backblaze account is in  %s.  The plan was  %s,  near your servers.
+An account's region cannot be changed.
+
+Choose one:
+  1. Carry on with  %s.  Your backups work the same, farther from your servers.
+  2. Make a new Backblaze account in  %s.  It needs another email address.
+
+`, account, planned, account, planned))
+	for {
+		answer, err := g.askVisible("  Type 1 or 2: ")
+		if err != nil {
+			return false, err
+		}
+		switch answer {
+		case "1":
+			g.note("b2_s3_endpoint", accountEndpoint)
+			return true, nil
+		case "2":
+			g.e.show(fmt.Sprintf(`
+Make the new account:
+  1. Open  https://www.backblaze.com/sign-up/cloud-storage  and sign up with another email address.
+  2. When Backblaze asks for a region, choose  %s.
+  3. Save the login in %s.
+  4. Open  App Keys  and press  Generate New Master Application Key.
+
+Then paste the new account's two values here.
+
+`, planned, g.passwordManager()))
+			return false, nil
+		}
+	}
 }
 
 // The Git host's registry token.
@@ -817,6 +910,9 @@ This token stops working on %s.
 				return "", err
 			}
 			if strings.ToLower(strings.TrimSpace(answer)) != "yes" {
+				e.say("")
+				e.say(stillWaitingHere)
+				e.say("")
 				continue
 			}
 			g.note("container_registry_read_only_token_expires_at", check.expiresAt.Format(time.RFC3339))
@@ -1191,6 +1287,7 @@ Do this now:
 		}
 		e.say("")
 		e.say("That is not the passphrase above.  Check the copy in %s, then type it again.", g.passwordManager())
+		e.say(stillWaitingHere)
 		e.say("")
 	}
 	e.clearValueFromScreen()

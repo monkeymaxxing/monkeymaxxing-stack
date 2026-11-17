@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -596,5 +597,45 @@ func TestAnAppWithUploadsNamesItsKeyVariables(t *testing.T) {
 	writeFile(t, path, strings.ReplaceAll(string(text), "access_key_id: R2_ACCESS_KEY_ID", "access_key_id: NOT_LISTED"))
 	if err := h.runCloudflare(); err == nil || !strings.Contains(err.Error(), "does not list") {
 		t.Fatalf("want the variable check, got %v", err)
+	}
+}
+
+// The root step that hands the API proxy a token prints its check for the
+// coding agent. In go-live the person's terminal must not show it; a failed
+// step still names its reason.
+func TestTheProxyStepPrintsNothingOnThePersonsScreen(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	fakeSudo := func(script string) {
+		writeFile(t, filepath.Join(bin, "sudo"), "#!/bin/sh\ncat > /dev/null\n"+script)
+		if err := os.Chmod(filepath.Join(bin, "sudo"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	screen := func(work func() error) (string, error) {
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		stdout, stderr := os.Stdout, os.Stderr
+		os.Stdout, os.Stderr = writer, writer
+		workErr := work()
+		os.Stdout, os.Stderr = stdout, stderr
+		writer.Close()
+		shown, _ := io.ReadAll(reader)
+		return string(shown), workErr
+	}
+	request := proxyFileRequest{API: "cloudflare", Token: "a-token", CloudflareAccountID: testAccountID}
+
+	fakeSudo("echo 'The API proxy has the new token: http://127.0.0.1:8082/accounts/x/tokens/verify answered through it.'\n")
+	shown, err := screen(func() error { return writeProxyFileWithSudo(request) })
+	if err != nil || shown != "" {
+		t.Fatalf("a working step: want no screen text and no error, got %q, %v", shown, err)
+	}
+
+	fakeSudo("echo 'Stopped: systemctl restart failed: no such unit.' >&2\nexit 1\n")
+	shown, err = screen(func() error { return writeProxyFileWithSudo(request) })
+	if shown != "" || err == nil || !strings.Contains(err.Error(), "systemctl restart failed: no such unit") {
+		t.Fatalf("a failed step: want its reason in the error and no screen text, got %q, %v", shown, err)
 	}
 }

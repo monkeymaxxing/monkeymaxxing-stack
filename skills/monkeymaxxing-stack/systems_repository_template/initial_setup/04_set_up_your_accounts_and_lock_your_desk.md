@@ -32,8 +32,8 @@ domain at Cloudflare, its DNS records, and the lock.
   `not_started`, and `stopped_with`, the reason a run stopped. Its
   `for_the_coding_agent` block holds values that are not secrets, which
   you write into the settings or check. The file never holds a secret.
-  Read the file through your login, every 30 seconds while the command
-  runs:
+  Wait for the file as step 2 says, and read it again each time the
+  person writes to you:
 
   ```sh
   # On the laptop:
@@ -48,9 +48,8 @@ domain at Cloudflare, its DNS records, and the lock.
 
 1. **Open your shared login before the lock.** Before the phone code
    exists, your login needs only the laptop key. Open the shared
-   connection now, and keep it in use: the reads of the results file use
-   it every 30 seconds, so the desk's one-hour idle limit never closes it
-   during this chapter.
+   connection now. When the person takes longer than the desk's one-hour
+   idle limit, the login closes, and step 8 says how to open it again.
 
    ```sh
    # On the laptop:
@@ -85,8 +84,44 @@ domain at Cloudflare, its DNS records, and the lock.
 
      ssh desk01-setup
 
-   It shows the next 3 accounts, one at a time.  I watch from here.
+   It shows the next 3 accounts, one at a time.
+   I carry on by myself when it is done.
+   Ask me here at any time if a step is unclear.
    ```
+
+   Put the screen first and whole in your reply's text. Then, in the same
+   turn, wait on the desk until `go-live` finishes or stops. Give the
+   command the longest time your agent allows a command, 10 minutes in
+   Claude Code:
+
+   ```sh
+   # On the laptop. Waits up to 9 minutes for go-live to finish or stop.
+   ssh desk01-agent 'f=/var/lib/monkeymaxxing-stack/setup_results.json; start=$(date +%s)
+     for i in $(seq 108); do
+       [ -f "$f" ] && [ "$(stat -c %Y "$f")" -ge "$start" ] && grep -qE "\"finished\": true|\"stopped_with\":" "$f" && break
+       sleep 5
+     done
+     cat "$f"'
+   ```
+
+   The wait counts only a results file written after it started, and a
+   new `go-live` run drops the earlier run's `stopped_with`. Reason for 9
+   minutes: the loop ends by itself before Claude Code's 10-minute limit
+   stops the command, and a question the person types meanwhile waits 9
+   minutes at most. The wait is one more session on your shared login, and
+   the person's `ssh desk01-setup` is a separate login, so neither blocks
+   the other. Both go through the same doubleshell tunnel, which serves
+   several connections at once.
+
+   When `finished` is true, carry on with the steps below without being
+   told. With `stopped_with`, tell the person the reason in plain words and
+   what to do. When the limit passed, read the file, do the work of each
+   step that is done, such as step 3's, then say in one line that you are
+   still waiting and that the person can type anything here when the
+   command is done, and end the reply. At the person's next message, read
+   the file, and wait again while `go-live` still runs. An agent that does
+   not show its text before a command ends its reply with the screen and
+   "When it says  Go back to your coding agent,  tell me "done" here."
 
    **Check:** the results file shows that `go-live` started.
 
@@ -159,9 +194,9 @@ domain at Cloudflare, its DNS records, and the lock.
      record that the scan missed. The MX records come first, because
      without them the company's email stops arriving.
 
-   **Tell the person,** after the command accepted the token: one line
-   about each piece of work, as it happens, such as "Cloudflare accepted
-   your token. I am checking your domain's DNS records at Cloudflare."
+   **Tell the person,** when your wait ends: one line about each
+   piece of work, such as "Cloudflare accepted your token. I checked your
+   domain's DNS records at Cloudflare."
 
    **Check:** the step `cloudflare` is `done`, and
    `vars.cloudflare_account_id` is committed in your clone.
@@ -236,9 +271,23 @@ domain at Cloudflare, its DNS records, and the lock.
    ```
 
    The command checks the key and prints `Backblaze accepted the key.`
-   When the account's region differs from `vars.backups`, the results
-   file's `b2_s3_endpoint` names the account's own endpoint: write it into
-   `vars.backups`, because the region cannot change.
+   When the account's region differs from `vars.backups`, the command
+   says so on the person's screen and waits for the person's choice:
+
+   ```text
+   Your Backblaze account is in  US West.  The plan was  EU Central,  near your servers.
+   An account's region cannot be changed.
+
+   Choose one:
+     1. Carry on with  US West.  Your backups work the same, farther from your servers.
+     2. Make a new Backblaze account in  EU Central.  It needs another email address.
+
+     Type 1 or 2:
+   ```
+
+   With 1, the results file's `b2_s3_endpoint` names the account's own
+   endpoint: write it, and its region, into `vars.backups`. With 2, the
+   command shows the new account's steps and asks for its key.
    Then it makes the buckets and keys as the settings in `vars.backups`
    name them, with Object Lock on the database backups' bucket and the
    uploads' copy, checks each lock with a test file, saves each server's
@@ -277,7 +326,21 @@ domain at Cloudflare, its DNS records, and the lock.
    publish once `go-live` has finished, as in step 3.
    `container_image_found` says whether CI has built the first image yet.
    With `no, not built yet`, check CI before chapter 7, with `gh run watch`
-   when `gh` is signed in.
+   when `gh` is signed in. Without `gh`, show the person one screen, with
+   the app's repository in the link:
+
+   ```text
+   One check: did GitHub build your app?
+
+   Do this now:
+     1. Sign in to GitHub in your browser.  Without it, the page says  Page not found.
+     2. Open  https://github.com/OWNER/shop/actions
+     3. Tell me what the newest run shows: a green tick, a red cross, or a yellow dot.
+   ```
+
+   A red cross: ask the person to open the run and tell you the failed
+   step's name, fix the app, and push the fix after the person's "yes".
+   A yellow dot: the build still runs; ask again in a few minutes.
 
    An organization may require a token that ends. The command accepts a
    token that ends 30 or more days from now, after the person types `yes`,
@@ -471,7 +534,10 @@ domain at Cloudflare, its DNS records, and the lock.
   the command shows the service's reason and asks again. Nothing else is
   needed.
 - **The person stops in the middle:** `ssh desk01-setup` again continues
-  at the first screen that is not done.
+  at the first screen that is not done. When Backblaze was done in the
+  earlier run, a short screen asks for the master key once more, because
+  the key is never kept and the recovery bundle's copy goes into the
+  locked backup bucket. The same key works; a new master key works too.
 - **The domain shows "Pending" for longer than the setup takes:** chapters
   5 to 8 continue. Chapter 9's check through the public address waits for
   "Active".

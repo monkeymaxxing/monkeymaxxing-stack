@@ -881,7 +881,7 @@ func (e *environment) ensureDeskToken(link *cloudflareClient, settings systemSet
 		return &cloudflareClient{baseURL: e.cloudflareAPIURL, token: held, accountID: accountID, who: "your desk's Cloudflare token"}, nil
 	}
 	e.say("  Made your desk's token %q (ID %s): %s.", plan.TokenName, token.ID, describePolicies(plan.Policies))
-	e.say("  Saved it in the API proxy and in %s as %s. Load the file again in open terminals: . %s", path, deskTokenVariable, path)
+	e.say("  Saved it in the API proxy and in %s as %s.", path, deskTokenVariable)
 	if held != "" && heldID == "" {
 		e.say("  Your token file held an earlier Cloudflare token that is not an account token of account %s, such as a token you made yourself.", accountID)
 		e.say("  This command cannot delete it. Delete it on your profile's API Tokens page if it is yours: https://dash.cloudflare.com/profile/api-tokens")

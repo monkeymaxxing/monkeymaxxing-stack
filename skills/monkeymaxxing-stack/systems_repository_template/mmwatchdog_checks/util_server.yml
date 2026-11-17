@@ -207,6 +207,7 @@ check_groups:
 {{- $installed := true }}
 {{- if eq $program "codex" }}{{ $installed = eq $.inputs.triage_agent_coding_agent "codex" }}{{ end }}
 {{- if eq $program "rclone" }}{{ $installed = not (empty $.inputs.backups.uploads_backup_runs_on) }}{{ end }}
+{{- if eq $program "doubleshell" }}{{ $installed = false }}{{ end }}
 {{- if $installed }}
 {{- if regexMatch "^https://github[.]com/[^/]+/[^/]+/releases/download/" $release.download_url }}
 {{- $_ := set $checked_programs $program (regexReplaceAll "^https://github[.]com/([^/]+/[^/]+)/releases/download/.*$" $release.download_url "${1}") }}

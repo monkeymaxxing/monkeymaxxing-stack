@@ -11,8 +11,8 @@ install two tools and start the systems repository on the laptop.
 **Who acts:** the person answers two questions and says "go". You work
 out every other value from the laptop and the domain, and do the rest.
 
-**Tell the person when the chapter starts:** no separate message. The
-first question is the opening.
+**Tell the person when the chapter starts:** the one approval below,
+then the first question in the same reply.
 
 Chapters 1 to 9 are the first sitting, "go live". The first sitting ends
 with the app live, protected and backed up. Phone alerts are the second
@@ -32,6 +32,8 @@ holds the map of the whole system, for when the person asks.
   stand, with the team's own names and values in place of the example's.
   Show a line in capital letters on its own line, in bold. Keep each
   blank line: the blank lines make the screen easy to read.
+- **Each screen goes in your own reply, whole,** as the skill's
+  "Talking with the person" says, with the other rules for every reply.
 - **Short messages.** Between screens, say what you do in one line at a
   time, such as "I am adding your domain at Cloudflare." Explain more
   only when the person asks.
@@ -42,11 +44,112 @@ holds the map of the whole system, for when the person asks.
   exists, the commits stay in the laptop's copy. From chapter 4 on, follow
   the systems repository's [`AGENTS.md`, "Making a change"](../AGENTS.md#making-a-change).
 
+## First: one approval for the setup's commands
+
+Your coding agent's program asks the person before each new command, file
+change, or web page, such as Claude Code's "Do you want to proceed?". The
+setup runs about a hundred commands, so ask for one approval at the start
+instead.
+
+In Claude Code, write the allow rules below into
+`.claude/settings.local.json` in the app's folder, where the person
+started you. Claude Code reads the file at once, with no restart, and asks
+the person once before it writes the file, because the file is Claude
+Code's own setting. That question is the one approval. Use the local file,
+not `.claude/settings.json`: the local file stays on this laptop and never
+goes into the app's code. Never commit it.
+
+The rules use no team name, so you write the file once, before the
+first question. Use the path of the skill's folder, the folder that holds
+`SKILL.md`, and add its real path too when the skill is installed as a
+link. Read web pages, such as the provider's price page, with `curl`.
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(mmx *)",
+      "Bash(doubleshell *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(ssh desk01-agent *)",
+      "Bash(ssh root@desk01 *)",
+      "Bash(ssh -o StrictHostKeyChecking=accept-new root@desk01 *)",
+      "Bash(ssh -F ssh/desk01 *)",
+      "Bash(ssh -O check desk01-agent)",
+      "Bash(ssh-keygen *)",
+      "Bash(curl *)",
+      "Bash(jq *)",
+      "Bash(dig *)",
+      "Bash(tar *)",
+      "Bash(shasum *)",
+      "Bash(sha256sum *)",
+      "Bash(openssl *)",
+      "Bash(podman run *)",
+      "Bash(podman build *)",
+      "Bash(docker run *)",
+      "Bash(docker build *)",
+      "Bash(./server_management_scripts/*)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(ln *)",
+      "Bash(chmod *)",
+      "Edit(./**)",
+      "Edit(~/code/*_systems/**)",
+      "Edit(~/*-setup/**)",
+      "Edit(~/.ssh/config)",
+      "Edit(~/.config/doubleshell/**)",
+      "Read(~/code/*_systems/**)",
+      "Read(~/*-setup/**)",
+      "Read(~/.claude/skills/monkeymaxxing-stack/**)"
+    ]
+  }
+}
+```
+
+`Edit` rules cover every tool that writes a file. A compound command runs
+without a question only when each part matches a rule, and a command that
+starts with a variable, such as `COPYFILE_DISABLE=1 tar`, asks. So a few
+commands still ask, and `rm` always asks: the person approves each one
+as it comes. Never add `Bash(*)` or a rule for `rm`, and never turn off
+the questions with a mode that skips them all. Reason: a wildcard in an
+`rm` rule also matches a second path, such as `~/`.
+
+**Tell the person first,** in your first reply, before you write the
+file:
+
+```text
+Before I start: one approval, so I do not ask "allow?" at every step.
+
+I add one list to this folder, in  .claude/settings.local.json.
+It lets me do these without asking each time:
+  - run the setup's tools: mmx, doubleshell, git, ssh to your desk, curl, and a few more
+  - change files in this app's folder, and in the systems folder I make in  ~/code
+  - add your desk to your SSH settings,  ~/.ssh/config
+
+Your desk is a small server of your own that holds the keys to your servers.
+I work through it and never copy the keys.
+
+Anything else still asks you.  The list stays on this laptop.  It never goes into your app's code.
+
+Claude Code now asks you once.  Choose  Yes.
+```
+
+Then write the file. After the person's approval, ask the first question
+in the same reply.
+
+With another coding agent, use its own way to approve the setup's
+commands once, and say plainly what it allows.
+
+**Check:** the person chose Yes, and `.claude/settings.local.json` holds
+the rules.
+
 ## Steps
 
 1. **The domain.**
 
-   **Ask the person,** as the first message:
+   **Ask the person,** in the same first reply, after the approval:
 
    ```text
    Two questions, then I start.
@@ -81,6 +184,10 @@ holds the map of the whole system, for when the person asks.
    - **Size:** the smallest system, three production servers and one
      desk. The fuller system adds `staging01`, a test server, and
      `app002`, a second app server.
+   - **Your app's address:** the domain the person named, as named, such
+     as `example.com`. The domain itself is the default. Never choose a
+     name such as `shop.example.com` yourself: offer it only when the
+     person asks, or when the domain already runs another site.
    - **Company name:** from the domain, such as `Example` for
      `example.com`.
    - **Password manager:** the one the laptop has, such as 1Password,
@@ -98,6 +205,7 @@ holds the map of the whole system, for when the person asks.
 
      Servers near:       Frankfurt          (from your laptop's time zone: change this if your users are somewhere else)
      Size:               the smallest system (3 servers and 1 desk)
+     Your app's address: example.com        (your domain itself)
      Company name:       Example            (from your domain)
      Password manager:   1Password          (the one this laptop has)
      Your name on the desk:  alex           (your laptop's user name)
@@ -118,8 +226,13 @@ holds the map of the whole system, for when the person asks.
    what one line means, answer in one or two sentences, then show the
    screen again.
 
+   When the person changes a line, confirm each change in your next reply,
+   in one line each, such as "Password manager: 1Password, as you said.
+   Your name on the desk: sam." A name the person gives for the desk
+   becomes a user name in lowercase letters, such as `sam` for "Sam".
+
    **Check:** the person said "go", or you changed what the person asked
-   and the person then said "go".
+   and the person then said "go". Your next reply confirms each change.
 
 4. **The tools.** Install the release of MMX that `stack_software.mmx`
    in the installed skill's `systems_repository_template/mmx_project_settings.yml`
@@ -127,10 +240,15 @@ holds the map of the whole system, for when the person asks.
    Verify the archive against `SHA256SUMS`, keep the complete archive
    layout in `~/.cache/monkeymaxxing-stack/desk-bootstrap-tools/`, and
    link `mmx` into `~/.local/bin`. Never fill a pin by hand.
-   Install doubleshell's newest release as
+   Install the release of doubleshell that `stack_software.doubleshell`
+   pins, never a newer one: download
+   `doubleshell-VERSION-PLATFORM.tar.gz` for the laptop's platform from
+   the folder of the pin's `download_url`, such as
+   `doubleshell-0.1.2-macos-arm64.tar.gz`, check its SHA-256 against
+   `laptop_archive_sha256` for that platform, and copy the binary to
+   `~/.local/bin`, as
    [doubleshell installation](https://github.com/monkeymaxxing/doubleshell#install)
-   says: download the archive, check it against `SHA256SUMS`, and copy
-   the binary to `~/.local/bin`. The laptop also needs Git 2.34 or later,
+   says. A SHA-256 that differs stops the install. The laptop also needs Git 2.34 or later,
    OpenSSH, Bash, jq, curl, and OpenSSL. On Windows, every command runs
    inside WSL.
 
