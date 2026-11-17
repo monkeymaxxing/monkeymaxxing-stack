@@ -76,7 +76,9 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
-   I carry on by myself when it is done.
+   Then leave that window open. It shows when your desk is ready, about
+   10 minutes later, and goes on to the next questions by itself.
+   I carry on by myself meanwhile.
    ```
 
    Then, in the same turn, wait for the key file. Give the command the
@@ -98,6 +100,8 @@ account screen of step 1 is the opening.
    when it is not there yet. Never print the file. An agent that does
    not show its text before a command ends its reply with the screen and
    "When it says  Hetzner accepted the key,  tell me "done" here."
+   The key command stays open after that on purpose: chapter 4 step 2
+   tells it when the desk is ready.
 
    **Check:** `~/example-setup/provider-key` exists, mode `0600`.
 
@@ -142,9 +146,9 @@ account screen of step 1 is the opening.
    into `server_management_scripts/` of the laptop's copy, from the guide
    and the
    [provider script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts).
-   At Hetzner Cloud, install `hcloud` on the laptop for now, as the
-   guide says, with the key only in the environment, so no saved
-   `hcloud` context remains. Check the key with the list script:
+   The scripts call the provider's API with `curl` and `jq`, so install
+   no provider program on the laptop. Check the key with the list script,
+   which reads it from the environment only:
 
    ```sh
    # On the laptop, in ~/code/example_systems:
@@ -240,7 +244,8 @@ repository's name, including paths inside quoted SSH commands.
    `~/example-setup/provider-key` in the same command, and
    `/tmp/desk01-first-boot.yml` as first-boot data. Public SSH stays
    closed from first boot. Record the returned public address as
-   `desk01.vars.public_ipv4_address`. Clear the private first-boot file at
+   `desk01.vars.public_ipv4_address` and the returned `id` as
+   `desk01.vars.provider_server_id`. Clear the private first-boot file at
    once after the provider accepts or refuses the request:
 
    ```sh
@@ -256,7 +261,7 @@ repository's name, including paths inside quoted SSH commands.
    ```
 
    **Check:** the provider lists `desk01`, `desk01.vars.public_ipv4_address`
-   holds its address, and `/tmp/desk01-first-boot.yml` is empty.
+   holds its address, `desk01.vars.provider_server_id` holds its ID, and `/tmp/desk01-first-boot.yml` is empty.
 
 3. **The laptop's way in.** Write `~/.config/doubleshell/desk01.conf`
    with the following block. The file holds no secret: it has no

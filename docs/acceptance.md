@@ -119,9 +119,7 @@ The contracts below state the required outcomes for changes to the stack.
   `coding_agent_login_longest_hours` (10), so a changed laptop setting cannot lengthen it. Through that login the
   agent uses the production key's socket, `run-mmx-on-the-servers` (run as the `servers-mmx` account) and the API
   proxy, and never reads a key or a token. A run longer than a few minutes is a desk job that keeps running while
-  the laptop sleeps; the agent reads its log and exit file later. A desk job is one of the Stack's own runs,
-  started with `sudo -n start-a-desk-job`, and ends after `coding_agent_login_longest_hours`; everything else the
-  login started ends with the login, and the agent's account reaches only the desk and the servers over WireGuard. Nothing on the desk needs resuming, and nothing
+  the laptop sleeps; the agent reads its log and exit file later. Nothing on the desk needs resuming, and nothing
   is signed in there. The person logs in to the desk only for a hidden prompt or a desk review, each one short
   command plus one phone code.
 - **The team's main copy is on `util01`:** a root-owned bare repository that refuses force pushes and branch

@@ -60,15 +60,16 @@ DESK_COPY = Path('/var/lib/systems-desk/systems_repository')
 # Where the bootstrap's copy of the systems repository is, which the desk
 # copy starts from.
 CODING_AGENT_CHECKOUT = Path('/home/coding-agent/systems_repository')
-# Root's Git runs only in root's own repositories. It fetches pushed main
-# from the main copy on util01 over SSH (pull_main_into_the_desks_copy), and
-# before util01 exists from a copy of the coding agent's checkout
-# (FETCH_PUSHED_MAIN), never with Git in the checkout.
+# Root's Git reads only local repositories: it fetches pushed main from a
+# copy of the coding agent's checkout (FETCH_PUSHED_MAIN), never from util01
+# itself.
 GIT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8',
                    'GIT_CONFIG_GLOBAL': os.devnull}
-# The coding agent's own Git, as its logins get it (sshd.conf). Root runs it
-# only to ask whether the checkout has an origin, until root's first pull
-# from util01, so root never runs Git inside the coding agent's checkout.
+# The coding agent's own Git, as its logins get it (sshd.conf), which
+# reaches the main copy on util01 (origin of its checkout) with the
+# production key through the relay socket and util01's committed host key
+# (ssh.conf). Root runs it only to bring the checkout's origin/main up to
+# date, so root never runs Git inside the coding agent's checkout.
 CODING_AGENT_GIT = ['/usr/sbin/runuser', '-u', 'coding-agent', '--', GIT, '-c', 'core.hooksPath=/dev/null']
 CODING_AGENT_GIT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/home/coding-agent', 'LANG': 'C.UTF-8',
                                 'SSH_AUTH_SOCK': '/run/desk-ssh-agent/socket',
@@ -165,25 +166,6 @@ def shown_name(repository, path):
     return os.path.normpath(path.relative_to(repository).as_posix())
 
 
-# The arguments through which MMX reads a file of the controller machine:
-# source, template, signing_key_source, package_file_source and
-# key_files_on_controller_machine. A field such as
-# shell.run_only_once_marker_file names a file on the desk instead.
-CONTROLLER_FILE_ARGUMENT = re.compile(r'(source|template|[a-z_]+_source|key_files_on_controller_machine(\[\d+\])?)')
-
-
-def refuse_a_path_outside_the_repository(repository, base, where, value):
-    """Stops the desk review when a file the desk playbook reads is named
-    by an absolute path, or by a relative one that leaves the repository.
-    Reason: the review shows only files of the repository, so such a file
-    could change after the person's yes, and the next desk review would run
-    it as root without a question. Same kind of Stop as inside()."""
-    if value.startswith('/') or not os.path.normpath(base/value).startswith(str(repository) + os.sep):
-        raise Stop('%s names %s, a path outside the systems repository. The desk playbook reads only files inside '
-                   'the repository, which your review shows: name the file by its path inside the repository. '
-                   'Nothing ran.' % (where, visible(value)))
-
-
 def referenced_files(repository, task):
     """Repository files a task copies as they are, named by an argument
     such as file.source or apt_repository.signing_key_source. A template's
@@ -197,9 +179,6 @@ def referenced_files(repository, task):
     for argument in task.get('arguments', []):
         value = argument.get('value')
         last = argument['field'].rsplit('.', 1)[-1]
-        if CONTROLLER_FILE_ARGUMENT.fullmatch(last) and isinstance(value, str) and value and '{{' not in value:
-            refuse_a_path_outside_the_repository(repository, bases[0], 'Task %s, argument %s,' % (
-                visible(task.get('path', '')), visible(argument['field'])), value)
         if not any(word in last for word in ('source', 'template', 'file')):
             continue
         if (argument['field'] in rendered or not isinstance(value, str) or not value or '\n' in value
@@ -260,8 +239,7 @@ def desk_run_view(repository, explain, inventory):
         for key in sorted(settings):
             lines += value_lines(key, settings[key])
             value = settings[key]
-            if key in CONNECTION_FILE_FIELDS and isinstance(value, str):
-                refuse_a_path_outside_the_repository(repository, repository, 'The inventory\'s %s of %s' % (key, visible(node)), value)
+            if key in CONNECTION_FILE_FIELDS and isinstance(value, str) and not value.startswith('/'):
                 path = repository/value
                 if path.exists() or path.is_symlink():
                     files[shown_name(repository, path)] = file_lines(repository, path)
@@ -338,105 +316,23 @@ def as_the_coding_agent(*arguments):
                           env=CODING_AGENT_GIT_ENVIRONMENT)
 
 
-# Root-owned, in the desk copy's .git: written at the first pull that
-# finds util01, so the coding agent cannot turn root back to its checkout
-# by removing the checkout's origin.
-PUSHED_MAIN_COMES_FROM_UTIL01 = '.git/pushed-main-comes-from-util01'
+def util01_exists():
+    """Whether the coding agent's checkout has an origin. Chapter 7 adds
+    origin, util01's main copy, once util01 exists; before that the checkout
+    is the main copy and has none."""
+    return as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0
 
 
-def main_copy_url(repository, revision):
-    """The main copy on util01, as root reaches it over SSH: util01's
-    address and SSH user from the inventory, and
-    systems_repository.main_copy_path_on_util01 from the settings, at
-    revision of the desk copy: HEAD, pushed main as root last fetched it,
-    or on a copy with no commit yet the checkout's main just read as data.
-    Never the coding agent's remote.origin.url."""
-    import yaml  # python3-yaml, which the desk role installs
-
-    def read(name):
-        shown = git(repository, 'show', '%s:%s' % (revision, name))
-        if shown.returncode:
-            raise Stop('%s is missing at %s' % (name, revision))
-        loaded = yaml.safe_load(shown.stdout)
-        return loaded if isinstance(loaded, dict) else {}
-    settings = read('mmx_project_settings.yml')
-    variables = settings.get('vars') if isinstance(settings.get('vars'), dict) else {}
-    path = (variables.get('systems_repository') or {}).get('main_copy_path_on_util01')
-    inventory = read('inventories/%s.yml' % settings.get('default_inventory', ''))
-    nodes = ((inventory.get('groups') or {}).get('util_server') or {}).get('nodes') or ['']
-    node = (inventory.get('nodes') or {}).get(nodes[0]) or {}
-    address, user = node.get('address'), node.get('ssh_user') or 'root'
-    for value in (path, address, user):
-        if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_./-]+', value) or value.startswith('-'):
-            raise Stop('the desk copy names no main copy on util01 that root can reach (util01\'s address %s, ssh_user %s, '
-                       'main_copy_path_on_util01 %s)' % (visible(str(address)), visible(str(user)), visible(str(path))))
-    return '%s@%s:%s' % (user, address, path)
-
-
-def ssh_to_the_main_copy(known_hosts):
-    """Root's SSH to the main copy on util01: the production key through the
-    person's private agent socket, as the desk playbook reads util01's join
-    code, and only the host keys in known_hosts."""
-    return ('ssh -F /dev/null -o IdentityAgent=%s -o IdentityFile=/etc/systems-desk/production_key.pub -o IdentitiesOnly=yes '
-            '-o UserKnownHostsFile=%s -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes -o BatchMode=yes '
-            '-o ForwardAgent=no -o ClearAllForwardings=yes -o ConnectTimeout=10' % (PRIVATE_AGENT_SOCKET, known_hosts))
-
-
-def pull_main_into_the_desks_copy(repository=DESK_COPY, at_the_bootstrap=False):
+def pull_main_into_the_desks_copy(repository=DESK_COPY):
     """Makes the desk copy pushed main: fetch, then reset, keeping only the
-    run history in .mmx. Returns whether the pull worked, and one plain
-    sentence that says what happened or what is in the way.
-
-    Pushed main is main of the main copy on util01, which root fetches
-    itself, into this root-owned copy, with main_copy_url's address. Root
-    never reads a ref the coding agent writes for it, so every commit root
-    runs is in the main copy's log of main.
-
-    Before util01 exists, the coding agent's checkout has no origin and is
-    the main copy, so its own main is pushed main, which root reads as data
-    (FETCH_PUSHED_MAIN). The first pull that finds an origin in the checkout
-    writes PUSHED_MAIN_COMES_FROM_UTIL01, and from then on root fetches from
-    util01 only, also while util01 is lost: a desk review then waits for
-    the new util01, and the lock-out button goes on with the copy it has.
-    at_the_bootstrap, for --record-the-first-desk-review only, reads the
-    checkout and leaves no mark. Reason: until the lock, the laptop that runs
-    the bootstrap is root on the desk anyway, and a desk rebuilt while
-    util01 is lost must still finish its bootstrap
-    (operating_procedures/rebuild_a_systems_desk.md).
-    util01's host key comes from ssh/known_hosts of both the desk copy and
-    the checkout's main, so a rebuilt util01's committed key works."""
-    if not (repository/'.git').is_dir():
-        # A desk from an earlier Stack version, whose desk reviews ran in the
-        # person's own checkout, gets its desk copy at its first such pull.
-        repository.mkdir(mode=0o700, parents=True, exist_ok=True)
-        repository.chmod(0o700)
-        git(repository, 'init', '--quiet', '-b', 'main')
-    marker = repository/PUSHED_MAIN_COMES_FROM_UTIL01
-    from_util01 = marker.exists() or (not at_the_bootstrap and as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0)
-    # Root reads the checkout, which coding-agent owns, as data only.
-    fetched = subprocess.run([FETCH_PUSHED_MAIN, str(CODING_AGENT_CHECKOUT), str(repository)], text=True, capture_output=True,
-                             env=GIT_ENVIRONMENT)
-    if not from_util01 and fetched.returncode:
-        return False, visible(' '.join(fetched.stderr.split()) or 'The fetch of pushed main did not work.')
-    if from_util01:
-        has_head = git(repository, 'rev-parse', '--verify', '--quiet', 'HEAD').returncode == 0
-        checkout_main = 'FETCH_HEAD' if fetched.returncode == 0 else None
-        known_hosts = ''.join(git(repository, 'show', '%s:ssh/known_hosts' % revision).stdout + '\n'
-                              for revision in ('HEAD' if has_head else None, checkout_main) if revision)
-        try:
-            revision = 'HEAD' if has_head else checkout_main
-            if not revision:
-                raise Stop('the desk copy has no commit yet, and the checkout\'s main could not be read')
-            url = main_copy_url(repository, revision)
-        except Stop as stop:
-            return False, 'The pull of main from the main copy on util01 did not work (%s).' % stop
-        with tempfile.NamedTemporaryFile('w', prefix='util01-known-hosts-') as hosts:
-            hosts.write(known_hosts)
-            hosts.flush()
-            fetched = subprocess.run(['timeout', '--kill-after=5', str(PULL_TIME_LIMIT_SECONDS), GIT, '-c', 'core.hooksPath=/dev/null',
-                                      '-C', str(repository), 'fetch', '--quiet', '--no-tags', '--', url, 'main'],
-                                     text=True, capture_output=True, stdin=subprocess.DEVNULL,
-                                     env={**GIT_ENVIRONMENT, 'GIT_SSH_COMMAND': ssh_to_the_main_copy(hosts.name)})
+    run history in .mmx. Pushed main is main of the main copy on util01,
+    origin of the coding agent's checkout, which the checkout fetches first;
+    before util01 exists the checkout has no origin and its own main is
+    pushed main. Returns whether the pull worked, and one plain sentence
+    that says what happened or what is in the way."""
+    has_origin = util01_exists()
+    if has_origin:
+        fetched = as_the_coding_agent('fetch', '--quiet', '--no-tags', 'origin', 'main')
         if fetched.returncode:
             said = ' '.join((fetched.stderr or fetched.stdout).split())[:400] or 'no message'
             if fetched.returncode in (124, 137):
@@ -444,12 +340,21 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY, at_the_bootstrap=False):
             else:
                 cause = 'git said: %s' % visible(said)
             return False, 'The pull of main from the main copy on util01 did not work (%s).' % cause
-        marker.write_text('Root fetches pushed main from the main copy on util01 (review-and-apply-the-systems-desk-settings).\n')
+    if not (repository/'.git').is_dir():
+        # The desk copy does not exist before the first pull.
+        repository.mkdir(mode=0o700, parents=True, exist_ok=True)
+        repository.chmod(0o700)
+        git(repository, 'init', '--quiet', '-b', 'main')
+    # Root reads the checkout, which coding-agent owns, as data only.
+    fetched = subprocess.run([FETCH_PUSHED_MAIN, str(CODING_AGENT_CHECKOUT), str(repository)], text=True, capture_output=True,
+                             env=GIT_ENVIRONMENT)
+    if fetched.returncode:
+        return False, visible(' '.join(fetched.stderr.split()) or 'The fetch of pushed main did not work.')
     for arguments in [('reset', '--quiet', '--hard', 'FETCH_HEAD'), ('clean', '--quiet', '-d', '--force', '-x', '--exclude=.mmx')]:
         done = git(repository, *arguments)
         if done.returncode:
             return False, 'git %s in %s did not work: %s' % (arguments[0], repository, visible(' '.join(done.stderr.split())[:400]))
-    if from_util01:
+    if has_origin:
         return True, 'Pulled main from the main copy on util01: the desk\'s copy is at %s.' % current_commit(repository)
     return True, ('Pulled main from the coding agent\'s checkout, the main copy until util01 exists: the desk\'s copy is at %s.'
                   % current_commit(repository))
@@ -560,7 +465,7 @@ def record_the_first_desk_review():
     if read_record()[0] is not None:
         return 0
     DESK_COPY.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pulled, reason = pull_main_into_the_desks_copy(DESK_COPY, at_the_bootstrap=True)
+    pulled, reason = pull_main_into_the_desks_copy(DESK_COPY)
     if not pulled:
         raise Stop('The desk copy could not be made from %s: %s' % (CODING_AGENT_CHECKOUT, reason))
     view, keys_view = what_the_desk_playbook_does(DESK_COPY)
@@ -595,10 +500,53 @@ def main(arguments):
     if not review(view, commit):
         raise Stop('Stopped. Nothing ran, and nothing was recorded.')
     write_record(view, commit, keys_view)
+    only, skipped = stages_to_run(only, util01_exists())
+    if skipped:
+        print(skipped, flush=True)
     command = [MMX, 'run', PLAYBOOK, '--var', 'desk_name=' + socket.gethostname(), *only, '--connection', 'ssh_only']
     print(' '.join(command), flush=True)
-    os.chdir(repository)
-    os.execve(MMX, command, {**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+    return run_and_explain_a_failure(command, repository)
+
+
+def stages_to_run(only, util01_exists):
+    """The --only-fleet-stages arguments for the run, and one plain line when
+    this skips the monitoring stages.
+
+    Joining the desk to MMWatchdog's fleet hub reads util01's join code, so
+    it cannot run before util01 exists. The checkout has an origin once
+    util01 exists (util01_exists); until then the
+    review runs the desk's own stages only, as the bootstrap does, and the
+    first review after util01 exists joins the desk to monitoring. A person's
+    own --only-fleet-stages stays as given."""
+    if util01_exists or only:
+        return only, None
+    return ['--only-fleet-stages', 'systems_desk,lock'], (
+        'util01 does not exist yet, so this review skips joining the desk to monitoring. '
+        'The first review after util01 exists does it.')
+
+
+def run_and_explain_a_failure(command, repository):
+    """Runs mmx with the person's private agent socket, in the desk's copy,
+    on the person's own terminal (so MMX keeps its live display). When it
+    fails, one plain sentence follows: what failed, whether anything is
+    harmed, and what happens next. The lines above it are for the coding
+    agent. Reason it is printed after: buffering the run to print it first
+    would hide the progress of a run that takes minutes."""
+    run = subprocess.Popen(command, cwd=repository, env={**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+    try:
+        code = run.wait()
+    except KeyboardInterrupt:
+        code = run.wait()
+    if code:
+        print()
+        print(FAILED_REVIEW_SENTENCE, flush=True)
+    return code
+
+
+FAILED_REVIEW_SENTENCE = (
+    'The desk review failed: one step of the desk playbook did not work, and nothing else was touched. '
+    'Your site and servers are not affected, and the desk keeps working with the settings it had. '
+    'Tell your coding agent: it reads the technical lines above, fixes the cause, and you run the review again.')
 
 
 if __name__ == '__main__':

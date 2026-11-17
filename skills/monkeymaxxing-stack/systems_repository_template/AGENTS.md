@@ -118,18 +118,11 @@ phone code opens a working session, and every later command reuses the
 connection. The desk closes the connection after one hour unused
 (`coding_agent_login_idle_minutes` in `mmx_project_settings.yml`) and after ten
 hours at most (`coding_agent_login_longest_hours`). Both are settings, with
-their reasons beside them. A command that prints nothing and reads nothing
-for the idle hour is closed too.
+their reasons beside them.
 
-Everything you start in the login ends with the login: a program you leave
-running, in the background or in your own systemd, stops when the
-connection closes. A run that must outlive the login is a desk job
-([Making a change](#making-a-change)). Your account on the desk reaches
-only the desk itself and the servers over WireGuard: run a request to a
-public address, such as an app's health URL at its public host name, on
-the laptop. Reason: while the login is open, any program on the laptop can
-use it, and nothing it starts may keep your powers after the login ends,
-or send what it reaches to an outside host.
+Run a request to a public address, such as an app's health URL at its public host name, on
+the laptop, not on the desk. Reason: the desk works with the servers over WireGuard, and the
+laptop's request shows what the app's users see.
 
 `~/code/example_systems/ssh/open-the-desk-login --check` says whether the
 connection is open: exit 0 open, 1 closed. When it is closed, ask the
@@ -537,50 +530,40 @@ each change, because only the desk holds the production key that lets a push int
    Commit the results, and publish them with steps 2 to 4. Report the outcome using [Talking with the team](talking_with_the_team.md).
 
 **A run longer than a few minutes is a desk job,** so the laptop may sleep
-and the connection may close without stopping the run. Start it with
-`sudo -n start-a-desk-job NAME -- COMMAND ARGUMENTS`, where NAME names the
-run, in lowercase letters, digits and `-`:
+and the connection may close without stopping the run. Start the run with
+`systemd-run --user`, with a log file and an exit file named after the run:
 
 ```sh
 # On the laptop. NAME: the run's name, such as every-server-2026-11-17-1405.
-ssh desk01-agent 'cd systems_repository && git pull --ff-only && sudo -n start-a-desk-job NAME -- run-mmx-on-the-servers run every_server --connection ssh_only'
+ssh desk01-agent 'mkdir -p ~/runs && systemd-run --user --unit=NAME --collect bash -c "cd ~/systems_repository && sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only > ~/runs/NAME.log 2>&1; echo \$? > ~/runs/NAME.exit"'
 ```
 
-A desk job runs one of these, and the command refuses anything else:
+A desk job does not get the two values sshd sets for your logins, because
+`systemd-run --user` starts it in your own systemd, not in the login. A
+job that pushes with Git, such as a `git push` from your checkout, passes
+both, right after `systemd-run --user`
+(`publish-branch-to-main` sets them itself):
+`-E SSH_AUTH_SOCK=/run/desk-ssh-agent/socket -E GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig`.
+Without them, Git cannot reach the main copy on `util01`.
 
-- `run-mmx-on-the-servers` with `run`, `dryrun`, `resume` or `run-command`
-  and its usual arguments: your MMX button, as `servers-mmx`.
-- `run_mmx_on_util01` with `run`, `dryrun`, `resume` or `run-command`
-  and its usual arguments: `./server_management_scripts/run_mmx_on_util01`
-  from the desk's checkout. Pull first, as the helper needs.
-- `publish-branch-to-main BRANCH`.
-
-Run every other command, such as `status`, `results` or `validate`, in
-your login. The job writes its output to `~/runs/NAME.log`, and its exit
-code, or a line that starts with `stopped:` when the desk ended the job, to
-`~/runs/NAME.exit`. The desk ends a desk job after
-`coding_agent_login_longest_hours` (ten hours). Wait for the job with one
-command, never a loop of `sleep`s; give the command a 10-minute limit in
-Claude Code:
+Wait for the job with one command, never a loop of `sleep`s; give the
+command a 10-minute limit in Claude Code:
 
 ```sh
-# On the laptop. NAME: the name you gave start-a-desk-job.
+# On the laptop. NAME: the name you gave the desk job.
 ssh desk01-agent wait-for-a-desk-job NAME
 ```
 
 It prints a few lines of the log as the job goes, ends when the job ends,
 and returns the job's exit code with a plain last line, such as
 `The desk job every-server-1405 ended with exit code 1.`, after the log's
-last 30 lines. Exit 125 means the job ended without an exit code, such
-as when the desk stopped it; the last line shows why. Exit 124 means the
-job still runs after 9 minutes: say in one line what the job is doing, and
-run the same command again. Run it for a job that already ended to read
-its result again. After a closed connection, open it again, as "Your
-login on the desk" says, then run the same command. Never start a run
-again only because the connection closed. A name that was used before is
-refused, so give each run a new name.
-Reason: the desk runs only the Stack's own runs after your login ends, so
-a program on the laptop cannot leave a job behind that keeps your powers.
+last 30 lines. Exit 125 means the exit file holds no number; the last line
+shows what it holds. Exit 124 means the job still runs after 9 minutes:
+say in one line what the job is doing, and run the same command again. Run
+it for a job that already ended to read its result again. After a closed
+connection, open it again, as "Your login on the desk" says, then run the
+same command. Never start a run again only because the connection closed.
+Give each run a new name.
 
 To update MMHotline's dashboard after a checklist-only change, run
 `./server_management_scripts/run_mmx_on_util01 validate`.

@@ -73,20 +73,30 @@ domain at Cloudflare, its DNS records, and the lock.
    says the login is open, and `~/code/example_systems` is a clone of the desk's
    repository.
 
-2. **The desk's setup command.**
+2. **The desk's setup command.** The laptop key command from chapter 3
+   is still open in the person's terminal, waiting for
+   `~/example-setup/desk-ready`. Make that file now, and the key command
+   runs `ssh desk01-setup` by itself in the same window, so the person
+   types nothing:
+
+   ```sh
+   # On the laptop:
+   touch ~/example-setup/desk-ready
+   ```
 
    **Ask the person:**
 
    ```text
    Your desk is ready.
 
-   Type this in your terminal:
-
-     ssh desk01-setup
-
+   The window where you typed the Hetzner key goes on by itself now.
    It shows the next 3 accounts, one at a time.
    I carry on by myself when it is done.
    Ask me here at any time if a step is unclear.
+
+   If you closed that window, type this in a terminal instead:
+
+     ssh desk01-setup
    ```
 
    Put the screen first and whole in your reply's text. Then, in the same
@@ -222,7 +232,7 @@ domain at Cloudflare, its DNS records, and the lock.
 
      4. Press save.
 
-   Press Enter here when you saved.  I check it from here.
+   Nothing to press here.  The next account comes next, and I check the nameservers myself later.
    ```
 
    When DNSSEC is on, the screen has a loud line above "Do this now:", and
@@ -232,11 +242,13 @@ domain at Cloudflare, its DNS records, and the lock.
    TURN OFF DNSSEC FIRST.  YOUR SITE WILL NOT WORK WITH IT ON.
    ```
 
-   After the person presses Enter, check the change with
+   The command asks for no keypress and goes on to Backblaze by itself.
+   Once `go-live` has finished, check the change with
    `dig NS example.com +short` until the answer names the two nameservers
    in `cloudflare_nameservers` of `for_the_coding_agent`. Cloudflare's own
    "Active" can take hours. Nothing in chapters 4 to 7 waits for
-   "Active".
+   "Active". When the answer still names other nameservers at chapter 9,
+   say so plainly and say what the person changes at the registrar.
 
    **Tell the person after:**
 
@@ -505,7 +517,8 @@ domain at Cloudflare, its DNS records, and the lock.
    The laptop keeps mmx, doubleshell, `~/.ssh/desk01`, `~/.ssh/desk01.pub`,
    `~/.ssh/desk01_known_hosts`, the desk's SSH entries, and
    `~/.config/doubleshell/desk01.conf`. Remove any provider tool's saved
-   login that the provider guide names, such as `~/.config/hcloud/cli.toml`.
+   login that the provider guide names; most guides name none, because the
+   scripts use `curl`.
 
    **Tell the person:** no message.
 

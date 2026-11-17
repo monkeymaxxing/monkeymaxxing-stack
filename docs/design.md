@@ -677,17 +677,12 @@ sshd journal, which names each root login's key, the reflog says which key pushe
 Before `util01` exists, the first desk's checkout is the main copy: it has no `origin`, `publish-branch-to-main`
 ends at the fast-forward of its `main`, and the vault commands commit there. The `util_server` role makes the empty bare
 repository, MMHotline's clone step skips it while it is empty, and the desk pushes `main` to it after the first run
-and makes it `origin` (chapter 7). The button and the WireGuard peers command read pushed `main` from the coding
-agent's checkout, `origin/main` when it has an origin and its own `main` before, so they work before `util01` exists
-and while it is lost. The WireGuard peers command must read the checkout, not `util01`: a rebuilt `util01`'s new
-WireGuard key is what lets the desk reach it. The desk review and the lock-out button, which run as root, fetch
-`main` from the main copy on `util01` themselves, into root's own desk copy, over SSH as root with the person's
-private agent socket, at the address and path in that copy. Reason: a ref in the coding agent's checkout is one the
-coding agent writes, and a commit root runs must be in the main copy's log of `main`, which the break-in guide reads.
-Before `util01` exists they read the checkout's own `main`; the first pull that finds an `origin` in the checkout
-leaves a root-owned mark in the desk copy, and from then on they fetch from `util01` only. While `util01` is lost, a
-desk review waits for the new one, and the lock-out button goes on with the copy it has. Every reader of the
-checkout reads it as data, through `fetch-pushed-main-from-the-coding-agents-checkout`: it copies the checkout's objects and
+and makes it `origin` (chapter 7). The desk's own readers, the button, the WireGuard peers command, the desk review
+and the lock-out button, read pushed `main` from the coding agent's checkout, `origin/main` when it has an origin
+and its own `main` before, so they work before `util01` exists and while it is lost; the desk review and the
+lock-out button first fetch `origin` into the checkout as the coding agent. The WireGuard peers command must read
+the checkout, not `util01`: a rebuilt `util01`'s new WireGuard key is what lets the desk reach it. All four read the
+checkout as data, through `fetch-pushed-main-from-the-coding-agents-checkout`: it copies the checkout's objects and
 refs into a new bare repository of the reader's own account, fetches the one ref from that copy, and deletes it.
 Reason: Git in a repository runs commands that the repository's own settings name, such as `core.fsmonitor`, and
 `coding-agent` writes those settings, so root and `servers-mmx` never run Git in the checkout or with it as the
@@ -5572,76 +5567,30 @@ template), and a timer ends a login older than
 reasons. Reason for the desk and not the laptop: a changed laptop setting
 cannot lengthen them. A laptop that sleeps less than the idle hour needs
 nothing; after a longer sleep the agent asks for one new code.
-`ChannelTimeout session:*` closes a command that sends and receives
-nothing for the same idle minutes, so one idle command, such as
-`ssh desk01-agent sleep 1d`, cannot hold the login open. It applies to
-every SSH login on the desk: Debian 13's sshd (OpenSSH 10.0p2) applies a
-`ChannelTimeout` written in a `Match` block only before the login, never to
-its commands, and labels a command's channel `session:command`, which a
-plain `session` does not match.
-
-**Nothing the agent starts outlives its login.** `coding-agent`'s systemd
-user session does not linger, logind ends the processes of its login when
-the login ends (`KillUserProcesses` for `coding-agent` alone), cron refuses
-its jobs, and the longest-login timer ends its user session with
-`loginctl terminate-user`. Reason: an open login is any laptop program's
-for a moment, and a job it leaves behind, such as an SSH tunnel to an
-outside host, would otherwise keep the relay socket, the API proxies and
-the sudo rules with no phone code (security review finding H4).
 
 **Long runs are desk jobs.** A run longer than a few minutes starts with
-`sudo -n start-a-desk-job NAME -- COMMAND ARGUMENTS`. The command starts
-only the Stack's own long runs, by name and with their arguments checked:
-the MMX button with `run`, `dryrun`, `resume` or `run-command`, as
-`servers-mmx`; `run_mmx_on_util01` with the same, as `coding-agent`; and
-`publish-branch-to-main BRANCH`. It refuses anything else, a path, a shell,
-extra arguments, and a job name that is not plain lowercase letters,
-digits, `-` and `_`. Each job is a root-owned transient unit,
-`desk-job-NAME.service`, outside the login, which writes
-`~coding-agent/runs/NAME.log` and, when it ends, `NAME.exit` with the exit
-code or a `stopped:` line. The unit writes both files as `coding-agent`,
-never as root, so a link the agent planted there cannot make root write
-elsewhere. The desk ends a job after `coding_agent_login_longest_hours`
-(`RuntimeMaxSec`). Reason for the limit: `run_mmx_on_util01` runs from the
-agent's checkout, which the agent can change, so the limit bounds what any
-desk job can keep doing after the login ends. Reason for desk jobs at all:
-nothing on the desk needs resuming, so no terminal-session program runs
-there; the agent's conversation lives on the laptop, where the agent
-already keeps it.
+`systemd-run --user` as `coding-agent`, with a log file and an exit file
+named after the run. It keeps running when the connection closes, and the
+agent reads the two files later. Reason: nothing on the desk needs
+resuming, so no terminal-session program runs there; the agent's
+conversation lives on the laptop, where the agent already keeps it.
 
 **The agent waits with one command.** `wait-for-a-desk-job NAME` and
 `wait-for-the-setup` run in the agent's own login, with no sudo. Each
-prints a line at least once a minute, so the desk's idle `ChannelTimeout`
-never closes it, and ends after 9 minutes by default with its own exit
-code (124), before Claude Code's 10-minute command limit. The job's exit
-code passes through; 125 means the job ended without one, such as a
-`stopped:` line. The wait reads only `~/runs/NAME.log` and `NAME.exit`,
-so it works for any way the job was started.
-`wait-for-the-setup` reads `go-live`'s results file, and a stop counts only
-when the file was written after the wait started, because an earlier run's
-`stopped_with` stays until the next run's first write. Reason: in
-walk-through run 1 the agent wrote 25 polling loops, and one blocked
-`sleep 240` turned a wait into a turn that ended with a promise.
+prints a line at least once a minute, so the person sees progress, and
+ends after 9 minutes by default with its own exit code (124), before Claude
+Code's 10-minute command limit. The job's exit code passes through; 125
+means the exit file holds no number. The wait reads only `~/runs/NAME.log`
+and `NAME.exit`. `wait-for-the-setup` reads `go-live`'s results file, and a
+stop counts only when the file was written after the wait started, because
+an earlier run's `stopped_with` stays until the next run's first write.
+Reason: in a newcomer test the agent wrote 25 polling loops, and one
+blocked `sleep 240` turned a wait into a turn that ended with a promise.
 `wait_for_the_app_image`, in `server_management_scripts/`, runs on the
-laptop, because the agent's desk account reaches no outside host and the
-desk's registry login is in the vault: it asks the registry's manifest
-address, with a login only when the laptop already saved one, and says
-"cannot tell" (exit 3), never "missing", when the registry refuses the
-laptop.
-
-**The agent's account reaches only the desk and WireGuard.** The desk
-firewall's output chain refuses every packet of `coding-agent` that leaves
-by an interface other than loopback and `wg0`. That leaves what the agent
-needs on the desk: the API proxies on loopback, and `util01`'s main copy
-and SSH to every server over `wg0`. Requests to public addresses, such as
-an app's health URL, run on the laptop, and so do app image builds without
-CI. WireGuard's encrypted packets keep the account of the program whose
-packet they carry, so `wg0` marks them (`FwMark = 0x4d4d`) and the rule lets
-the mark through; only root can set a mark. The API proxy, the MMX button's
-`servers-mmx` and the person are other accounts, outside the rule.
-Open point (2026-11-17): `servers-mmx` has no output limit; measure what
-MMX's controller reaches, then extend the rule. It is on the Stack's to-do
-list, "Not in this version's template yet" in `skills/monkeymaxxing-stack/SKILL.md`.
+laptop, because the desk's registry login is in the vault: it asks the
+registry's manifest address, with a login only when the laptop already
+saved one, and says "cannot tell" (exit 3), never "missing", when the
+registry refuses the laptop.
 
 **Edits on the laptop, publishing on the desk.** The agent clones the
 desk's checkout, `git clone desk01-agent:systems_repository`, edits with
@@ -5655,10 +5604,8 @@ nothing. The laptop pushes the Git host's backup with the person's own login.
 vault passphrase and the person's tokens stay on the desk, and the agent
 uses them without copying them. While the shared login is open, any
 program on the laptop could use it too. That is the main risk of this
-design, and the reason for the idle hour, the ten-hour limit, the end of
-everything the login started, the firewall rule for the agent's account,
-and the guide's rule to run the app's install and test commands in a
-container on the laptop.
+design, and the reason for the idle hour, the ten-hour limit, and the guide's
+rule to run the app's install and test commands in a container on the laptop.
 
 ## Naming
 
@@ -5745,13 +5692,9 @@ The command runs `mmx run systems_desk --var desk_name=<this desk> --connection 
 with the person-owned private agent socket, which reaches `util01` to read the monitoring join code.
 First bootstrap runs only `--only-fleet-stages systems_desk`, because `util01` does not exist yet;
 the laptop's bootstrap run uses `mmx` directly, and every later run uses the command.
-The command first fetches pushed `main` from the main copy on `util01` into root's own desk copy (before `util01`
-exists, from the coding agent's checkout as data), and stops with nothing run when the fetch fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
+The command first fetches `origin` into the coding agent's checkout, as the coding agent, reads pushed `main`
+from it as data, and stops with nothing run when the fetch fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
 the lock-out button shares the pull but goes on without it.
-The command stops, with nothing run, when the desk playbook names a file it reads by an absolute path or by a
-path that leaves the repository: a `source`, `template`, `*_source` or key-file argument, or the desk's `ssh_config`
-or `ssh_known_hosts`. Reason: the review shows only the repository's files, so such a file could change after the
-person's yes, and a later desk review would run it as root without a question.
 
 ### The desk bootstrap: the agent does the whole desk setup before the lock
 
@@ -6009,21 +5952,17 @@ The button uses the actual committed production inventory and settings, with des
 Reason: running MMX as the person would let a committed absolute `file.source` read personal keys from the controller.
 The button's vault passphrase is `/etc/systems-desk/vault-passphrase`, root:servers-mmx, mode `0640`.
 The button runs only an allow-list of MMX commands and options. Of the `secrets` commands it runs `set`, `add-random`,
-`list-keys`, `diff-keys` and `usage`, and refuses `--vault` and `--new-vault-password-file`. Reason: `secrets edit`
-opens an editor on the decrypted vault and `describe-module` a pager, and either one's shell escape runs as
-`servers-mmx`, which reads the vault passphrase file.
-Before MMX runs, the button checks `ssh/config` and every node's `ssh_config` in pushed `main`
-(`check-the-pushed-ssh-settings`): each is a plain file inside the repository, and each line uses only the keywords the
-template's own SSH files use, plus `HostName` and `Port`. `Include`, `Match` and every other keyword are refused.
-Reason: MMX hands the file to ssh with `-F`, and ssh runs the programs some keywords name (`ProxyCommand`,
-`LocalCommand`, `KnownHostsCommand`, `PKCS11Provider` and more) as `servers-mmx`.
+`list-keys`, `diff-keys` and `usage`, and refuses `--vault`, `--vault-password-file` and `--new-vault-password-file`.
+Reason: `secrets edit` opens an editor on the decrypted vault and `describe-module` a pager, which put vault secrets on the
+coding agent's screen, and a run must not point at another vault by mistake.
 No account on the desk accepts the production key that the button's runs offer: sshd admits only root from
 loopback, with the root-owned self-management key alone, and the person and `coding-agent` from elsewhere, with a
-laptop key and the phone code. The desk firewall also refuses `servers-mmx`'s connections to the desk's own SSH.
-Reason: a pushed inventory or `ssh_config` can name the desk under any address or `HostName`.
+laptop key and the phone code. Reason: a pushed inventory or `ssh_config` can name the desk under any address or `HostName`,
+and a run of the button must not log in to the desk by mistake.
 
 The API proxy supplies provider and Cloudflare authentication through loopback ports 8081 and 8082, from root-only token files. It is the desk's one program for this job. Reason: nginx, the alternative for the providers that take a token in a header, needs `proxy_http_version 1.1` and a deep enough `proxy_ssl_verify_depth` to reach Hetzner, Scaleway or Vultr, and one program already signs requests for the others. Go's HTTP client speaks HTTP/1.1 or later and verifies with the system's certificate store, and one program means one set of behavior for every provider.
 `systems_desk_provider_api_url` selects the provider's HTTPS base URL, including a trailing slash.
+The provider proxy on 8081 refuses, with the plain message "this would change your desk itself; the desk is managed by its own guide", any request other than GET whose path has the desk's own server ID as a segment, or whose query or body names it (a JSON value, or a form value such as AWS's `InstanceId.1`). The ID is `provider_server_id` in the desk's entry of `inventories/servers.yml`, from the create receipt; the desk playbook writes it, root-owned, to `/etc/systems-desk/desk-server-id`, and systemd hands it to the proxy. Reason: a cleanup must never delete or rebuild the desk by mistake. Limit: a provider that names a server by name in the path (Google Cloud, an OVHcloud VPS) is not covered, because the rule matches the ID only.
 `systems_desk_provider_api_authentication` says how the credential reaches each request: `token_in_a_header`
 (Hetzner, DigitalOcean, Vultr, Scaleway; Scaleway's token file sets `X-Auth-Token`, the others set
 Authorization), where the proxy adds the token on 8081, or one where it signs the requests on 8081; 8082 is always Cloudflare:

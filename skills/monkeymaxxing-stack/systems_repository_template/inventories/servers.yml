@@ -132,6 +132,9 @@ nodes:
     ssh_config: ssh/desk01
     vars:
       public_ipv4_address: 203.0.113.91
+      # This desk's own server ID at the provider, from the create receipt. The API
+      # proxy refuses a request other than GET that names it.
+      provider_server_id: "4242424242"
       private_ip: 10.20.9.1
       wireguard_public_key: "urzzcMKwVZ9bM84MmgWUjMRxOTNn2PDtEF5it/uZFQ4="
       person_unix_username: alex

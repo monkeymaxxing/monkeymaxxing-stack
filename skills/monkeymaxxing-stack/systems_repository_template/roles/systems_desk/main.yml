@@ -19,6 +19,10 @@ inputs:
   coding_agent_login_idle_minutes: {type: integer, required: true}
   coding_agent_login_longest_hours: {type: integer, required: true}
   provider_api_url: {type: string, default: "https://api.hetzner.cloud/v1/"}
+  # This desk's own server ID at the provider, from the create receipt
+  # (provider_server_id in the desk's entry of inventories/servers.yml). The
+  # API proxy refuses a request other than GET that names it.
+  provider_server_id: {type: string, required: true}
   # From systems_desk_provider_api_authentication: token_in_a_header, where
   # the API proxy adds the token on 127.0.0.1:8081, or
   # ovhcloud_signed_requests, aws_signed_requests or
@@ -37,10 +41,12 @@ node_tasks:
     assert:
       that:
         all:
+          - {number_at_least: ["{{ .inputs.coding_agent_login_idle_minutes }}", 1]}
           - {number_at_least: ["{{ .inputs.coding_agent_login_longest_hours }}", 1]}
       message: >-
+        coding_agent_login_idle_minutes is {{ .inputs.coding_agent_login_idle_minutes }} and
         coding_agent_login_longest_hours is {{ .inputs.coding_agent_login_longest_hours }}
-        in mmx_project_settings.yml. It must be a whole number of at least 1. Nothing changed.
+        in mmx_project_settings.yml. Each must be a whole number of at least 1. Nothing changed.
   - id: check_the_systems_desk_provider_api_authentication_setting
     assert:
       that:
@@ -213,53 +219,24 @@ node_tasks:
   # clear, and the coding agent holds no secret on this desk.
   - id: protect_the_coding_agents_home
     directory: {path: /home/coding-agent, owner: coding-agent, group: coding-agent, permissions_mode: "0711"}
-  # The coding agent's own processes end with its login. Its systemd user
-  # session does not linger, and logind ends every process of its login
-  # when the login ends (KillUserProcesses for coding-agent only). Reason:
-  # otherwise one open login can leave behind a job, such as an SSH tunnel
-  # to an outside host, that keeps the coding agent's powers with no phone
-  # code. Its long runs are desk jobs instead (files/start-a-desk-job). An
-  # earlier desk turned lingering on for rootless Podman; the desk builds
-  # no image now. cron.deny keeps cron from running the coding agent's own
-  # jobs, where cron is installed.
-  - id: stop_the_coding_agents_user_session_from_lingering
+  # The coding agent starts long runs with systemd-run --user, which needs
+  # its user's systemd to keep running after the login ends. Lingering
+  # starts the user's systemd at boot and keeps it. MMX has no module for it:
+  # systemd_service starts a unit in a user's systemd and so turns lingering
+  # on, but this desk runs no unit there. The linger file is where loginctl
+  # records it.
+  - id: keep_the_coding_agents_user_session_running
     shell:
       script: |
-        [ -e /var/lib/systemd/linger/coding-agent ] || exit 0
-        loginctl disable-linger coding-agent
+        [ -e /var/lib/systemd/linger/coding-agent ] && exit 0
+        loginctl enable-linger coding-agent
         exit 2
       dryrun: |
-        [ -e /var/lib/systemd/linger/coding-agent ] || exit 0
-        printf 'would run: loginctl disable-linger coding-agent\n'
+        [ -e /var/lib/systemd/linger/coding-agent ] && exit 0
+        printf 'would run: loginctl enable-linger coding-agent\n'
         exit 2
       success_exit_codes: [0, 2]
       changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
-  - task_block:
-      id: end_the_coding_agents_processes_with_its_login
-      changes:
-        - id: create_the_logind_settings_directory
-          directory: {path: /etc/systemd/logind.conf.d, owner: root, group: root, permissions_mode: "0755"}
-        - id: end_the_coding_agents_processes_when_its_login_ends
-          file:
-            path: /etc/systemd/logind.conf.d/50-systems-desk-coding-agent.conf
-            content: |
-              # Managed by MMX from roles/systems_desk/main.yml in the systems repository.
-              [Login]
-              KillUserProcesses=yes
-              KillOnlyUsers=coding-agent
-            owner: root
-            group: root
-            permissions_mode: "0644"
-      activate:
-        - id: restart_logind_with_the_new_settings
-          systemd_service: {name: systemd-logind, state: running, refresh: restart}
-  - id: refuse_cron_jobs_of_the_coding_agent
-    file:
-      path: /etc/cron.deny
-      content: "coding-agent\n"
-      owner: root
-      group: root
-      permissions_mode: "0644"
   # The bootstrap copies the systems repository from the laptop into
   # /home/coding-agent/systems_repository as root, before the coding-agent
   # account exists. Make the copy the coding agent's own, so its Git can
@@ -322,10 +299,6 @@ node_tasks:
   # writes (files/fetch-pushed-main-from-the-coding-agents-checkout says why).
   - id: install_the_command_that_reads_pushed_main_as_data
     file: {path: /usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout, source: files/fetch-pushed-main-from-the-coding-agents-checkout, owner: root, group: root, permissions_mode: "0755"}
-  # The button's check of pushed main's SSH settings files, which ssh would
-  # otherwise let run a program as servers-mmx (the file says why).
-  - id: install_the_check_of_the_pushed_ssh_settings
-    file: {path: /usr/local/bin/check-the-pushed-ssh-settings, source: files/check-the-pushed-ssh-settings, owner: root, group: root, permissions_mode: "0755"}
   - id: install_the_run_mmx_on_the_servers_command
     file: {path: /usr/local/bin/run-mmx-on-the-servers, source: files/run-mmx-on-the-servers, owner: root, group: root, permissions_mode: "0755"}
   # The person's desk review. It runs the desk playbook as root only after
@@ -342,12 +315,6 @@ node_tasks:
   # production key that lets a push into the main copy on util01.
   - id: install_the_publish_branch_to_main_command
     file: {path: /usr/local/bin/publish-branch-to-main, source: files/publish-branch-to-main, owner: root, group: root, permissions_mode: "0755"}
-  # The coding agent's long runs, as desk jobs that keep running after its
-  # login ends: only the Stack's own runs, each in a root-owned unit that
-  # ends after coding_agent_login_longest_hours at most
-  # (files/start-a-desk-job says which runs and why).
-  - id: install_the_desk_job_command
-    file: {path: /usr/local/bin/start-a-desk-job, template: files/start-a-desk-job, owner: root, group: root, permissions_mode: "0755"}
   # The coding agent's two waits, run in its own login with no sudo:
   # for a desk job, and for the person's go-live. Each one prints a line at
   # least once a minute and ends at a bound, so the agent waits with one
@@ -357,18 +324,6 @@ node_tasks:
     file: {path: /usr/local/bin/wait-for-a-desk-job, source: files/wait-for-a-desk-job, owner: root, group: root, permissions_mode: "0755"}
   - id: install_the_wait_for_the_setup_command
     file: {path: /usr/local/bin/wait-for-the-setup, source: files/wait-for-the-setup, owner: root, group: root, permissions_mode: "0755"}
-  - id: allow_the_coding_agent_the_desk_job_command
-    file:
-      path: /etc/sudoers.d/start-a-desk-job
-      content: "coding-agent ALL=(root) NOPASSWD: /usr/local/bin/start-a-desk-job *\n"
-      owner: root
-      group: root
-      permissions_mode: "0440"
-      check_new_file:
-        shell:
-          script: visudo -c -f "$NEW_FILE"
-          dryrun: visudo -c -f "$NEW_FILE"
-          env: {NEW_FILE: "{{ .new_file.path }}"}
   # The lock-out button runs as root on this desk and on every server. It
   # runs only these copies, which this desk review installs, never the pushed
   # ones. Reason: an intruder who can push to the main copy, such as through util01, must not
@@ -559,6 +514,17 @@ node_tasks:
   # leak of its conversation never carries them. The unit names the release
   # it runs and the provider's address, so a new release or address restarts
   # the proxy.
+  # The desk's own server ID at the provider, root-owned, which the API proxy
+  # reads (systemd's LoadCredential). Reason: the proxy refuses a request
+  # other than GET that names this ID, so a cleanup never deletes or
+  # rebuilds the desk by mistake; the desk is managed by its own guide.
+  - id: write_the_desks_own_server_id_for_the_api_proxy
+    file:
+      path: /etc/systems-desk/desk-server-id
+      content: "{{ .inputs.provider_server_id }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
   - task_block:
       id: provider_api_proxy
       changes:
@@ -1057,10 +1023,9 @@ node_tasks:
   # The coding agent's shared login ends after
   # coding_agent_login_longest_hours, used or not; sshd ends it after
   # coding_agent_login_idle_minutes unused (files/sshd.conf). The settings
-  # give the reasons. The timer ends every login of coding-agent and its
-  # systemd user session with it (terminate-user), so nothing the login
-  # started keeps running. The desk jobs that start-a-desk-job started are
-  # root-owned units outside the login, and keep running.
+  # give the reasons. Ending the login session ends its SSH connection;
+  # the coding agent's desk jobs run in its own systemd, outside the login,
+  # and keep running.
   - id: end_the_coding_agents_long_logins
     systemd_scheduled_job:
       name: end-long-coding-agent-logins
@@ -1075,7 +1040,7 @@ node_tasks:
           [ "$(loginctl show-session "$session" --property=Service --value)" = sshd ] || continue
           started=$(date -d "$(loginctl show-session "$session" --property=Timestamp --value)" +%s)
           if [ $((now - started)) -ge $((LONGEST_HOURS * 3600)) ]; then
-            loginctl terminate-user coding-agent
+            loginctl terminate-session "$session"
             printf 'Ended the coding agent'"'"'s login %s: it was open for more than %s hours.\n' "$session" "$LONGEST_HOURS"
           fi
         done

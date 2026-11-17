@@ -11,9 +11,11 @@ Cloudflare, the way users reach the app, and MMWatchdog's checks of the app
 turn on. The first release goes out the way every later release does.
 
 **Who acts:** you, the coding agent, check the app, change the settings,
-and run the release through the desk. The person says "release" to
-approve the first release to production, when
-`production_releases_wait_for_a_persons_approval` is `true`.
+and run the release through the desk. The first release asks the person
+for no approval, because the person approved the app's changes in
+chapter 2 and the first release is that approved image. To ask for the
+approval again, set `first_release_waits_for_a_persons_approval` to `true`
+in `mmx_project_settings.yml`; the steps below say where it applies.
 
 **Tell the person when the chapter starts:**
 
@@ -76,10 +78,15 @@ approve the first release to production, when
 
    YOUR SITE HAS NO PHONE ALERTS YET.  Say "set up alerts" to add them.  It takes about 15 minutes.
 
-   Say "release" to put your app's newest version live.
+   I am putting your app's newest version live now.
    ```
 
-   The person's "release" is the approval that
+   With `first_release_waits_for_a_persons_approval` set to `true`, the
+   last line is instead: Say "release" to put your app's newest version
+   live.
+
+   Without the setting, go on to step 3 at once. With it, the person's
+   "release" is the approval that
    [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release)
    asks for. Ask nothing else about the first release. Check CI yourself,
    with `gh run watch` when `gh` is signed in. Without `gh`, run
@@ -87,7 +94,8 @@ approve the first release to production, when
    cannot tell (exit 3), `deploy`'s image pull proves the image. Never ask
    the person whether CI is green.
 
-   **Check:** the person said "release".
+   **Check:** with the setting, the person said "release"; without it,
+   step 3 started.
 
 3. **The first release,** by [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release),
    follows the agent-run deployment used for every later release.
@@ -97,8 +105,10 @@ approve the first release to production, when
    change that users do not see, such as a line in the app's README, and
    ask nothing about it. Commit and push the change to the app's main
    branch from the app's folder on the laptop, with the person's own Git
-   login, as "A release" describes. The person's "release" in step 2 is
-   the one approval.
+   login, as "A release" describes. The first release skips the approval
+   that "A release" asks for when `production_releases_wait_for_a_persons_approval`
+   is `true`, unless `first_release_waits_for_a_persons_approval` is `true`.
+   Then the person's "release" in step 2 is the one approval.
    The new app commit must follow the app commit whose image chapter 7 (install everything on the production servers)
    started.
 

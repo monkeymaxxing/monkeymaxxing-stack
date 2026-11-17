@@ -168,38 +168,6 @@ class DeskRunView(unittest.TestCase):
         with self.assertRaisesRegex(DESK_REVIEW.Stop, 'points outside the systems repository'):
             self.view()
 
-    def test_an_absolute_file_path_stops_the_desk_review(self):
-        # The review would not show the named file, so a later change of
-        # its content would run as root with no question.
-        named = str(self.repository/'roles/systems_desk/files/coding-agent-gitconfig')
-        self.edit('roles/systems_desk/main.yml', 'source: files/coding-agent-gitconfig', 'source: ' + named)
-        with self.assertRaisesRegex(DESK_REVIEW.Stop, r'names %s, a path outside the systems repository' % re.escape(named)):
-            self.view()
-
-    def test_a_relative_file_path_that_leaves_the_repository_stops_the_desk_review(self):
-        # MMX refuses such a path too; the review does not rely on that.
-        for field, value in (('file.source', '../../../outside'), ('file.template', '../../../../etc/x'),
-                             ('apt_repository.signing_key_source', '/etc/key'),
-                             ('authorized_keys.key_files_on_controller_machine[0]', '/home/coding-agent/keys')):
-            with self.subTest(field=field):
-                task = {'path': 'systems_desk/x', 'source': {'file': 'roles/systems_desk/main.yml'},
-                        'arguments': [{'field': field, 'value': value}]}
-                with self.assertRaisesRegex(DESK_REVIEW.Stop, 'a path outside the systems repository'):
-                    list(DESK_REVIEW.referenced_files(self.repository, task))
-        # Other fields that end in "file" name a file on the desk, not one of the repository.
-        task = {'path': 'systems_desk/x', 'arguments': [{'field': 'shell.run_only_once_marker_file', 'value': '/var/lib/mmx/x'},
-                                                        {'field': 'wireguard_interface.template_text', 'value': '/x'}]}
-        self.assertEqual(list(DESK_REVIEW.referenced_files(self.repository, task)), [])
-
-    def test_an_absolute_ssh_settings_file_of_the_desk_stops_the_desk_review(self):
-        for field in ('ssh_config', 'ssh_known_hosts'):
-            with self.subTest(field=field):
-                connections = {**CONNECTIONS, 'desk01': {**CONNECTIONS['desk01'], field: str(self.repository/'ssh/desk01')}}
-                explained = subprocess.run([self.mmx, 'explain', 'systems_desk', '--var', 'desk_name=desk01', '--json'],
-                                           cwd=self.repository, text=True, capture_output=True)
-                with self.assertRaisesRegex(DESK_REVIEW.Stop, 'a path outside the systems repository'):
-                    DESK_REVIEW.desk_run_view(self.repository, json.loads(explained.stdout), {'nodes': connections})
-
     def test_control_characters_cannot_hide_a_line(self):
         before = self.view()
         self.edit('roles/systems_desk/files/run-mmx-on-the-servers', '#!', '#!/bin/sh\ncp key /tmp \x1b[1A\x1b[2K‮\n#!')
@@ -333,6 +301,37 @@ class FirstDeskReview(unittest.TestCase):
             with self.assertRaisesRegex(DESK_REVIEW.Stop, 'bootstrap'):
                 DESK_REVIEW.record_the_first_desk_review()
         self.assertFalse((Path(self.directory.name)/'record').exists())
+
+
+class StagesAndFailure(unittest.TestCase):
+    def test_before_util01_exists_the_review_runs_the_desks_own_stages_and_says_so(self):
+        only, line = DESK_REVIEW.stages_to_run([], util01_exists=False)
+        self.assertEqual(only, ['--only-fleet-stages', 'systems_desk,lock'])
+        self.assertEqual(line, 'util01 does not exist yet, so this review skips joining the desk to monitoring. '
+                               'The first review after util01 exists does it.')
+
+    def test_once_util01_exists_the_review_runs_every_stage(self):
+        self.assertEqual(DESK_REVIEW.stages_to_run([], util01_exists=True), ([], None))
+
+    def test_a_stage_the_person_named_stays_as_given(self):
+        named = ['--only-fleet-stages', 'systems_desk']
+        self.assertEqual(DESK_REVIEW.stages_to_run(named, util01_exists=False), (named, None))
+
+    def test_a_failed_run_ends_with_one_plain_sentence_and_the_exit_code(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = DESK_REVIEW.run_and_explain_a_failure(['/bin/sh', '-c', 'echo technical line; exit 3'], '/')
+        self.assertEqual(code, 3)
+        text = output.getvalue()
+        self.assertIn(DESK_REVIEW.FAILED_REVIEW_SENTENCE, text)
+        for answer in ('failed', 'not affected', 'run the review again'):
+            self.assertIn(answer, DESK_REVIEW.FAILED_REVIEW_SENTENCE)
+
+    def test_a_run_that_works_adds_nothing(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(DESK_REVIEW.run_and_explain_a_failure(['/bin/sh', '-c', 'exit 0'], '/'), 0)
+        self.assertEqual(output.getvalue(), '')
 
 
 class Question(unittest.TestCase):

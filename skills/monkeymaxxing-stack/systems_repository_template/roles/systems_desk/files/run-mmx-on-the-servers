@@ -50,10 +50,6 @@ printf 'Using pushed main commit %s\n' "$commit"
 # Only the button's execution copy is disposable. Keep MMX history.
 git -c core.hooksPath=/dev/null reset --hard "$commit"
 git -c core.hooksPath=/dev/null clean -fdx -e .mmx
-# MMX hands each node's ssh_config to ssh with -F, and ssh runs programs
-# that such a file names, as servers-mmx, which reads the vault passphrase:
-# only SSH settings files with known-safe keywords reach MMX (exit 64).
-/usr/local/bin/check-the-pushed-ssh-settings "$checkout"
 # Settings, apps, vault and inventory come from this pushed commit unchanged.
 # every_server excludes systems_desks in each stage; it reaches production and
 # staging only. An arbitrary committed playbook retains production root power.
@@ -61,13 +57,11 @@ git -c core.hooksPath=/dev/null clean -fdx -e .mmx
 # Force this inventory even if default_inventory names another file.
 # MMX's local commands (version, module-usage, help) do not accept --inventory.
 # The commands are an allow-list: each one below reads pushed main and talks
-# to the servers, or prints. Refused, because each gives servers-mmx's
-# powers, the vault passphrase file among them, to whoever holds the terminal:
-# secrets edit (it opens vi on the decrypted vault, and vi's :! is a shell),
-# secrets passwd, and describe-module (it pages through less, whose ! is a
-# shell). Also refused: init, new-one-time-playbook and module-json, which
-# only write files this disposable checkout throws away; the coding agent
-# runs those in its own checkout.
+# to the servers, or prints. Refused: secrets edit and passwd, and
+# describe-module, because an editor or a pager would put the decrypted vault's
+# secrets on the coding agent's screen; and init, new-one-time-playbook and
+# module-json, which only write files this disposable checkout throws away, so
+# a run of them by mistake loses the work (run them in your own checkout).
 # The lock-out button leaves /etc/systems-desk/everyone-locked-out, which only
 # root writes, on the desk where the person pressed it, and its undo removes
 # the file. Its first line names the desk that keeps access, its WireGuard

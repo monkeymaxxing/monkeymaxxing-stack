@@ -149,7 +149,7 @@ def server_block(name, address):
     variables = {'public_ipv4_address': '203.0.113.%d' % (int(third) * 10 + int(last)),
                  'private_ip': address, 'wireguard_public_key': name.upper() + 'KEY'}
     if name.startswith('desk'):
-        variables.update(person_unix_username=name.replace('desk', 'person'), production_ssh_public_key='ssh-ed25519 AAAA%s %s' % (name, name),
+        variables.update(person_unix_username=name.replace('desk', 'person'), provider_server_id='424242' + last, production_ssh_public_key='ssh-ed25519 AAAA%s %s' % (name, name),
                          allowed_laptops=[{'laptop_name': name + '-laptop', 'wireguard_public_key': name.upper() + 'LAPTOP',
                                            'private_ip': '10.20.10.' + last, 'ssh_public_key': 'ssh-ed25519 AAAAlaptop ' + name}])
     return {'address': address, 'ssh_user': 'root', 'ssh_known_hosts': 'ssh/known_hosts', 'ssh_config': 'ssh/config', 'vars': variables}

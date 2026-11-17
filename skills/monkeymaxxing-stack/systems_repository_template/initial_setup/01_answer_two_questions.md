@@ -367,9 +367,10 @@ the rules with this team's folders.
   Cloudflare in chapter 4, right after the Cloudflare account exists, at
   the price Cloudflare shows. The new domain needs no nameserver change,
   so chapter 4's registrar screen is skipped.
-- **The laptop has no password manager** (step 3): show
-  `Password manager:  none found. I recommend Bitwarden.` on the screen.
-  The person installs it before chapter 3, where the first login is saved.
+- **The laptop shows no password manager** (step 3): show
+  `Password manager:  which one do you use?` on the screen, and take the
+  answer. Only when the person has none, recommend Bitwarden: the person
+  installs it before chapter 3, where the first login is saved.
 - **The laptop lacks Git, jq, curl, or OpenSSL** (step 4): name each
   missing tool in the screen's install line.
 - **A pin whose SHA-256 is all zeros** (step 4): the skill came from a
