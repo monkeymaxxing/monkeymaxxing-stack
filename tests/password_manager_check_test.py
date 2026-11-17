@@ -18,7 +18,7 @@ class PasswordManagerCheck(unittest.TestCase):
         self.text = re.sub(r'\s+', ' ', CHAPTER.read_text())
 
     def test_linux_is_checked_where_a_linux_laptop_keeps_its_programs(self):
-        self.assertIn('On Linux, look for `1password`, `bitwarden`, and `keepassxc` on `PATH` and in `~/.local/share/applications`', self.text)
+        self.assertIn('On Linux, look for `1password`, `bitwarden`, or `keepassxc` on `PATH` or in `~/.local/share/applications`', self.text)
 
     def test_finding_none_asks_which_one_the_person_uses_before_recommending(self):
         self.assertIn('which one do you use?', self.text)
