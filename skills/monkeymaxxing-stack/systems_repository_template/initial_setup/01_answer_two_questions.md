@@ -191,7 +191,10 @@ the rules.
    - **Company name:** from the domain, such as `Example` for
      `example.com`.
    - **Password manager:** the one the laptop has, such as 1Password,
-     Bitwarden, or KeePassXC. On a Mac, look in `/Applications`.
+     Bitwarden, or KeePassXC. On a Mac, look in `/Applications`. On
+     Linux, look for `1password`, `bitwarden`, and `keepassxc` on `PATH`
+     and in `~/.local/share/applications`. When you find none, do not
+     recommend one: the screen asks which one the person uses.
    - **Your name on the desk:** the laptop's user name, `$USER`.
    - **Cost:** the desk and the three servers, each with its public
      address, from the provider's prices, as the provider guide says. Before
@@ -304,9 +307,10 @@ the rules.
   Cloudflare in chapter 4, right after the Cloudflare account exists, at
   the price Cloudflare shows. The new domain needs no nameserver change,
   so chapter 4's registrar screen is skipped.
-- **The laptop has no password manager** (step 3): show
-  `Password manager:  none found. I recommend Bitwarden.` on the screen.
-  The person installs it before chapter 3, where the first login is saved.
+- **The laptop shows no password manager** (step 3): show
+  `Password manager:  which one do you use?` on the screen, and take the
+  answer. Only when the person has none, recommend Bitwarden: the person
+  installs it before chapter 3, where the first login is saved.
 - **The laptop lacks Git, jq, curl, or OpenSSL** (step 4): name each
   missing tool in the screen's install line.
 - **A pin whose SHA-256 is all zeros** (step 4): the skill came from a
