@@ -129,13 +129,18 @@ An independent replay checks that the guide needs no hidden setup knowledge.
 **Versions are Git tags** of the Monkeymaxxing Stack repository: `v`
 and the version, the value of `stack_version` in the template's
 checklist, such as `v0.1.0` for `0.1.0`. Versions follow semantic
-versioning, as MMX, MMWatchdog and MMHotline do. While the major number is
-0, a release that changes a setting or needs a step of
+versioning, as MMX, MMWatchdog and MMHotline do, with the smallest step
+that is honest. While the major number is 0, fixes and text changes raise
+the last number, such as `0.2.1`, even a guide change that changes what a
+new setup builds. Only a release that makes existing teams act, such as a
+changed setting or a step of
 [A new version](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/upgrade_to_a_new_stack_version.md#a-new-version)
-beyond copying the template's changes raises the minor number, such as
-`0.2.0`, and a release of fixes alone raises the last number, such as
-`0.1.1`. Reason: one numbering for every Monkeymaxxing tool, which Git
-hosts, `sort -V` and dependency tools order correctly. Publishing a version creates the version's tag.
+beyond copying the template's changes, raises the middle number, such as
+`0.3.0`. Small text fixes wait on `main` and go out together, unless one
+fixes something people would otherwise get wrong. Reason: one numbering
+for every Monkeymaxxing tool, which Git hosts, `sort -V` and dependency
+tools order correctly, and a version number that tells a team whether it
+has work to do. Publishing a version creates the version's tag.
 A team clones the stack's repository, checks out the newest version tag,
 and uses the skill from that tag. A new version is `git fetch --tags` and
 a checkout of the new version's tag. Reason: between releases, `main`
