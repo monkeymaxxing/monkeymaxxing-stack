@@ -10,11 +10,9 @@ new laptop, takes the old desk's place, and the old desk is deleted, so the
 stolen laptop's keys reach no desk. The credentials that the laptop held
 are replaced too.
 
-**Who acts:** the person works on the new laptop, at websites, in the
-password manager, and in the person's own terminal on the replacement desk.
-The coding agent does the repository work that
-[Rebuild a systems desk](rebuild_a_systems_desk.md) gives it, first on the
-new laptop and then on the replacement desk.
+**Who acts:** the person works on the new laptop, at websites, and in the
+password manager. The coding agent, on the new laptop, does the work that
+[Rebuild a systems desk](rebuild_a_systems_desk.md) gives it.
 
 **Terms:** this page uses the Stack's terms, such as systems desk, phone
 code, and personal provider token. [Technical terms](../talking_with_the_team.md#technical-terms)
@@ -31,8 +29,13 @@ explains each term.
   without needing access through the stolen laptop.
   [Why a replacement desk, not a wait](#why-a-replacement-desk-not-a-wait)
   explains why waiting is not enough.
-- **The person can open the team's password manager.** The old desk's
-  production SSH key, desk WireGuard key and vault passphrase are there.
+- **The person can open the team's password manager.** It holds the
+  recovery passphrase, which opens the recovery bundle: the old desk's
+  production SSH key, desk WireGuard key and vault passphrase.
+- **The stolen laptop's own desk login may still be open.** Your shared
+  login, `desk01-agent`, stays open for up to one unused hour, and ten
+  hours at most. Build the replacement and delete the old desk without
+  waiting.
 
 ## Steps
 
@@ -46,33 +49,32 @@ explains each term.
    the same permissions as in chapter 3. Do this before the rebuild, so
    the rebuild uses the new token, not the old one.
    Reason: the laptop held the old token during setup, in
-   `~/.config/monkeymaxxing-stack/desk-bootstrap.env` and, at most
-   providers, the provider's command-line tool, and a backup of the laptop
-   can still hold the old token. The old token creates and deletes servers
+   `~/example-setup/provider-key` and, at some providers, the provider's
+   command-line tool, and a backup of the laptop can still hold the old
+   token. The old token creates and deletes servers
    without a desk or a phone code.
    **Check:** the provider's website shows the new token.
-3. **Build the replacement desk:** follow
-   [Rebuild a systems desk](rebuild_a_systems_desk.md), using the next desk
+3. **Build the replacement desk:** for the first desk, whose keys are in
+   the recovery bundle, follow
+   [Rebuild a systems desk](rebuild_a_systems_desk.md); for a teammate's
+   desk, add a new desk, as "Joining" in
+   [Add or remove a team member](add_or_remove_a_team_member.md#joining)
+   says, and remove the old one, as "Leaving" steps 2 and 3 say. Use the next desk
    name, such as `desk02` when the team's only desk was `desk01`. The next
    desk name takes the next number above every desk number the team has
    used, never a lost desk's name, by the same rule as a new server in a pool
    ([Server names and private addresses](../AGENTS.md#server-names-and-private-addresses))
-   and as step 6 of Rebuild a systems desk explains. In that procedure:
-   - use the new personal provider token from step 2 for the laptop's
-     provider access (Rebuild a systems desk, step 3);
-   - restore the old desk's production SSH key, desk WireGuard key and
-     vault passphrase from the password manager;
+   and as step 6 of Rebuild a systems desk explains. In Rebuild a systems
+   desk:
+   - the person types the new personal provider token from step 2 into the
+     laptop key command (step 3), and step 14 moves it to the desk;
+   - the old desk's production SSH key, desk WireGuard key and vault
+     passphrase come from the recovery bundle;
    - the replacement desk's `allowed_laptops` contains only the new
      laptop's keys;
    - power off the old desk before activating the restored WireGuard
      identity on the replacement desk;
-   - save the new token on the replacement desk with
-     `set-up-outside-services personal-token server-provider`, as the
-     provider guide gives it, in the person's own terminal (Rebuild a
-     systems desk, step 23). `set-up-outside-services` checks the token
-     with the provider's server listing, and saves only a token that
-     passed;
-   - step 28 of Rebuild a systems desk deletes the old desk by the old
+   - step 22 deletes the old desk by the old
      desk's verified provider ID, and a fresh provider listing confirms
      that the old desk is gone. The stolen laptop's keys reach no existing
      desk after deletion.
@@ -95,10 +97,11 @@ explains each term.
 7. **Review app releases and systems Git history** for unexpected changes.
    Run `git log` on the systems repository's `main`, and on the app's
    repository, from the earliest date the compromise could have started.
-   Read each commit that the team's desks and `util01` did not make. The
-   commit signatures show which: use `git log --show-signature`, or check
-   each signing key against `root_ssh_public_keys` in
-   `mmx_project_settings.yml`. Also compare the registry's list of image
+   Read each commit that the team's coding agents and `util01` did not
+   make. For a commit nobody knows, `util01`'s journal names the key that
+   pushed it, as
+   [An unknown commit in the systems repository](respond_to_a_break_in.md#an-unknown-commit-in-the-systems-repository)
+   says. Also compare the registry's list of image
    tags with `deployed_image_tags` in `inventories/servers.yml`.
    **Check:** every commit and image tag is known. Each unknown commit or
    tag goes to the person before anything else, as

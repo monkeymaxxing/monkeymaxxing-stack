@@ -128,10 +128,9 @@ When `gpg` is missing on the desk, the person runs
    MMHotline allows the triage agent to reach the hosts of the program's
    releases and advisories pages.
    The agent's internet access is "listed hosts only".
-   Only commits signed by a person's or `util01`'s key can change
-   `software_outside_the_distribution.yml`.
-   The triage agent's key cannot change
-   `software_outside_the_distribution.yml`.
+   MMHotline pushes the triage agent's commits only when they change
+   nothing but its notes and one-time playbooks, so the triage agent
+   cannot change `software_outside_the_distribution.yml`.
    **Check:** none; this step changes nothing.
 
 Then commit, push and run `every_server` on `util01`, as

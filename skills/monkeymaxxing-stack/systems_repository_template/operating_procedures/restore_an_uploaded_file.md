@@ -10,12 +10,10 @@ held the files at a time before the change.
 **Who acts:** the coding agent writes, validates, pushes and runs each
 one-time playbook ([Where the commands run](#before-you-start)). The person
 says when the file changed, approves the restore, and confirms the files
-in the app. The person runs `mmx secrets edit` in the person's own terminal,
-to put the paths of [Restore listed files](#restore-listed-files) in the vault
-and to delete them afterwards, and commits and pushes `secrets_vault.age`
-there each time: the coding agent never opens the vault, and the person
-commits the vault from the person's repository
-([The rules](../AGENTS.md#the-rules)). The triage agent hands over to a
+in the app. The person saves the paths of [Restore listed files](#restore-listed-files) in
+the vault from a file the coding agent writes, with one command in their own
+desk login, and clears them afterwards. The coding agent publishes
+`secrets_vault.age` each time, and never opens the vault ([The rules](../AGENTS.md#the-rules)). The triage agent hands over to a
 person on signs of data loss and does not follow this page
 ([When to hand over](../triage_agent_rules.md#when-to-hand-over)).
 
@@ -78,20 +76,13 @@ For one file or a few named files.
    restore time, and copies nothing for a wrong time.
 3. **Put paths in the vault, never in Git.** A path may name a customer.
    MMX keeps each run's command, variables, and output in its controller history.
-   The person opens `mmx secrets edit` in the person's own terminal and sets `uploaded_file_paths_to_restore` to
-   paths within the app's R2 bucket, one per line.
-   Leave out the R2 bucket's name, and the folder named after the app that
-   the B2 backup puts in front of each path. The vault entry, in the
-   editor that `mmx secrets edit` opens, looks like this; it is not part
-   of the playbook in step 5:
-
-   ```yaml
-   uploaded_file_paths_to_restore: |
-     variants/ab/cd/abcd1234
-   ```
-
-   Then the person commits and pushes `secrets_vault.age` from the
-   person's repository, in the person's own terminal.
+   Give the person one command with the paths within the app's R2 bucket,
+   one quoted path each. Leave out the R2 bucket's name, and the folder
+   named after the app that the B2 backup puts in front of each path.
+   The person runs the command, as
+   [Change the vault by hand](rotate_a_secret.md#change-the-vault-by-hand) says:
+   `printf '%s\n' 'variants/ab/cd/abcd1234' | mmx secrets set --vault secrets_vault.age uploaded_file_paths_to_restore`.
+   Then the coding agent publishes `secrets_vault.age`.
    **Check:** none here: the coding agent never opens the vault, and step
    8's count finds a missing or wrong path.
 4. **Create the one-time playbook on `util01`:**
@@ -189,9 +180,10 @@ For one file or a few named files.
 9. **Verify:** the app shows each file again, and the person confirms that
    each overwritten file has its contents from before the change.
    **Check:** the person confirms.
-10. **The person deletes `uploaded_file_paths_to_restore` from the vault**
-    (`mmx secrets edit`, in the person's own terminal), then commits and
-    pushes the vault change.
+10. **The person clears the paths from the vault,** as
+    [Change the vault by hand](rotate_a_secret.md#change-the-vault-by-hand) says, with
+    `printf 'none\n' | mmx secrets set --vault secrets_vault.age --replace uploaded_file_paths_to_restore`.
+    MMX keeps no empty value, so `none` stands in. The coding agent publishes the vault change.
     **Check:** none here: the coding agent never opens the vault.
 11. **Complete the one-time playbook:**
     run `mmx complete-one-time-playbook 2026-11-03_restore_uploaded_files_of_shop_on_util01`,

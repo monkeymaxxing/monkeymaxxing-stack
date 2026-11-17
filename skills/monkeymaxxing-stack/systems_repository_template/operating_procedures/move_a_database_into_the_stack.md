@@ -15,7 +15,7 @@ machine, through the team's own access to it: the Stack's inventory never
 lists the old server. Only a person:
 
 - announces the work in the team's chat, and agrees the maintenance window;
-- saves the passwords in the Stack vault, in the person's own terminal;
+- saves the passwords in the Stack vault, in their own desk login;
 - does the old provider's console work, such as a managed database's
   settings, its firewall rule, and destroying the relay, because no step
   calls the old provider's API from the desk.
@@ -457,12 +457,10 @@ Separate copy entries keep replication and administrator reads reachable during 
 
    PgBouncer needs these passwords to authenticate its outgoing verified-TLS connections.
    The relay administrator's password authenticates only to PgBouncer's console.
-   The person saves the relay administrator password in the Stack vault, on the systems desk, then commits and pushes `secrets_vault.age`:
-
-   ```sh
-   # This systems desk, in the systems repository, in the person's own terminal:
-   . ~/.config/monkeymaxxing-stack/example_systems.env && mmx secrets set database_moving_in_relay_admin_password
-   ```
+   The person saves the relay administrator password in the Stack vault, as
+   [Change the vault by hand](rotate_a_secret.md#change-the-vault-by-hand) says, with
+   `mmx secrets set --vault secrets_vault.age database_moving_in_relay_admin_password`. You publish
+   `secrets_vault.age`.
 
    No check here: step 12 logs in with each password.
 9. **Protect the relay's files, then start PgBouncer:**
@@ -527,16 +525,12 @@ Separate copy entries keep replication and administrator reads reachable during 
    server that isn't in the inventory, until the move ends and the old server is retired: that is expected, so say so when you
    report it.
    **Check:** the checks of the setup chapters pass, and the old server is in no inventory group.
-2. **The person saves the old Postgres passwords,** then commits and pushes `secrets_vault.age`:
+2. **The person saves the old Postgres passwords,** as
+   [Change the vault by hand](rotate_a_secret.md#change-the-vault-by-hand) says, with
+   `mmx secrets set --vault secrets_vault.age database_moving_in_replication_password` and
+   `mmx secrets set --vault secrets_vault.age database_moving_in_superuser_password`. You publish `secrets_vault.age`.
 
-   ```sh
-   # This systems desk, in the systems repository, in the person's own terminal:
-   . ~/.config/monkeymaxxing-stack/example_systems.env &&
-     mmx secrets set database_moving_in_replication_password &&
-     mmx secrets set database_moving_in_superuser_password
-   ```
-
-   **Check:** after the person's push, `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`
+   **Check:** after the publish, `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`
    no longer shows either key as `not defined`.
 3. **Add this block under `vars` in `inventories/servers.yml`:**
 

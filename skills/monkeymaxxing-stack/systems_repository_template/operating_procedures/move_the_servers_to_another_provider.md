@@ -51,10 +51,11 @@ settings, and do the replacements. Only a person:
    After a review that moved the desk to `token_in_a_header`, nothing answers at
    `http://127.0.0.1:8081/` or at Cloudflare's `http://127.0.0.1:8082/` until the person gives the
    new provider's token in the next sentence's command.
-   Each person then runs the guide's `set-up-outside-services personal-token server-provider`
-   command in the person's own terminal, which replaces the old provider's token in the desk's
-   proxy and in `SERVER_PROVIDER_API_TOKEN` in the person's token file. The person saves `util01`'s own token with
-   `set-up-outside-services secrets --replace util01_provider_api_token`.
+   Each person then types the guide's `set-up-outside-services personal-token server-provider`
+   command on the laptop, as `ssh -t desk01 set-up-outside-services personal-token server-provider ...`,
+   with their own desk name and a phone code. It replaces the old provider's token in the desk's
+   proxy, the provider token's only place on the desk. The person saves `util01`'s own token with
+   `ssh -t desk01 set-up-outside-services secrets --replace util01_provider_api_token`.
    After these steps neither the vault nor a file that the Stack writes on a desk holds the old
    provider's tokens; the tokens still work at the old provider until step 6 deletes them there.
    The new scripts reach only the new provider, so during the
@@ -110,35 +111,35 @@ settings, and do the replacements. Only a person:
    Do this after `util01` is replaced, so that each new desk can reach the new
    `util01` and join the MMWatchdog fleet. Set `systems_desk_provider_api_url`
    in `mmx_project_settings.yml` to the new provider's address, as the new
-   provider's guide gives it. Then rebuild the desks one at a time, with
-   [Rebuild a systems desk](rebuild_a_systems_desk.md).
-   Use the new provider and a location different from production. Each
-   rebuilt desk keeps its old private address, its WireGuard key, and its
-   person, as that procedure says, so production needs no change to accept it.
-   - **The old desks.** Each person's old desk is powered off before the
-     replacement starts, because two desks must not run one WireGuard
-     identity at once. It stays powered off, and is not destroyed, until the
-     replacement desk passes that procedure's verification (step 26). Then
-     the procedure's step 28 destroys it by its verified provider ID. Until then the person has no
+   provider's guide gives it. Then move the desks one at a time, at the new
+   provider and in a location different from production:
+   - **The first desk,** whose keys are in the recovery bundle: rebuild it with
+     [Rebuild a systems desk](rebuild_a_systems_desk.md). It keeps its old
+     private address, its WireGuard key and its person, so production needs
+     no change to accept it.
+   - **Each teammate's desk:** add a new desk for that teammate, as "Joining"
+     in [Add or remove a team member](add_or_remove_a_team_member.md#joining)
+     says, then remove the old desk, as "Leaving" steps 2 and 3 say.
+   - **The old first desk** is powered off before its rebuild starts, because
+     two desks must not run one WireGuard identity at once. It stays powered
+     off, and is not destroyed, until the rebuilt desk passes that
+     procedure's verification. Then the procedure's step 22 destroys it by
+     its verified provider ID. Until then the person has no
      desk, so rebuild the desk of the person who drives the move last, and
      keep that desk until every other desk works.
-   - **The WireGuard peers.** The replacement desk starts at a new public
-     address. Its first `every_server` run, from the new desk's coding agent
-     (step 26 of that procedure), saves the new address in every server's peers.
+   - **The WireGuard peers.** The rebuilt desk starts at a new public
+     address. Its first `every_server` run, through that desk (step 19 of
+     that procedure), saves the new address in every server's peers.
      Record the new address as the desk's `public_ipv4_address` in
      `inventories/servers.yml` first.
-   - **The lock-out button's reviewed record.** A rebuilt desk has no
-     desk review, and the lock-out button stops with "Run
-     review-and-apply-the-systems-desk-settings once" until the person approves one. The
-     rebuild procedure's step 22 makes that first desk review. Read the commits on
-     `main` with the team before typing `yes`: they include the whole move.
-     The old desks, while they last, ask the person to approve the changed
+   - **The lock-out button's reviewed record.** Each new desk's bootstrap
+     records its first desk review. The old desks, while they last, ask the person to approve the changed
      inventory the next time the button or a desk review runs; that is expected.
-     Do not press the lock-out button to test it. Finish the first desk review on
-     every new desk before the old desks are destroyed.
+     Do not press the lock-out button to test it.
 
    **Check:** the checks of [Rebuild a systems desk](rebuild_a_systems_desk.md)
-   pass for each desk.
+   pass for the first desk, and the checks of "Joining" for each teammate's
+   desk.
 6. **Delete the old provider's API tokens.** Once the old provider holds no server of the system,
    the old desks included, the person deletes, on the old provider's website, every API token of the
    system there: each person's and `util01`'s, where the old provider's guide says: at OVHcloud the

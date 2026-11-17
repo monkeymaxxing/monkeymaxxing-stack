@@ -6,12 +6,12 @@
 at the company that issued it, the servers get the new secret, and the old
 secret stops working.
 
-**Who acts:** the person issues new secrets at outside companies, and runs
-each `mmx secrets` and `set-up-outside-services` command in the person's
-own desk terminal, because only the person handles secret values. The
-coding agent gives the person each command, commits and pushes any file
-other than the vault, runs `every_server` on `util01`, and checks the
-result.
+**Who acts:** the person issues new secrets at outside companies, and
+types each `set-up-outside-services` command this page gives, on the
+laptop, with a phone code, because only the person handles secret values.
+The command saves the secret, and commits and pushes the vault itself. The
+coding agent, on the laptop, gives the person each command, publishes any
+other file, runs `every_server` on `util01`, and checks the result.
 
 ## Find your situation
 
@@ -49,8 +49,9 @@ Then choose the section for the secret you need to replace.
   backup.
   If `pgbackrest_repository_cipher_passphrase` may have leaked, rotate the
   B2 keys. The passphrase cannot read backups without the B2 keys.
-- Change the vault's own passphrase with `mmx secrets passwd`, following
-  [Adding or removing a person](add_or_remove_a_team_member.md#adding-or-removing-a-person).
+- Change the vault's own passphrase as
+  [Replace the vault passphrase and secrets](add_or_remove_a_team_member.md#replace-the-vault-passphrase-and-secrets)
+  says.
 
 **A push alone changes no server.** Apply each configuration change as
 [Making a change](../AGENTS.md#making-a-change)
@@ -60,14 +61,21 @@ says: a push alone changes no server, so run `every_server` or the playbook the 
 
 Find the secret's section below. The usual order is:
 
-1. **Issue the new secret and set it in the vault.** The person runs each
-   `mmx secrets` command below in the person's own desk terminal, in the
-   systems repository, after `. ~/.config/monkeymaxxing-stack/example_systems.env &&`,
-   which gives MMX the vault passphrase. You give the person the command.
+1. **Issue the new secret and set it in the vault.** The person types,
+   on the laptop, with the key's name, and a phone code:
+
+   ```sh
+   ssh -t desk01 set-up-outside-services secrets --replace KEY
+   ```
+
+   For a key a website gives, the command shows where to make it and asks
+   for it at a hidden prompt. A random key, such as a database password,
+   it makes itself, and nobody sees it. Then it commits and pushes the
+   vault. You give the person the command.
    **Check:** the command ends without an error.
-2. **The person commits and pushes `secrets_vault.age`;** you commit and push
-   any other file the section changes.
-   **Check:** `git pull --rebase` brings the person's vault commit.
+2. **Publish any other file the section changes,** as
+   [Making a change](../AGENTS.md#making-a-change) says.
+   **Check:** `git pull --ff-only` in your clone brings the vault commit.
 3. **Run `every_server` on `util01`** and read `./server_management_scripts/run_mmx_on_util01 results` for the result.
    **Check:** the run passes.
 4. **Verify the new secret works, then revoke the old one.**
@@ -83,7 +91,7 @@ the exceptions in the section for the secret you are replacing.
 ## The shared root console password
 
 `shared_root_console_password_hash` holds the shared root console password's hash.
-The actual password lives only in the team's password manager.
+The first password is in the recovery bundle. A new one goes into the team's password manager.
 
 1. **Check for a running `restore01`** before rotating the password, with
    `./server_management_scripts/list_the_servers_at_the_provider`.
@@ -96,17 +104,19 @@ The actual password lives only in the team's password manager.
 
    Reason: `every_server` skips `database_restore_servers`, so a surviving
    restore server would retain the old shared root console password.
-2. **The person makes the new password.** The person runs, in the person's own desk terminal, in the systems
-   repository:
+2. **The person makes the new password,** on the laptop, with a phone
+   code:
 
    ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services secrets --replace shared_root_console_password_hash
+   ssh -t desk01 set-up-outside-services secrets --replace shared_root_console_password_hash
    ```
 
    The command makes a new password for every server and shows it once.
-   The person replaces the password in the password manager item
+   The person saves it in the password manager as
    `Shared root console password`, then types it back at a hidden prompt.
    The command saves only the new hash, then commits and pushes the vault.
+   The recovery bundle keeps the first password, which no longer works:
+   the password manager's entry is the current one.
    **Check:** the command ends after its push.
 3. **Run `every_server` on `util01`.**
    MMX's `user` module sets root's `password_hash` with
@@ -132,9 +142,9 @@ An app secret, such as `shop_STRIPE_API_KEY`.
 1. **Create the new secret.** Issue a new secret at the company that issued
    the old secret, such as Stripe for `shop_STRIPE_API_KEY`, and set it in
    the vault as [Rotating a secret](#rotating-a-secret) says.
-   For an app secret generated locally, such as `shop_SECRET_KEY_BASE`, use
-   `mmx secrets add-random shop_SECRET_KEY_BASE --replace --length 64`.
-   **Check:** the person has pushed `secrets_vault.age`.
+   For an app secret the setup made, such as `shop_SECRET_KEY_BASE`, the
+   same command makes a new random one.
+   **Check:** the command pushed `secrets_vault.age`.
 2. **Run `every_server` on `util01`.** The app's containers restart with the rewritten
    secrets file, such as `/etc/shop/shop.env` for `shop`.
    **Check:** the run passes.
@@ -147,10 +157,10 @@ An app secret, such as `shop_STRIPE_API_KEY`.
 
 An app's database password, such as `shop_database_password` (staging's: `staging_shop_database_password`).
 
-1. **Create the new secret.** `mmx secrets add-random shop_database_password --replace`:
-   letters and digits only, so the generated password needs no escaping in
+1. **Create the new secret:** `ssh -t desk01 set-up-outside-services secrets --replace shop_database_password`.
+   It makes letters and digits only, so the password needs no escaping in
    `DATABASE_URL`.
-   **Check:** the person has pushed `secrets_vault.age`.
+   **Check:** the command pushed `secrets_vault.age`.
 2. **Run `every_server` on `util01`.** The primary receives the new database password first.
    Then the app's containers restart with the new database password.
    Existing connections stay open meanwhile.
@@ -169,8 +179,8 @@ An app's database password, such as `shop_database_password` (staging's: `stagin
 Each database server's pg_autoctl process, called its keeper, uses the
 monitor's `autoctl_node` login to report to the monitor.
 
-1. **Create the new secret.** `mmx secrets add-random pg_auto_failover_autoctl_node_password --replace`.
-   **Check:** the person has pushed `secrets_vault.age`.
+1. **Create the new secret:** `ssh -t desk01 set-up-outside-services secrets --replace pg_auto_failover_autoctl_node_password`.
+   **Check:** the command pushed `secrets_vault.age`.
 2. **Run `every_server` on `util01`.** Nothing restarts.
    The run changes the monitor's login on `util01` first.
    Then the `every_server` run writes each database server's password file,
@@ -189,8 +199,8 @@ monitor's `autoctl_node` login to report to the monitor.
 
 `pg_auto_failover_replication_password`: the password for login `pgautofailover_replicator`, used by replicas to copy from the primary.
 
-1. **Create the new secret.** `mmx secrets add-random pg_auto_failover_replication_password --replace`.
-   **Check:** the person has pushed `secrets_vault.age`.
+1. **Create the new secret:** `ssh -t desk01 set-up-outside-services secrets --replace pg_auto_failover_replication_password`.
+   **Check:** the command pushed `secrets_vault.age`.
 2. **Run `every_server` on `util01`.** Nothing restarts.
    The `every_server` run writes the new replication password into each
    database server's password file, one server at a time.
@@ -231,19 +241,18 @@ work the same way.
 servers run, and run `every_server` right after the command (see
 [Why the waiting](#why-the-waiting)).
 
-1. **Create the new secret.** The person runs, in the person's own desk
-   terminal, in the systems repository, with the name of each key to replace
-   from the table above:
+1. **Create the new secret.** The person types, on the laptop, with the
+   name of each key to replace from the table above, and a phone code:
 
    ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare --replace-key shop_R2_ACCESS_KEY_ID
+   ssh -t desk01 set-up-outside-services cloudflare --replace-key shop_R2_ACCESS_KEY_ID
    ```
 
    `--replace-key` can be given several times. `--replace-every-key`
    replaces every key in the table. The command asks for a link token, made
    from the link it prints, as in
    [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
-   It commits and pushes the vault itself, signed. Then it lists the old
+   It commits and pushes the vault itself. Then it lists the old
    keys, prints the run's command, and waits in the person's terminal. The
    old keys keep working while it waits. After a break-in,
    [Respond to a break-in](respond_to_a_break_in.md) adds
@@ -251,7 +260,8 @@ servers run, and run `every_server` right after the command (see
    **Check:** the command lists the old keys and prints the run's command.
 2. **The run, while the command waits.** Every key in the vault reaches the
    servers only with a run. While the person's command waits, the coding
-   agent runs, from its checkout, the command the person's terminal printed:
+   agent runs the command the person's terminal printed, in its desk
+   checkout through `ssh desk01-agent`:
 
    ```sh
    ./server_management_scripts/run_mmx_on_util01 run every_server
@@ -272,13 +282,14 @@ servers run, and run `every_server` right after the command (see
      uploads the MMHotline-down alarm's Worker and waits for an accepted
      check-in, and publishes the status page with the new key.
 
-   The person's desk token and posting key need no run: load the token file
-   again in open terminals. For staging's service token, each other team
+   The person's desk token and posting key need no run: a new desk login
+   loads the token file again. For staging's service token, each other team
    member enters the new secret from the password manager with
-   `set-up-outside-services personal-token staging-access`; when CI tests
-   against staging, replace CI's two secrets too.
+   `ssh -t desk02 set-up-outside-services personal-token staging-access`,
+   with their own desk name; when CI tests against staging, replace CI's
+   two secrets too.
    **Check:** the run passes, or, for a key no server holds, the person has
-   loaded the token file again.
+   opened a new desk login.
 3. **Verify, then press Enter.**
    **Check,** for each replaced key:
 
@@ -295,7 +306,7 @@ servers run, and run `every_server` right after the command (see
      shows the `status_page` part applied.
    - The person's desk token: a Cloudflare read through
      `http://127.0.0.1:8082/` succeeds from `coding-agent`.
-   - The person's posting key:
+   - The person's posting key: in the person's own desk terminal,
      `. ~/.config/monkeymaxxing-stack/example_systems.env && mmhotline status-page show`
      lists the page's notices.
    - Staging's service token: the check of
@@ -337,7 +348,7 @@ a tunnel's token while all of the tunnel's servers run.
    [Rotating a secret](#rotating-a-secret) says.
    The token must read each app's image named by `vars.apps.<app>.image` in
    `mmx_project_settings.yml`.
-   **Check:** the person has pushed `secrets_vault.age`.
+   **Check:** the command pushed `secrets_vault.age`.
 2. **Run `every_server` on `util01`.** Nothing restarts.
    Each image pull logs in.
    **Check:** the run passes.
@@ -358,18 +369,17 @@ you are rotating:
 - Uploads backup key: `uploads_backup_b2_write_key_id` and
   `uploads_backup_b2_write_application_key`.
 
-1. **Create the new secret.** The person runs, in the person's own desk
-   terminal, in the systems repository, with the key ID's vault name of the
-   pair being rotated:
+1. **Create the new secret.** The person types, on the laptop, with the
+   key ID's vault name of the pair being rotated, and a phone code:
 
    ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services backblaze --replace-key pgbackrest_b2_write_key_id
+   ssh -t desk01 set-up-outside-services backblaze --replace-key pgbackrest_b2_write_key_id
    ```
 
    The command takes the master key at hidden prompts, makes a new key with
    the old key's bucket and capabilities, and saves it over the old pair with
-   `--replace`, without printing it. It commits and pushes the vault itself,
-   signed. Then it waits, as for [Cloudflare keys](#cloudflare-keys): the
+   `--replace`, without printing it. It commits and pushes the vault itself.
+   Then it waits, as for [Cloudflare keys](#cloudflare-keys): the
    old key keeps working at Backblaze while the coding agent runs
    `./server_management_scripts/run_mmx_on_util01 run every_server`, and the
    command deletes the old key when the person presses Enter after the
@@ -417,7 +427,7 @@ MMHotline uses `pushover_application_token` for everyone's alerts
 1. **Create the new secret.** Create an application, or a group, in
    Pushover, and set the keys in the vault as
    [Rotating a secret](#rotating-a-secret) says.
-   **Check:** the person has pushed `secrets_vault.age`.
+   **Check:** the command pushed `secrets_vault.age`.
 2. **Run `every_server` on `util01`.** The fleet hub restarts with the new keys. `util01`'s run applies MMHotline's sending service with `mmhotline settings apply`.
    `mmhotline settings apply` checks the new application token with Pushover
    first.
@@ -454,7 +464,7 @@ MMHotline-down alarm's held alerts with the new application token.
 
 1. **Create the new secret.** Create a token in the provider's project,
    and set it in the vault as [Rotating a secret](#rotating-a-secret) says.
-   **Check:** the person has pushed `secrets_vault.age`.
+   **Check:** the command pushed `secrets_vault.age`.
 2. **Run `every_server` on `util01`.** The restore drill's jobs read the new provider API
    token at the next start of each job.
    **Check:** the run passes.
@@ -474,9 +484,9 @@ token expires, and when the agent cannot sign in.
 1. **Create the new secret.** Create an API key at the triage agent's AI
    provider, or use `claude setup-token` for a Claude Code subscription
    token.
-   The person runs `claude setup-token` in their own terminal on their
-   systems desk. Claude Code must be signed in to the subscription account used
-   for the triage agent.
+   The person runs `claude setup-token` in their own terminal on the
+   laptop, signed in to the subscription account used for the triage
+   agent.
 
    - **Renew a Codex access token** before its end date: the person creates a
      new token on the workspace's Access tokens page and picks a new end date,
@@ -484,25 +494,28 @@ token expires, and when the agent cannot sign in.
      and the new `triage_agent.credential_expires_on` (`"YYYY-MM-DD"`, not a
      secret) in `mmhotline_settings.yml`.
    - **Replace a ChatGPT sign-in** when MMHotline says it stopped working, or
-     when a person who knew it leaves. The person signs in again in a new empty
-     folder used only for MMHotline, with a ChatGPT account that has no
-     connected apps (`export CODEX_HOME="$(mktemp -d)"`, `codex login`), and
-     saves the new `auth.json` with `set-up-outside-services secrets --replace
-     mmhotline_triage_agent_credential`, which reads the file without showing
-     it. The person then deletes the folder and never runs `codex logout` on
-     it, which would end MMHotline's sign-in too.
+     when a person who knew it leaves. The person signs in again on the
+     laptop, in a new empty folder used only for MMHotline, with a ChatGPT
+     account that has no connected apps (`export CODEX_HOME="$(mktemp -d)"`,
+     `codex login`). The person copies the new `auth.json` to the desk with
+     `scp "$CODEX_HOME/auth.json" desk01:` and a phone code, and saves it with
+     `ssh -t desk01 set-up-outside-services secrets --replace mmhotline_triage_agent_credential`,
+     which reads the file without showing it. Then the person deletes both
+     copies, `rm -r "$CODEX_HOME"` and `ssh desk01 rm auth.json`, and never
+     runs `codex logout` on the folder, which would end MMHotline's sign-in
+     too.
 
    **Check:** the person has the new credential.
 2. **Store the new triage agent credential in the vault** with
-   `mmx secrets set mmhotline_triage_agent_credential --replace` at its
-   hidden prompt (a sign-in, as above).
+   `ssh -t desk01 set-up-outside-services secrets --replace mmhotline_triage_agent_credential`,
+   at its hidden prompt (a sign-in, as above).
    If switching credential types, change `triage_agent.credential_type` in
    `mmhotline_settings.yml` in the commit that replaces the vault credential.
    Use `api_key` for an API key, `subscription_token` for a Claude Code
    subscription token, or for Codex `access_token` (with
    `credential_expires_on`) or `chatgpt_sign_in`.
-   **Check:** the person has pushed `secrets_vault.age`, with any change to
-   `mmhotline_settings.yml` in the same commit.
+   **Check:** the command pushed `secrets_vault.age`. Publish any change to
+   `mmhotline_settings.yml` right after it, before the run.
 3. **Run `every_server` on `util01`.** `util01`'s run applies the new triage agent credential
    with `mmhotline settings apply`.
    MMHotline first tests the credential with a prompt in the triage agent's
@@ -550,20 +563,25 @@ The alert source `mmwatchdog_fleet_hub` in `mmhotline_settings.yml` lists
 **Use two commits.** MMHotline must accept the old and new signing
 secrets while the second commit changes the hub's signing secret.
 
-1. **Add the new secret beside the old one.** Pipe the new secret into a second key so it never appears in output:
-   `openssl rand -hex 32 | mmx secrets set mmhotline_next_signing_secret_of_the_fleet_hub`.
-   Add the vault template expression after the first entry in
+1. **Add the new secret beside the old one.** The person makes the new secret in a root-only file on the desk,
+   and pipes it into a second key, so it never appears in output, as
+   [Change the vault by hand](#change-the-vault-by-hand) says, with
+   `sudo sh -c 'umask 077 && openssl rand -hex 32 > /root/next-fleet-hub-signing-secret'` and
+   `sudo cat /root/next-fleet-hub-signing-secret | mmx secrets set --vault secrets_vault.age mmhotline_next_signing_secret_of_the_fleet_hub`.
+   You add the vault template expression after the first entry in
    `signing_secrets` for `mmwatchdog_fleet_hub` in `mmhotline_settings.yml`:
    `"{{ .secrets.mmhotline_next_signing_secret_of_the_fleet_hub }}"`.
-   Commit and push, and run `every_server` on `util01`. MMHotline accepts the old and new signing secrets
-   while the hub still signs with the old signing secret.
+   Publish the vault and the settings, as
+   [Making a change](../AGENTS.md#making-a-change) says, and run `every_server` on `util01`. MMHotline accepts the
+   old and new signing secrets while the hub still signs with the old signing secret.
    **Check:** wait for `util01`'s run to pass.
-2. **Make the new secret the only one.** Use `mmx secrets edit` in a person's own terminal.
-   Copy the value of `mmhotline_next_signing_secret_of_the_fleet_hub` into
-   `mmhotline_signing_secret_of_the_fleet_hub`.
-   Remove the temporary vault key,
-   `mmhotline_next_signing_secret_of_the_fleet_hub`.
-   Remove the second entry from `signing_secrets`. Commit and push, and
+2. **Make the new secret the only one.** The person sets it as the main key from the same file, as
+   [Change the vault by hand](#change-the-vault-by-hand) says, with
+   `sudo cat /root/next-fleet-hub-signing-secret | mmx secrets set --vault secrets_vault.age --replace mmhotline_signing_secret_of_the_fleet_hub`,
+   then deletes the file: `sudo rm /root/next-fleet-hub-signing-secret`.
+   The temporary key, `mmhotline_next_signing_secret_of_the_fleet_hub`, stays in the vault unused: MMX has no
+   command that removes one key, and the next rotation replaces it with `--replace`.
+   You remove the second entry from `signing_secrets`. Publish both files, and
    run `every_server` on `util01`.
    The second run restarts the hub with the new secret in its `util_server` stage.
    Then, in `every_server`'s final settings stage,
@@ -590,33 +608,73 @@ secrets while the second commit changes the hub's signing secret.
 
 Production secrets stay in the vault and continue using the rotation sections above.
 Personal tokens stay on the person's own desk, outside Git and outside `coding-agent`'s home.
-The person performs personal-token changes in the person's own terminal.
+The person types each personal-token command on the laptop, with a phone code.
 
 - Provider token: issue the replacement at the provider.
-  The person saves it with `set-up-outside-services personal-token server-provider --server-listing-path PATH`
+  The person saves it with `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path PATH`
   (the provider guide's listing).
-  The command checks the new token first, then updates the token file and the root-owned
+  The command checks the new token first, then updates the root-owned
   `/etc/systems-desk/provider-api-token.conf`,
   restarts the API proxy, and checks a request through it. A new token that fails a check
   changes nothing. Then revoke the old token.
   **Check:** the command's own check of a request through the API proxy passes.
 - Cloudflare desk token and status-page posting key:
-  `. ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare --replace-key CLOUDFLARE_API_TOKEN --replace-key MMHOTLINE_STATUS_PAGE_R2_ACCESS_KEY_ID`,
+  `ssh -t desk01 set-up-outside-services cloudflare --replace-key CLOUDFLARE_API_TOKEN --replace-key MMHOTLINE_STATUS_PAGE_R2_ACCESS_KEY_ID`,
   as [Cloudflare keys](#cloudflare-keys) says. The command writes the new desk token into
   `/etc/systems-desk/cloudflare-api-token.conf` the same way, and deletes the old tokens at Cloudflare.
   **Check:** the checks of the person's desk token and posting key in
   [Cloudflare keys](#cloudflare-keys).
-- Vault passphrase: follow [Adding or removing a person](add_or_remove_a_team_member.md#adding-or-removing-a-person).
-  Update each person's private passphrase file; the next `review-and-apply-the-systems-desk-settings --only-fleet-stages systems_desk` installs it as the desk's `/etc/systems-desk/vault-passphrase`.
-  The button needs the new passphrase before the first direct run updates `util01`.
+- Vault passphrase: follow
+  [Replace the vault passphrase and secrets](add_or_remove_a_team_member.md#replace-the-vault-passphrase-and-secrets).
+  It writes the new passphrase into each desk's `/etc/systems-desk/vault-passphrase` and into the recovery bundle,
+  and gives `util01` the new passphrase with one run from the desk.
 - Production SSH key: generate the replacement on the desk, add the new public key beside the old public key
   in `root_ssh_public_keys`, and register the new public key at the provider. The run that applies
   `root_ssh_public_keys` also lets the new key push to the main copy on `util01`.
   Update the desk's inventory `vars.production_ssh_public_key` to the replacement public key.
   During containment, first load both keys into the person's private SSH agent, because locked servers admit only the mapped key.
   Apply `every_server` before removing the old public key. Restart the desk's SSH agent to load the replacement.
-  Verify production login and signed push, update the recovery copy, then revoke the old public key everywhere.
+  Verify production login and a push to the main copy, then save the new private key in the recovery bundle as
+  `production_ssh_private_key`, as
+  [Change an item in the recovery bundle](rebuild_a_systems_desk.md#change-an-item-in-the-recovery-bundle) says,
+  with the file `~/.ssh/production_key`, without its `rm`. Then revoke the old public key everywhere.
 - Laptop desk-login key: follow [Lost or stolen laptop](recover_from_a_lost_or_stolen_laptop.md) when compromise is possible.
 - Phone-code secret: follow [Lost phone](recover_from_a_lost_phone.md).
 
 Reason: a person's departure revokes personal access without changing production's account-owned tokens.
+
+## Change the vault by hand
+
+Most vault changes go through `set-up-outside-services`. A few steps
+change a key it does not make, such as the fleet hub's second signing
+secret. The person does those in their own desk login, `ssh desk01` and a
+phone code, on a copy of the vault in a folder of their own:
+
+```sh
+# On the desk, as the person:
+work=$(mktemp -d) && cd "$work"
+cp /home/coding-agent/systems_repository/secrets_vault.age .
+sudo install -o "$USER" -m 0600 /etc/systems-desk/vault-passphrase "$work/vault-passphrase"
+export MMX_VAULT_PASSWORD_FILE="$work/vault-passphrase"
+```
+
+Then the step's own `mmx secrets` command, with `--vault secrets_vault.age`,
+such as `mmx secrets set --vault secrets_vault.age KEY`. Then put the copy
+back, and clean up:
+
+```sh
+# On the desk, as the person:
+sudo install -o coding-agent -g coding-agent -m 0644 secrets_vault.age /home/coding-agent/systems_repository/secrets_vault.age
+cd && rm -r "$work" && unset MMX_VAULT_PASSWORD_FILE
+```
+
+Then you commit `secrets_vault.age` in the desk's checkout and publish
+it, as [Making a change](../AGENTS.md#making-a-change) says.
+
+Reason for a copy: MMX never runs as root on the pulled repository on a
+desk, so the person's own MMX opens only the vault file, outside the
+checkout.
+
+**Check:** the publishing step names the commit, and
+`ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets list-keys`
+lists the key.

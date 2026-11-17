@@ -247,8 +247,9 @@ Kubernetes existed.
    working when the app server or the database server fails.
 3. **Changes.** Every change to the servers is a commit to your systems
    repository. The systems repository holds the server settings and the
-   encrypted secrets, and your Git host, such as GitHub, keeps a copy. Your
-   coding agent pushes the commit and starts an MMX run on `util01`. MMX is
+   encrypted secrets. Its main copy lives on your own utility server, and
+   your Git host, such as GitHub, keeps a backup. Your coding agent
+   publishes the commit and starts an MMX run on `util01`. MMX is
    the program that makes each server match the systems repository. A push
    alone changes no server.
    *Why:* the repository is the record of what every server is and of who
@@ -398,8 +399,7 @@ busy for about an hour of it:
    Cloudflare, your domain's registrar, and Backblaze for the backups. Each
    screen says what the account is for and exactly what to do, and each key
    you paste is checked with its company at once.
-3. You add one key at GitHub, and make one token there, so your servers can
-   download your app.
+3. You make one token at GitHub, so your servers can download your app.
 4. You save one recovery passphrase, and scan one QR code with your phone.
 
 Then your agent works alone: it creates the servers, installs everything,

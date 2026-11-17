@@ -7,9 +7,10 @@ first app that keeps uploads or for a later one.
 the app's R2 bucket to a locked B2 bucket, with rclone.
 
 **Who acts:** the coding agent edits and pushes the settings, checks the
-vault's keys, and runs `every_server`. Only the person runs
-`set-up-outside-services`, in the person's own desk terminal (steps 2
-and 3), because the command makes keys and saves them in the vault.
+vault's keys, and runs `every_server`. Only the person types the
+`set-up-outside-services` commands, on the laptop, with a phone code
+(steps 2 and 3), because the command makes keys and saves them in the
+vault.
 
 ## Before you start
 
@@ -28,7 +29,7 @@ and 3), because the command makes keys and saves them in the vault.
 For the first app that keeps uploads, prepare the bucket, keys, and settings in this order:
 
 1. **Name the bucket and the app's settings** in `mmx_project_settings.yml`,
-   committed and pushed, then pulled into the person's repository on the desk.
+   committed and published.
    - Under `vars.apps`, set the app's `production_uploads_r2_bucket` to the
      name of the app's production R2 bucket.
    - Add the app's two R2 key variables to its `secrets_from_vault`, such
@@ -37,7 +38,8 @@ For the first app that keeps uploads, prepare the bucket, keys, and settings in 
      app's `production_uploads_r2_key_variables` to those two names. The
      setup makes the key at Cloudflare and saves it under them.
    - With `staging01`, also set the app's `staging_uploads_r2_bucket` to
-     its own staging bucket. Add the two `staging_` keys to the staging
+     its own staging bucket, which `staging01` gets as `R2_BUCKET`, and
+     keep the app's own staging address in `staging_env`. Add the two `staging_` keys to the staging
      `app_secrets` in `playbooks/every_server.yml`. Nothing copies the
      staging bucket to B2.
    - Set `backups.uploads_bucket` to a name for the uploads' B2 bucket.
@@ -46,10 +48,12 @@ For the first app that keeps uploads, prepare the bucket, keys, and settings in 
      using your account's ID.
    - Keep `backups.uploads_backup_runs_on: []` for now.
 
-   **Check:** `git log -1` in the person's repository on the desk shows
-   the settings' commit.
-2. **The person runs `set-up-outside-services backblaze`**, in the person's
-   own desk terminal, as [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#chapter-4-set-up-your-accounts-and-lock-your-desk)
+   Publish the settings, as [Making a change](../AGENTS.md#making-a-change)
+   says, before step 2: the command reads them from the desk's checkout.
+   **Check:** `ssh desk01-agent 'cd systems_repository && git log -1'`
+   shows the settings' commit.
+2. **The person types `ssh -t desk01 set-up-outside-services backblaze`**
+   on the laptop, as [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#chapter-4-set-up-your-accounts-and-lock-your-desk)
    describes. The command:
    - creates the uploads' bucket, locked for the lock length in
      `backups.lock_backups_against_deletion_for_days`, with the lifecycle
@@ -65,14 +69,14 @@ For the first app that keeps uploads, prepare the bucket, keys, and settings in 
    recoverable for `backups.keep_prior_file_versions_in_buckets_for_days`
    without keeping old copies forever.
    **Check:** the command checks the lock itself; step 4 checks the keys.
-3. **The person runs `set-up-outside-services cloudflare`.** The command:
+3. **The person types `ssh -t desk01 set-up-outside-services cloudflare`.** The command:
    - creates the app's R2 bucket when missing;
    - saves the app's own R2 key under the app's two names;
    - saves `util01`'s read-only R2 key for every app's uploads bucket, as
      `uploads_r2_read_only_access_key_id` and
      `uploads_r2_read_only_secret_access_key`.
 
-   The command commits and pushes the vault itself, signed.
+   The command commits and pushes the vault itself.
    **Check:** step 4 checks the keys.
 4. **Turn the copy on** in `mmx_project_settings.yml`:
    set `backups.uploads_backup_runs_on: [util_server]`.

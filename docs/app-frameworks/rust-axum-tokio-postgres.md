@@ -134,8 +134,9 @@ vars:
       database_name: customer_portal_rust
       env:
         APP_ORIGIN: https://rust-portal.example.com
-        R2_BUCKET: example-customer-portal-rust-production
         R2_ENDPOINT: https://example-account-id.r2.cloudflarestorage.com
+      staging_env:
+        APP_ORIGIN: https://staging.rust-portal.example.com
       secrets_from_vault:
         R2_ACCESS_KEY_ID:
           where_the_value_comes_from: generated_by_the_setup
@@ -152,7 +153,7 @@ vars:
 
 Create separate production and staging buckets using the Stack's
 [account setup in chapter 4 (set up your accounts and lock your desk)](../../skills/monkeymaxxing-stack/systems_repository_template/initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
-The production `R2_BUCKET` must match `production_uploads_r2_bucket`.
+Leave `R2_BUCKET` out of `env`: the Stack writes it from `production_uploads_r2_bucket`, and on staging01 from `staging_uploads_r2_bucket`, and `every_server` refuses `R2_BUCKET` in `env` or `staging_env`.
 Extend the existing uploads-backup read credential to include the production bucket.
 If uploads backups were disabled, configure the uploads-backup bucket and credentials first.
 Set `vars.backups.uploads_backup_runs_on: [util_server]` once uploads backups are ready.
@@ -184,7 +185,7 @@ customer_portal_rust_R2_ACCESS_KEY_ID: "{{ .secrets.staging_customer_portal_rust
 customer_portal_rust_R2_SECRET_ACCESS_KEY: "{{ .secrets.staging_customer_portal_rust_R2_SECRET_ACCESS_KEY }}"
 ```
 
-`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
+`env:` holds production's plain settings. With staging01, `staging_env:` gives staging its own address, as above, and `staging_uploads_r2_bucket` its own bucket; `every_server` refuses staging01 without them.
 
 Also extend each `database_server` role's `database_passwords` mapping in `playbooks/every_server.yml`:
 

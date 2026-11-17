@@ -7,8 +7,9 @@ stack version.
 changes between the system's recorded stack commit and the new one, keeps
 the team's values and deviations, and one run on `util01` applies them.
 
-**Who acts:** the coding agent does the steps from the systems desk, and
-works in the systems repository. The person decides each conflict with a
+**Who acts:** the coding agent does the steps on the laptop, in its clone
+of the systems repository, `~/code/example_systems`, and runs MMX through
+the desk. The person decides each conflict with a
 recorded deviation, reviews each updated app file, approves the commit
 before the push, picks the quiet hour, and adds each missing vault key.
 
@@ -21,10 +22,9 @@ before the push, picks the quiet hour, and adds each missing vault key.
 
 ## Before you start
 
-- **The person's token file stays in the person's terminal.** Commands that
-  source the person's token file, `~/.config/monkeymaxxing-stack/example_systems.env`,
-  run only in the person's own desk terminal, as the secrets rule in
-  [The rules](../AGENTS.md#the-rules) says.
+- **Edit on the laptop.** You edit in the laptop's clone and publish each
+  commit, as [Making a change](../AGENTS.md#making-a-change) says. The
+  Stack's own clone, `STACK_REPOSITORY` below, is on the laptop too.
 - **A new stack version never changes a running system by itself.** Only
   the run in step 5 of [A new version](#a-new-version) applies it.
 
@@ -66,7 +66,7 @@ before the push, picks the quiet hour, and adds each missing vault key.
   exits 1.
 
 When the person asks to move the system to the new version, work in the
-systems repository:
+laptop's clone, `~/code/example_systems`:
 
 1. **The team's deviations:** the differences from the template at the
    old commit. The differences between the systems repository and the old
@@ -128,11 +128,13 @@ systems repository:
      and `backups.uploads_r2_s3_endpoint` while `backups.uploads_backup_runs_on`
      is `[]`.
    - After the push in step 5, before its preview,
-     `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`
+     `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`
      exits 0: the vault defines every key the new files read, except those
      the command marks "secret key not needed with the selected inventory".
-     For each key it lists as `not defined`, the person adds the key and
-     pushes the vault, as [Secrets in chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#secrets) says.
+     For each key it lists as `not defined`, the person types
+     `ssh desk01-secrets` and a phone code. The command asks for each
+     missing key, and commits and pushes the vault, as
+     [Secrets in chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#secrets) says.
    - The apps' files from the stack:
      `git -C STACK_REPOSITORY diff --stat OLD_COMMIT NEW_COMMIT -- skills/monkeymaxxing-stack/files_for_your_app`
      lists changed app files, such as `pg_with_multiple_database_servers.mjs`.
@@ -151,18 +153,22 @@ systems repository:
    - Push the MMX pin's commit when the person asks.
    - Wait for `util01`'s run of the MMX pin's commit to pass before pushing
      the stack version's commit.
-   - This systems desk needs the new MMX too, before `mmx validate` and
-     the dryrun of the version's files.
+   - The laptop needs the new MMX before `mmx validate`, and the desk
+     needs it before the dryrun of the version's files. The desk gets it
+     from a desk review: the person types `ssh desk01-review` and a phone
+     code, after `util01`'s run of the pin passed.
 
    Then the stack version's commit:
    - Commit the stack version's changes with no `.rej` file left.
      The commit message must name the old and new stack versions and the new
      items.
    - Run `mmx validate` and show the person the commit's changes.
-   - After approval, synchronize and push, check the vault keys with
-     `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage` (step 4),
+   - After approval, publish the commit, as
+     [Making a change](../AGENTS.md#making-a-change) says. Check the vault
+     keys with
+     `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage` (step 4),
      then preview the pushed commit with
-     `sudo -n -u servers-mmx run-mmx-on-the-servers dryrun every_server --connection ssh_only` and show the results.
+     `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers dryrun every_server --connection ssh_only` and show the results.
    - When the preview shows only the expected changes, run MMX on `util01` to apply the version.
      Applying the version can restart services, so run MMX in a quiet hour, an
      hour that the person picks when the apps have few users,
@@ -186,8 +192,8 @@ systems repository:
   and installs nothing, the new MMX included (the systems repository's
   [add_or_update_a_program_from_outside_the_distribution.md](add_or_update_a_program_from_outside_the_distribution.md#updating-a-program-from-outside-the-distribution), "Updating a program from outside the distribution").
   Split the commit as step 5 says.
-- **`secrets usage` lists a key as `not defined`.** The person adds the
-  key and pushes the vault, as step 4 says, before the preview.
+- **`secrets usage` lists a key as `not defined`.** The person types
+  `ssh desk01-secrets`, as step 4 says, before the preview.
 
 ## What each version changes
 

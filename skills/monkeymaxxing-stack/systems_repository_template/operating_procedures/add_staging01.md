@@ -12,14 +12,14 @@ before customers get it. Or the team no longer wants a test server.
 removes it. Each release then goes to `staging01` first.
 [What staging01 is](#what-staging01-is) explains the server.
 
-**Who acts:** you, the coding agent, do the steps from the systems desk.
-Only the person:
+**Who acts:** you, the coding agent, do the steps on the laptop and
+through your desk login, `ssh desk01-agent`. Only the person:
 
 - approves `staging01`'s price before step 2 of
   [Adding staging01](#adding-staging01);
-- runs `set-up-outside-services` in the person's own desk terminal and
-  makes one more Cloudflare link token (step 3);
-- runs the Access check in the person's own desk terminal (step 8);
+- types `ssh -t desk01 set-up-outside-services cloudflare` and a phone
+  code, and makes one more Cloudflare link token (step 3);
+- runs the Access check in their own desk login, `ssh desk01` (step 8);
 - when removing `staging01`, deletes two kinds of token at Cloudflare and
   removes the `staging_` keys from the vault and the staging Access entry
   from the password manager.
@@ -72,7 +72,13 @@ explains each term.
    - In `mmx_project_settings.yml`, for each app with a
      `production_uploads_r2_bucket`, set `staging_uploads_r2_bucket` to the
      app's own staging bucket, such as `example-shop-staging-uploads`.
-     Reason: staging never reaches production's uploaded files.
+     `staging01` gets it as the app's `R2_BUCKET`. Reason: staging never
+     reaches production's uploaded files.
+   - In `mmx_project_settings.yml`, give each app with an `APP_ORIGIN` in
+     `env` its own staging address in `staging_env`, such as
+     `APP_ORIGIN: https://staging.shop.example.com`.
+     `every_server` refuses to configure `staging01` while an app would keep
+     production's bucket or address, and names the line to add.
 
    Run `mmx validate`, commit, and push.
 
@@ -126,10 +132,11 @@ explains each term.
      nothing else from the desk: an app test needs permission to reach
      staging, not permission to administer Cloudflare. Another
      person's desk enters them from the password manager with
-     `set-up-outside-services personal-token staging-access`.
+     `ssh -t desk02 set-up-outside-services personal-token staging-access`,
+     with that person's desk name.
 
    **Check:** after the commit of step 1 and the vault are pushed, check with
-   `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage` that every
+   `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage` that every
    `staging_` key is defined.
 
 4. **DNS and Access for each staging host name,** through the API token
@@ -165,7 +172,7 @@ explains each term.
 
    **Check:** the checks of steps 5 and 6 of [Add a server](add_a_server.md).
 
-6. **The desks:** each other desk's coding agent runs
+6. **The desks:** each teammate's coding agent runs
    `sudo -n update-this-desks-wireguard-peers` at the start of its next
    session, as for any new server.
 
@@ -202,12 +209,12 @@ explains each term.
    ssh -F ssh/config root@10.20.0.2 "curl -sS -o /dev/null -w '%{http_code}\n' -H 'Host: staging.shop.example.com' http://127.0.0.1/up"
    ```
 
-   The command prints `200`. Then the person runs, in the person's own
-   desk terminal, the check that Access admits the service token and
+   The command prints `200`. Then the person runs, in their own desk
+   login, `ssh desk01` and a phone code, the check that Access admits the service token and
    refuses everyone else; you read the two lines it prints:
 
    ```sh
-   # This systems desk, in the person's own terminal:
+   # On the desk, as the person:
    . ~/.config/monkeymaxxing-stack/example_systems.env &&
      curl -sS -o /dev/null -w 'with the service token: %{http_code}\n' \
        -H "CF-Access-Client-Id: $STAGING_ACCESS_CLIENT_ID" \
@@ -241,7 +248,8 @@ When the team no longer wants a test server:
    its line from `ssh/known_hosts`, its node from `inventories/servers.yml`,
    and its name from the group: `staging_server` keeps `nodes: []`.
    Set `deployed_image_tags.staging` and `public_host_names.staging` back
-   to `{}`, and set each `staging_uploads_r2_bucket` back to `""`. Commit, push,
+   to `{}`, set each `staging_uploads_r2_bucket` back to `""`, and each
+   app's `staging_env` back to `{}`. Commit, push,
    and run `every_server`, which removes `staging01`'s peers and keys from
    every server. Each desk runs `sudo -n update-this-desks-wireguard-peers`.
 
@@ -262,9 +270,9 @@ When the team no longer wants a test server:
    succeeded, and the person sees the tokens' lists at Cloudflare.
 
 3. **The vault and the password manager.** The `staging_` keys in the
-   vault are now unused. The person removes
-   them in the person's own terminal with `mmx secrets edit`, and the
-   staging Access entry from the password manager.
+   vault are now unused, and stay there: no server reads them, and MMX has
+   no command that removes one key. The person removes the staging Access
+   entry from the password manager.
 
    No check of its own: only the person sees the vault's contents and the
    password manager.
@@ -282,7 +290,7 @@ When the team no longer wants a test server:
 
 - **An app has no seed command (step 7):** the app gets one now, as step 7
   says, following `files_for_your_app/write_the_seed_command.md`.
-- **The person's other desks (step 6):** each other desk's coding agent
+- **The teammates' desks (step 6):** each teammate's coding agent
   runs `sudo -n update-this-desks-wireguard-peers` at the start of its
   next session.
 

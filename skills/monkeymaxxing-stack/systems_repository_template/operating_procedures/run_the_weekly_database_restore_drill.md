@@ -156,9 +156,6 @@ MMX playbook `weekly_database_restore_drill` on `util01`, at the trusted
 commit, under `/var/lib/mmhotline/systems_repository.lock`, shared with
 ordinary agent runs.
 
-- A commit waiting for review never runs in the drill: the drill runs at
-  the trusted commit before the commit, and the commit's alert from
-  MMHotline names the commit.
 - The first or rebuilt-system `every_server` run also starts a drill until
   a drill passes.
 - The drill waits for an active uploads copy.

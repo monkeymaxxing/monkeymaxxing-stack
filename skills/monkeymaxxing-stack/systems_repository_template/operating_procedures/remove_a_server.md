@@ -73,7 +73,7 @@ rule as `util01`'s check `app_servers_to_remove_for_the_load`, and never
 below `growth_limits.app_servers.smallest_number_of_servers`. It takes the
 server out of service as step 1 below does. Then it does steps 2 and 3
 itself, once every other app server does its work: one commit to `main`,
-signed by `util01` (pull before your next change), and the destroy by the
+made by `util01` (pull before your next change), and the destroy by the
 provider's ID, never by name. Its last lines give the monthly price that
 stops. `every_server` then takes the server out of the peers and the
 firewall.

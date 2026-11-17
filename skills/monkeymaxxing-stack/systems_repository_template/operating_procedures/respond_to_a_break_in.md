@@ -10,13 +10,15 @@ Every desk, `util01` and the triage agent keep working, except in the few cases 
 
 **Who acts:**
 
-- **The coding agent** reads the logs and settings, proposes each step with its reason, prepares and pushes each
-  commit, gives the person each command, and runs MMX. Outside a lock-out, the coding agent runs MMX on `util01`
-  with `./server_management_scripts/run_mmx_on_util01`. During a lock-out, the coding agent runs MMX with its MMX
-  button on the desk that keeps access.
-- **The person** decides each step and does the work at each company's website. The person runs, in the person's
-  own desk terminal: the lock-out button `sudo lock-everyone-out`, the evidence copy of step 2, each Cloudflare key
-  replacement, and `review-and-apply-the-systems-desk-settings` after the incident.
+- **The coding agent,** on the person's laptop, reads the logs and settings through its desk login
+  (`ssh desk01-agent`), proposes each step with its reason, prepares and publishes each commit, gives the person each
+  command, and runs MMX. Outside a lock-out, it runs MMX on `util01` with
+  `./server_management_scripts/run_mmx_on_util01`. During a lock-out, it runs MMX with its MMX button on the desk
+  that keeps access.
+- **The person** decides each step and does the work at each company's website. The person types, on the laptop,
+  with a phone code: the lock-out button `ssh -t desk01 sudo lock-everyone-out`, each Cloudflare key replacement,
+  and `ssh desk01-review` after the incident. The evidence copy of step 2 runs in the person's own desk login,
+  `ssh desk01`.
 - **Only a person starts or undoes a lock-out,** from a desk that shows no signs of the break-in. The triage agent
   never does. The coding agent recommends a lock-out only when the facts match one of the cases in
   [The lock-out: only for these cases](#the-lock-out-only-for-these-cases).
@@ -42,7 +44,7 @@ a break-in through the app, cuts off the people and agents that the team needs f
 | What you saw | What the intruder can reach | Go to |
 | --- | --- | --- |
 | The app misbehaves: an admin account that nobody made, an app secret seen in public, or data that nobody on the team changed | The app's own data, uploaded files and outside-service keys | [A break-in through the app](#a-break-in-through-the-app) |
-| An unknown commit in the systems repository, or an MMHotline SOS from a commit review | What a run of that commit would do on every server | [An unknown commit in the systems repository](#an-unknown-commit-in-the-systems-repository) |
+| An unknown commit in the systems repository | What a run of that commit would do on every server | [An unknown commit in the systems repository](#an-unknown-commit-in-the-systems-repository) |
 | An alert, or a session that nobody recognises, at the server provider, Cloudflare, the registry, the password manager or the coding-agent vendor | That company's account | [An unknown session at a company](#an-unknown-session-at-a-company) |
 | A laptop is lost or stolen, or a laptop ran malware | The laptop's desk-login keys and tokens | [Recover from a lost or stolen laptop](recover_from_a_lost_or_stolen_laptop.md) |
 | A team member left and kept a credential | That credential | [A member left with a credential](#a-member-left-with-a-credential) |
@@ -54,7 +56,7 @@ a break-in through the app, cuts off the people and agents that the team needs f
 | Before any incident: write the team's answers down | Nothing | [0. Prepare the response page](#0-prepare-the-response-page) |
 | Optional practice | Nothing | [7. Practice the response](#7-practice-the-response) |
 
-Signs on your own desk are, for example, a commit that nobody on the team made but your desk's key signed, or a
+Signs on your own desk are, for example, a commit that nobody on the team made but your desk's key pushed, or a
 login to your desk that you do not recognise.
 
 When the facts fit no row, start with [Find out what happened](#find-out-what-happened): the log reads in that section
@@ -164,10 +166,10 @@ Replace every secret that the app holds, because the intruder could read each on
    **Check:** the checks of App secrets.
 2. **Replace the app's database password,** as [App database passwords](rotate_a_secret.md#app-database-passwords) says.
    **Check:** the checks of App database passwords.
-3. **The person replaces the app's R2 key,** in the person's own desk terminal, in the systems repository:
+3. **The person replaces the app's R2 key,** on the laptop, with a phone code:
 
    ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare --replace-key shop_R2_ACCESS_KEY_ID --delete-the-old-keys-at-once
+   ssh -t desk01 set-up-outside-services cloudflare --replace-key shop_R2_ACCESS_KEY_ID --delete-the-old-keys-at-once
    ```
 
    The command deletes the old key at Cloudflare at once, as [Cloudflare keys](rotate_a_secret.md#cloudflare-keys)
@@ -238,23 +240,22 @@ and nobody, the intruder included, reaches the app from outside.
 
 ## An unknown commit in the systems repository
 
-**When:** a commit that nobody on the team made is on `main`, or MMHotline sends an SOS from a commit review.
+**When:** a commit that nobody on the team made is on `main` in the main copy on `util01`.
 
-**What the intruder can reach:** a commit that runs reaches every server as root. A commit that no trusted key signed
-waits for review, and MMHotline runs nothing past a commit that waits. But with the template's setting
-`commits_without_a_trusted_signature_are_approved_by: a_person_or_the_triage_agent`, the triage agent approves an
-ordinary change itself.
+**What the intruder can reach:** MMHotline and `util01` trust every commit on the main copy
+(`triage_agent.trusted_commits: every_commit_on_origin`), so the next run applies the commit on every server as root.
+Only a key in `root_ssh_public_keys` can push to the main copy, as root: a desk's production key or `util01`'s
+`mmhotline` key. So a commit nobody made means one of those keys is in someone else's hands.
+The triage agent cannot push: MMHotline pushes its commits only when they change nothing but its notes and one-time
+playbooks.
 
-1. **Do not mark the commit reviewed yet.** Recommend "treat as a break-in", as
-   ["Review each commit waiting for review before any run"](../AGENTS.md#the-rules) says.
-   **Check:** `./server_management_scripts/run_mmx_on_util01 commit-reviews list` still names the commit as waiting.
-2. **Undo the unknown commit at once:** the coding agent commits and pushes a signed revert.
-   Reason: with the template's setting, the triage agent may still approve the commit. After the revert, a run of
-   `main` applies nothing of the unknown change.
+1. **Undo the unknown commit at once.** The coding agent reverts it in its clone and publishes the revert, as
+   [Making a change](../AGENTS.md#making-a-change) says. It runs nothing else yet.
+   Reason: after the revert, a run of `main` applies nothing of the unknown change.
+   Never remove the commit with a force push: the main copy refuses it, and the commit is evidence.
    **Check:** `git show` of the revert removes every line of the unknown commit.
-3. **Find the key that pushed, and revoke it.** Only a key in `root_ssh_public_keys` can push to the main copy on
-   `util01`, as root. On `util01`, the main copy's reflog gives the time of each change to `main`, and sshd's journal
-   gives the key that logged in as root at that time, by its fingerprint and source address:
+2. **Find the key that pushed.** On `util01`, the main copy's reflog gives the time of each change to `main`, and
+   sshd's journal gives the key that logged in as root at that time, by its fingerprint and source address:
 
    ```sh
    ssh -F ssh/config root@10.20.0.1 'git -C /var/lib/systems_repository.git reflog show --date=iso refs/heads/main | head -20'
@@ -262,38 +263,22 @@ ordinary change itself.
    ```
 
    Match the fingerprint with `ssh-keygen -l` of each key in `root_ssh_public_keys`: its comment names the desk, such
-   as `alex on desk01`, or `util01, the mmhotline user`. That desk or `util01` is suspect: go to
-   [The lock-out: only for these cases](#the-lock-out-only-for-these-cases).
-   A commit that came only through the backup at the Git host never reached a server; it shows as a refused backup
-   push. For it, the person does the Git host row of ["At each company's website"](#1-lock-everyone-out).
-   Reason: whoever holds that key has root on every server, so the key goes, not only the commit.
+   as `alex on desk01`, or `util01, the mmhotline user`.
    **Check:** the reflog's change and a journal line name the same time, and the key is known.
-4. **After the revert is on `main`, mark the unknown commit reviewed:**
-   `./server_management_scripts/run_mmx_on_util01 commit-reviews mark-reviewed --commit-id COMMIT`.
-   Reason: MMHotline trusts `main` only up to the commit before the first waiting commit. A commit on top, the
-   revert included, does not move the trusted commit past a waiting commit. So until a person marks the commit
-   reviewed, MMHotline, the helper and the scheduled jobs run nothing, the fixes of this page included. After the
-   mark, a run applies `main`, where the revert removed the change. Never remove the commit with a force push.
-   **Check:** `commit-reviews list` names no waiting commit.
-5. **Make every unsigned commit wait for a person:** the coding agent sets
-   `commits_without_a_trusted_signature_are_approved_by: a_person` in `mmhotline_settings.yml`, as
-   [Change MMHotline settings](change_mmhotline_settings.md) says, commits, pushes and runs `every_server`.
-   **Check:** the run applied the stage `apply_the_mmhotline_settings` on `util01`.
-6. **Find what already ran.** The coding agent reads the commits that the triage agent approved, in
-   `commit-reviews list`, and MMX's run history with `./server_management_scripts/run_mmx_on_util01 results`,
-   from the first unknown commit on.
-   **Check:** each approved commit and each run since that time is known. When an unknown commit ran on the
-   servers, the intruder had root through the run: go to
-   [The lock-out: only for these cases](#the-lock-out-only-for-these-cases).
+3. **Find what already ran.** The coding agent reads MMX's run history with
+   `./server_management_scripts/run_mmx_on_util01 results`, and MMHotline's triage runs in its dashboard, from the
+   time of the unknown commit on.
+   **Check:** each run since that time is known.
+4. **Go to the lock-out.** The desk or `util01` whose key pushed is suspect, and its key has root on every server:
+   go to [The lock-out: only for these cases](#the-lock-out-only-for-these-cases). When the pushing key is your own
+   desk's, go to [When your own desk was the way in](#when-your-own-desk-was-the-way-in).
+   Reason: whoever holds that key has root on every server, so the key goes, not only the commit.
+   **Check:** the lock-out's own checks.
 
-**When the triage agent already approved the unknown commit,** the commit no longer waits, and a run may have
-applied the commit. The coding agent pushes the signed revert of item 2. Item 4 is not needed. Then item 6 shows
-whether a run applied the commit.
-
-When a key in `root_ssh_public_keys` signed the unknown commit, a desk's key or `util01`'s key made the commit.
-Then the desk or `util01` is suspect: go to [The lock-out: only for these cases](#the-lock-out-only-for-these-cases).
-Keep `a_person` until the key that pushed is out of `root_ssh_public_keys` on every server. Then the team chooses the
-setting again.
+**A commit only at the Git host's backup** never reached a server: the Git host is a backup that nothing reads. It
+shows as a refused backup push ("The main copy and the backup at the Git host" in
+[`AGENTS.md`](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host)). Never merge it. The person does the Git
+host row of ["At each company's website"](#1-lock-everyone-out), and nothing else on this page is needed.
 
 ## An unknown session at a company
 
@@ -320,17 +305,17 @@ coding agent, from the first unknown session on.
   Replace the [registry credentials](rotate_a_secret.md#the-container-registry-token). Compare the registry's tags
   with `deployed_image_tags` in `inventories/servers.yml`. Build the image again from the reviewed source, push the image
   under a new tag, and deploy the new tag, before a server is added or replaced.
-- **The password manager or the identity provider** holds the recovery logins, each desk's production and WireGuard
-  keys, the vault passphrase and the backup passphrase. So every kept credential is suspect: go to
+- **The password manager or the identity provider** holds the recovery logins and the recovery passphrase, which
+  opens the recovery bundle: the first desk's production and WireGuard keys, and the vault passphrase. So every kept credential is suspect: go to
   [The lock-out: only for these cases](#the-lock-out-only-for-these-cases). The person changes the master password
   from a clean device.
 - **The coding-agent vendor's account** holds the stored conversations and may hold the triage agent's credential.
   The coding agent never reads a secret, so the conversations hold no secret. Revoke affected personal
   subscriptions, API keys and active sessions. Replace the [triage agent credential](rotate_a_secret.md#the-triage-agent-credential).
-  When the vendor's records show a session that ran on a desk, that desk was the way in:
-  [When your own desk was the way in](#when-your-own-desk-was-the-way-in).
+  When the vendor's records show a session that nobody on the team ran, the laptop it ran on, and so its desk, was
+  the way in: [When your own desk was the way in](#when-your-own-desk-was-the-way-in).
 - **Staging's Access token** reaches only `staging01`'s pages behind Cloudflare Access. The person replaces the token
-  with `set-up-outside-services cloudflare --replace-key STAGING_ACCESS_CLIENT_SECRET`, as
+  with `ssh -t desk01 set-up-outside-services cloudflare --replace-key STAGING_ACCESS_CLIENT_SECRET`, as
   [Cloudflare keys](rotate_a_secret.md#cloudflare-keys) says.
 
 **Check:** at each company, the lists of sessions and tokens show only the team's, and the audit log shows no
@@ -352,14 +337,14 @@ after leaving, go to [The lock-out: only for these cases](#the-lock-out-only-for
 
 **Do this now, when the facts match one of the three cases below:**
 
-1. On a desk with no signs ([Check a desk for signs](#check-a-desk-for-signs)), the coding agent pushes the
-   one-line commit `everyone_locked_out_except_desk: desk01`, with that desk's name, under the top-level `vars` of
-   `inventories/servers.yml`.
-2. You run the lock-out button in your own terminal on that desk, in your systems repository:
+1. For a desk with no signs ([Check a desk for signs](#check-a-desk-for-signs)), that desk's coding agent publishes
+   the one-line commit `everyone_locked_out_except_desk: desk01`, with that desk's name, under the top-level `vars`
+   of `inventories/servers.yml`.
+2. You run the lock-out button for that desk, on its laptop:
 
    ```sh
-   cd ~/example_systems
-   sudo lock-everyone-out
+   # On the laptop:
+   ssh -t desk01 sudo lock-everyone-out
    ```
 
 3. Read each line, type `yes`, and continue with step 3 of [Lock everyone out now](#lock-everyone-out-now).
@@ -410,20 +395,21 @@ The same command undoes the lock-out ([Undo a lock-out](#undo-a-lock-out)).
 
 ### Check a desk for signs
 
-The person runs these two reads in the person's own terminal on the desk. Both reads change nothing.
+The person runs these two reads in their own desk login, `ssh desk01` and a phone code. Both reads change nothing.
 
 ```sh
-cd ~/example_systems
-git log --since="14 days ago" --date=iso --format='%h %ad %G? %GS %s'
+# On the desk, as the person:
+sudo -u coding-agent git -C /home/coding-agent/systems_repository log --since="14 days ago" --date=iso --format='%h %ad %an %s'
 sudo journalctl -u ssh.service --since "-14 days" --grep "Accepted" --no-pager
 ```
 
-- **Commits:** each line shows the commit, its time, `G` for a good signature, the signer, such as
-  `alex_on_desk01`, and the message. A commit that this desk's signer made but nobody on the team made is a sign.
-- **Logins:** each `Accepted` line shows a login to the desk, with its time and its address. First check whether the
-  login is your own: your laptop's address is in the desk's `allowed_laptops` in `inventories/servers.yml`, such as
-  `10.20.10.1`, and the time matches a time you logged in. A login from another address, or at a time you did not
-  log in, is a sign.
+- **Commits:** each line shows the commit, its time, its author and its message. A commit that nobody on the team
+  made is a sign. [An unknown commit in the systems repository](#an-unknown-commit-in-the-systems-repository) says
+  how to find the key that pushed it.
+- **Logins:** each `Accepted` line shows a login to the desk, as the person or as `coding-agent`, with its time and
+  its address. First check whether the login is your own or your coding agent's: your laptop's address is in the
+  desk's `allowed_laptops` in `inventories/servers.yml`, such as `10.20.10.1`, and the time matches a time you or
+  your coding agent worked. A login from another address, or at a time nobody worked, is a sign.
 
 **Check:** a desk with no such commit and no such login shows no signs.
 
@@ -440,20 +426,21 @@ says. When this desk shows signs:
 - **Working alone,** follow these steps on this desk, because no other desk exists. Then follow "Working alone" in
   [When your own desk was the way in](#when-your-own-desk-was-the-way-in).
 
-1. **Your coding agent, on your desk, prepares and pushes a one-line commit:** `everyone_locked_out_except_desk: desk01`,
+1. **Your coding agent, on your laptop, prepares and publishes a one-line commit:** `everyone_locked_out_except_desk: desk01`,
    with your desk's name, under the top-level `vars` of `inventories/servers.yml`, as
    [Making a change](../AGENTS.md#making-a-change) describes. The coding agent never applies the setting itself:
    only the lock-out button starts a lock-out.
    **Check:** the coding agent tells you the commit and gives you the command below. When the coding agent cannot
    be used, [make the commit by hand](#make-the-lock-out-commit-by-hand).
-   On a desk that shows signs, the coding agent on that desk is suspect too. So read the commit yourself, in your
-   own terminal: `git fetch origin && git show origin/main` must change only the one line in
+   On a desk that shows signs, your laptop and its coding agent are suspect too, because only your laptop reaches
+   your desk. So read the commit yourself, in your own desk login:
+   `sudo -u coding-agent git -C /home/coding-agent/systems_repository show HEAD` must change only the one line in
    `inventories/servers.yml`. Or make the commit by hand.
-2. **You run the lock-out button** in your own desk terminal, in your systems repository:
+2. **You run the lock-out button,** on the laptop, with a phone code:
 
    ```sh
-   cd ~/example_systems
-   sudo lock-everyone-out
+   # On the laptop:
+   ssh -t desk01 sudo lock-everyone-out
    ```
 
    The lock-out button pulls the coding agent's commit, shows every server and the desk that keeps access,
@@ -472,37 +459,42 @@ Then continue with [step 1](#1-lock-everyone-out).
 
 ### Make the lock-out commit by hand
 
-**When the coding agent cannot be used,** make the commit by hand in your own desk terminal:
+**When the coding agent cannot be used,** make the commit by hand in the desk's checkout, in your own desk login
+(`ssh desk01` and a phone code). `agent_git` runs Git as the coding agent, with the desk's production key, so the
+checkout stays the coding agent's own:
 
 ```sh
-cd ~/example_systems
-nano inventories/servers.yml
+# On the desk, as the person:
+cd /home/coding-agent/systems_repository
+agent_git() { sudo -u coding-agent env SSH_AUTH_SOCK=/run/desk-ssh-agent/socket GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig git -c core.hooksPath=/dev/null "$@"; }
+agent_git pull --ff-only
+# Adds the setting as the first line under the inventory's top-level vars:. GNU sed, as on the desk.
+sudo -u coding-agent sed -i '0,/^vars:$/s//vars:\n  everyone_locked_out_except_desk: desk01/' inventories/servers.yml
+grep -n -A1 '^vars:$' inventories/servers.yml
 ```
 
-Add the following setting under the inventory's existing top-level `vars`, and keep the existing values:
+The last line prints the setting under `vars:`, and the existing values stay:
 
 ```yaml
 vars:
   everyone_locked_out_except_desk: desk01
 ```
 
-Commit, synchronize and push the setting:
+Commit and push the setting to the main copy on `util01`:
 
 ```sh
-git add inventories/servers.yml
-git commit -m 'Lock production administration to desk01 during incident response'
-git pull --rebase origin main
-git --no-pager log --oneline HEAD@{1}..HEAD
-git push origin main
+agent_git add inventories/servers.yml
+agent_git commit -m 'Lock production administration to desk01 during incident response'
+agent_git push origin main
 ```
 
-If synchronization reports a conflict, run `git rebase --abort` and resolve the competing incident change with the team.
-Then run `sudo lock-everyone-out`.
+When `util01` does not answer, or the push is refused, go on: the lock-out button uses the desk's checkout as it is.
+Then run `sudo lock-everyone-out` in the same login.
 
 ### What the lock-out leaves running
 
 The desk that keeps access retains production access. Other desks retain local sessions but lose their production keys and peers.
-On the desk that keeps access, you and the coding agent keep working: the coding agent, its buttons, Rex and the API proxy keep running.
+On the desk that keeps access, you and the coding agent keep working: the coding agent's login to the desk, its buttons and the API proxy keep running.
 Server triage stops. The lock-out button also revokes sessions for the configured private Cloudflare Access applications.
 A failed Cloudflare revocation is reported after local containment. Complete that revocation at Cloudflare's website.
 
@@ -521,7 +513,7 @@ A failed Cloudflare revocation is reported after local containment. Complete tha
    the WireGuard peer template, the triage user's sudo rules and `mmhotline_settings.yml`.
    It takes only data from the pulled repository: the inventory, the servers' host keys, the settings and the vault.
    When the pulled repository changes one of those reviewed files, the lock-out button names the file and uses the
-   reviewed copy. After the incident, run `review-and-apply-the-systems-desk-settings` and read the change before you approve it.
+   reviewed copy. After the incident, run `ssh desk01-review` and read the change before you approve it.
    Reason: an intruder who can push to the main copy on `util01` must not get root on your desk, or on every server,
    through the lock-out; a pushed change to a lock-out program reaches root only through your desk review.
    The lock-out button stops before changing anything when a node's `ssh_config` in the inventory is not one of the
@@ -604,17 +596,27 @@ lock-out, provider snapshots keep the evidence, as [Find out what happened](#fin
    records checksums and failed servers.
 2. **If a server is unreachable, snapshot the server's disk at the provider and record the gap before replacement.**
    **Check:** the provider shows the snapshot.
-3. **Keep evidence and the manifest outside Git. Preserve the backup encryption passphrase in the password manager.**
+3. **Keep evidence and the manifest outside Git. Keep the backup encryption passphrase in the vault as it is.**
    **Check:** none, because both are places to keep things, not commands.
 
 The copies include journals, retained authentication and web logs, MMX run records, private MMX failure details, and the histories of the desk that keeps access.
 The helper copies every inventory server except other desks. Provider snapshots preserve those desks' evidence.
 
-To open a downloaded `.tar.gz.enc` evidence copy, use the existing backup encryption passphrase at OpenSSL's hidden prompt:
+To open a downloaded `.tar.gz.enc` evidence copy, the person runs this on the desk that keeps access, in their own login.
+The backup passphrase, `pgbackrest_repository_cipher_passphrase`, goes straight from the vault into OpenSSL.
+Nobody sees it, and nobody opens the vault.
 
 ```sh
-openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
-  -in desk01.tar.gz.enc -out desk01.tar.gz
+# On the desk that keeps access, as the person, in the folder with the evidence copy:
+work=$(mktemp -d)
+cp /home/coding-agent/systems_repository/secrets_vault.age "$work/"
+sudo install -o "$USER" -m 0600 /etc/systems-desk/vault-passphrase "$work/vault-passphrase"
+# MMX has no command that prints one value: this editor setting prints the one item and changes nothing.
+EDITOR="awk -F': ' '\$1 == \"pgbackrest_repository_cipher_passphrase\" {v=\$2; gsub(/^\"|\"\$/, \"\", v); print v}'" \
+  MMX_VAULT_PASSWORD_FILE="$work/vault-passphrase" mmx secrets edit --vault "$work/secrets_vault.age" | head -n 1 |
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass stdin \
+    -in desk01.tar.gz.enc -out desk01.tar.gz
+rm -r "$work"
 ```
 
 ## 3. Find what was taken
@@ -664,22 +666,21 @@ When the uploaded files were deleted or overwritten too, follow
 after item 5 replaced the app's own R2 key, with the same time as the database.
 
 1. **Recover company ownership and review Git history, roles, images and pending MMHotline approvals.**
-   Reject untrusted queued requests. Review each commit waiting for review with the person, as
-   ["Review each commit waiting for review before any run"](../AGENTS.md#the-rules) says, and mark a suspected
-   commit reviewed only after its signed revert is on `main`, as
+   Reject untrusted queued requests. Read each commit since the break-in with the person, and revert each one
+   nobody on the team made, as
    [An unknown commit in the systems repository](#an-unknown-commit-in-the-systems-repository) says. Replace personal company credentials using [Personal desk credentials](rotate_a_secret.md#personal-desk-credentials).
    Rebuild suspect desks using fresh production SSH, WireGuard, host and phone identities when the old identities were exposed,
    in the order that [When your own desk was the way in](#when-your-own-desk-was-the-way-in) gives.
    Update each desk's `production_ssh_public_key` alongside `root_ssh_public_keys` when replacing a production key.
    Load the replacement private key into the person's private SSH agent before applying its new public mapping.
    **Check:** each replacement works before the old credential is revoked.
-2. **Replace the [vault passphrase](add_or_remove_a_team_member.md#adding-or-removing-a-person) and [shared root console password](rotate_a_secret.md#the-shared-root-console-password).**
+2. **Replace the [vault passphrase](add_or_remove_a_team_member.md#replace-the-vault-passphrase-and-secrets) and [shared root console password](rotate_a_secret.md#the-shared-root-console-password).**
    Old vault copies remain readable with the old passphrase, so continue replacing exposed vault secrets.
    **Check:** the checks of the two linked sections.
 3. **Follow [Rebuild util01](rebuild_the_utility_server_util01.md), with the coding agent's MMX button in place of each `util01` run, as above.**
    When the database goes back to a time before the break-in, skip rebuild steps 5 and 6, as the restore section says.
    A fresh util01 generates new controller and triage SSH keys and a new MMWatchdog hub identity and join secret.
-   Record the generated public keys in `root_ssh_public_keys` and `triage_ssh_public_key`, and replace the controller's Git and provider registrations.
+   Record the generated public keys in `root_ssh_public_keys` and `triage_ssh_public_key`, and replace the controller's provider registrations.
    Apply the new utility peer and rejoin reporting nodes. Rejoin each trusted desk locally through `systems_desk`.
    Do not restore old generated private keys or the old MMWatchdog state directory.
    **Check:** the checks of Rebuild util01.
@@ -694,10 +695,10 @@ after item 5 replaced the app's own R2 key, with the same time as the database.
    **Check:** the checks of Replace a server, for each server.
 5. **Replace every Cloudflare key:** the tunnel tokens, each app's R2 key, `util01`'s R2 key, the MMHotline-down alarm's token,
    the status page's R2 key, the person's own desk token and posting key, and with `staging01` staging's service token.
-   The person runs, in the person's own terminal on the desk that keeps access, in the systems repository:
+   The person types, on the laptop of the desk that keeps access, with a phone code:
 
    ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare --replace-every-key --delete-the-old-keys-at-once
+   ssh -t desk01 set-up-outside-services cloudflare --replace-every-key --delete-the-old-keys-at-once
    ```
 
    The command makes each new key, saves it in the vault or the token file, and deletes each old key at Cloudflare
@@ -707,7 +708,8 @@ after item 5 replaced the app's own R2 key, with the same time as the database.
    their uploads and MMHotline cannot post to the status page.
    Delete each other team member's Cloudflare tokens with `--delete-tokens-of-person`, as
    [Add or remove a team member](add_or_remove_a_team_member.md#adding-or-removing-a-person) says;
-   each member makes new ones with `set-up-outside-services cloudflare` after the lock-out is undone.
+   each member makes new ones with `ssh -t desk02 set-up-outside-services cloudflare`, with their own desk name,
+   after the lock-out is undone.
    Replace [registry credentials](rotate_a_secret.md#the-container-registry-token),
    [app secrets](rotate_a_secret.md#app-secrets), [database passwords](rotate_a_secret.md#app-database-passwords),
    [monitor passwords](rotate_a_secret.md#the-failover-monitor-password), and [replication passwords](rotate_a_secret.md#the-replication-password).
@@ -745,32 +747,32 @@ which value to correct, and says "Nothing changed". Reason: an undo that removed
 SSH connection after some servers changed, with the servers still locked out and no desk able to finish it.
 
 1. **Your coding agent lists each key in `root_ssh_public_keys` and `triage_ssh_public_key`,** with its comment and
-   its fingerprint as `ssh-keygen -l` shows it, and says whose key each one is.
+   its fingerprint as `ssh-keygen -l` shows it, and says whose key each one is. On a desk that showed signs, you
+   read the list yourself, in your own desk login.
    Reason: the lock-out button shows only the keys added or removed since your last desk review, so a key that
    arrived earlier is not shown at the undo.
    **Check:** each key belongs to a trusted desk or to `util01`. If a key is not one you know, your coding agent
-   removes it from `mmx_project_settings.yml` and pushes before the undo.
-2. **Your coding agent prepares and pushes the commit that removes `everyone_locked_out_except_desk` from
+   removes it from `mmx_project_settings.yml` and publishes before the undo.
+2. **Your coding agent prepares and publishes the commit that removes `everyone_locked_out_except_desk` from
    `inventories/servers.yml`, and gives you the command.**
    When the coding agent cannot be used, remove the line by hand, as [step 1](#make-the-lock-out-commit-by-hand) shows for adding it.
    **Check:** the coding agent tells you the commit.
-3. **You run `sudo lock-everyone-out` again,** in your own desk terminal, in your systems repository.
+3. **You run `ssh -t desk01 sudo lock-everyone-out` again,** on the laptop, with a phone code.
    The lock-out button shows the servers and asks you to type `yes`.
    When the inventory names an SSH settings file, such as `ssh/desk03`, that your last desk review did not install,
-   the button stops with nothing changed: run `review-and-apply-the-systems-desk-settings` first. That desk review
+   the button stops with nothing changed: run `ssh desk01-review` first. That desk review
    shows the key changes too, and records them.
    **Check:** when a key was added or removed since your last desk review, the lock-out button shows each one and
    asks you a second time. When your desk review just showed them, the button says instead that the keys are the
    same as at your last desk review. If a key is not one you know, or a key you need is gone, press Enter: nothing changes.
-   Ask your coding agent to correct the keys in `mmx_project_settings.yml` and push, then run the lock-out button again.
+   Ask your coding agent to correct the keys in `mmx_project_settings.yml` and publish, then run the lock-out button again.
    Step 4 replaces keys on purpose, so expect the lock-out button to show those new keys at the final undo.
 4. **Read the last line.**
    **Check:** when the undo fails on a server, its last line says so: that server is still locked out, so `util01` and the other
-   desks cannot reach it yet. Your coding agent fixes the cause, and you run `sudo lock-everyone-out` again.
+   desks cannot reach it yet. Your coding agent fixes the cause, and you run `ssh -t desk01 sudo lock-everyone-out` again.
    When no desk reaches a server any more, follow [Recover a half-undone lock-out](#recover-a-half-undone-lock-out).
 
-MMHotline keeps the commit it last checked through the lock-out, so after the undo MMHotline checks only the
-commits pushed since, with the keys the undo applied.
+After the undo, MMHotline and `util01` run every commit on the main copy again, as before the lock-out.
 
 The undo lets in, on every server, each key in `root_ssh_public_keys` as root and `triage_ssh_public_key` as the triage user,
 from `mmx_project_settings.yml`. So the lock-out button compares those keys with the ones your last desk review recorded.
@@ -785,16 +787,17 @@ Other desks start fresh SSH sessions to the servers. Company-side revocations ne
 process on your desk that nobody started.
 
 **What the intruder can reach:** everything that your desk reaches. That is root on every server, `util01` included,
-and your desk's production SSH key, WireGuard key, provider token and Cloudflare tokens. `util01`
-runs each commit that your desk's key signed. So a desk that was the way in counts as an unknown root login, one of
+and your desk's production SSH key, WireGuard key, provider token and Cloudflare tokens. Your desk's key
+can push to the main copy on `util01`, and `util01` runs every commit there. So a desk that was the way in counts as an unknown root login, one of
 the lock-out cases.
 
 **A trusted laptop** is a new laptop, or your laptop after its operating system is reinstalled, as
 [Recover from a lost or stolen laptop](recover_from_a_lost_or_stolen_laptop.md#before-you-start) says.
-Reason: on a laptop that reached the suspect desk, an untrusted program may still be running.
+Reason: only your laptop reaches your desk, so a desk that was the way in makes the laptop and its coding agent
+suspect too. An untrusted program may still be running there.
 
 **Why the new desk gets fresh keys:** [Rebuild a systems desk](rebuild_a_systems_desk.md) restores the old desk's
-production and WireGuard keys from the password manager. Here the intruder may hold copies of those keys. So the new
+production and WireGuard keys from the recovery bundle. Here the intruder may hold copies of those keys. So the new
 desk is built with fresh keys, as a new team member's desk is, and the old desk's key leaves `root_ssh_public_keys`.
 
 **The order of the key change:** the new desk's key goes into `root_ssh_public_keys` before the undo, so the undo lets
@@ -820,25 +823,25 @@ The old desk is deleted at the end, in both orders.
 4. **The teammate continues with steps 1 to 3** from the teammate's desk.
    **Check:** the checks of those steps.
 5. **Build a new desk from a trusted laptop with fresh keys,** under the next desk name, such as `desk03`, as
-   [Add or remove a team member](add_or_remove_a_team_member.md#adding-or-removing-a-person) steps 2 and 3 say for a
-   new person. Never restore the old desk's keys from the password manager.
-   **Check:** the new desk sends its public values, as step 3 of that procedure says.
+   "Joining" steps 2 to 7 of [Add or remove a team member](add_or_remove_a_team_member.md#joining) say for a
+   new person. Never restore the old desk's keys from the recovery bundle.
+   **Check:** the new desk's patch file reaches the teammate, as "Joining" step 7 says.
 6. **The teammate's coding agent adds the new desk and removes the old desk's key, in one commit:** the new desk's
-   entry and key, as step 4 of Add or remove a team member says, and the old desk's key out of
-   `root_ssh_public_keys`. The coding agent pushes the commit, but does not run `every_server` for the new key.
+   entry and key, as "Joining" step 8 says, and the old desk's key out of `root_ssh_public_keys`. The coding agent
+   publishes the commit, but does not run `every_server` for the new key.
    Reason: during the lock-out, the servers admit only the desk that keeps access. The undo lets the new key in.
    **Check:** the diff adds the new key and removes only the old desk's key.
-7. **The teammate runs `review-and-apply-the-systems-desk-settings`, continues with step 4, then undoes the
+7. **The teammate runs a desk review, `ssh desk02-review`, continues with step 4, then undoes the
    lock-out,** as [Undo a lock-out](#undo-a-lock-out) says. Reason: the undo connects only with SSH settings files
    that a desk review installed, and the new desk's `ssh/` file is new.
    **Check:** the desk review shows the new desk's key added and the old desk's key removed, and the undo then says
    the keys are the same as at the last desk review.
-8. **Finish the new desk,** as step 5 of Add or remove a team member says, with the commit ID from the teammate.
+8. **Finish the new desk,** as "Joining" steps 9 to 13 of Add or remove a team member say.
    Reason for after the undo: the new desk fetches `main` from the main copy on `util01`, and during the lock-out
    `util01` admits only the desk that keeps access.
    **Check:** the checks of that step, and from the new desk, `ssh -F ssh/config root@10.20.1.1 true` works.
 9. **Delete the old desk** by the old desk's verified provider ID, as
-   [Find the old desk at the provider](rebuild_a_systems_desk.md#find-the-old-desk-at-the-provider) and step 28 of
+   [Find the old desk at the provider](rebuild_a_systems_desk.md#find-the-old-desk-at-the-provider) and step 22 of
    Rebuild a systems desk say. Then remove the old desk's entry, its `ssh/` settings file and its known-host lines,
    as step 2 of "Leaving" in Add or remove a team member says.
    **Check:** a fresh provider listing no longer shows the old desk.
@@ -851,8 +854,9 @@ You use the old desk again for a few minutes, for items 6 and 7, because during 
 that desk, so only that desk can run the undo.
 
 1. **Lock out from your own desk,** as [Lock everyone out now](#lock-everyone-out-now) says, with your desk's name.
-   Read the one-line commit yourself before you press, because the coding agent on this desk is suspect.
-   Reason: `util01` runs each commit that your desk's key signed, so the lock-out stops a commit that the intruder signed.
+   Read the one-line commit yourself before you press, because your laptop and its coding agent are suspect.
+   Reason: `util01` runs every commit on the main copy, and your desk's key can push there, so the lock-out stops
+   what the intruder pushes.
    **Check:** the button's last lines say how to undo the lock-out.
 2. **Save the evidence,** as [2. Save the evidence](#2-save-the-evidence) says, on your desk.
    **Check:** the checks of step 2.
@@ -862,27 +866,31 @@ that desk, so only that desk can run the undo.
    Power the desk on again only for items 6 and 7.
    **Check:** the provider shows the snapshot, and the desk powered off.
 5. **Build a new desk from a trusted laptop with fresh keys,** under the next desk name, such as `desk02`, as
-   [Add or remove a team member](add_or_remove_a_team_member.md#adding-or-removing-a-person) steps 2 and 3 say.
-   Never restore the old desk's keys from the password manager.
-   **Check:** the new desk prints its public values.
-6. **On the old desk, the coding agent adds the new desk and its key, and keeps the old desk's key,** as step 4 of
-   Add or remove a team member says, and pushes. You read the diff yourself before the push.
+   "Joining" steps 2 to 7 of [Add or remove a team member](add_or_remove_a_team_member.md#joining) say.
+   Never restore the old desk's keys from the recovery bundle.
+   **Check:** the new laptop's coding agent wrote the patch file, `~/add-desk02.patch`.
+6. **On the old desk, you add the new desk and its key by hand, and keep the old desk's key.** Copy the patch file
+   to the old laptop. From the old laptop, `scp add-desk02.patch desk01:` and log in, `ssh desk01`, each with a
+   phone code. In the desk's checkout, set up `agent_git` as
+   [Make the lock-out commit by hand](#make-the-lock-out-commit-by-hand) shows, then read the patch and apply it:
+   `agent_git am ~/add-desk02.patch` and `agent_git push origin main`.
    Reason: the undo in item 7 runs on the old desk, so the old desk's key stays in `root_ssh_public_keys` until the
-   undo has finished; and the new desk joins only a `main` whose newest commit is signed by a key that commit lists.
+   undo has finished.
    **Check:** the diff adds the new desk's entry, `ssh/` file and known-host lines and its key in
    `root_ssh_public_keys`, and removes nothing.
-7. **On the old desk, undo the lock-out:** run `review-and-apply-the-systems-desk-settings`, then follow
-   [Undo a lock-out](#undo-a-lock-out). For the undo's step 1, read the key list yourself.
+7. **On the old desk, undo the lock-out:** in the same login, run `review-and-apply-the-systems-desk-settings`,
+   then `sudo lock-everyone-out`, as [Undo a lock-out](#undo-a-lock-out) says. For the undo's step 1, read the key
+   list yourself; remove the lock-out line by hand, as for adding it.
    Then power off the old desk again.
    **Check:** the desk review shows the new desk's key added; the undo's last line names no failed server; the
    provider shows the old desk powered off. Write down the undo commit's ID.
-8. **Finish the new desk,** as step 5 of Add or remove a team member says, with the undo commit's ID from item 7.
-   Then the new desk's coding agent removes the old desk's key from `root_ssh_public_keys`, pushes, and runs
-   `every_server`, as [Making a change](../AGENTS.md#making-a-change) says.
-   Reason: once that run applies the list, `util01` and the servers stop trusting the old key: a commit signed with
-   it waits for review.
-   **Check:** the join shows `main` at the undo commit; if `main` is past it, stop: someone pushed after the undo, and
-   your coding agent reviews that commit with you first. From the new desk, `ssh -F ssh/config root@10.20.1.1 true`
+8. **Finish the new desk,** as "Joining" steps 9 to 12 of Add or remove a team member say. Then the new laptop's
+   coding agent removes the old desk's key from `root_ssh_public_keys`, publishes, and runs `every_server`, as
+   [Making a change](../AGENTS.md#making-a-change) says.
+   Reason: once that run applies the list, `util01` and the servers stop trusting the old key: it can no longer log
+   in or push to the main copy.
+   **Check:** `origin/main` on the new desk is the undo commit of item 7; if `main` is past it, stop: someone pushed
+   after the undo, and your coding agent reads that commit with you first. From the new desk, `ssh -F ssh/config root@10.20.1.1 true`
    works, and `ssh -F ssh/config root@10.20.1.1 cat /root/.ssh/authorized_keys` no longer shows the old desk's key.
 9. **Delete the old desk, then continue with step 4 from the new desk,** as item 9 of
    "With a teammate" says. `util01` is suspect, because your old desk had root on `util01`: step 4's item 3
@@ -994,14 +1002,14 @@ from [What did you see?](#what-did-you-see), and does not recommend a lock-out.
 
 Then rehearse containment.
 Use an isolated staging system with two actual systems desks and harmless company tokens.
-Open a second desk login, Rex session, coding agent, triage run, server SSH sessions and proxy requests.
+Open a second desk login, the coding agent's desk login, a triage run, server SSH sessions and proxy requests.
 Keep an HTTP client requesting the reference app throughout containment.
 Follow steps 1 and 2, including both undo commands. Verify the following results:
 
 - The desk that keeps access session works and customer requests have no failures during the access lock.
 - The second desk's local sessions survive, but existing server sessions end and fresh server SSH and MMX attempts fail.
 - The second desk cannot use the token proxy of the desk that keeps access. No desk-management path joins the desks.
-- On the desk that keeps access, Rex, the coding agent, its buttons and the proxy keep working. Triage stops on every server.
+- On the desk that keeps access, the coding agent's login, its buttons and the proxy keep working. Triage stops on every server.
 - The coding agent's `sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only` on the desk that keeps access retains the lock.
 - The same command on the second desk, and `./server_management_scripts/run_mmx_on_util01 run every_server`, refuse with the message that only the person starts a lock-out.
 - The status switch shows the independent status page, and its undo restores the app.

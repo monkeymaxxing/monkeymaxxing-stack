@@ -10,11 +10,10 @@ page, updates the notice, and resolves the notice, through MMHotline while
 
 **Who acts:** the coding agent writes each message for the incident at
 hand and gives the person the command. The person posts: in MMHotline in
-the browser, in a terminal on `util01`, or in the person's own desk
-terminal. Commands that source the person's token file,
-`~/.config/monkeymaxxing-stack/example_systems.env`, run only in the
-person's own desk terminal, as the secrets rule in
-[The rules](../AGENTS.md#the-rules) says.
+the browser, or, while `util01` is down, in their own desk terminal. The
+desk commands read the person's own R2 key from their token file on the
+desk, `~/.config/monkeymaxxing-stack/example_systems.env`, which you never
+read.
 
 **Terms:** this page uses the Stack's terms, such as status page, token
 file, link token, R2 and `util01`.
@@ -44,8 +43,9 @@ for how the two services keep working while the servers are down.
    [the README](../README.md#operating-links).
    **Check:** none here; step 3 checks the public page.
 2. **Open the incident for the problem, then select "Post to the status
-   page".** Alternatively, run `sudo mmhotline status-page post --message "..."`
-   in a terminal on `util01`.
+   page".** Or, when the person asks you to post, run it on `util01`
+   through the desk:
+   `ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 mmhotline status-page post --message "..."'`.
    **Check:** none here; step 3 checks the public page.
 3. **Check the public status page,** linked in
    [the README](../README.md#operating-links).
@@ -57,7 +57,8 @@ for how the two services keep working while the servers are down.
 While `util01` is down, each person posts from their own systems desk with
 their own R2 key for the page's bucket
 ([A person's own R2 key for posting from a systems desk](#a-persons-own-r2-key-for-posting-from-a-systems-desk)).
-Every command here runs in the person's own desk terminal.
+Every command here runs in the person's own desk terminal. The person
+opens it on the laptop with `ssh desk01` and a phone code.
 
 1. **Check that the desk can post:**
    `. ~/.config/monkeymaxxing-stack/example_systems.env && mmhotline status-page show`.
@@ -75,10 +76,10 @@ Every command here runs in the person's own desk terminal.
    ```
 
 2. **Only when the token file lacks those lines: make the person's key,**
-   in the person's own desk terminal, in the systems repository:
+   in the person's own desk terminal:
 
    ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare
+   set-up-outside-services cloudflare
    ```
 
    The command asks for a link token, made from the link it prints, makes
@@ -135,23 +136,21 @@ Every command here runs in the person's own desk terminal.
 1. **Follow [Rebuild a systems desk](rebuild_a_systems_desk.md).** Do not
    wait for a complete production rebuild to post.
    **Check:** the checks of Rebuild a systems desk.
-2. **On the replacement desk, the person runs `set-up-outside-services cloudflare`,**
-   as [step 2 of posting from a systems desk](#post-from-a-systems-desk-while-util01-is-down)
-   shows, in the person's own desk terminal. The run makes a new personal
-   R2 key, writes it and the page's bucket address into the token file,
-   and deletes the lost desk's key, which has the same name.
-   **Check:** the token file holds the three lines.
-3. **Install the pinned MMHotline CLI on the replacement desk.** The
-   `systems_desk` role installs it, at the release pinned by
+2. **The rebuild's Cloudflare step made the person's new R2 key.**
+   [Rebuild a systems desk](rebuild_a_systems_desk.md)'s step 17 runs
+   `set-up-outside-services cloudflare`, which writes the key and the
+   page's bucket address into the new desk's token file, and deletes the
+   lost desk's key, which has the same name. The desk role installs
+   MMHotline's command-line program, at the release pinned by
    `stack_software.mmhotline.version` in `mmx_project_settings.yml`.
-   **Check:** `. ~/.config/monkeymaxxing-stack/example_systems.env && mmhotline status-page show`
-   lists the page's notices.
-4. **Use the posting commands above** (steps 3 to 5 of
+   **Check:** `. ~/.config/monkeymaxxing-stack/example_systems.env && mmhotline status-page show`,
+   in the person's own desk terminal, lists the page's notices.
+3. **Use the posting commands above** (steps 3 to 5 of
    [Post from a systems desk while util01 is down](#post-from-a-systems-desk-while-util01-is-down)).
    The replacement desk can post directly to R2 before joining monitoring
    or rebuilding `util01`.
    **Check:** the public status page shows the notice.
-5. **Record the tested desk-loss posting path in `systems_desk_recovery`.**
+4. **Record the tested desk-loss posting path in `systems_desk_recovery`.**
    **Check:** none, because the record is the last step.
 
 Reason: the public status page lives outside the production servers, and a replacement desk needs no working MMHotline service to write R2.
