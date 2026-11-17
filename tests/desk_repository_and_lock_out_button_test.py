@@ -191,8 +191,7 @@ class BreakInButton(unittest.TestCase):
 
     def test_the_desk_role_installs_every_reviewed_copy_the_button_reads(self):
         role = (T/'roles/systems_desk/main.yml').read_text()
-        installed = set(re.findall(r'/usr/local/lib/systems-desk/lock-everyone-out/([\w/.]+\.\w+)', role))
-        installed |= set(re.findall(r'\{source: [\w/.]+, path: ([\w/.]+)\}', role))
+        installed = set(re.findall(r'/usr/local/lib/systems-desk/lock-everyone-out/(\w[\w/.]*)', role))
         # The evidence copy is installed beside the button's copies, for its
         # reviewed SSH settings, but the button itself does not read it.
         self.assertEqual(installed - {'server_management_scripts/save_break_in_evidence.py'}, set(BUTTON.REVIEWED_PATHS))
