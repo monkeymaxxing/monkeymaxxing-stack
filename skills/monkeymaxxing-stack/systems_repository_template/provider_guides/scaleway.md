@@ -4,7 +4,7 @@ Scaleway calls a server an **Instance**, a server type a **commercial type**, an
 Follow the shared [script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts),
 [enrollment contract](../server_management_scripts/README.md#enroll-a-server-before-the-first-mmx-run),
 and [initial setup](../initial_setup/): accounts in
-[chapter 4 (sign up for the outside services the Stack uses)](../initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md),
+[chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
 servers in [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md).
 
 ## The provider's web console
@@ -20,8 +20,21 @@ through the desk's API proxy, as
 says.
 
 Set `systems_desk_provider_api_url: https://api.scaleway.com/` in `mmx_project_settings.yml`, including the trailing slash.
-The person saves the token with `set-up-outside-services personal-token server-provider --server-listing-path instance/v1/zones/fr-par-1/servers --token-header X-Auth-Token`.
+The person types the secret key on the laptop with the laptop key command below, and the bootstrap moves it
+to the desk. To replace the key later, the person runs
+`ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path instance/v1/zones/fr-par-1/servers --token-header X-Auth-Token`.
 A server listing uses `http://127.0.0.1:8081/instance/v1/zones/fr-par-1/servers`.
+
+### The laptop key command
+
+The values for [The laptop key command](README.md#the-laptop-key-command):
+
+- **Script:** `~/example-setup/enter-the-scaleway-key`.
+- **Values:** one, the API key's **secret key** of "The person's API key" below. The access key is not needed.
+- **Shape:** a UUID: 36 characters, 8-4-4-4-12 hexadecimal digits with hyphens.
+- **Read-only call:** `GET https://api.scaleway.com/instance/v1/zones/fr-par-1/servers?per_page=1` with `X-Auth-Token: SECRET_KEY`. HTTP 200 accepts the key.
+- **Key file line:** the secret key.
+
 
 Scaleway authenticates with the API key's secret key in `X-Auth-Token`, rather than an Authorization
 bearer header. `--token-header X-Auth-Token` makes the command check the token with that header and write

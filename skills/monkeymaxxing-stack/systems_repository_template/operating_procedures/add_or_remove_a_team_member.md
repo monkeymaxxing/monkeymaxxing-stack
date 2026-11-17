@@ -44,7 +44,7 @@ person's own desk terminal, as the secrets rule in
    repository and vault: never copy a fresh template, create another Git repository, or create another vault.
    The new person's laptop coding agent clones the team's systems repository into `~/code/example_systems`,
    with the new person's own Git host access, and follows
-   [chapter 2 (set up your laptop and your systems desk)](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md)'s
+   [chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md)'s
    "Create desk01 through WireGuard" in that clone, with the next desk name, such as `desk02`, in place of `desk01`.
    In the clone it adds `desk02` to `nodes` and `groups.systems_desks.nodes` in `inventories/servers.yml`, with the
    connection lines of `desk01` (`address: 127.0.0.1`, `ssh_user`, `connection`, `ssh_identity_file`,
@@ -54,9 +54,9 @@ person's own desk terminal, as the secrets rule in
    by any desk, such as `10.20.10.2`, in the desk's first-boot peer and the laptop's `desk02.conf` too.
    Reason: one address per laptop across the team makes each desk's login records name one laptop.
    It copies `ssh/desk01` to `ssh/desk02` with `HostKeyAlias desk02`. Then the new person bootstraps the desk and
-   enrolls the phone code, as chapter 2's steps 3 to 5 say. The bootstrap's temporary edits stay in the laptop's
-   own copy and are cleared there, as chapter 2 says.
-   **Check:** the checks of chapter 2's steps 3 to 5.
+   enrolls the phone code, as chapter 3's steps 3 to 5 say. The bootstrap's temporary edits stay in the laptop's
+   own copy and are cleared there, as chapter 3 says.
+   **Check:** the checks of chapter 3's steps 3 to 5.
 3. **The new person sends the new desk's public values.** In the new person's own desk terminal:
 
    ```sh
@@ -90,13 +90,13 @@ person's own desk terminal, as the secrets rule in
    ```
 
    The command sees that the team's repository has commits, so it joins it, as
-   [chapter 2's "Finish the systems repository on the desk"](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#finish-the-systems-repository-on-the-desk)
+   [chapter 3's "Finish the systems repository on the desk"](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard)
    describes: it checks main and names its newest commit and signer. The command keeps the bootstrap copy's
    edits in `git stash`, asks for the team's vault passphrase, which the new person pastes from the password manager,
    runs the first desk review, and makes the coding agent's checkout.
    **Check:** the new person compares the newest commit the command names with the
    ID from step 4, and stops at the desk review's question if they differ.
-6. **Tokens, monitoring and checks.** The new person brings the provider token to the desk, as chapter 2's "Bring
+6. **Tokens, monitoring and checks.** The new person brings the provider token to the desk, as chapter 3's "Bring
    the provider token to the desk" says, and makes their own Cloudflare tokens in their own desk terminal, in the
    systems repository: `. ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare`.
    The command prints a link; the new person, a member of the Cloudflare account since step 1, makes the link token

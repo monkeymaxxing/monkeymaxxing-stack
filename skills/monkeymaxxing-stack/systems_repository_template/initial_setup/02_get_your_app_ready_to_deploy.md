@@ -1,61 +1,59 @@
-# Chapter 3: Get your app ready to deploy
+# Chapter 2: Get your app ready to deploy
 
-**When:** after chapter 2 (set up your laptop and your systems desk). The
-desk's read-only clone of the app needs the deploy key that
-[chapter 4 (sign up for the outside services the Stack uses)](04_sign_up_for_the_outside_services_the_stack_uses.md#make-the-desks-app-checkout-credentials)
-shows how to make.
+**When:** right after chapter 1 (answer two questions).
 
 **What this chapter does:** the app gets ready to run on several app
 servers and to keep working after a database switch, so later the team
 only needs to add a server to handle more requests. The systems repository
-gets the app's settings, and the first tested image of the app reaches the
-registry.
+gets the app's settings. CI gets a workflow that builds the app's images.
 
-**Who acts:** you, the coding agent, read the app's code on the desk, fill
-in the app's settings in the systems repository, and write each required
-code change. The person reviews each code change and pushes it, because the
-app's code is the person's, and chooses how images are built.
+**Who acts:** you, the coding agent, work on the laptop, in the app's
+folder, where you can already read and push the code. You write every
+change. The person approves the whole set once, because the app's code is
+the person's. Then you push the changes and watch the first build.
 
 **Tell the person when the chapter starts:**
 
-> Next, I will check that your app can run on several app servers and keep
-> working after a database switch. I will prepare your app now, so later
-> you only need to add a server to handle more requests. I will read your
-> app's code and show you each required code change. You review each code
-> change, because the app's code is yours.
+> I am reading your app's code, to see what it needs to run on your servers.
 
 ## Before you start
 
-- **The messages to the person.** Each step says what to tell or ask the
-  person, in quote blocks: "Tell the person first" before the step, "Ask
-  the person" when the person must act or approve, and "Tell the person
-  after" with the result and its link. Say each message when its step
-  comes, in your own words, with the team's own names and links.
-- **The desk's clone of the app.** The systems desk holds a read-only clone of the app, as `coding-agent`, so I can read the code and what each release changes.
-  [Chapter 4 (sign up for the outside services the Stack uses)](04_sign_up_for_the_outside_services_the_stack_uses.md#make-the-desks-app-checkout-credentials) shows how the person makes the clone's read-only deploy key.
-  The clone cannot push to the app's repository.
-- **Where images are built.** With CI, CI tests, builds, and pushes the image, and the desk holds no credential that can publish an image.
-  Without CI, I test and build the image on the desk only inside a container, never with the app's own tools on the desk, and push it with the registry login that chapter 4 also makes.
-- **Systems changes.** Record image tags in the systems repository on the desk as `coding-agent`.
-  Commit, synchronize, and push the systems changes before running deployment through the desk's buttons.
+- **Your laptop runs your app's packages. Use a container.** The app's
+  install, test and build commands run code from the app's packages, such
+  as `npm install` and `npm test`. A poisoned package would run as the
+  person, on the laptop. From chapter 4 on, the laptop also holds an open
+  login to the systems desk while you work. A poisoned package could use
+  that login to act on production while the login is open. The package
+  still cannot copy the production key, the vault, or the person's
+  tokens, which stay on the desk. So run every install, test and build
+  command of the app only inside a container on the laptop, with
+  `podman` or `docker`, with only the app's folder mounted:
+  `podman run --rm -v "$PWD":/app -w /app IMAGE npm test`. CI runs the
+  real tests and builds on a clean machine. This risk is accepted when
+  the team chooses one agent on the laptop. The guide states this risk
+  here only.
+- **Systems settings go into the laptop's copy,** `~/code/example_systems`,
+  until chapter 3 copies it to the desk.
 - **More than one app.** Steps 2 to 8 are for each app.
 
 ## Steps
 
-1. **The app's repository.** Ask where the app's repository is, and read it.
+1. **The app's repository.** The person started you in the app's folder.
+   Read the app's code there. Record the repository's address from
+   `git remote get-url origin`, such as `git@github.com:OWNER/shop.git`, and
+   its owner, `OWNER`. Chapter 3 makes the systems repository at the same
+   owner.
 
-   **Ask the person:**
+   **Tell the person:** no message, because the chapter's opening line
+   said what you do.
 
-   > Where is your app's repository? Give me its address at your Git host, such as `git@github.com:OWNER/APP.git`.
+   **Check:** you know the app's address, owner and main branch, and
+   `git status` in the app's folder shows no change of the person's own.
+   When the person has uncommitted work, ask once whether to wait, and
+   never mix your changes with the person's.
 
-   **Tell the person after:**
-
-   > I read your app's code in the desk's read-only clone.
-   > Next, I fill in your app's settings in the systems repository, then show you each code change your app needs.
-
-   **Check:** the desk's clone holds the app's `main`.
-
-2. **Its settings,** under `vars.apps` in `mmx_project_settings.yml`: an
+2. **Its settings,** under `vars.apps` in `mmx_project_settings.yml` of the
+   laptop's copy, `~/code/example_systems`: an
    entry named after the app in place of `shop`, filled in from the app's
    code:
    - `image`, the image's name at the registry, such as `ghcr.io/<owner>/<repository>` in lowercase. The CI workflow pushes to the same name, so the two must match;
@@ -92,8 +90,8 @@ app's code is the person's, and chooses how images are built.
      app's secrets);
    - `production_uploads_r2_bucket`: the name of the R2 bucket for the app's
      uploaded files in production, such as `example-shop-uploads`, which
-     [chapter 4 (sign up for the outside services the Stack uses)](04_sign_up_for_the_outside_services_the_stack_uses.md#chapter-4-sign-up-for-the-outside-services-the-stack-uses)
-     creates; `""` when the app keeps no uploaded files;
+     creates once R2 is turned on, after the first sitting (see
+     [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#if-something-is-different)); `""` when the app keeps no uploaded files;
    - `restore_drill_check_queries`: queries for the app's own tables, each
      answering true on the restored copy, so a restore that brings back an
      empty or old database fails the drill. An old database fails only a
@@ -108,7 +106,7 @@ app's code is the person's, and chooses how images are built.
      adds the remaining queries in a commit.
 
    **Tell the person:** no message, because the settings come from the
-   app's code, and step 5 shows the person each change the app needs.
+   app's code, and step 7 shows the person each change the app needs.
 
    **Check:** `mmx validate` passes, and each key above holds the app's
    value, not `shop`'s.
@@ -153,13 +151,14 @@ app's code is the person's, and chooses how images are built.
    `shop_deploys_without_dropping_requests`, which waits for the second
    deploy, keeps that `waits_for`.
 
-   **Tell the person:** no message, because step 8 tells the person about
-   each item the app cannot meet.
+   **Tell the person:** no message, because step 8 records each item the
+   app cannot meet.
 
    **Check:** each of the app's items is `open` with its `waits_for`.
 
-5. **The app's code, against each item's `verification`.** Each fix goes to
-   the app's repository as a change the person reviews. The usual code fixes:
+5. **The app's code, against each item's `verification`.** Write each fix
+   in the app's folder on the laptop, on the app's `main`, uncommitted. Step 7
+   shows every fix at once. The usual code fixes:
    - the web container listens on the port in `PORT` and on no other fixed
      port, because the containers share the server's network
      (`Network=host`). Rails 8's default Dockerfile starts Thruster on port
@@ -230,71 +229,32 @@ app's code is the person's, and chooses how images are built.
      Write the laptop steps in the app's README: start a local database,
      run the app's migrations, then run the seed command with
      `APP_ENV=development` and the local database's settings. The seed
-     command and these laptop steps never run on the systems desk: the
-     desk runs only the container commands of step 6.
+     command runs on laptops and on `staging01`, never in production.
 
      Production data stays on the production servers: no copy of
      production goes to a laptop, `staging01`, or CI, so the seed command
      is where test data comes from.
 
-   **Tell the person first,** for each required change, with an example
-   from this app. Explain ports and worker processes only when a required
-   app change uses them:
+   **Tell the person:** no message, because step 7 shows every fix.
 
-   > Your app saves uploaded pictures on the app server's own disk, so a replacement app server would not have them.
-   > Data that must survive a server replacement belongs in the database or in file storage, R2.
-   > App files that ship with a release can stay on the app server.
+   **Check:** each of the app's items is met by a fix, or step 8 records
+   the item as a deviation.
 
-   Before the matching change, explain:
-   - a move from SQLite to Postgres, when the app uses SQLite, and a move
-     of uploaded files to R2, before changing the upload code;
-   - the primary, the database server that takes the writes, and a
-     replica, before the database-connection work: the app must reconnect
-     after a database switch, and a second database server is necessary
-     for automatic failover;
-   - that separate ports let two app versions operate at once, and that
-     worker processes use the server's processors to handle requests.
+6. **CI builds the images.** CI, the Git host's automated service, tests
+   the app, builds the image from `Containerfile`, and pushes the image to
+   the registry whenever the code on `main` changes. CI is the default, so
+   there is no question. A team that already has CI keeps it, with the steps
+   below. "No CI" stays a choice the person can name: see
+   [If something is different](#if-something-is-different).
 
-   **Ask the person,** for each change:
-
-   > Please review my change to your app: [the change at the Git host].
-   > Push the change when you approve it, and tell me when it is on `main`.
-
-   **Tell the person after:** no message, because step 7 shows the
-   person the first image built from the changed code.
-
-   **Check:** each of the app's items is met by the app's code on `main`,
-   or step 8 records the item as a deviation.
-
-6. **Choose how to build images. Recommend CI.** CI tests the app, builds
-   the image from `Containerfile`, and pushes it to the registry whenever
-   the code on `main` changes. A team that already has CI keeps it, with the steps
-   below. A team without CI is best served by adding it; GitHub Actions is
-   free for a private repository within its monthly allowance, and the
-   person only has to put one file into the app's repository.
-
-   **Tell the person first:**
-
-   > An image packages your app for the servers. CI, your Git host's automated service, tests your app, builds the image, and pushes it to the registry whenever the code changes.
-   > I recommend CI: the build runs on a clean machine instead of anyone's computer.
-   > No password that can publish an image sits on your systems desk or your laptop.
-   > Each image is tagged with the commit it came from, so a release names its code exactly.
-   > Without CI, I do the same steps by hand on your systems desk, inside a container.
-
-   **Ask the person:**
-
-   > Do you want CI to build your app's images?
-
-   **With CI.** The ready example is
+   The ready example is
    `test_build_and_push_the_app_image.yml`
    in the installed skill's `files_for_your_app/` directory, for GitHub
-   Actions and GitHub's registry (GHCR). The desk's clone is read-only, so
-   the file reaches the app's repository the way every other app code
-   change does: the coding agent writes it, and the person reviews and
-   pushes it (or the laptop's agent does). The file goes in as
+   Actions and GitHub's registry (GHCR). The file joins the fixes of step 5,
+   as
    `.github/workflows/test_build_and_push_the_app_image.yml`. Change the two
    steps its comments mark `REPLACE` (the app's language and its test
-   command, which includes the seed command), and commit it. On each push
+   command, which includes the seed command). On each push
    to `main` it does six things:
 
    1. checks out the code and starts a throwaway Postgres;
@@ -318,9 +278,10 @@ app's code is the person's, and chooses how images are built.
    does: add the build file if the app has none, and the `ARG` if it is
    missing (`reference_app`'s `Containerfile` is an example).
 
-   The servers' registry read token is a different token, made in
-   [chapter 4](04_sign_up_for_the_outside_services_the_stack_uses.md)
-   (step "The registry's read-only token") and kept in the vault as
+   The servers' registry read token is a different token, made on the Git
+   host's token screen in
+   [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
+   step 6, and kept in the vault as
    `container_registry_read_only_token`. A GHCR package is private by
    default, so the servers cannot pull without it.
 
@@ -330,125 +291,89 @@ app's code is the person's, and chooses how images are built.
    (`https://github.com/OWNER?tab=packages`) shows the package and its
    access settings.
 
-   **Ask the person,** with CI:
+   **Tell the person:** no message, because step 7 shows the CI file with
+   the other changes.
 
-   > Please review the CI file I wrote, `.github/workflows/test_build_and_push_the_app_image.yml`, and push it to your app's `main`.
-   > Tell me when it is pushed. CI then builds your first image.
+   **Check:** the workflow file is among the uncommitted changes, with
+   both `REPLACE` steps filled in.
 
-   **Without CI.** The coding agent tests and builds by hand on the desk.
-   Both run only inside a container, as `coding-agent`, with `podman`:
-   never the app's own tools on the desk, never `--network host`, and never
-   `/run` or a home directory mounted. Mount only the app's clone.
-   `podman build` counts as inside a container: the build's steps run in the
-   build's own containers. Set these once; `IMAGE` is the app's language
-   image, the one its build file starts `FROM`, and `IMAGE_NAME` is the
-   app's `image` under `vars.apps` (step 2), never typed from memory:
+7. **Show every change, once, and push.** Show the screen below. Give
+   each change one line that says what it does and why, then the diff,
+   such as "Uploads go to R2, so a new app server has every picture."
+   Explain a term the person needs for a change, such as the primary
+   database server or R2, in the same line.
 
-   ```sh
-   # On the systems desk, as the coding agent, in the app's clone, after `git pull`:
-   test -z "$(git status --porcelain)" || { echo 'The clone has changes; the tag would not name the image code' >&2; exit 1; }
-   image_tag=$(git rev-parse HEAD)
-   IMAGE=docker.io/library/node:22                # the app's language image
-   IMAGE_NAME=ghcr.io/example/shop                # `image` of this app in vars.apps
-   OWNER_AND_REPOSITORY=example/shop              # the app's repository at GitHub
-   # Tests with a database: a throwaway Postgres on a network of its own.
-   podman network create test-net
-   podman run -d --network test-net --name test-db -e POSTGRES_PASSWORD=throwaway-test-password docker.io/library/postgres:17
-   until podman exec test-db pg_isready -U postgres; do sleep 1; done
-   # TEST_DATABASE_URL is the setting the app's tests read. The tests include the seed command.
-   podman run --rm --network test-net -v "$PWD":/app:Z -w /app -e TEST_DATABASE_URL=postgresql://postgres:throwaway-test-password@test-db:5432/postgres "$IMAGE" npm test
-   podman rm -f test-db && podman network rm test-net
-   # Build for the servers' architecture, and push.
-   podman build --file Containerfile --platform linux/amd64 --build-arg RELEASE="$image_tag" --label "org.opencontainers.image.source=https://github.com/$OWNER_AND_REPOSITORY" --tag "$IMAGE_NAME:$image_tag" .
-   podman push "$IMAGE_NAME:$image_tag"
+   **Ask the person:**
+
+   ```text
+   Your app needs 4 small changes to run on the servers.  Here they are.
+
+     [the diff]
+
+   Say "yes" and I push them.  Or tell me what to change.
    ```
 
-   The label links a brand-new package to the repository, which keeps the
-   first push from being refused with `denied`. The tag is the full commit ID of a clean clone.
-   `RELEASE` gives the app the commit it was built from; a build file
-   without `ARG RELEASE` ignores it. `--platform linux/amd64` builds for
-   the servers.
-   The person signs the desk in to the registry once, as
-   [The registry publishing login](04_sign_up_for_the_outside_services_the_stack_uses.md#make-the-desks-app-checkout-credentials) says.
-   That login can publish images and reach no server.
+   One "yes" approves the set. When the person asks for a change, make it
+   and show the screen again.
 
-   **Tell the person after:** no message, because step 7 checks the image
-   and tells the person the result.
+   After "yes", commit the changes in the app's folder with a message that
+   says what changed and why, and push `main` with the person's own Git
+   login. Then watch the CI run:
 
-   **Check:** with CI, the workflow file is on the app's `main`; without
-   CI, `podman push` ended without an error.
+   - With `gh` signed in: `gh run watch` on the run of the pushed commit.
+     A green run whose last step names `linux/amd64` means the image is at
+     the registry.
+   - Without `gh`: nothing to watch from the laptop. Chapter 4's Git host
+     token screen reads the image at the registry with the new token.
 
-7. **The first image.** Verify the pushed image exists at the registry and
-   has the selected architecture. With CI, the workflow's last step asks
-   the registry for the tag, so a green run on that commit is the proof.
-   The desk holds no registry login, so the person looks.
-   Without CI, the coding agent has the push login and runs one command:
-
-   ```sh
-   # This systems desk, as the coding agent:
-   podman manifest inspect IMAGE_NAME:FULL_APP_COMMIT_ID
-   ```
-
-   It prints a manifest that names `linux/amd64`. An error such as
-   `manifest unknown` means the tag is not at the registry: the push failed,
-   or the name differs from `image` under `vars.apps`. The command sends the
-   OCI and Docker index and manifest types itself; a hand-written HTTP request
-   must list all four, because GHCR answers 404 when the image's own type is
-   missing. Record the full app commit ID as the
-   image tag in production's `deployed_image_tags`. Commit and push the systems repository change.
-   Chapter 7 (install everything on the production servers) configures the servers with the first image.
-
-   For later releases, the coding agent updates the environment's tag,
-   commits, pushes, and runs `deploy --var environment_name=ENVIRONMENT`
-   on `util01`. With `staging01`, staging and production reuse the same
-   tested image; no second build changes the image between staging and
-   production.
-
-   **Ask the person,** with CI:
-
-   > Please open your app's Actions tab, `https://github.com/OWNER/REPOSITORY/actions`, or run `gh run list --commit FULL_APP_COMMIT_ID`.
-   > The run for your latest commit must be green, and its last step's output must name `linux/amd64`.
-   > Tell me what you see.
+   Record the pushed commit's full ID, 40 characters, as the app's tag in
+   production's `deployed_image_tags` in the laptop's copy, and commit
+   there. Chapter 7 starts the app with that image.
 
    **Tell the person after:**
 
-   > Your app's first image is ready at the registry, tagged with commit `FULL_APP_COMMIT_ID`.
-   > Building an image changes no server. I record the image tag and run the deploy, and by default a release to production waits for your approval.
-   > Some of your app's checks need running servers, so they wait for chapter 7: [the app's open checklist items].
+   > Your changes are on `main`, and CI is building your app's first image.
+   > Building an image changes no server. Chapter 9 puts your app live.
 
-   **Check:** the run is green and names `linux/amd64`, or
-   `podman manifest inspect` names `linux/amd64`. `deployed_image_tags`
-   holds the full app commit ID, pushed.
+   **Check:** the push succeeded, and `deployed_image_tags` holds the
+   pushed commit's full ID. With `gh`, the run is green and names
+   `linux/amd64`.
 
 8. **An app requirement in the checklist that the app cannot meet** is a
    deviation, recorded with the reason. For example, a job queue in Redis,
    a separate data store that holds waiting background jobs, differs from
    the stack's requirement to keep the queue in Postgres.
 
-   **Tell the person,** before you record each deviation:
-
-   > Your app keeps its waiting background jobs in Redis, and the Stack keeps them in Postgres.
-   > I record the difference in the checklist, with the reason, so the next person sees why.
+   **Tell the person:** one line in step 7's screen, above the diff, such
+   as "Your app keeps its waiting jobs in Redis. The Stack keeps them in
+   Postgres. I record the difference in the checklist." So the person
+   reads every difference before the one "yes".
 
    **Check:** each such item is `deviated`, with `deviation:` saying what
    differs and why.
 
 ## If something is different
 
-- **An app whose tests need no database** (step 6, without CI): leave out
-  the first four commands and the `--network` and `-e` options.
-- **Another CI service** (step 6): it follows the same six steps; only the registry host,
-  the login command, and the name of the publish-only token change.
+- **The app needs no change** (step 7): say so in one line, push nothing,
+  and go on. An app that already has CI records the tag of its newest
+  green build of `main`.
+- **A bigger change, such as SQLite to Postgres, or uploads to R2**
+  (step 5): show that change on its own screen first, in the same form,
+  with what it means for the person's data. Such a change can take days.
+  The setup then waits, and the day's plan moves with it.
+- **The person names "no CI"** (step 6): test and build in a container
+  on the laptop, with `podman build --platform linux/amd64 --build-arg RELEASE="$image_tag" --tag "$IMAGE_NAME:$image_tag" .`
+  from a clean checkout, with `image_tag=$(git rev-parse HEAD)`. Push with
+  the person's own registry login on the laptop. The servers still use
+  only the read-only token of chapter 4.
+- **Another CI service** (step 6): it follows the same six steps. Only the
+  registry host, the login command, and the name of the publish-only token
+  change.
 - **GHCR refuses the first push of a brand-new package with `denied`**
-  (step 6, with CI). The workflow's image label links the
-  package to the repository, which normally prevents it; if it happens,
-  rerun the failed job in the repository's Actions tab, with nothing
-  changed. A second `denied` is a real permission problem.
-- **An arm64 desk, without CI** (step 6): `--platform linux/amd64` needs
-  emulation (`qemu-user-static`) that the desk does not install, so a team
-  without CI uses an x86-64 desk.
-- **A Git host other than GitHub, without CI** (step 6): the registry host,
-  the login command, and the token's name change; the steps do not.
+  (step 7). The workflow's image label links the package to the
+  repository, which normally prevents it. If it happens, rerun the failed
+  job, with `gh run rerun --failed` or in the repository's Actions tab,
+  with nothing changed. A second `denied` is a real permission problem.
 
 ## An app you didn't write
 
@@ -491,9 +416,12 @@ newsletter tool, goes through the same steps, with these differences.
 
 ## Why the chapter works this way
 
-**The desk only reads the app.** Reason: the clone only reads the code; an image can be published without a production private key or vault passphrase.
+**The app's code is the person's.** The person approves every change to
+the app, in one set, before you push.
 
-**The container.** Reason for the container: the app's install, test and build commands run code from the app's packages. A poisoned package would then run on the desk, next to its SSH socket and its API proxies at `127.0.0.1:8081` and `127.0.0.1:8082`. Inside a rootless container, with nothing but the app's clone mounted, a test on a real desk showed the code can reach neither.
+**The container.** The app's packages are the one piece of code here that
+nobody on the team wrote. A container keeps that code away from the
+laptop's open desk login.
 
 **One tag names one image.** The playbooks refuse any tag other than the
 full commit, so that one tag always names one image.
@@ -503,16 +431,13 @@ full commit, so that one tag always names one image.
 rotation check the current password without requiring staging secrets on a
 production-only system.
 
-**The app's code is the person's.** Each code fix is a change the person
-reviews, because the app's code belongs to the person.
-
-**Images from CI or the desk.** Reason: the image can come from CI or the systems desk; the deployment path
-remains the coding agent's explicit MMX run. By default, a release to
-production waits for the person's approval
+**Images from CI.** CI builds on a clean machine. No password that can
+publish an image sits on the systems desk. A release to production waits
+for the person's approval by default
 (`production_releases_wait_for_a_persons_approval` in `mmx_project_settings.yml`).
 
 **Test data comes from the seed command.** "Production data stays on the
 production servers" in [The rules](../AGENTS.md#the-rules) gives the
 whole rule and its reasons.
 
-Next: [Chapter 4: Sign up for the outside services the Stack uses](04_sign_up_for_the_outside_services_the_stack_uses.md).
+Next: [Chapter 3: Make your server account and your systems desk](03_make_your_server_account_and_your_systems_desk.md).

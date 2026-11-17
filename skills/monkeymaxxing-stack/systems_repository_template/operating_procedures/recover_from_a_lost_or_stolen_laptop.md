@@ -38,12 +38,12 @@ explains each term.
 
 1. **Create fresh desk-only login keys on the new laptop:** SSH and
    WireGuard, as
-   [chapter 2 (set up your laptop and your systems desk)](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md)
+   [chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md)
    describes. Never restore the stolen laptop's desk-login private keys.
-   **Check:** chapter 2's commands print the new public keys. The new keys
+   **Check:** chapter 3's commands print the new public keys. The new keys
    go into the replacement desk's `allowed_laptops` in step 2.
 2. **Make a new personal provider token** at the provider's website, with
-   the same permissions as in chapter 2. Do this before the rebuild, so
+   the same permissions as in chapter 3. Do this before the rebuild, so
    the rebuild uses the new token, not the old one.
    Reason: the laptop held the old token during setup, in
    `~/.config/monkeymaxxing-stack/desk-bootstrap.env` and, at most
@@ -103,9 +103,9 @@ explains each term.
    **Check:** every commit and image tag is known. Each unknown commit or
    tag goes to the person before anything else, as
    [Respond to a break-in](respond_to_a_break_in.md) says.
-8. **Complete chapter 2 (set up your laptop and your systems desk)'s
+8. **Complete chapter 3 (make your server account and your systems desk)'s
    cleanup on the new laptop.**
-   **Check:** the checks in chapter 2's cleanup.
+   **Check:** the checks in chapter 3's cleanup.
 9. **Record the tested result in `systems_desk_recovery`,** in the
    checklist, `monkeymaxxing_stack_checklist.yml`.
    **Check:** none, because the record is the last step.

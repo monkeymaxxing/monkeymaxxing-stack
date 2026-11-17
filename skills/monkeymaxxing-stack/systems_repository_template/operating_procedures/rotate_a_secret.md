@@ -242,7 +242,7 @@ servers run, and run `every_server` right after the command (see
    `--replace-key` can be given several times. `--replace-every-key`
    replaces every key in the table. The command asks for a link token, made
    from the link it prints, as in
-   [chapter 4 (sign up for the outside services the Stack uses)](../initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md).
+   [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
    It commits and pushes the vault itself, signed. Then it lists the old
    keys, prints the run's command, and waits in the person's terminal. The
    old keys keep working while it waits. After a break-in,

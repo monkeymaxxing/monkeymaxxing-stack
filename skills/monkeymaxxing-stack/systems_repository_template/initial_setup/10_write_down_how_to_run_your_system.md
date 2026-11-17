@@ -1,6 +1,7 @@
 # Chapter 10: Write down how to run your system
 
-**When:** after chapter 9 (go live).
+**When:** in a later sitting, after chapter 9 (go live) and the alerts
+sitting.
 
 **What this chapter does:** the break-in response page is prepared, the
 checklist is reviewed, and the operating guide is saved in the systems
@@ -155,20 +156,21 @@ and when.
    results, and `README.md`.
 
 5. **Show how to return.** Give the README path and the actual operating
-   links. Explain how to start a new coding-agent session in the systems
-   repository as `coding-agent` on the desk with `start-the-coding-agent`.
-   Show `ssh desk01`, the phone-code prompt, and the desk's own recovery procedures.
-   Show where the person updates the desk's inventory and manages the desk with `review-and-apply-the-systems-desk-settings`.
-   Confirm the desk can test, build, and publish app images when CI does not perform those tasks.
-   The laptop can keep app development and local tests.
+   links. Explain that the person comes back by opening the coding agent
+   on the laptop and saying what they want: you ask for one phone code in
+   the chat when your desk login is closed. Show the few commands the
+   person types, each plus one phone code: `ssh desk01-secrets` for a new
+   secret, `ssh desk01-review` for a change to the desk itself, and the
+   lock-out button. Name the desk's own recovery procedures, and the
+   recovery passphrase in the password manager.
    Use one relevant request from the README as an example.
    Show the alert acknowledgment and approval actions. Identify the status
    posting procedure and the recovery procedure table.
 
    **Tell the person first:**
 
-   > Your operating guide is in [the README's link]. To come back later, run `ssh desk01`, type your phone code, then run `start-the-coding-agent`.
-   > Then ask me in plain words, such as "[a request from the README]". The README lists the common requests.
+   > Your operating guide is in [the README's link]. To come back later, open me on this laptop and ask in plain words, such as "[a request from the README]".
+   > I ask for one code from your phone when I need your desk. The README lists the common requests.
 
    **Check:** the person can name where the README is and how to start a
    new session.

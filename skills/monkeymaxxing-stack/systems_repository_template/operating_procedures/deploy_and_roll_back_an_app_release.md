@@ -44,7 +44,7 @@ person's own desk terminal, as the secrets rule in
    and again after a rollback.
 2. **Build and test the image.**
    - **With CI:** CI tests, builds, and pushes the image when the team has
-     CI (chapter 3's ready GitHub Actions file does).
+     CI (chapter 2's ready GitHub Actions file does).
      **Check:** ask the person to confirm that CI's run for the full app
      commit is green (the repository's Actions tab, or
      `gh run list --commit FULL_APP_COMMIT_ID`) and that the last step's
@@ -52,7 +52,7 @@ person's own desk terminal, as the secrets rule in
      The desk has no registry login to check with, and needs none (see
      [Why the desk does not check the registry](#why-the-desk-does-not-check-the-registry)).
    - **Without CI:** run the app's tests and the build only inside a
-     container, as `coding-agent`, with `podman` and chapter 3's commands:
+     container, as `coding-agent`, with `podman` and chapter 2's commands:
      never the app's own tools on the desk, never `--network host`, and
      never `/run` or a home directory mounted. Push the image with the
      desk's publishing login. Use the full app commit ID as the tag. Then

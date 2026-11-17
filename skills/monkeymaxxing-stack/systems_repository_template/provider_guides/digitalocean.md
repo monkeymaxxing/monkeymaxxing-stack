@@ -4,7 +4,7 @@ DigitalOcean calls a server a **Droplet** and a server type a **size**. Follow t
 [script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts),
 [enrollment contract](../server_management_scripts/README.md#enroll-a-server-before-the-first-mmx-run),
 and [initial setup](../initial_setup/): accounts in
-[chapter 4 (sign up for the outside services the Stack uses)](../initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md),
+[chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
 servers in [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md).
 
 ## The provider's web console
@@ -20,8 +20,21 @@ through the desk's API proxy, as
 says.
 
 Set `systems_desk_provider_api_url: https://api.digitalocean.com/v2/` in `mmx_project_settings.yml`, including the trailing slash.
-The person saves the token with `set-up-outside-services personal-token server-provider --server-listing-path droplets`.
+The person types the token on the laptop with the laptop key command below, and the bootstrap moves it to
+the desk. To replace the token later, the person runs
+`ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path droplets`.
 A server listing uses `http://127.0.0.1:8081/droplets`.
+
+### The laptop key command
+
+The values for [The laptop key command](README.md#the-laptop-key-command):
+
+- **Script:** `~/example-setup/enter-the-digitalocean-key`.
+- **Values:** one, the **personal access token** of "The person's token" below.
+- **Shape:** `dop_v1_` followed by 64 hexadecimal characters.
+- **Read-only call:** `GET https://api.digitalocean.com/v2/droplets?per_page=1` with `Authorization: Bearer TOKEN`. HTTP 200 accepts the token.
+- **Key file line:** the token.
+
 
 The five provider scripts use `curl` and `jq` with the request function below, on the desk through the
 proxy and on `util01` with `util01`'s own token, so neither needs DigitalOcean's command-line tool `doctl`.
@@ -361,7 +374,7 @@ Check an existing [default VPC](https://docs.digitalocean.com/products/networkin
 before the first create, and after it read the Droplet's `vpc_uuid` and `GET /vpcs/UUID` for its
 `ip_range`. If that range overlaps `10.20.0.0/16`, or the team's chosen WireGuard range, stop and report the
 overlap before creating more servers, and resolve the address plan through
-[chapter 2 (set up your laptop and your systems desk)](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md).
+[chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md).
 Reason: a provider subnet overlapping WireGuard sends private traffic to the wrong interface.
 
 Attach no Cloud Firewall: UFW enforces the Stack's firewall.

@@ -4,7 +4,7 @@ Vultr calls a server an **instance** and a server type a **plan**. Follow the sh
 [script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts),
 [enrollment contract](../server_management_scripts/README.md#enroll-a-server-before-the-first-mmx-run),
 and [initial setup](../initial_setup/): accounts in
-[chapter 4 (sign up for the outside services the Stack uses)](../initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md),
+[chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
 servers in [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md).
 
 ## The provider's web console
@@ -20,8 +20,23 @@ through the desk's API proxy, as
 says.
 
 Set `systems_desk_provider_api_url: https://api.vultr.com/v2/` in `mmx_project_settings.yml`, including the trailing slash.
-The person saves the token with `set-up-outside-services personal-token server-provider --server-listing-path instances`.
+The person types the key on the laptop with the laptop key command below, and the bootstrap moves it to
+the desk. To replace the key later, the person runs
+`ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path instances`.
 A server listing uses `http://127.0.0.1:8081/instances`.
+
+### The laptop key command
+
+The values for [The laptop key command](README.md#the-laptop-key-command):
+
+- **Script:** `~/example-setup/enter-the-vultr-key`.
+- **Values:** one, the account's **API key**.
+- **Shape:** 36 capital letters and digits.
+- **Read-only call:** `GET https://api.vultr.com/v2/instances?per_page=1` with `Authorization: Bearer KEY`. HTTP 200 accepts the key.
+- **Key file line:** the key.
+
+When the key's address list is on, the list must hold the laptop's address until the bootstrap ends, and then the desk's ([Vultr's address list for API keys](#vultrs-address-list-for-api-keys)). A refusal `Unauthorized IP address` names that cause.
+
 
 The five provider scripts use `curl` and `jq` with the request function below, on the desk through the
 proxy and on `util01` with `util01`'s own API key, so neither needs Vultr's command-line tool. Reason:

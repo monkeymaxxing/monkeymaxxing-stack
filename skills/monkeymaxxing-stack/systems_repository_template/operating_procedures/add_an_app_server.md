@@ -110,7 +110,7 @@ needs one, by the rule in
    `sudo -n update-this-desks-wireguard-peers`.
    Reason: the playbook's push added a server to the inventory, and this
    desk's WireGuard peers must match the servers
-   ([Update the desk's production peers](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#update-the-desks-production-peers)).
+   ([Update the desk's production peers](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#update-the-desks-production-peers)).
 
 ## Add an app server by hand
 

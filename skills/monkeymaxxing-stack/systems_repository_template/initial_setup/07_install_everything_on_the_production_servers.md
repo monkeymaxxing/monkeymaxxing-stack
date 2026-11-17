@@ -11,12 +11,9 @@ settings. The servers install their security updates and reboot for the
 fixes that need a reboot. The first backup and the first restore drill
 start by themselves.
 
-**Who acts:** you, the coding agent, write the settings and run MMX from
-this systems desk. The person gives the time zone and the names of the
-people on call (step 1), adds `util01`'s deploy key at the Git host
-(step 3), tests the shared root console password at one provider console
-(step 4), opens the app (step 7), and runs the desk review in the person's
-own terminal (step 9).
+**Who acts:** you, the coding agent, write the settings and run MMX on the
+desk, each long run as a desk job. The person adds `util01`'s key at the
+Git host (step 3).
 
 **Tell the person when the chapter starts:**
 
@@ -28,19 +25,18 @@ own terminal (step 9).
 
 ## Before you start
 
-- **The messages to the person.** Each step says what to tell or ask the
-  person, in quote blocks: "Tell the person first" before the step, "Ask
-  the person" when the person must act or approve, "Tell the person while
-  waiting" during a step that runs for minutes, and "Tell the person after"
-  with the result and its link. Say each message when its step comes, in
-  your own words, with the team's own names and links.
-- **Commands that source the person's token file,** `~/.config/monkeymaxxing-stack/example_systems.env`,
-  run only in the person's own desk terminal, as the secrets rule in
-  [The rules](../AGENTS.md#the-rules) says.
+- **The messages to the person.** You work alone in chapters 5 to 9, and
+  the person may be away. Give each step's message as one short line, and
+  give the full text only when the person asks. Use each step's links and
+  names.
+- **Every run of more than a few minutes is a desk job,** with
+  `systemd-run --user`, a log file and an exit file, as "Making a change"
+  in [`AGENTS.md`](../AGENTS.md#making-a-change) says. So the laptop may
+  sleep during the runs.
 - **Every MMX run in this chapter uses the systems desk's button,**
-  `sudo -n -u servers-mmx run-mmx-on-the-servers`, until chapter 8 (check
-  that alerts reach your phone and backups restore) applies the triage
-  agent's settings. After that, run MMX on `util01` through the
+  `sudo -n -u servers-mmx run-mmx-on-the-servers`, until the triage
+  agent's sitting applies the triage agent's settings
+  ([chapter 8, part 1](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-1-add-mmhotlines-alerting-settings)). After that, run MMX on `util01` through the
   `./server_management_scripts/run_mmx_on_util01` helper
   ([the helper guide](../server_management_scripts/README.md#run-mmx-on-util01)).
   Use the systems desk for `util01`'s own
@@ -58,30 +54,28 @@ own terminal (step 9).
 1. **MMHotline's first settings:** edit the existing `mmhotline_settings.yml`
    in the systems repository. Keep chapter 5 (put your site behind Cloudflare and lock your private pages)'s `cloudflare_access` values.
    MMHotline starts in run 1 (prepare the utility server) and refuses to start without valid settings.
-   Set `team_name` to the company's name from chapter 2 (set up your laptop and your systems desk).
-   Replace the example administrator with the person, using the
-   `sign_in_email_address` from the person's Access sign-in.
+   Set `team_name` to the company's name from chapter 1 (answer two questions).
+   Replace the example administrator with the person, using the person's
+   email address at the company's domain when the laptop's
+   `git config user.email` has one, and otherwise `admin@` the domain. The
+   alerts sitting confirms the address with the person's first sign-in.
 
    **Tell the person first.** Say what the triage agent may do by itself,
-   from the person's answer in chapter 6. The example below is the answer
-   `routine_fixes`:
+   from `what_the_triage_agent_may_do_without_a_person`. The example below
+   is `routine_fixes`, the template's default until the triage agent's
+   sitting:
 
    > Next, I write MMHotline's first settings: who is on call, and what the triage agent may fix by itself.
-   > With your answer from chapter 6, the triage agent makes only fixes that cannot lose data, such as restarting a failed service or freeing disk space, and reports each fix.
+   > With the default answer, the triage agent makes only fixes that cannot lose data, such as restarting a failed service or freeing disk space, and reports each fix.
    > A fix that can cut off a server, a network, or a name waits for a person's approval, and so does anything that MMHotline cannot recognize.
    > Every start or stop of the database's failover program also waits for a person, because starting the wrong database server can bring back old data and lose newer changes.
 
-   **Ask the person:**
-
-   > To set up the alert schedule, I need your time zone and the people on call.
-   > What is your time zone, and who goes on call? Give me each person's name and company email address.
-
-   Put the person on call in `on_call_schedule`, with the agreed time zone
-   and names. Set the rules for running the agent's playbooks and MMWatchdog's fleet hub on `util01` as the only alert
+   Put the person alone on call in `on_call_schedule`, with the laptop's
+   time zone. The alerts sitting asks who else goes on call. Set the rules for running the agent's playbooks and MMWatchdog's fleet hub on `util01` as the only alert
    source, as the YAML example below shows.
 
    `mmx_project_settings.yml` keeps only MMHotline's backup address,
-   `backups.mmhotline_backup_replica_url` (chapter 4 (sign up for the outside services the Stack uses)).
+   `backups.mmhotline_backup_replica_url` (chapter 3 (make your server account and your systems desk)).
    Every other MMHotline setting is in `mmhotline_settings.yml`.
    `mmhotline_settings.yml` is an MMX template.
    The `mmhotline` fleet stage renders the template onto `util01` as
@@ -117,7 +111,7 @@ own terminal (step 9).
 
    ```yaml
    # mmhotline_settings.yml, in the systems repository: the parts this chapter needs
-   team_name: Example Inc.                    # the company's name, from chapter 2 (set up your laptop and your systems desk)
+   team_name: Example Inc.                    # the company's name, from chapter 1 (answer two questions)
    web_url: https://{{ .vars.util01_private_page_host_names.mmhotline }}
    web_listen_address: 127.0.0.1:8480         # where util01's tunnel reaches the pages
    alert_intake_listen_address: "{{ .vars.private_ip }}:8484"   # util01's WireGuard address: every server's MMWatchdog sends here
@@ -153,7 +147,7 @@ own terminal (step 9).
    ```
 
    - **`rules_for_running_agent_playbooks`:** the template writes this
-     entry from the person's answer in chapter 6,
+     entry from the answer
      `what_the_triage_agent_may_do_without_a_person` in
      `mmx_project_settings.yml`; never edit the entry by hand. The example
      above is the answer `routine_fixes`: the triage agent's routine
@@ -181,7 +175,7 @@ own terminal (step 9).
 
    **Before run 1 (prepare the utility server):** `mmx validate` and `mmx explain every_server` must pass.
    Run the example-value search in
-   [chapter 2 (set up your laptop and your systems desk)](02_set_up_the_laptop_and_the_systems_desk.md#check-remaining-example-values).
+   [chapter 3 (make your server account and your systems desk)](03_make_your_server_account_and_your_systems_desk.md#check-remaining-example-values).
    Require only comments and usage examples in the result.
    Commit and push. Then
    `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`, which
@@ -190,13 +184,8 @@ own terminal (step 9).
    not needed. For example, the uploads copy needs no keys when no app
    keeps uploads and `backups.uploads_backup_runs_on` is `[]`.
 
-   **Tell the person after:**
-
-   > Your alert schedule is set: [the first person] is on call first, and the next person takes over each Monday at 09:00, [the time zone] time.
-   > If nobody claims an urgent alert within 5 minutes, MMHotline sends the alert to everyone else who is available.
-
-   The 5 minutes are `on_call_schedule.escalate_if_unclaimed_after_minutes`
-   (5 in the template).
+   **Tell the person after:** no message. The alerts sitting tells the
+   person about the schedule, when alerts can reach a phone.
 
    **Check:** `mmx validate` and `mmx explain every_server` pass, and
    `secrets usage` shows no key `not defined` that a run needs.
@@ -249,15 +238,13 @@ own terminal (step 9).
      Add the `mmhotline` user's public key to `root_ssh_public_keys` in
      `mmx_project_settings.yml`, with the comment `util01, the mmhotline user`.
      Ask the person to add the public key at the Git host as a deploy key
-     on the systems repository. The person uses the repository's Settings,
-     Deploy keys (at GitHub, `https://github.com/OWNER/REPOSITORY/settings/keys`),
-     Add deploy key, with "Allow write access".
+     on the systems repository, with write access, on the screen below.
      Do not use `gh repo deploy-key add`, because a key added by `gh`
      disappears when the `gh` login is revoked.
 
      Register the `mmhotline` user's public key at the provider yourself,
-     through the API proxy, `http://127.0.0.1:8081/`, as chapter 4
-     registered the desk's production key. Use
+     through the API proxy, `http://127.0.0.1:8081/`, as the desk's
+     production key was registered in chapter 6. Use
      `util01_ssh_key_name_at_the_provider` as the registered name.
      Verify the registered key equals the utility key, so every new server
      and weekly `restore01` accepts the utility server's SSH login. The
@@ -270,15 +257,34 @@ own terminal (step 9).
 
    **Ask the person:**
 
-   > `util01` pulls your systems repository and pushes its own changes to the repository, so `util01` needs a deploy key at your Git host.
-   > Please open [the repository's deploy keys page] and select "Add deploy key". Paste this key: [the key]. Tick "Allow write access", then save.
-   > You then see the key in the list of deploy keys. Tell me when you see it.
+   ```text
+   One more key for GitHub: so util01, your tools server, can save its own changes.
+
+   What this is for:
+     util01 runs your system's tools.  It reads your systems repository and saves its own changes there.
+
+   Do this now:
+     1. Open  https://github.com/OWNER/example_systems/settings/keys/new
+     2. Title:  util01
+     3. Key:  paste this line.
+
+          ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleUtil01KeyOnlyForThisGuideXXXXXXX util01, the mmhotline user
+
+     4. Tick  Allow write access.
+     5. Press  Add key.
+
+   I see the key from here as soon as you press Add key.
+   ```
+
+   Check every 20 seconds from `util01` that the key opens the repository:
+   `ssh -F ssh/config root@10.20.0.1 'sudo -u mmhotline git ls-remote SSH_URL'`,
+   with `systems_repository.ssh_url`.
 
    **Tell the person after:** no message, because step 4 starts with the
    second run.
 
-   **Check:** the Git host lists the deploy key with write access, and the
-   key registered at the provider equals the utility key.
+   **Check:** the Git host accepts `util01`'s key with write access, and
+   the key registered at the provider equals the utility key.
 
 4. **Run 2 (configure every server):** repeat run 1 (prepare the utility server)'s `sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only`
    command without the `--only-fleet-stages` flag and the flag's stage list.
@@ -319,7 +325,7 @@ own terminal (step 9).
 
    > Next, the second run installs `util01`'s SSH keys on every server, sets up the database, and starts your app and the system tools.
    > MMWatchdog, the program that watches every server, starts in this run. MMWatchdog checks your app's public address only from chapter 9, when your site goes live, so your app raises no alert before then.
-   > Other alerts from the servers reach nobody yet. You see them on MMHotline's page in chapter 8, and from chapter 8 they can ring your phone.
+   > Other alerts from the servers reach nobody yet. They can ring your phone after the alerts sitting.
 
    Do not call an unrelated failure an expected alert.
 
@@ -329,20 +335,18 @@ own terminal (step 9).
 
    > The second run takes several minutes. I tell you when the run ends.
 
-   **Ask the person,** once run 2 passed, to test the shared root console
-   password at one provider console (the provider guide's "Console and rescue access" section, such as
-   [Hetzner Cloud's](../provider_guides/hetzner_cloud.md#console-and-rescue-access)):
-
-   > Please test the emergency way into your servers once: open `util01` in [the provider's web console, at the address in your provider guide's "The provider's web console"] and open its console.
-   > Log in as `root` with the password manager item `Shared root console password`. You see a root prompt. That login is expected and changes nothing.
-   > The console reaches the server without SSH, for the day SSH fails. Tell me whether the login worked.
-
-   Record the result for `provider_console_and_backup_mmhotline_logins`.
+   The shared root console password is in the recovery bundle. The
+   console login test, in the provider guide's "Console and rescue access"
+   section, such as
+   [Hetzner Cloud's](../provider_guides/hetzner_cloud.md#console-and-rescue-access),
+   is an optional check of
+   [Check my system's protections](../operating_procedures/assess_a_running_system_and_recommend_changes.md#check-my-systems-protections).
+   `provider_console_and_backup_mmhotline_logins` stays open until then.
 
    **Tell the person after:**
 
    > Your servers are set up. These services passed their checks: [the services].
-   > The first backup and the first restore drill start by themselves. We read both results in chapter 8.
+   > The first backup and the first restore drill start by themselves. I read both results in chapter 8.
 
    **Check:** run 2's summary shows every task passed, and a fresh SSH
    connection over wg0 from the systems desk reaches every server.
@@ -437,24 +441,15 @@ own terminal (step 9).
 
 ## Part 4: See the app and record the results
 
-7. **Show the person their app.** When the domain shows "Active", the
-   person opens the app's public address in the laptop's browser. While the
-   domain shows "Pending", show the person the answer of step 8's check
-   through Caddy on `app001`; the person's browser cannot reach the
-   servers' private network, and the person needs no port-forward.
+7. **Check the app.** Check the app through Caddy on `app001` with
+   step 8's check. When the domain shows "Active", also check the public
+   address with `curl -fsS https://shop.example.com/up` from the laptop.
 
-   **Ask the person,** when the domain shows "Active":
+   **Tell the person:**
 
-   > Please open https://shop.example.com in your browser. You see your app's page.
-   > Nobody is sent to your app yet, and no check watches the app. Chapter 9 checks the app from the internet and turns the checks on.
-   > Tell me when you see the page.
+   > Your app runs on `app001`. Chapter 9 checks it from the internet and turns the checks on.
 
-   **Tell the person,** while the domain shows "Pending":
-
-   > Your app runs on `app001`: here is its answer, [the answer of the check].
-   > Your app's public address answers once Cloudflare shows your domain as "Active". Chapter 9 checks the app there and turns the checks on.
-
-   **Check:** the person saw the app's page, or step 8's check answered.
+   **Check:** step 8's check answered.
 
 8. **Mark the items run 2 (configure every server) proved,** each after its `verification`:
    `app001_db01_and_util01_created`, `production_ssh_keys_and_desk_phone_codes`,
@@ -474,38 +469,29 @@ own terminal (step 9).
 
 ## Part 5: Join the systems desk to monitoring
 
-9. **Join the systems desk to monitoring.** After `util01` is configured, the
-   person runs the full desk playbook from the person's desk repository:
-
-   ```sh
-   review-and-apply-the-systems-desk-settings
-   ```
-
-   **Ask the person:**
-
-   > Next, MMWatchdog starts watching your systems desk too. Please run `review-and-apply-the-systems-desk-settings` in your own terminal, in your desk repository.
-   > If the command shows changes, I explain each change before you type `yes`.
-   > Tell me when the command has finished.
-
-   Verify that `desk01` appears in the fleet (`sudo mmwatchdog fleet` on `util01`).
-   The test of the desk's wrong-code alert is optional:
+9. **Join the systems desk to monitoring, in the alerts sitting.** The
+   full desk playbook joins the desk to MMWatchdog. It runs as root on the
+   desk, so the person runs it, with `ssh desk01-review` and a phone code.
+   Ask for it in the alerts sitting, together with the other alert steps,
+   not in the first sitting. After it ran, verify that `desk01` appears in
+   the fleet (`sudo mmwatchdog fleet` on `util01`). The test of the desk's
+   wrong-code alert is optional:
    [Check my system's protections](../operating_procedures/assess_a_running_system_and_recommend_changes.md#check-my-systems-protections).
 
-   **Tell the person after:** no message, because the chapter's last
-   message follows.
+   **Tell the person:** no message in the first sitting.
 
-   **Check:** `sudo mmwatchdog fleet` on `util01` lists `desk01`.
+   **Check:** in the alerts sitting, `sudo mmwatchdog fleet` on `util01`
+   lists `desk01`.
 
 ## Part 6: The fuller system
 
-10. **The fuller system,** when chapter 1 (pick your web address and start
-    the team's password manager) recorded it, and `trigger` of
+10. **The fuller system,** when chapter 1 (answer two questions) recorded it, and `trigger` of
     `staging_server` and `second_app_server` in the checklist says so:
     follow [Add an app server](../operating_procedures/add_an_app_server.md)
     for `app002`, with "The second app server's test" at its end, then
     [Add staging01](../operating_procedures/add_staging01.md). The person
-    approved both servers' prices in chapter 6 (create your three
-    production servers: app, database, and tools). A check through a
+    approved both servers' prices with "go" in chapter 1 (answer two
+    questions). A check through a
     public host name, such as the second app server's test and the
     staging Access check, waits until the domain shows "Active", at the
     latest until chapter 9 (go live). The smallest system skips this step.
@@ -515,18 +501,19 @@ own terminal (step 9).
 
     **Check:** the checks of the two operating procedures.
 
-**Tell the person when the chapter ends,** after step 9, or after step 10
+**Tell the person when the chapter ends,** after step 8, or after step 10
 with the fuller system:
 
 > From now on, each change to a server goes the same way: I commit and push the change you approved, then run MMX on `util01` and check the result. Runs take turns.
 > Pushing alone changes no server. Nobody changes a server by hand, because a later run can undo an unrecorded change.
 > One limit for now: `db01` has no replica yet, so a failure of `db01` stops your site until a replacement database is ready.
-> Next, in chapter 8, we check that alerts reach your phone and backups restore.
+> Next, I read the first backup and the first restore drill.
 
 ## If something is different
 
 - **The domain still shows "Pending"** (step 7): the app's public address
-  does not answer yet, so give step 7's second message.
+  does not answer yet. Step 8's check through Caddy is enough until
+  chapter 9.
 - **A run fails** (steps 2, 4, and 6): follow step 5.
 - **Another run holds `util01`'s lock** (step 6): step 6 says what to do.
 
@@ -577,7 +564,7 @@ cannot fail over.
 **No public checks yet.** The fleet hub does not check each app at the app's public host name
 yet: `public_site_checks_run` in `mmx_project_settings.yml` stays
 `false` until chapter 9 (go live), so no SOS can come from an app that
-nobody has announced. Signing in to MMHotline in chapter 8 (check that alerts reach your phone and backups restore) requires MMHotline's own
+nobody has announced. Signing in to MMHotline in the alerts sitting requires MMHotline's own
 host name to work through Cloudflare Access, after the domain is active.
 
 **The reboots come now.** No users use the system yet, so the reboots

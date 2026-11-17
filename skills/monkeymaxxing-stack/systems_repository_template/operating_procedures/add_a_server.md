@@ -133,7 +133,7 @@ each term.
    hint ([If something is different](#if-something-is-different)).
 
    Before connecting to the new server, run `sudo -n update-this-desks-wireguard-peers`, as
-   [update the desk's production peers in chapter 2 (set up your laptop and your systems desk)](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#update-the-desks-production-peers)
+   [update the desk's production peers in chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#update-the-desks-production-peers)
    describes. Each other desk's coding agent runs it at the start of its next session.
    Use the new server's inventory address, such as `10.20.1.2`.
 

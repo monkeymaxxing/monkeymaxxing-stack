@@ -45,7 +45,7 @@ says.
 - **After a push that adds, replaces or removes a server in the inventory,**
   also run `sudo -n update-this-desks-wireguard-peers`, so this
   desk's WireGuard peers match the servers
-  ([Update the desk's production peers](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#update-the-desks-production-peers)).
+  ([Update the desk's production peers](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#update-the-desks-production-peers)).
 - **Without the provider scripts,** use the provider's own command-line tool, as
   [Without the provider scripts](../server_management_scripts/README.md#without-the-provider-scripts)
   says.

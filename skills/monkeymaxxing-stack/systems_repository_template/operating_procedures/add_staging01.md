@@ -3,7 +3,7 @@
 Read [the systems repository rules](../AGENTS.md#the-rules) first.
 
 **When:** the team chose the fuller system in
-[chapter 1 (pick your web address and start the team's password manager)](../initial_setup/01_pick_your_web_address_and_start_the_teams_password_manager.md),
+[chapter 1 (answer two questions)](../initial_setup/01_answer_two_questions.md),
 and chapter 7 (install everything on the production servers) sends you
 here; or, later, the team wants to try each release on a test server
 before customers get it. Or the team no longer wants a test server.
@@ -94,19 +94,18 @@ explains each term.
 
    **Check:** the checks of steps 1 to 4 of [Add a server](add_a_server.md).
 
-3. **Staging's keys,** by the person, in the person's own desk terminal,
-   in the systems repository, after `git pull`. Each command reads that
-   `staging01` is in the inventory now and makes only what is missing:
+3. **Staging's keys,** by the person, on the laptop, each command plus a
+   phone code. Each command reads that `staging01` is in the inventory now
+   and makes only what is missing:
 
    ```sh
-   # This systems desk, in the person's own terminal:
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services secrets
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services show-recovery-items
+   # On the laptop, in the person's own terminal:
+   ssh -t desk01 set-up-outside-services cloudflare
+   ssh desk01-secrets
    ```
 
    - `cloudflare` prints a link for a new link token, as in
-     [chapter 4 (sign up for the outside services the Stack uses)](../initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md),
+     [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
      and makes the tunnel `example_systems-staging_apps` with its token in
      the vault as `staging_apps_cloudflare_tunnel_token`; each app's
      staging uploads bucket and its R2 key, in the vault with `staging_`
@@ -120,8 +119,8 @@ explains each term.
      `staging_shop_database_password`, and at a hidden prompt the ones only
      a website gives, such as a payment service's test key for
      `staging_shop_STRIPE_API_KEY`. A test key, never production's.
-   - `show-recovery-items` shows staging's Access service token for the
-     password manager. Cloudflare shows its secret only once. When CI
+   - Staging's Access service token stays in the person's token file on
+     the desk. Cloudflare shows its secret only once. When CI
      tests against staging, the two values also become CI's secrets, and
      for local app tests the laptop's app-test environment gets them, and
      nothing else from the desk: an app test needs permission to reach
@@ -180,7 +179,7 @@ explains each term.
    command sets `APP_ENV=staging` for the seed command alone. The example
    is a Rails app whose seed command is `bin/rails db:seed`; use the app's
    own seed command
-   ([chapter 3 (get your app ready to deploy)](../initial_setup/03_get_your_app_ready_to_deploy.md)):
+   ([chapter 2 (get your app ready to deploy)](../initial_setup/02_get_your_app_ready_to_deploy.md)):
 
    ```sh
    # This systems desk, in the systems repository:

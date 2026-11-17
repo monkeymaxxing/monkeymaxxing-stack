@@ -237,7 +237,7 @@ Record the reviewed image tag under `deployed_image_tags` and the public hostnam
 Keep all existing apps, tags, hostnames and secrets.
 
 Run `mmx validate` before applying the systems configuration.
-Follow the Stack's [app configuration in chapter 3 (get your app ready to deploy)](../../skills/monkeymaxxing-stack/systems_repository_template/initial_setup/03_get_your_app_ready_to_deploy.md)
+Follow the Stack's [app configuration in chapter 2 (get your app ready to deploy)](../../skills/monkeymaxxing-stack/systems_repository_template/initial_setup/02_get_your_app_ready_to_deploy.md)
 and [deploy-and-rollback procedure](../../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/deploy_and_roll_back_an_app_release.md).
 A push alone changes no server. The approved MMX run applies the selected release.
 The deployment runs migrations before switching traffic to healthy new web containers.

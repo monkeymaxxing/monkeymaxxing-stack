@@ -142,7 +142,7 @@ vars:
 ```
 
 Create separate production and staging buckets using the Stack's
-[account setup in chapter 4 (sign up for the outside services the Stack uses)](../../skills/monkeymaxxing-stack/systems_repository_template/initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md).
+[account setup in chapter 4 (set up your accounts and lock your desk)](../../skills/monkeymaxxing-stack/systems_repository_template/initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
 The production `R2_BUCKET` must match `production_uploads_r2_bucket`.
 Extend the existing uploads-backup read credential to include the production bucket.
 If uploads backups were disabled, configure the uploads-backup bucket and credentials first.

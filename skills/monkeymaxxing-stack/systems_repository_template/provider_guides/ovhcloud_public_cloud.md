@@ -139,27 +139,27 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
    `The systems desk creates, lists and deletes servers`, and **Validity** to **Unlimited**, and presses
    **Create keys**. Reason for Unlimited: the page's default is one day, and the proxy would stop working
    the next day. The person replaces the credential instead, below.
-4. During the first desk's bootstrap (chapter 2), the person puts the three values into the laptop's
-   temporary token file, in the person's own laptop terminal, one per line, and the joined form after them:
+4. OVHcloud shows the three values once, so the person types them at once into the laptop key command
+   below. The bootstrap moves them to the desk.
 
-   ```sh
-   export OVHCLOUD_APPLICATION_KEY=''
-   export OVHCLOUD_APPLICATION_SECRET=''
-   export OVHCLOUD_CONSUMER_KEY=''
-   export SERVER_PROVIDER_API_TOKEN="$OVHCLOUD_APPLICATION_KEY:$OVHCLOUD_APPLICATION_SECRET:$OVHCLOUD_CONSUMER_KEY"
-   ```
-
-5. On the desk, the person runs, in the person's own terminal, in the systems repository:
-
-   ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services personal-token server-provider --server-listing-path cloud/project/PROJECT_ID/instance
-   ```
-
+5. To replace the credential later, the person runs
+   `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path cloud/project/PROJECT_ID/instance`.
    The command asks for the Application Key, the Application Secret and the Consumer Key, each at a hidden
    prompt, checks them with a signed listing of the project's servers at OVHcloud, and only then writes
    `/etc/systems-desk/provider-api-signing-credential.json`, root:root, mode `0600`, restarts the API signing
    proxy, checks the same listing through `http://127.0.0.1:8081/`, and saves the joined form in the person's
    token file as `SERVER_PROVIDER_API_TOKEN`. When a check fails, the proxy keeps its old credential.
+
+### The laptop key command
+
+The values for [The laptop key command](README.md#the-laptop-key-command):
+
+- **Script:** `~/example-setup/enter-the-ovhcloud-key`.
+- **Values:** three, in this order: **Application Key**, **Application Secret**, **Consumer Key**.
+- **Shape:** 16, 32 and 32 letters and digits.
+- **Read-only call:** a signed `GET cloud/project/PROJECT_ID/instance`, with the guide's `ovhcloud_request` function below, and the three values in the script's memory only.
+- **Key file line:** `APPLICATION_KEY:APPLICATION_SECRET:CONSUMER_KEY`.
+
 
 The API proxy is `provider-api-proxy.service`. systemd runs it under an account of its own
 and hands it a copy of the credential file that only that account reads, so neither the coding agent nor any
@@ -220,7 +220,7 @@ setup still runs once by hand after setup, as
 says, and the coding agent checks its result as [Read the result](../operating_procedures/run_the_weekly_database_restore_drill.md#read-the-result)
 says: `passed` in `latest_result.json`, and no `restore01` left in the list script's output. It records the
 result in the checklist item `backups_restore_every_week`. Reason: the weekly drill is the system's proof that
-backups restore. A systems desk was set up at OVHcloud US from chapter 2 on 2026-11-13, and its API proxy signed
+backups restore. A systems desk was set up at OVHcloud US with the desk chapter on 2026-11-13, and its API proxy signed
 requests through `http://127.0.0.1:8081/` with the person's credential (HTTP 200).
 
 ### Replacing a credential, and a person who leaves

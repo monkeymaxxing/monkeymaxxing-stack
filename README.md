@@ -205,7 +205,7 @@ A system of servers in pools is called a **fleet**.
    database servers   db01, db02, ...
 
    utility server     util01: the tools that operate every server
-   systems desks      where your team and your coding agents work
+   systems desks      where your production keys stay, locked
 ```
 
 The smallest system has one server in each pool. When you need more, you
@@ -255,15 +255,17 @@ Kubernetes existed.
    repository, and the data from the backups. No server is changed by hand
    in a way that nobody remembers.
 4. **Systems desks.** Each person has a systems desk. A systems desk is a
-   small server of the person's own, where the person's coding agent does
-   the systems work. You log in from your laptop to your desk. Only the
-   desks and the utility server can log in to the production servers. Your
-   laptop cannot.
+   small server of the person's own that works as a locked key box: it
+   holds the production key, the secrets, and the person's tokens. Your
+   coding agent stays on your laptop and uses them through the desk, with
+   one code from your phone, and can never copy them. Only the desks and
+   the utility server can log in to the production servers. Your laptop
+   cannot.
    *Why:* most developers keep their production keys in their home
    directory. Any program that runs as them can copy those keys and send
    them away, and one poisoned package is enough. With the Stack, no
    production key is on your laptop, so there is nothing to copy. And your
-   coding agent keeps working on the desk when your laptop is closed.
+   agent's long jobs keep running on the desk when your laptop is closed.
 5. **Alerts.** MMWatchdog checks every server and sends each problem that
    needs a person to MMHotline. MMHotline runs the triage agent, which
    investigates the problem and proposes a fix. Then MMHotline alerts the
@@ -371,39 +373,45 @@ Stack is open source: you can copy it and change any part to fit your needs.
 | Monitoring | [MMWatchdog](https://github.com/monkeymaxxing/mmwatchdog) | One program on each server. Each check comes with the next action to take, and its settings are readable files that your coding agent writes and you can read. |
 | Alerting and on-call | [MMHotline](https://github.com/monkeymaxxing/mmhotline) | It runs in your own accounts, with no price for each person, and gives each alert to the triage agent first. |
 | Alerts to your phone | [Pushover](https://pushover.net/) | Easy to start with, cheap, and its emergency alert sounds through Do Not Disturb and repeats until someone acknowledges it. Each person can add or choose other contact methods, such as a phone call. |
-| Where your team works | A systems desk | The desk runs in a different location from production, so your tools stay available when production's location fails. No production key is on your laptop, where a poisoned program could copy it. Your coding agent keeps working when your laptop is closed. |
+| Where your production keys live | A systems desk | The desk runs in a different location from production, so your tools stay available when production's location fails. No production key is on your laptop, where a poisoned program could copy it. Your agent's long jobs keep running when your laptop is closed. |
 
 The [design](docs/design.md#why-these-tools) records each choice in full,
 with what it costs and what was considered instead.
 
-## The setup: one working day, in ten chapters
+## The setup: a few hours to go live
 
-Your coding agent does the work, explains each step, and asks you for facts
-and for a few major decisions. Before you start, you need a domain at a
-registrar, a password manager for your team, a Git host such as GitHub, and
-an account with your coding agent's provider. The setup adds accounts at
-Cloudflare, your server provider, Backblaze, and Pushover. Before chapter 1, your coding agent shows you
-the route (chapter 0, the map):
+Your coding agent does every step it can. Before you start, you need a
+domain, a password manager, a GitHub account with your app's repository,
+and your coding agent on your laptop. The setup adds accounts at your
+server provider, Cloudflare, and Backblaze.
 
-| Chapter | What happens |
-| --- | --- |
-| 1 | Pick your web address and start the team's password manager. Your domain's move to Cloudflare starts here, because the move is the slowest wait. |
-| 2 | Set up your laptop and your systems desk. |
-| 3 | Get your app ready to deploy. |
-| 4 | Sign up for the outside services that the Stack uses: Cloudflare, Backblaze B2, Pushover, and your coding agent's provider. Make a read-only token for your container registry. |
-| 5 | Put your site behind Cloudflare, and put a sign-in (Cloudflare Access) in front of your private pages, such as MMHotline's dashboard. |
-| 6 | Create your three production servers, after you approve their prices and choose what the triage agent may do by itself. |
-| 7 | Install everything on the production servers. |
-| 8 | Check that alerts reach your phone and backups restore. |
-| 9 | Go live. Your app answers at your domain, and its first release goes out the way every later release will. |
-| 10 | Write down how to run your system: your links, test results, and next steps. |
+You tell your agent: "Set up the Monkeymaxxing Stack for my app." Your agent
+asks two questions, your domain and your server provider, and shows every
+other choice as a default, with the monthly cost. You say "go".
 
-Most of the day needs you: you sign up for the accounts, answer questions,
-approve costs, and review changes to your app. Your longest stretch of work
-is chapter 4, the accounts, at about one to two hours. Two waits are long.
-Your domain's move to Cloudflare takes from minutes to about a day. The
-first server setup, in chapter 7, takes most of an hour, and then waits up
-to an hour for the first restore drill.
+**The first sitting puts your app live.** It takes a few hours, and you are
+busy for about an hour of it:
+
+1. You approve your agent's changes to your app, once.
+2. You make four accounts, one screen at a time: your server provider,
+   Cloudflare, your domain's registrar, and Backblaze for the backups. Each
+   screen says what the account is for and exactly what to do, and each key
+   you paste is checked with its company at once.
+3. You add one key at GitHub, and make one token there, so your servers can
+   download your app.
+4. You save one recovery passphrase, and scan one QR code with your phone.
+
+Then your agent works alone: it creates the servers, installs everything,
+sets up the backups, proves a restore, and puts your app live. Your laptop
+may sleep meanwhile. At the end, you approve your app's first release.
+
+**Then short sittings.** Phone alerts, the same day, in about 15 minutes.
+Later: the triage agent, a status page for your customers, and your
+written operating guide.
+
+Two waits are long, and you have nothing to do during them. Your domain's
+move to Cloudflare takes from minutes to about a day. The first server
+setup takes most of an hour.
 
 Your app must meet three conditions. Your app uses Postgres, keeps uploaded
 files in R2, and runs as a container image. If your app does not meet a
@@ -422,9 +430,14 @@ A skill is a directory of instructions for a coding agent. The stack skill
 tells Claude Code or Codex how to build and run your team's production
 system. The stack skill lives in
 [`skills/monkeymaxxing-stack`](skills/monkeymaxxing-stack).
-Clone the Monkeymaxxing Stack repository once, check out the newest
-release, then link the skill directory into the place where your agent
-looks for your skills:
+
+The short way: tell your coding agent "Install the Monkeymaxxing Stack
+skill from github.com/monkeymaxxing/monkeymaxxing-stack, at its newest
+release." Then start a new session.
+
+By hand: clone the Monkeymaxxing Stack repository once, check out the
+newest release, then link the skill directory into the place where your
+agent looks for your skills:
 
 ```sh
 git clone https://github.com/monkeymaxxing/monkeymaxxing-stack.git ~/monkeymaxxing-stack
@@ -460,35 +473,29 @@ stack, and changes none of your systems. Your agent applies a new release's
 changes to your systems repository only when you ask, following the
 [upgrade procedure](skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/upgrade_to_a_new_stack_version.md).
 
-Then tell your agent what you want, in your own words. Your coding agent
-loads the skill for requests about production hosting for a web app or work
-on an existing stack system. You can also name the skill:
-`/monkeymaxxing-stack` in Claude Code, `$monkeymaxxing-stack` in Codex.
+Then tell your agent what you want, in your own words, in your app's
+folder. Your coding agent loads the skill for requests about production
+hosting for a web app or work on an existing stack system. You can also
+name the skill: `/monkeymaxxing-stack` in Claude Code, `$monkeymaxxing-stack`
+in Codex.
 
-- **To start:** "Set up production servers for my app in `~/code/shop` with
-  the Monkeymaxxing Stack." Your agent first shows you the
-  [ten setup chapters in chapter 0 (before you start: what we build and how long it takes)](skills/monkeymaxxing-stack/systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
-  and how long the waits take: about a working day in all.
+- **To start:** "Set up the Monkeymaxxing Stack for my app." Your agent
+  asks for your domain and your server provider, then shows you what it
+  will set up and what it costs.
 
-  At each chapter, your agent names the setup task, explains why the task
-  matters, and says what your agent needs from you. Your agent says where
-  the setup task happens and how your agent checks that the task succeeded.
-
-  Your agent asks you for one fact at a time, such as your domain or an
-  approval. Your agent never asks you to paste a secret into the chat: you
-  type each secret into your own terminal. At the end, your agent saves
-  your operating guide in the systems repository. The guide contains your
-  links, results, and next actions.
-- **Later,** in your systems repository: "Review my system", "Deploy shop
-  to production", "We have paying customers now: what should change?", or
-  "app001 died. Replace it."
+  Your agent never asks you to paste a secret into the chat: you type each
+  secret at a hidden prompt that checks it. When your agent needs your
+  desk, it asks for one code from your phone, in the chat.
+- **Later,** in the same agent on your laptop: "Review my system", "Deploy
+  shop to production", "We have paying customers now: what should
+  change?", or "app001 died. Replace it."
 
 ## Documentation
 
 | Read | When you want to know |
 | --- | --- |
 | [A running Stack system, day to day](docs/day-to-day-operation.md) | What happens when a server fails, what an intruder can reach, how you hear about a problem, how a release goes live, and how the system grows |
-| [The ten setup chapters](skills/monkeymaxxing-stack/systems_repository_template/initial_setup) | Exactly what the setup does, chapter by chapter |
+| [The setup chapters](skills/monkeymaxxing-stack/systems_repository_template/initial_setup) | Exactly what the setup does, chapter by chapter |
 | [The operating procedures](skills/monkeymaxxing-stack/systems_repository_template/operating_procedures) | The tested steps for every later job, such as replacing a server |
 | [App framework examples](docs/app-frameworks/README.md) | How an app in your framework fits the Stack, with a working example |
 | [App platform migration guides](docs/app-platform-migrations/README.md) | How to move from the platform that you use now |

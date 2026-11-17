@@ -187,8 +187,9 @@ differs and why.
 
 Never ask the person to put a secret in the chat, because the chat is
 stored at the coding agent's provider. Tell the person where to type the
-secret instead: the person's own terminal, the person's editor, or the
-password manager.
+secret instead: a hidden prompt of a `set-up-outside-services` command on
+the desk, such as `ssh desk01-secrets`, or the password manager. Never ask
+the person to paste a secret into a file with an editor.
 
 ## During work
 
@@ -309,19 +310,20 @@ using the term in the team's documentation.
 | Term | Explanation |
 | --- | --- |
 | Production servers | The app servers, database servers, and utility server, `util01`. |
-| Systems desk | The person's own small server at the server provider, in a different location from the production servers, where the person and the coding agent do all systems work. The production SSH key, the vault passphrase and the person's tokens stay on the desk, never on the laptop. The laptop reaches only the person's desk. [Chapter 2 (set up your laptop and your systems desk)](initial_setup/02_set_up_the_laptop_and_the_systems_desk.md) sets it up. |
+| Systems desk | The person's own small server at the server provider, in a different location from the production servers, where the person and the coding agent do all systems work. The production SSH key, the vault passphrase and the person's tokens stay on the desk, never on the laptop. The laptop reaches only the person's desk. [Chapter 3 (make your server account and your systems desk)](initial_setup/03_make_your_server_account_and_your_systems_desk.md) sets it up. |
 | Phone code | A six-digit authenticator code needed with the laptop's SSH key to log in to the desk. |
 | doubleshell | The program on the laptop that carries the SSH login to the person's desk through WireGuard, without a VPN on the laptop. |
-| Rex | The terminal program on the desk that keeps the person's terminal sessions running when the laptop sleeps or the connection drops. |
-| Token file | The person's private file on the desk, `~/.config/monkeymaxxing-stack/<project_name>.env`, readable only by the person: the person's own tokens and the path of the vault passphrase file. Only the person's own terminal loads it; the coding agent never reads it. |
-| `set-up-outside-services` | The Stack's command on the desk for the person's accounts and secrets at outside companies, such as Cloudflare, Backblaze and the server provider, and for the vault's missing keys. The person runs it in their own desk terminal. |
-| Desk review | The person's run of `review-and-apply-the-systems-desk-settings`, in their own terminal on their desk. It applies the desk playbook, `playbooks/systems_desk.yml`, as root, and first shows each change since the person's last desk review and waits for `yes`. |
-| Coding agent account | The separate Unix account `coding-agent` on the desk, used for all systems coding work. |
+| Token file | The person's private file on the desk, `~/.config/monkeymaxxing-stack/<project_name>.env`, readable only by the person: the person's own tokens and the path of the vault passphrase file. `set-up-outside-services` writes it; nobody edits it, and the coding agent never reads it. |
+| Recovery passphrase | The six words in the team's password manager that open the recovery bundle, `recovery_bundle.age`: every item a lost desk needs, encrypted. |
+| Phone code | The 6 digits from the authenticator app on the person's phone that open the desk, for the person and for the coding agent. Each code works once. |
+| `set-up-outside-services` | The Stack's command on the desk for the person's accounts and secrets at outside companies, such as Cloudflare, Backblaze and the server provider, and for the vault's missing keys. The person starts it from the laptop with a short command, such as `ssh desk01-setup` or `ssh desk01-secrets`. |
+| Desk review | The person's run of `review-and-apply-the-systems-desk-settings`, with `ssh desk01-review` on the laptop. It applies the desk playbook, `playbooks/systems_desk.yml`, as root, and first shows each change since the person's last desk review and waits for `yes`. |
+| Coding agent account | The separate Unix account `coding-agent` on the desk. The coding agent on the laptop logs in to it through `ssh desk01-agent`, and uses the desk's buttons from it. |
 | Button | A command or local service that uses a protected credential for the coding agent without giving the coding agent the credential. |
 | API proxy | The desk's one local service between the coding agent and the outside APIs. At `http://127.0.0.1:8081/` it adds the person's server provider token to each request, or signs it, such as at OVHcloud and AWS, or adds a short-lived token it makes from a key, such as at Google Cloud. At `http://127.0.0.1:8082/` it adds the desk token to the coding agent's Cloudflare requests. The coding agent never reads the token or credential. |
 | Desk token | The person's own Cloudflare token on their systems desk, named after the person. The API proxy adds it to the coding agent's Cloudflare requests. It cannot make tokens. `set-up-outside-services cloudflare` makes it. |
 | Link token | The one Cloudflare token the person makes by hand, from the link that `set-up-outside-services cloudflare` prints. It can only make tokens, and the command deletes it when the command ends. |
-| Lock-out button | The command `sudo lock-everyone-out`, which only a person runs, in their own terminal on their own desk, and only in the narrow break-in cases that [The lock-out: only for these cases](operating_procedures/respond_to_a_break_in.md#the-lock-out-only-for-these-cases) names, such as a suspect `util01`. In every other break-in, such as one through the app, the lock-out harms more than it helps. It cuts off every other desk and `util01` at the servers and stops the triage agent; the person and the coding agent keep working from that desk, the desk that keeps access. The coding agent prepares the one-line inventory commit, `everyone_locked_out_except_desk`. |
+| Lock-out button | The command `sudo lock-everyone-out`, which only a person runs, with `ssh -t desk01 sudo lock-everyone-out` on the laptop, and only in the narrow break-in cases that [The lock-out: only for these cases](operating_procedures/respond_to_a_break_in.md#the-lock-out-only-for-these-cases) names, such as a suspect `util01`. In every other break-in, such as one through the app, the lock-out harms more than it helps. It cuts off every other desk and `util01` at the servers and stops the triage agent; the person and the coding agent keep working from that desk, the desk that keeps access. The coding agent prepares the one-line inventory commit, `everyone_locked_out_except_desk`. |
 | Undo a lock-out | Give every desk, `util01` and the triage agent their access back after a lock-out: the coding agent removes `everyone_locked_out_except_desk` and pushes, and the person runs the lock-out button again. Say "undo", never "reverse". |
 | Desk that keeps access | During a lock-out, the one desk named in `everyone_locked_out_except_desk`: the desk where the person ran the lock-out button. The person and the coding agent keep working there; every other desk and `util01` lose access at the servers. |
 | Provider console | The server's screen and keyboard on the server provider's website. It works without SSH and WireGuard, so the person can log in there as root with the shared root console password from the password manager and repair them. |
@@ -461,9 +463,10 @@ A solo person still follows the `main` synchronization rules in `AGENTS.md`.
 ## Systems work and app work
 
 We say "laptop" throughout because most people use one. Any computer you develop on works the same way, such as a desktop or a Mac mini.
-The laptop keeps app development and local app tests; systems work happens on the systems desk, as
-[chapter 2 (set up your laptop and your systems desk)](initial_setup/02_set_up_the_laptop_and_the_systems_desk.md)
-explains, and the coding agent works there as `coding-agent` through its buttons, as `AGENTS.md` says.
+The coding agent works on the laptop, beside the app's code, and acts on production only through the
+systems desk, as
+[chapter 3 (make your server account and your systems desk)](initial_setup/03_make_your_server_account_and_your_systems_desk.md)
+explains, logged in as `coding-agent` and using its buttons, as `AGENTS.md` says.
 When you explain the desk's protections, say what they leave: malware controlling the laptop during an open
 desk session can act through the session, and a coding agent with production authority can read production
 secrets through production work.

@@ -1,29 +1,37 @@
 # Chapter 8: Check that alerts reach your phone and backups restore
 
-**When:** after chapter 7 (install everything on the production servers).
-Parts 2, 3, and 5 also need the domain to show "Active" at Cloudflare.
+**When:** in three sittings.
 
-**What this chapter does:** MMHotline gets its alerting settings: the
-triage agent, Pushover, and the MMHotline-down alarm. Each person on call
-connects a phone, and a test SOS proves the path from the servers to the
-phone. The first backup's and the first restore drill's results are read.
-The status page, where the team tells customers about a problem, gets its
-settings and a test notice.
+- **The first sitting** runs only part 4 (read the backup results), right
+  after chapter 7 (install everything on the production servers). Then
+  chapter 9 puts the app live.
+- **The alerts sitting,** when the person says "set up alerts", runs
+  parts 1 to 3 without the `triage_agent` section, and chapter 7's part 5
+  (join the systems desk to monitoring). The person types
+  `ssh desk01-alerts` for the Pushover screen. Parts 2 and 3 need the
+  domain to show "Active" at Cloudflare.
+- **Later sittings** add part 1's `triage_agent` section, with
+  `ssh desk01-secrets` for the triage agent's credential, and part 5 (the
+  status page).
+
+Until the alerts sitting is done, say plainly that the site has no phone
+alerts, whenever you report on the system.
+
+**What this chapter does:** the first backup's and the first restore
+drill's results are read. MMHotline gets its alerting settings: Pushover,
+the MMHotline-down alarm, and later the triage agent. Each person on call
+connects a phone, and a test proves the path from the servers to the
+phone. The status page, where the team tells customers about a problem,
+gets its settings and a test notice.
 
 **Who acts:** you, the coding agent, write the settings, run MMX, and
-read the results from this systems desk. Each person on call signs in to
-MMHotline, adds a phone, and acknowledges the test notifications (part 2
-and part 3). The person on call claims and resolves the test SOS (part 2).
-The person runs `set-up-outside-services cloudflare` again only when the
-domain was still "Pending" in chapter 4 (part 5).
+read the results through the desk. In the alerts sitting, each person on
+call signs in to MMHotline, adds a phone, and acknowledges the test
+notifications (parts 2 and 3).
 
-**Tell the person when the chapter starts:**
+**Tell the person when the chapter starts,** in the first sitting:
 
-> Next, I test that a failure alerts the right person and that your backups restore your data.
-> Until a restore passes, you cannot trust a backup to restore your data.
-> This chapter also sets up a status page, where you tell your customers about a problem.
-> First I check that Cloudflare shows your domain as "Active".
-> Then I give you the MMHotline login link to connect your phone, and you check that the test alert reaches your phone.
+> I am reading the first backup and the first restore drill.
 
 ## Before you start
 
@@ -33,9 +41,6 @@ domain was still "Pending" in chapter 4 (part 5).
   waiting" during a step that runs for minutes, and "Tell the person after"
   with the result and its link. Say each message when its step comes, in
   your own words, with the team's own names and links.
-- **Commands that source the person's token file,** `~/.config/monkeymaxxing-stack/example_systems.env`,
-  run only in the person's own desk terminal, as the secrets rule in
-  [The rules](../AGENTS.md#the-rules) says.
 - **The domain must be active for three parts.** Signing in to MMHotline and checking the public status page need the
   domain active at Cloudflare. While the domain is pending, continue part 1 (add MMHotline's alerting settings) and part 4 (read the backup results). Part 2 (each person on call signs in and adds a phone), part 3 (the MMHotline-down alarm), and part 5 (the status page) wait until
   Cloudflare shows the domain as "Active". While the domain is pending,
@@ -63,7 +68,7 @@ domain was still "Pending" in chapter 4 (part 5).
    triage_agent:
      commit_signing_public_key: "{{ .vars.triage_ssh_public_key }}"
      coding_agent: {{ .vars.triage_agent_coding_agent }}     # claude_code or codex, from mmx_project_settings.yml
-     credential_type: api_key                 # the kind step 7 of chapter 4 chose
+     credential_type: api_key                 # the kind the person chose in the triage agent's sitting
      credential: {{ .secrets.mmhotline_triage_agent_credential | toJson }}
      model: opus                              # the newest of the provider's most capable family that answers within minutes
      reasoning_effort: high
@@ -425,23 +430,25 @@ domain was still "Pending" in chapter 4 (part 5).
 
 ## Part 5: The status page
 
-11. **The status page's Cloudflare resources and key already exist.** Chapter 4 (sign up for the outside services the Stack uses) chose the
-    status page's host name, `vars.status_page_host_name` in
-    `mmx_project_settings.yml`, such as `status.example.com`.
+11. **The status page's Cloudflare resources and key.** The status page's
+    host name is `vars.status_page_host_name` in
+    `mmx_project_settings.yml`: `status.example.com` by default, which you
+    set in the status page's sitting.
     Check that `vars.cloudflare_account_id` there is the account ID used for the MMHotline-down alarm and Access session revocation.
-    The status page's title is the company's name, from chapter 2 (set up your laptop and your systems desk).
+    The status page's title is the company's name, from chapter 1 (answer two questions).
     The status page is public, so the page gets no Access application.
 
-    `set-up-outside-services cloudflare` ran `mmhotline status-page set-up`
-    in chapter 4 (sign up for the outside services the Stack uses), with the person's desk token, which
-    MMHotline never stores. MMHotline created the R2 bucket, named after
+    `set-up-outside-services cloudflare`, which the person runs in the
+    status page's sitting with `ssh -t desk01 set-up-outside-services cloudflare`,
+    runs `mmhotline status-page set-up` with the person's desk token, which
+    MMHotline never stores. R2 must be on first: the person approves
+    Cloudflare's payment on R2's page, `https://dash.cloudflare.com/?to=/:account/r2/overview`. MMHotline created the R2 bucket, named after
     the host name, such as `mmhotline-status-status-example-com-18a8ea11`;
     connected the host name to the bucket, so Cloudflare created the host
     name's DNS record and certificate; and added a URL rewrite rule that
     serves `index.html` at the page's root address, such as
     `https://status.example.com/`. Never make the status page's DNS
-    record yourself. A rerun of `set-up-outside-services cloudflare`
-    creates only missing resources.
+    record yourself. A rerun creates only missing resources.
 
     The key MMHotline posts with is in the vault too, made by the same
     command: an account API token for the page's bucket only, so that
@@ -449,7 +456,7 @@ domain was still "Pending" in chapter 4 (part 5).
     `mmhotline_status_page_r2_access_key_id` and
     `mmhotline_status_page_r2_secret_access_key`.
     The page's `r2_bucket_url` is the one the command printed, also in
-    the person's token file as `MMHOTLINE_STATUS_PAGE_R2_BUCKET_URL`, and
+    the person's own token file on the desk as `MMHOTLINE_STATUS_PAGE_R2_BUCKET_URL`, and
     `https://ACCOUNT_ID.r2.cloudflarestorage.com/BUCKET` with
     the bucket's name from `GET http://127.0.0.1:8082/accounts/ACCOUNT_ID/r2/buckets`.
 
@@ -493,22 +500,12 @@ domain was still "Pending" in chapter 4 (part 5).
     shows the `status_page` part applied.
 
 13. **The systems desk can post while `util01` is down:** the person's
-    own R2 key for the page's bucket is in the person's token file
-    already. `set-up-outside-services cloudflare` made it in chapter 4
-    (sign up for the outside services the Stack uses), as
+    own R2 key for the page's bucket is in the person's own token file on
+    the desk, made in the same step as the page, as
     [post_to_the_status_page.md](../operating_procedures/post_to_the_status_page.md),
     "A person's own R2 key for posting from a systems desk", says.
 
-    **Ask the person,** only when the domain was still "Pending" in
-    chapter 4, which left the key unmade. The person runs the command again
-    now, with a new link token, which makes the key:
-
-    > Your systems desk needs its own key to post to the status page while `util01` is down.
-    > Please run this command in your own terminal on your systems desk, in the systems repository:
-    > `. ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare`
-    > The command prints a link for a new link token, as in chapter 4. Tell me when the command is done.
-
-    **Tell the person:** no other message, because step 14 shows how the
+    **Tell the person:** no message, because step 14 shows how the
     systems desk posts.
 
     **Check:** step 14's read from the systems desk.
@@ -519,11 +516,12 @@ domain was still "Pending" in chapter 4 (part 5).
       working.";
     - before posting, the systems desk reads the page using the person's R2
       key. A successful read verifies the desk's bucket URL and R2
-      credentials from `~/.config/monkeymaxxing-stack/example_systems.env`:
+      credentials in the person's own token file. The person types, on
+      the laptop, with a phone code:
 
       ```sh
-      # This systems desk:
-      . ~/.config/monkeymaxxing-stack/example_systems.env && mmhotline status-page show
+      # On the laptop, in the person's own terminal:
+      ssh -t desk01 mmhotline status-page show
       ```
 
     - a test notice from `util01`,
@@ -533,9 +531,8 @@ domain was still "Pending" in chapter 4 (part 5).
       the `notice_id` printed by the post command:
 
       ```sh
-      # This systems desk:
-      . ~/.config/monkeymaxxing-stack/example_systems.env &&
-        mmhotline status-page resolve --notice-id 1 --closing-message "The test is over."
+      # On the laptop, in the person's own terminal:
+      ssh -t desk01 mmhotline status-page resolve --notice-id 1 --closing-message "The test is over."
       ```
 
       If resolving the test notice from the systems desk fails, resolve the
@@ -563,7 +560,7 @@ domain was still "Pending" in chapter 4 (part 5).
 
     > Your alerts reach your phone, your backups restore, and your status page works: [the checks that passed].
     > Still open: [the tests that need a person or a date].
-    > Next, in chapter 9, your site goes live.
+    > Your status page is ready.
 
     **Check:** the page says "Everything is working." again, with the test under
     "Recently resolved". Mark `status_page_for_customers` done after
@@ -572,8 +569,9 @@ domain was still "Pending" in chapter 4 (part 5).
 
 ## If something is different
 
-- **The domain is still pending:** continue part 1 and part 4, and tell
-  the person when you check the domain next, as
+- **The domain is still pending:** in the first sitting, part 4 needs
+  nothing from the domain. In the alerts sitting, continue part 1, and
+  tell the person when you check the domain next, as
   [Before you start](#before-you-start) says.
 - **A settings part fails to apply** (steps 2 and 12): read the reason in
   the run's results, correct the cause, and rerun `every_server`, as step 2
@@ -602,4 +600,4 @@ team's Cloudflare account, so the page works while every server is down,
 and the systems desk can post with the person's own R2 key while `util01`
 is down.
 
-Next: [Chapter 9: Go live](09_go_live.md), once every check of this chapter passed.
+Next, in the first sitting: [Chapter 9: Go live](09_go_live.md), once part 4's checks passed.

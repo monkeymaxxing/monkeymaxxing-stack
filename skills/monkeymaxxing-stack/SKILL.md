@@ -36,9 +36,16 @@ In what you say to the person, "you" is the person. In this skill's
 instructions, "you" is you, the coding agent, and the person is "the
 person".
 
-For a new system, show [the map and the time estimate in chapter 0 (before you start: what we build and how long it takes)](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
-first. Then give chapter 1 (pick your web address and start the team's password manager)'s opening and ask its first question. The person
-has already chosen the stack, so do not explain the whole project first.
+For a new system, start [chapter 1 (answer two questions)](systems_repository_template/initial_setup/01_answer_two_questions.md)
+with its first question. The person has already chosen the stack, so do
+not explain the whole project first. [Chapter 0](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
+holds the map, for when the person asks.
+
+The setup comes in sittings. The first sitting, chapters 1 to 9, puts the
+app live, protected and backed up, in a few hours. The second sitting
+adds phone alerts. Later short sittings add the triage agent, the status
+page, and chapter 10. Until the alerts sitting is done, say plainly that
+the site has no phone alerts.
 
 Each chapter opens with **When**, **What this chapter does**, **Who acts**,
 and a **Tell the person when the chapter starts** message. Then come
@@ -79,9 +86,9 @@ to add a second app server and a database replica.
 These six rules hold the system together. Follow all six rules during
 initial setup and every later operation. Introduce each rule when its
 first action comes, not all at once at the start, because the person has
-already chosen the stack and wants to get to work. Chapter 2 (set up your laptop and your systems desk) introduces the
-systems repository, the vault, and the personal token file. Chapter 4 (sign up for the outside services the Stack uses)
-introduces the outside accounts and their APIs. Chapter 7 (install everything on the production servers) introduces how
+already chosen the stack and wants to get to work. Chapter 3 (make your server account and your systems desk) introduces the
+systems repository and the desk. Chapter 4 (set up your accounts and lock your desk)
+introduces the outside accounts, the vault, and the recovery passphrase. Chapter 7 (install everything on the production servers) introduces how
 the agent runs MMX on `util01` after pushing each change.
 Each chapter introduces the checklist's results as its checks pass. Keep each
 exception with its rule, and give its reason.
@@ -115,23 +122,37 @@ exception with its rule, and give its reason.
    while it's broken or being rebuilt; once after a new vault passphrase, because `util01` cannot open
    the new vault with the old passphrase;
    and for `util01`'s own reboot, because MMX never reboots the controller machine.
-   The laptop runs MMX only for the desk's first bootstrap run, then removes the temporary tools.
-   The person manages the desk with `review-and-apply-the-systems-desk-settings`, which runs the desk playbook as root
+   The laptop runs MMX against the desk only for the desk's bootstrap and its lock.
+   The person manages the desk with `ssh desk01-review`, which runs the desk playbook as root
    and first shows the person every change since the person's last desk review.
-   The systems coding agent always runs as `coding-agent` and uses the buttons.
-4. **Set up the accounts and resources at outside companies once.** Use
-   the companies' websites or APIs from the systems desk. The password manager
-   keeps the logins. Use the person's own token through the API for every
-   action the token permits, so the action is exact and repeatable.
+   You work on the person's laptop, and act on the desk as `coding-agent`, through `ssh desk01-agent` and the buttons.
+4. **If you can do a step, you do it.** Set up the accounts and resources
+   at outside companies once, through their APIs: through the desk's API
+   proxy with the person's own token, or with the person's signed-in tools
+   on the laptop, such as `gh`, for work that shows no secret. The setup
+   never requires `gh` or another extra tool: without one, show one screen
+   with a link that is already filled in. The person does only what needs
+   the person: sign up on a website, approve money or terms, type a secret
+   once at a hidden prompt that checks it with the company, save a login,
+   and scan a QR code. Never add the desk's deploy key with `gh`: the Git
+   host deletes it when that login is revoked.
 
-   The person performs the actions available only on the company's
-   website. The person also creates every token that must belong to the
-   company's account rather than to a person, on the company's website.
-   For each website action, tell the person exactly where to click.
-5. **The systems desk keeps the person's own tokens outside Git.** The desk
-   is the one server that holds a person's own tokens; production servers keep using account-owned tokens.
-   When a person leaves, revoke the person's tokens at each company and delete the person's desk.
-   Deleting token files alone revokes nothing.
+   Every screen for the person has four parts: a title that names the
+   company and what it is for, "What this is for:", "Do this now:" with
+   numbered steps, one instruction per line, and the prompt or the one
+   thing to say. Put a line in capitals, on its own line, only for the few
+   things that cause trouble when missed, such as
+   **WAIT FOR A NEW CODE.** The password manager keeps the logins.
+5. **The desk is a locked key box.** The person's systems desk holds the
+   production key, the vault passphrase, and the person's own tokens, and
+   you use them through the desk without ever copying them. Nothing you
+   need runs on the laptop with a secret in it. The person's tokens never
+   enter Git, the chat, or the laptop, except the provider key for the
+   ten minutes before the desk exists. Production servers keep using
+   account-owned tokens. One recovery passphrase in the password manager
+   opens the recovery bundle, which holds every item a lost desk needs.
+   When a person leaves, revoke the person's tokens at each company and
+   delete the person's desk. Deleting token files alone revokes nothing.
 6. **The checklist records what's done, what's open, and what's done
    differently, and why.** Mark each item in the step that proves it,
    never on a plan, a promise, or a command that only started. A check
@@ -153,11 +174,11 @@ introduction, and do not define familiar Linux terms.
   SKILL.md, is this version's whole system, with every instruction you
   follow: `initial_setup/`, the ten chapters done once; `operating_procedures/`,
   every later job; and the rules, in `AGENTS.md`, `triage_agent_rules.md`,
-  and `talking_with_the_team.md`. Chapter 2 (set up your laptop and your systems desk) copies the whole folder to become
+  and `talking_with_the_team.md`. Chapter 1 (answer two questions) copies the whole folder to become
   the team's systems repository. So the team, the triage agent on `util01`,
   and a later session all find the instructions for the system's version
   in the team's systems repository. During the initial setup, read the
-  chapters here, in the skill: they are the same files that chapter 2 (set up your laptop and your systems desk) copies.
+  chapters here, in the skill: they are the same files that chapter 1 copies.
 - **The template's version** is `stack_version` in
   `monkeymaxxing_stack_checklist.yml` in `systems_repository_template/`.
   Every value in the template is written out. A value the team must
@@ -200,7 +221,7 @@ introduction, and do not define familiar Linux terms.
 
 | You find | Do |
 | --- | --- |
-| No systems repository yet (ask the person whether one exists, and where) | [the initial setup in chapter 0 (before you start: what we build and how long it takes)](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#chapter-0-before-you-start-what-we-build-and-how-long-it-takes) |
+| No systems repository yet (ask the person whether one exists, and where) | [the initial setup, from chapter 1 (answer two questions)](systems_repository_template/initial_setup/01_answer_two_questions.md) |
 | A systems repository with `monkeymaxxing_stack_checklist.yml`, and every server in its `inventories/servers.yml` built by the Stack | Read the team's systems repository's `AGENTS.md`, then [assess, recommend, execute](systems_repository_template/operating_procedures/assess_a_running_system_and_recommend_changes.md) |
 | A systems repository copied from the template whose `inventories/servers.yml` lists servers the Stack didn't build, such as a team's written record of a system the team inherited. An inherited server keeps its old name, not a Stack name such as `app001` or `db01`. Ask the person when unsure | Only read the repository. Never run MMX against those servers, and never follow the assessment or another operating procedure on them: MMX would apply the Stack's roles to servers the Stack didn't build. Say plainly that the Stack works only on servers it built. When the person asks, build a new system beside the inherited system, starting at the initial setup with a new systems repository. Then move the app and its database in with [Move a database into the Stack](systems_repository_template/operating_procedures/move_a_database_into_the_stack.md), which keeps the old server out of the inventory. |
 | The template changed since `stack_commit` in the team's systems repository's `monkeymaxxing_stack_checklist.yml` ([a new version](systems_repository_template/operating_procedures/upgrade_to_a_new_stack_version.md#a-new-version) says how to tell) | Tell the person. When the person asks, apply the new stack version by following [a new version](systems_repository_template/operating_procedures/upgrade_to_a_new_stack_version.md#a-new-version). |
@@ -211,15 +232,15 @@ introduction, and do not define familiar Linux terms.
 
 Never ask the person to type a secret into this conversation: it would be
 stored with the conversation at your provider. Every secret has one home,
-and gets there one way: [Secrets in chapter 2 (set up your laptop and your systems desk)](systems_repository_template/initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#secrets).
+and gets there one way: [Secrets in chapter 3 (make your server account and your systems desk)](systems_repository_template/initial_setup/03_make_your_server_account_and_your_systems_desk.md#secrets).
 
 ## The instruction files
 
 - [Chapter 0: Before you start: what we build and how long it takes](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md)
-- [Chapter 1: Pick your web address and start the team's password manager](systems_repository_template/initial_setup/01_pick_your_web_address_and_start_the_teams_password_manager.md)
-- [Chapter 2: Set up your laptop and your systems desk](systems_repository_template/initial_setup/02_set_up_the_laptop_and_the_systems_desk.md)
-- [Chapter 3: Get your app ready to deploy](systems_repository_template/initial_setup/03_get_your_app_ready_to_deploy.md)
-- [Chapter 4: Sign up for the outside services the Stack uses](systems_repository_template/initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md)
+- [Chapter 1: Answer two questions](systems_repository_template/initial_setup/01_answer_two_questions.md)
+- [Chapter 2: Get your app ready to deploy](systems_repository_template/initial_setup/02_get_your_app_ready_to_deploy.md)
+- [Chapter 3: Make your server account and your systems desk](systems_repository_template/initial_setup/03_make_your_server_account_and_your_systems_desk.md)
+- [Chapter 4: Set up your accounts and lock your desk](systems_repository_template/initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)
 - [Chapter 5: Put your site behind Cloudflare and lock your private pages](systems_repository_template/initial_setup/05_put_your_site_behind_cloudflare_and_lock_your_private_pages.md)
 - [Chapter 6: Create your three production servers: app, database, and tools](systems_repository_template/initial_setup/06_create_your_three_production_servers.md)
 - [Chapter 7: Install everything on the production servers](systems_repository_template/initial_setup/07_install_everything_on_the_production_servers.md)
@@ -249,10 +270,10 @@ Nothing at this version.
 ## Agent-run operations
 
 Follow the systems repository's [rules](systems_repository_template/AGENTS.md#the-rules).
-On the desk as `coding-agent`, edit, validate, commit, pull with rebase, report incoming commits, push, then preview and run MMX on `util01`, normally
-with the `server_management_scripts/run_mmx_on_util01` helper.
-A push alone changes no server. CI is the recommended way to test, build, and push images; without CI, the coding agent
-tests and builds on the systems desk only inside a container, and pushes the image. The systems coding agent deploys from the desk in either case.
+On the laptop, edit in your clone of the desk's repository, validate, commit on a branch, push the branch to the desk,
+and run `sign-and-publish` on the desk, which signs the commits and pushes `main`. Report incoming commits, then preview
+and run MMX on `util01` from the desk, normally with the `server_management_scripts/run_mmx_on_util01` helper, as a
+desk job when the run is long. A push alone changes no server. CI tests, builds, and pushes the app's images.
 Before `util01` exists and while `util01` is broken or rebuilt, run MMX
 on the systems desk through `sudo -n -u servers-mmx run-mmx-on-the-servers` with `--connection ssh_only`.
 

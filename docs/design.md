@@ -411,8 +411,8 @@ person, with their reasons, so each idea is explained when its action
 comes. The six core ideas in
 [`SKILL.md`](../skills/monkeymaxxing-stack/SKILL.md#the-core-ideas) govern
 every operation.
-Chapter 2 (set up your laptop and your systems desk) introduces the laptop login, provider account, systems desk, repository, vault, and personal
-token file, which holds the person's own API tokens on the systems desk. Chapter 4 (sign up for the outside services the Stack uses)
+Chapter 3 (make your server account and your systems desk) introduces the laptop login, provider account, systems desk, repository, vault, and personal
+token file, which holds the person's own API tokens on the systems desk. Chapter 4 (set up your accounts and lock your desk)
 introduces the accounts at other companies and their APIs. Chapter 7 (install everything on the production servers)
 introduces how the coding agent runs MMX on `util01` after pushing. Each chapter introduces
 the checklist's results as its checks pass. Each exception stays with its
@@ -467,7 +467,7 @@ result.
 who knows the route can tell where they are and why a step comes when it
 does, and no chapter needs a fact or an account from a later one.
 
-- Chapter 1 (pick your web address and start the team's password manager) asks for the domain, where most users are, and whether the
+- Chapter 1 (answer two questions) asks for the domain, where most users are, and whether the
   team wants the smallest system or the fuller one, each question
   separately. The server location and Backblaze's region depend on the
   domain and where most users are. The fuller system's two servers come
@@ -494,18 +494,18 @@ does, and no chapter needs a fact or an account from a later one.
   must never wait for a person, and the person still decides how far the
   bill can grow. No price is written into the Stack: each one is read
   from the provider's API when it is shown, so none goes stale.
-  Chapter 1 (pick your web address and start the team's password manager) also starts the domain's move to Cloudflare, the slowest wait of
+  Chapter 1 (answer two questions) also starts the domain's move to Cloudflare, the slowest wait of
   the day, which needs the password manager and the Cloudflare account
   first.
-- Chapter 2 (set up your laptop and your systems desk) gives the systems repository its home at the Git host, because
-  chapter 3 (get your app ready to deploy) records image tags in the repository.
-- Chapter 3 (get your app ready to deploy) only names the app's R2 bucket. Chapter 4 (sign up for the outside services the Stack uses) creates the app's R2 bucket
+- Chapter 3 (make your server account and your systems desk) gives the systems repository its home at the Git host, because
+  chapter 2 (get your app ready to deploy) records image tags in the repository.
+- Chapter 2 (get your app ready to deploy) only names the app's R2 bucket. Chapter 4 (set up your accounts and lock your desk) creates the app's R2 bucket
   as part of setting up the accounts at other companies. Chapter 4 also makes
   the status page's bucket and R2 key, so every key of the Cloudflare account
   is made in one chapter, and chapter 8 (check that alerts reach your phone and backups restore) only tests the status page.
   When the domain is still "Pending", Cloudflare cannot connect the status page's host
   name to its bucket, so that one step waits for chapter 8.
-- Chapter 4 (sign up for the outside services the Stack uses) chooses the server provider and its location before creating the
+- Chapter 4 (set up your accounts and lock your desk) chooses the server provider and its location before creating the
   Backblaze account. The order matters because Backblaze's region follows
   the servers' location and is set when the Backblaze account is made.
 - Chapter 6 (create your three production servers: app, database, and tools) gets the person's approval of the weekly restore drill's server
@@ -3191,8 +3191,8 @@ file.
 
 `staging_server`, `second_app_server`, and each app's
 `<app>_seed_command_fills_test_data` are Later items for every team. A
-team that chooses the fuller system in chapter 1 (pick your web address
-and start the team's password manager) gets their `waits_for` set to
+team that chooses the fuller system in chapter 1 (answer two
+questions) gets their `waits_for` set to
 chapter 7's step that adds the two servers, and the operating procedures
 that add the servers finish the items. Reason: the items move nowhere in
 the file, and the same procedures finish them on a later day.
@@ -3421,8 +3421,8 @@ repositories, and `pinned_program_releases` for the downloaded programs
 
 - **The triage agent is Claude Code or Codex, by default the desks'
   coding agent.** `triage_agent_coding_agent` in `mmx_project_settings.yml`
-  holds the choice, `claude_code` or `codex`; chapter 4 (sign up for the
-  outside services the Stack uses) sets it to `systems_desk_coding_agent`'s
+  holds the choice, `claude_code` or `codex`; chapter 4 (set up your accounts
+  and lock your desk) sets it to `systems_desk_coding_agent`'s
   value without a question (one question fewer, and the team already has
   that vendor's account). `mmhotline_settings.yml` reads it for
   `triage_agent.coding_agent`, `util_server` installs Codex only when it is
@@ -5098,8 +5098,8 @@ file, through `sudo cat` for a root-only file, so even the command never
 holds the value. A backup passphrase lives only in the vault, which MMX
 never prints, so the command opens `mmx secrets edit` for the person to
 copy it and close without saving. An item that does not exist yet, such as
-a backup passphrase before chapter 4 (sign up for the outside services the
-Stack uses), is listed as not made yet, so a later rerun finishes it. The
+a backup passphrase before chapter 4 (set up your accounts and lock your
+desk), is listed as not made yet, so a later rerun finishes it. The
 coding agent hears the three summary lines, which hold names only.
 
 **What stays a website step, and why:**
@@ -5850,13 +5850,13 @@ settings beside it; the pulled repository supplies only the inventory and `ssh/k
 
 ### Bootstrap, phone code, and recovery
 
-Chapter 2 (set up your laptop and your systems desk) creates the provider account and personal token before creating the first desk.
+Chapter 3 (make your server account and your systems desk) creates the provider account and personal token before creating the first desk.
 Reason: the first desk cannot create the provider account or supply the laptop's temporary bootstrap tools.
 The laptop briefly holds the template, MMX, doubleshell, and provider credentials.
 First-boot data enrolls only the laptop peer and selected bootstrap root SSH key.
 Public SSH stays closed from first boot.
 The bootstrap run closes root's remote access and can end with a warning, or with "node busy with job …"
-while the desk carries on with the job; chapter 2 lists each end the person can see and says to rerun until the
+while the desk carries on with the job; chapter 3 lists each end the person can see and says to rerun until the
 laptop's root login is refused, and then to go on, because the first desk review finishes the playbook on the desk.
 The "node busy" end was seen on the first run of every test desk. Cause: the test ran the
 controller as a systemd service on the desk itself; the run's own `install_the_waiting_security_updates_on_a_new_server`
@@ -5865,7 +5865,7 @@ alone, and the rerun met it. A restart of `ssh.service` does not end an open SSH
 laptop keeps its connection. On a desk, needrestart therefore never restarts `rex-desk.service`
 (`roles/every_server/files/needrestart.conf`): the person's terminals, with any desk review, lock-out press or
 coding agent run in them, live there. A rerun that reaches the desk after the orphaned job finished stops with "The
-phone code is missing …", which names the enrollment command; chapter 2 says so. The marker below stays the
+phone code is missing …", which names the enrollment command; chapter 3 says so. The marker below stays the
 signal: a desk where nobody enrolled must not pass a desk review.
 The person immediately runs `set-up-the-phone-code`, saves the secret, scans the QR code, and confirms a real phone code.
 Before enrollment, the permitted laptop key admits the person without a code.

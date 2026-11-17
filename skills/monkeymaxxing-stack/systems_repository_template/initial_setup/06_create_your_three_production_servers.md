@@ -7,43 +7,30 @@ private pages).
 provider: `app001` runs the app, `db01` stores the app's data, and `util01`
 runs the system tools. Each server's WireGuard key and SSH host key are
 recorded in the systems repository before any connection. The person
-approves the prices, decides how many servers may be added without asking,
-and decides what the triage agent may do by itself.
+approved the prices, the weekly restore drill and the default growth
+limits with "go" in chapter 1.
 
-**Who acts:** you, the coding agent, do every step from this systems desk:
-the team's scripts reach the provider through the API token proxy. The
-person approves the prices, the weekly restore drill, the growth limits, and
-what the triage agent may do (step 2). The person runs a command only when
-the shared root console password's hash is missing (step 6).
+**Who acts:** you, the coding agent, do every step through the desk: the
+team's scripts reach the provider through the API proxy. The person does
+nothing, unless the prices rose since chapter 1 (step 2).
 
 **Tell the person when the chapter starts:**
 
-> Next, I create your three servers.
-> The app server runs your app. The database server stores your app's data.
-> The utility server runs the system tools.
-> Before I create anything, I show you the prices and ask for your approval.
-> You also decide about money for later, once: how many servers of each kind I may add, and how big, without asking you.
-> Inside those limits I add a server when it is needed and tell you what it costs. For anything more, I ask first.
-> With the fuller system, the price list also shows the test server and the second app server, which chapter 7 adds once these three run.
+> I am creating your three servers: `app001` for your app, `db01` for its data, and `util01` for the system tools.
 
 ## Before you start
 
-- **The messages to the person.** Each step says what to tell or ask the
-  person, in quote blocks: "Tell the person first" before the step, "Ask
-  the person" when the person must act or approve, "Tell the person while
-  waiting" during a step that runs for minutes, and "Tell the person after"
-  with the result and its link. Say each message when its step comes, in
-  your own words, with the team's own names and links.
-- **Commands that source the person's token file,** `~/.config/monkeymaxxing-stack/example_systems.env`,
-  run only in the person's own desk terminal, as the secrets rule in
-  [The rules](../AGENTS.md#the-rules) says.
+- **The messages to the person.** You work alone in chapters 5 to 9, and
+  the person may be away. Give each step's message as one short line, and
+  give the full text only when the person asks. Use each step's links and
+  names.
 - **No private network may overlap the WireGuard network.** Before creating
   the first server, check that no private network the provider attaches to
   the new servers overlaps `vars.wireguard_network`: a private network the
   team made at the provider, or one the provider adds to every new server.
   If one overlaps, choose another network as
-  [chapter 2 (set up your laptop and your systems desk)](02_set_up_the_laptop_and_the_systems_desk.md) describes,
-  then [update the desk's production peers](02_set_up_the_laptop_and_the_systems_desk.md#update-the-desks-production-peers) before connecting.
+  [chapter 3 (make your server account and your systems desk)](03_make_your_server_account_and_your_systems_desk.md) describes,
+  then [update the desk's production peers](03_make_your_server_account_and_your_systems_desk.md#update-the-desks-production-peers) before connecting.
 - **The link.** The person sees the new servers in the provider's web console.
   The team's [provider guide](../provider_guides/README.md) gives its address, in the section
   "The provider's web console", such as [Hetzner Cloud's](../provider_guides/hetzner_cloud.md#the-providers-web-console).
@@ -51,7 +38,7 @@ the shared root console password's hash is missing (step 6).
 ## Steps
 
 1. **The location and the sizes.** Use the production location chosen in
-   [chapter 2 (set up your laptop and your systems desk)](02_set_up_the_laptop_and_the_systems_desk.md#prepare-the-laptop-and-provider-account), different from the desk location.
+   [chapter 1 (answer two questions)](01_answer_two_questions.md#steps), different from the desk location.
    The table gives the initial setup sizes, with Hetzner Cloud as an
    example. With another provider, use x86 types with at least each
    server's vCPUs, memory, and disk in the table:
@@ -85,7 +72,7 @@ the shared root console password's hash is missing (step 6).
    `restore_drill_server_type`, `restore_drill_location`, and
    `server_image` hold `db01`'s values.
 
-2. **The prices, and the person's approval.** Read each selected server
+2. **The prices, checked against chapter 1.** Read each selected server
    type's current hourly and monthly prices in the chosen location from
    the provider, through `http://127.0.0.1:8081/`. With the fuller system, the
    servers include `staging01` and `app002`. The
@@ -100,93 +87,46 @@ the shared root console password's hash is missing (step 6).
    charge too, from `pricing.primary_ips` (type `ipv4`, at the chosen
    location) in `GET http://127.0.0.1:8081/pricing`.
 
-   Show each server's size, location, and monthly total as “the server,
-   plus its public address”. Show `restore01`'s hourly total with its
-   address for its weekly hour or so. Give the currency and whether tax is
-   included. Label the combined ongoing server cost as a subtotal, with
-   other known costs and unknown charges stated separately.
+   Compare the monthly total with the cost that chapter 1's screen showed.
+   When the total is higher by more than the rounding of "about", show
+   each server's size, location, and monthly total as "the server, plus
+   its public address", with the currency and whether tax is included,
+   and ask once:
 
-   **Ask the person** to approve the servers and the weekly restore drill:
+   > The prices at [the provider] rose since you said "go": your servers now cost about [the new total] a month, not [the old total].
+   > Say "go" to create them, or tell me what to change.
 
-   > Here are your servers' monthly prices, each with its public address: [the prices]. The subtotal leaves out [the other costs].
-   > Each [weekly work day], `util01` makes a temporary server, `restore01`, restores your backups onto it, checks the data, and deletes it, usually within the hour. You pay [the hourly price] for each hour it exists.
-   > Each kind of server starts as one server, so if `app001` or `db01` fails, your site stops until the server is replaced.
-   > Do you approve these servers and the weekly restore drill?
+   Otherwise ask nothing: the person's "go" in chapter 1 approved these
+   servers and the weekly restore drill. The drill runs each
+   `weekly_work_day`, Sunday in the template, on a temporary server of
+   the database server's size, usually within the hour. The first drill
+   starts during chapter 7 (install everything on the production
+   servers), and chapter 8 reads its result.
 
-   The drill runs each `weekly_work_day`, Sunday in the template. The
-   temporary server has the database server's size. The first drill starts
-   during chapter 7 (install everything on the production servers), and
-   chapter 7 waits for the first drill to end. Chapter 8 (check that alerts
-   reach your phone and backups restore) reads the first drill's result.
+   Then write the growth limits, `growth_limits` in
+   `mmx_project_settings.yml`, with the template's defaults, which the
+   person's "go" approved. Write each pool's `server_types` for the chosen
+   provider: the type in the table above, and the next bigger type of the
+   same line. A pool is servers with the same job. Jobs servers and
+   load-balancer servers take `app001`'s type and the next bigger one. The
+   defaults and their reasons are beside the setting. Chapter 10's
+   operating guide shows each limit with its monthly cost, so the person
+   can change a limit any day.
 
-   Then the growth limits, `growth_limits` in `mmx_project_settings.yml`.
-   Write each pool's `server_types` for the chosen provider: the type in
-   the table above, and the next bigger type of the same line. A pool is
-   servers with the same job. Jobs servers and load-balancer servers take
-   `app001`'s type and the next bigger one. Read each type's monthly price
-   the same way, with its public address. Show, for each pool, its
-   `largest_number_of_servers` and the monthly cost of the pool at that
-   limit with its biggest type, and the total at every limit.
-   For the app servers, also show `smallest_number_of_servers`, 1 by
-   default, and its monthly cost: the triage agent never removes an app
-   server below it, and the second app server's test raises it to 2 later.
-   The defaults and their reasons are beside the setting.
+   Inside the limits, you add a server when a trigger arrives, and, with
+   server work, the triage agent adds or removes one. Two operating
+   procedures add capacity to the system: add a server to a pool, or
+   replace a server with a bigger server. Commit the limits.
 
-   **Ask the person** about the growth limits:
-
-   > Next, the growth limits: how many servers of each kind may be added without asking you, and how big. Here is each limit and its monthly cost: [the limits]. At every limit, the total is [the total].
-   > A server is added only after a measured sign that more capacity is needed, such as MMWatchdog warning that the app servers are busy. So you pay for a server only once you need it.
-   > Inside the limits, servers are added and removed without asking, and you get a silent report of the server and its monthly cost. Anything else waits for your approval.
-   > Do you keep these limits, or do you want other numbers or types?
-
-   Inside the limits, the coding agent adds a server when a trigger
-   arrives, and, with server work below, the triage agent adds or removes
-   one. Two operating procedures add capacity to the system: add a server
-   to a pool, or replace a server with a bigger server. Write the answer
-   and commit.
-
-   **Ask the person** what the triage agent may do by itself. The person
-   chooses one of three answers:
-
-   1. Every fix waits for the person's approval.
-   2. Routine fixes, such as restarting a service that failed or freeing
-      disk space, run at once and the person reads the report; anything
-      else waits for the person. This is the recommended start.
-   3. Routine fixes and server work: the triage agent also replaces a
-      failed app server, jobs server or load-balancer server with a new one
-      of the same type, inside the growth limits above. After a warning that
-      anyone on the team can stop, it reboots servers for installed
-      updates, adds an app server when the app servers stay busy, and
-      removes one when a whole week's load no longer needs it, between the
-      smallest and largest number above. Database servers and `util01`
-      still wait for the person. When a failed server stops the site at
-      night, the person is woken only if the replacement fails or takes
-      longer than 7 minutes.
-
-   With (1) or (2), the triage agent replaces such a server after the
-   person's one approval, and tells the person when the load calls for
-   another app server.
-
-   > The triage agent looks into each alert on `util01`. How much may it do by itself, at night too?
-   > (1) Every fix waits for your approval. (2) Routine fixes, such as restarting a service that failed, run at once and you read the report. I recommend (2) to start.
-   > (3) Routine fixes and server work: it also replaces a failed app server, and adds or removes app servers inside your limits. Database servers and `util01` still wait for you.
-   > A change of mind later is one line that I edit and apply. Which answer do you want?
-
-   Write the answer as `what_the_triage_agent_may_do_without_a_person` in
-   `mmx_project_settings.yml`: `every_fix_waits_for_a_person`,
-   `routine_fixes`, or `routine_fixes_and_server_work`. A change of mind
-   later is one line that the coding agent edits and applies with
-   `every_server`.
-
-   Create nothing until the person approves the ongoing servers, the
-   drill, the growth limits, and what the triage agent may do.
+   `what_the_triage_agent_may_do_without_a_person` keeps
+   `routine_fixes` from chapter 1. The triage agent's own sitting asks the
+   person, with the three answers and a recommendation.
 
    **Tell the person after:** no message, because step 4 starts with the
    servers' creation.
 
-   **Check:** `growth_limits` and
-   `what_the_triage_agent_may_do_without_a_person` hold the person's
-   answers in a commit, and the person approved all four.
+   **Check:** `growth_limits` holds the defaults in a commit, and the
+   monthly total is at most chapter 1's, or the person said "go" again.
 
 3. **Prepare each server's WireGuard identity on the systems desk.** Create
    `util01` first. For every initial server, generate the private key in memory with `wg genkey`.
@@ -241,9 +181,13 @@ the shared root console password's hash is missing (step 6).
    inside `vars.wireguard_network`, and no private key is in Git or in a
    file on the systems desk.
 
-4. **Create each server with the approved type and location.** The coding
-   agent runs the team's scripts, which reach the provider through the API
-   token proxy and never read the person's token file. Run
+4. **Create each server with the approved type and location.** You run
+   the team's scripts on the desk, which reach the provider through the API
+   proxy and never read the person's token. First register the desk's
+   production public key, `/etc/systems-desk/production_key.pub`, at the
+   provider through the proxy, and check that the registered key equals
+   the file. Complete the provider guide's console activation, when the
+   guide names one. Then run
    `create_a_server_at_the_provider` with
    `--server-name` (the server's name at the provider must be exactly its
    inventory name, such as `util01`: the weekly restore drill and the checks
@@ -293,7 +237,7 @@ the shared root console password's hash is missing (step 6).
 5. **Update the desk, then trust each SSH host key over WireGuard.**
    Before connecting, commit and push the new inventory, then run `sudo -n update-this-desks-wireguard-peers`.
    It prints each new server's peer it added. The desk now has every new server's WireGuard peer.
-   [Update the desk's production peers](02_set_up_the_laptop_and_the_systems_desk.md#update-the-desks-production-peers) says more.
+   [Update the desk's production peers](03_make_your_server_account_and_your_systems_desk.md#update-the-desks-production-peers) says more.
    Save each new public key and
    address in the inventory before connecting. From the repository root,
    accept the new server's host key once over wg0:
@@ -323,31 +267,28 @@ the shared root console password's hash is missing (step 6).
    `ssh -F ssh/config root@ADDRESS true` succeeds over each server's
    private `address`.
 
-6. **The shared root console password is ready.** The secrets step in
-   [chapter 4 (sign up for the outside services the Stack uses)](04_sign_up_for_the_outside_services_the_stack_uses.md)
-   made the servers' shared root console password, showed it once for the
-   password manager item `Shared root console password`, checked the saved
-   copy, and saved only its hash as `shared_root_console_password_hash`. Every
-   server shares the one password. Check with
+6. **The shared root console password is ready.** `set-up-outside-services go-live`
+   in [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps)
+   made the servers' shared root console password, saved only its hash in
+   the vault as `shared_root_console_password_hash`, and put the password
+   itself into the recovery bundle. Every server shares the one password.
+   Check with
    `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage shared_root_console_password_hash`
-   that the hash is defined; when it is not, the person runs
-   `set-up-outside-services secrets` again.
+   that the hash is defined.
 
    MMX sets root's password from `shared_root_console_password_hash` during
    chapter 7 (install everything on the production servers), using `password_hash` and `apply_password_hash: on_every_run`.
-   SSH keeps refusing passwords. Chapter 7 (install everything on the production servers) has the person test the
-   saved password at one provider console (each [provider guide](../provider_guides/README.md)
-   names its console), and records the result in `provider_console_and_backup_mmhotline_logins`.
+   SSH keeps refusing passwords. The password opens a server's console at
+   the provider when SSH fails, as each [provider guide](../provider_guides/README.md)
+   says. The person reads the password from the recovery bundle on the day
+   the person needs it.
 
    **Ask the person,** only when the hash is not defined:
 
    > Your vault has no hash of the shared root console password yet.
-   > Please run this command in your own terminal on your systems desk, in the systems repository:
-   > `. ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services secrets`
-   > The command shows the new password once. Save it in your password manager as `Shared root console password`, then tell me when the command is done.
+   > Please type `ssh desk01-secrets` in your terminal, and a code from your phone. The command makes the password by itself.
 
-   **Tell the person:** no other message, because chapter 7 has the
-   person test the password.
+   **Tell the person:** no message.
 
    **Check:** `secrets usage shared_root_console_password_hash` shows the
    hash as defined.

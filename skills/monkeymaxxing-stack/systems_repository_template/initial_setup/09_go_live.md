@@ -1,8 +1,8 @@
 # Chapter 9: Go live
 
-**When:** after chapter 8 (check that alerts reach your phone and backups
-restore), once every check of chapter 8 passed and Cloudflare shows the
-domain as "Active".
+**When:** after chapter 8's part 4 (read the backup results), once its
+checks passed and Cloudflare shows the domain as "Active". Chapter 9 ends
+the first sitting.
 
 **What this chapter does:** the app has run on the servers since
 chapter 7 (install everything on the production servers), but nobody has
@@ -11,30 +11,24 @@ Cloudflare, the way users reach the app, and MMWatchdog's checks of the app
 turn on. The first release goes out the way every later release does.
 
 **Who acts:** you, the coding agent, check the app, change the settings,
-and run the release from this systems desk. The person opens the app's
-URL, and approves the release to production when
+and run the release through the desk. The person says "release" to
+approve the first release to production, when
 `production_releases_wait_for_a_persons_approval` is `true`.
 
 **Tell the person when the chapter starts:**
 
-> Your app has run on your servers since chapter 7, but nobody has been sent to it yet.
-> Now I check that your app answers through Cloudflare, the way users reach your app, and then I turn on the checks that watch it.
-> Then I test and package a new version, using your existing CI when available. After your approval, I record the image tag and run the deployment.
-> Every later release follows the same steps.
+> I am checking your app through Cloudflare, the way your users reach it.
 
 ## Before you start
 
-- **The messages to the person.** Each step says what to tell or ask the
-  person, in quote blocks: "Tell the person first" before the step, "Ask
-  the person" when the person must act or approve, and "Tell the person
-  after" with the result and its link. Say each message when its step
-  comes, in your own words, with the team's own names and links.
+- **The messages to the person.** Give each step's message as one short
+  line, except the screen of step 2, which the person reads in full.
 - **The release has its own messages.** For the release, follow [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release):
   each of its steps says what to explain, and when to ask for approval.
 
 ## Steps
 
-1. **The public host names.** From the desk, as `coding-agent`, confirm each
+1. **The public host names.** From the laptop, confirm each
    app's health URL answers HTTP 200 through Cloudflare at the app's public
    host name, the way users reach it: `curl -fsS https://shop.example.com/up`.
    A connector is `cloudflared`, the program on the app server that
@@ -60,31 +54,49 @@ URL, and approves the release to production when
    commit, push, and run `every_server` on `util01` (the
    [Making a change](../AGENTS.md#making-a-change) steps). Then
    `public_sites` exists on `util01`, and an app that stops answering sends
-   an `sos` alert that wakes the person on call.
+   an `sos` alert. The alert wakes the person on call only after the alerts
+   sitting.
 
-   **Ask the person:** give the person the URL to open too.
-
-   > Your app answers through Cloudflare at https://shop.example.com/up. Please open https://shop.example.com in your browser: you see your app's page, as your users will.
-   > Tell me when you see the page.
-
-   **Tell the person after:**
-
-   > MMWatchdog now checks your app at https://shop.example.com. If your app stops answering, the person on call is woken.
+   **Tell the person:** no message, because step 2's screen gives the
+   result.
 
    **Check:** each health URL answers HTTP 200 through Cloudflare, each app
    server has a healthy connector, and `public_sites` exists on `util01`.
 
-2. **The first release,** by [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release),
+2. **The app is live: tell the person, and ask for the first release.**
+   Show the screen, with the checks that passed:
+
+   ```text
+   Your app is live:  https://example.com
+
+   What I checked:
+     - The site answers, through Cloudflare.
+     - Backups run, and I restored one to a test server.
+     - Every server reports in.
+
+   YOUR SITE HAS NO PHONE ALERTS YET.  Say "set up alerts" to add them.  It takes about 15 minutes.
+
+   Say "release" to put your app's newest version live.
+   ```
+
+   The person's "release" is the approval that
+   [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release)
+   asks for. Ask nothing else about the first release. Check CI yourself,
+   with `gh run watch` when `gh` is signed in. Without `gh`, `deploy`'s
+   image pull proves the image. Never ask the person whether CI is green.
+
+   **Check:** the person said "release".
+
+3. **The first release,** by [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release),
    follows the agent-run deployment used for every later release.
    The first release needs an image the app servers do not run yet,
    so the first release proves a real version switch.
    Use one of the app's own changes, or, when none waits, make a small
    change that users do not see, such as a line in the app's README, and
    ask nothing about it. Commit and push the change to the app's main
-   branch as "A release" describes. The person's one question is step 4's,
-   whether to release to production, when
-   `production_releases_wait_for_a_persons_approval` is `true`; show the
-   change there.
+   branch from the app's folder on the laptop, with the person's own Git
+   login, as "A release" describes. The person's "release" in step 2 is
+   the one approval.
    The new app commit must follow the app commit whose image chapter 7 (install everything on the production servers)
    started.
 
@@ -120,19 +132,19 @@ URL, and approves the release to production when
    **Check:** `deploy` passed, with its check through the app's public host
    name.
 
-3. **Inspect and verify.** Read MMX's deployment result on `util01` and
+4. **Inspect and verify.** Read MMX's deployment result on `util01` and
    compare every live app release with the selected tag. Follow
    [Memory for both releases](../operating_procedures/deploy_and_roll_back_an_app_release.md#memory-for-both-releases)
    when a leaking release needs an approved rollback without the memory
    check. Every deployment still records the selected tag in a commit.
 
-   **Tell the person:** no message, because step 2's message gave the
+   **Tell the person:** no message, because step 3's message gave the
    result.
 
    **Check:** every live app release equals the selected tag, and a commit
    records the tag.
 
-4. **Note the waiting restore drill check queries.** Chapter 3 (get your app ready to deploy) left out each
+5. **Note the waiting restore drill check queries.** Chapter 2 (get your app ready to deploy) left out each
    check query that needs data people create, such as a page view or an
    order from the last two days, because a new system holds no such data.
    Do not add them now. The checklist's improvement item
@@ -143,20 +155,19 @@ URL, and approves the release to production when
 
    **Tell the person after,** which also ends the chapter:
 
-   > Your site is live, and the checks watch it.
-   > Once real customers create data, such as orders, I add checks to the weekly restore drill that the restored copy holds that data.
-   > Next, in chapter 10, I write down how to run your system.
+   > Your first release is live. Your setup's first sitting is done.
+   > When you are ready, say "set up alerts", so a broken site wakes you.
 
    **Check:** `restore_drill_checks_data_people_create` waits for its
    trigger in the checklist.
 
 ## If something is different
 
-- **CI builds the image** (step 2): inspect CI's credentials, as step 2
+- **CI builds the image** (step 3): inspect CI's credentials, as step 3
   says.
-- **With `staging01`** (step 2): the first release goes to `staging01`
+- **With `staging01`** (step 3): the first release goes to `staging01`
   first.
-- **A leaking release needs a rollback** (step 3): follow
+- **A leaking release needs a rollback** (step 4): follow
   [Memory for both releases](../operating_procedures/deploy_and_roll_back_an_app_release.md#memory-for-both-releases).
 
 ## Why the chapter works this way
@@ -170,4 +181,5 @@ copy holds the data people create. A query for recent data, such as an
 order from the last two days, also fails when a restore brings back an
 old database.
 
-Next: [Chapter 10: Write down how to run your system](10_write_down_how_to_run_your_system.md).
+Next, in a later sitting: [Chapter 10: Write down how to run your system](10_write_down_how_to_run_your_system.md).
+The alerts sitting comes first: [chapter 8, parts 1 to 3](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-1-add-mmhotlines-alerting-settings).

@@ -337,5 +337,5 @@ All systems work starts on the desk, as `coding-agent`.
 Direct production runs from the desk use `sudo -n -u servers-mmx run-mmx-on-the-servers`, including util01 recovery and reboot.
 The button reads pushed `main`, so commit, pull with rebase, report incoming changes, and push before using the button.
 The person alone manages `systems_desk` from the person's checkout with the preserved SSH agent socket.
-Update the desk's `wg0` peers with `sudo -n update-this-desks-wireguard-peers` after a pushed change that adds, replaces or removes a server, before attempting SSH to that server ([Update the desk's production peers](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#update-the-desks-production-peers)).
+Update the desk's `wg0` peers with `sudo -n update-this-desks-wireguard-peers` after a pushed change that adds, replaces or removes a server, before attempting SSH to that server ([Update the desk's production peers](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#update-the-desks-production-peers)).
 The laptop has no inventory copy after bootstrap and uses only a desk-specific `--wireguard-config` file.
