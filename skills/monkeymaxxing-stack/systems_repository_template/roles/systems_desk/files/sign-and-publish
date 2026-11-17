@@ -4,10 +4,13 @@
 # the laptop and pushes a branch to its checkout on this desk, then runs:
 #     git push desk01-agent:systems_repository HEAD:refs/heads/BRANCH
 #     ssh desk01-agent sign-and-publish BRANCH
-# It brings main up to main at the Git host, rebases BRANCH onto main with
-# every commit signed again here (git rebase --force-rebase --gpg-sign),
-# fast-forwards main, pushes main to the Git host, and deletes BRANCH. The
-# laptop's author stays on each commit; this desk is the committer.
+# It brings main up to main in the team's main copy, rebases BRANCH onto
+# main with every commit signed again here (git rebase --force-rebase
+# --gpg-sign), fast-forwards main, pushes main to the main copy, and
+# deletes BRANCH. The laptop's author stays on each commit; this desk is
+# the committer. The main copy is origin, the bare repository on util01.
+# Before util01 exists the checkout has no origin: this checkout is the
+# main copy then, and publishing ends at the fast-forward.
 # On a rebase conflict it names the files and changes nothing: BRANCH and
 # main stay as they were.
 # Reason: MMHotline and util01 trust only commits signed by a key in
@@ -32,17 +35,21 @@ git rev-parse --verify --quiet "refs/heads/$branch^{commit}" > /dev/null ||
     stop "The desk has no branch $branch. Push it first: git push desk01-agent:systems_repository HEAD:refs/heads/$branch. Nothing changed."
 
 main_before=$(git rev-parse main)
-# main at the Git host, when it has one yet: before the first push there is
-# none, and this desk's main is the start.
-if git ls-remote --exit-code --heads origin main > /dev/null; then
-    git fetch --quiet --no-tags origin main
-    published=$(git rev-parse FETCH_HEAD)
-    git merge-base --is-ancestor main "$published" ||
-        stop "main on this desk has commits that main at the Git host does not have: git log $published..main shows them. Nothing changed."
-    git merge --quiet --ff-only "$published"
-else
-    status=$?
-    [ "$status" = 2 ] || stop "The Git host did not answer (git ls-remote exited $status). Nothing changed."
+has_origin=false
+git remote get-url origin > /dev/null 2>&1 && has_origin=true
+# main in the main copy, when it has one yet: an empty main copy, such as
+# a rebuilt util01's, has none, and this desk's main is the start.
+if "$has_origin"; then
+    if git ls-remote --exit-code --heads origin main > /dev/null; then
+        git fetch --quiet --no-tags origin main
+        published=$(git rev-parse FETCH_HEAD)
+        git merge-base --is-ancestor main "$published" ||
+            stop "main on this desk has commits that main in the main copy on util01 does not have: git log $published..main shows them. Nothing changed."
+        git merge --quiet --ff-only "$published"
+    else
+        status=$?
+        [ "$status" = 2 ] || stop "The main copy on util01 did not answer (git ls-remote exited $status). Nothing changed."
+    fi
 fi
 put_main_back() { git checkout --quiet main; git reset --quiet --hard "$main_before"; }
 base=$(git rev-parse main)
@@ -70,11 +77,16 @@ if git log --format=%G? "main..$branch" | grep -qv '^G$'; then
     stop "A rebased commit has no good signature of this desk's production key. Check that ssh-add -l lists it with SSH_AUTH_SOCK=$SSH_AUTH_SOCK, and that root_ssh_public_keys holds it. Nothing changed."
 fi
 git merge --quiet --ff-only "$branch"
-if ! git push --quiet origin main; then
-    put_main_back
-    stop "The Git host refused the push: main there moved, or the Git host does not let this desk in yet. main on this desk is as it was; $branch holds the signed commits. Run sign-and-publish $branch again."
+if "$has_origin"; then
+    if ! git push --quiet origin main; then
+        put_main_back
+        stop "The main copy on util01 refused the push: main there moved, or util01 does not let this desk in. main on this desk is as it was; $branch holds the signed commits. Run sign-and-publish $branch again."
+    fi
+    git branch --quiet --set-upstream-to=origin/main main 2> /dev/null || true
+    where='in the main copy on util01'
+else
+    where='on this desk, the main copy until util01 exists'
 fi
-git branch --quiet --set-upstream-to=origin/main main 2> /dev/null || true
 git branch --quiet -d "$branch"
-printf 'Published %s commits on main, signed with this desk'"'"'s production key. main is at %s at the Git host:\n' "$count" "$(git rev-parse --short HEAD)"
+printf 'Published %s commits on main, signed with this desk'"'"'s production key. main is at %s %s:\n' "$count" "$(git rev-parse --short HEAD)" "$where"
 git log --format='  %h %s (%an)' "$base..main"

@@ -79,7 +79,6 @@ fleet_stages:
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           allowed_laptops: "{{ .vars.allowed_laptops }}"
           systems_desk_laptop_addresses: "{{ .vars.private_ip_ranges.systems_desk_laptops }}"
-          systems_repository: "{{ .vars.systems_repository }}"
           root_ssh_public_keys: "{{ .vars.root_ssh_public_keys }}"
           provider_api_url: "{{ .vars.systems_desk_provider_api_url }}"
           provider_api_authentication: "{{ .vars.systems_desk_provider_api_authentication }}"

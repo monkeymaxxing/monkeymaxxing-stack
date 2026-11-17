@@ -7,21 +7,21 @@ prepares and pushes the one-line inventory commit,
 everyone_locked_out_except_desk: DESK; only the person starts a lock-out
 or its undo.
 
-1. It pulls main from the Git host into the desk's own copy of the systems
-   repository, the one the desk review uses. A break-in must not wait for
-   the Git host: when the pull fails, the lock-out button says why and uses
-   the desk's copy as it is.
+1. It pulls main from the main copy on util01, through the coding agent's
+   checkout, into the desk's own copy of the systems repository, the one
+   the desk review uses. A break-in must not wait for util01: when the pull
+   fails, the lock-out button says why and uses the desk's copy as it is.
 2. It shows every server of the inventory, one line each, and the desk that
    keeps access, and asks the person to type yes, in the person's own
    terminal. Reason: the lock-out peers every server with the servers the
-   inventory names, so a server that an outside attacker pushed to the Git
-   host would join the private network through the lock-out itself. A plain
+   inventory names, so a server that an intruder pushed to the main copy
+   would join the private network through the lock-out itself. A plain
    list that the person reads at each press shows such a server.
 3. On the undo, the press after everyone_locked_out_except_desk is removed,
    it compares the keys it lets in with the ones the last desk review
    recorded, and asks when they changed: the undo installs
    root_ssh_public_keys and triage_ssh_public_key from the pulled settings on
-   every server, so a key pushed to the Git host would be let in by the undo
+   every server, so a key pushed to the main copy would be let in by the undo
    itself.
 4. It runs MMX as root from REVIEWED, the root-owned copies that the
    person's last desk review installed: the playbook, the two lock-out roles,
@@ -29,8 +29,8 @@ or its undo.
    installs on the servers from outside its roles: the servers' WireGuard
    peers, the triage user's sudo rules and MMHotline's settings. Only data
    comes from the pulled repository: the inventory, the servers' host keys,
-   the settings and the vault. Reason: an outside attacker who can push to
-   the Git host must not get root on this desk, or on every server, through
+   the settings and the vault. Reason: an intruder who can push to the main
+   copy, such as through util01, must not get root on this desk, or on every server, through
    the lock-out; a pushed change to what the lock-out runs or installs
    reaches root only through the person's desk review.
 
@@ -284,7 +284,7 @@ def review_the_keys_it_lets_in(desk_review, settings, inventory):
         print('The keys the lock-out button lets in changed since your last desk review (%s).' % commit)
     print('With everyone_locked_out_except_desk removed, the lock-out button lets in, on every server, each key in')
     print('root_ssh_public_keys as root, and triage_ssh_public_key as the triage user from util01.')
-    print('Anyone who can push to your Git host can add a key, and the undo would let that key in.')
+    print('Anyone who can push to your main copy on util01 can add a key, and the undo would let that key in.')
     print('Lines with - are keys your reviewed settings had; lines with + are keys the lock-out button would let in now.')
     print('Each line shows the key\'s comment and its fingerprint, as ssh-keygen -l shows it.')
     print(flush=True)

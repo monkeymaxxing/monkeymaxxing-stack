@@ -82,7 +82,7 @@ inputs:
   util01_private_page_host_names:           # MMHotline dashboard hostname
     type: mapping
     required: true
-  systems_repository:                       # ssh_url and git_host_ssh_known_hosts_lines
+  systems_repository:                       # main_copy_path_on_util01
     type: mapping
     required: true
   triage_agent_coding_agent:                # vars.triage_agent_coding_agent: claude_code or codex
@@ -224,15 +224,14 @@ node_tasks:
   # Two SSH keys, each made on util01, so the private half never leaves it.
   # The coding agent reads each public_key from the first run's results.
   # The agent commits the mmhotline user's public key in root_ssh_public_keys
-  # in mmx_project_settings.yml. The person also registers the mmhotline
-  # user's public key at the Git host as a deploy key with write access
-  # to the systems repository. The agent commits the triage agent's public
+  # in mmx_project_settings.yml. The agent commits the triage agent's public
   # key as triage_ssh_public_key in mmx_project_settings.yml.
   #
   # The mmhotline user's key logs in as root on every server, and signs its
-  # commits. The mmhotline user's SSH key also pushes to the Git host.
-  # A separate Git-host key for mmhotline would protect nothing, because
-  # whoever controls the mmhotline account already holds root on every server.
+  # commits. The same key pulls and pushes the main copy of the systems
+  # repository, as root@127.0.0.1 on util01 itself. A separate key or
+  # account for the main copy would protect nothing, because whoever
+  # controls the mmhotline account already holds root on every server.
   - id: ssh_key_of_the_mmhotline_user
     ssh_key_pair:
       for_user_account: mmhotline
@@ -241,7 +240,7 @@ node_tasks:
       key_comment_when_created: util01, the mmhotline user
   # The triage agent's key logs in as the read-only triage user on every
   # server and signs the agent's commits. The triage agent's key reaches
-  # no Git host: MMHotline pushes the agent's commits itself.
+  # no copy of the repository: MMHotline pushes the agent's commits itself.
   - id: ssh_key_of_the_triage_agent
     ssh_key_pair:
       for_user_account: mmhotline-triage-agent
@@ -249,10 +248,18 @@ node_tasks:
       key_type: ed25519
       key_comment_when_created: util01, the triage agent
 
-  - id: trust_the_ssh_host_keys_of_the_git_host
+  # The mmhotline user's Git reaches the main copy at 127.0.0.1, util01
+  # itself, so it trusts util01's own SSH host keys for that address.
+  # Reading them from /etc/ssh on util01 is as trustworthy as util01.
+  - id: read_the_ssh_host_keys_of_util01
+    shell:
+      script: for key in /etc/ssh/ssh_host_*_key.pub; do printf '127.0.0.1 %s\n' "$(cut -d ' ' -f 1,2 "$key")"; done
+      dryrun: for key in /etc/ssh/ssh_host_*_key.pub; do printf '127.0.0.1 %s\n' "$(cut -d ' ' -f 1,2 "$key")"; done
+      changed_when: false
+  - id: trust_the_ssh_host_keys_of_util01_for_the_main_copy
     file:
       path: /var/lib/mmhotline/.ssh/known_hosts
-      template: files/git_host_known_hosts
+      content: "{{ .node_tasks.read_the_ssh_host_keys_of_util01.stdout }}"
       owner: mmhotline
       group: mmhotline
       permissions_mode: "0644"
@@ -411,6 +418,29 @@ node_tasks:
           script: visudo -c -f "$NEW_FILE"
           dryrun: visudo -c -f "$NEW_FILE"
           env: {NEW_FILE: "{{ .new_file.path }}"}
+  # The team's main copy of the systems repository: a bare repository,
+  # owned by root and closed to every other user, which desks and the
+  # mmhotline user push to and pull from as root over SSH (the keys in
+  # root_ssh_public_keys). It refuses a push that rewrites main and a
+  # branch deletion, and its reflog records every change to main with its
+  # time, so a break-in can be traced with util01's sshd journal
+  # (operating_procedures/respond_to_a_break_in.md). The role makes it
+  # empty; the first desk pushes main to it after the first run
+  # (initial_setup/07_install_everything_on_the_production_servers.md), and
+  # after a rebuild of util01 (operating_procedures/rebuild_the_utility_server_util01.md).
+  - id: create_the_main_copy_of_the_systems_repository
+    shell:
+      script: |
+        set -eu
+        git init --quiet --bare --initial-branch=main "$MAIN_COPY"
+        git -C "$MAIN_COPY" config receive.denyNonFastForwards true
+        git -C "$MAIN_COPY" config receive.denyDeletes true
+        git -C "$MAIN_COPY" config core.logAllRefUpdates always
+        chmod 0700 "$MAIN_COPY"
+      dryrun: printf 'would create the empty main copy of the systems repository, %s\n' "$MAIN_COPY"
+      env:
+        MAIN_COPY: "{{ .inputs.systems_repository.main_copy_path_on_util01 }}"
+      skip_if_this_path_exists: "{{ .inputs.systems_repository.main_copy_path_on_util01 }}"
   # util01's copy of the systems repository belongs to mmhotline. MMHotline, the
   # helper run_mmx_on_util01 and the scheduled jobs share the copy and
   # systems_repository.lock. After the clone, only MMHotline moves the
@@ -431,12 +461,15 @@ node_tasks:
       run_as_user_account: mmhotline
       run_from_directory: /var/lib/mmhotline
       env:
-        SYSTEMS_REPOSITORY_SSH_URL: "{{ .inputs.systems_repository.ssh_url }}"
+        SYSTEMS_REPOSITORY_SSH_URL: "root@127.0.0.1:{{ .inputs.systems_repository.main_copy_path_on_util01 }}"
       skip_if_this_path_exists: /var/lib/mmhotline/systems_repository
+      # Skipped until a desk pushed main to the main copy (exit 2), and
+      # while root on util01 does not let the mmhotline user's key in yet
+      # (exit 128): the key reaches root_ssh_public_keys after the first run.
       run_only_if_this_command_succeeds:
         script: git ls-remote --quiet --exit-code "$SYSTEMS_REPOSITORY_SSH_URL" HEAD > /dev/null
         true_exit_codes: [0]
-        false_exit_codes: [128]           # the Git host refuses the key, or can't be reached
+        false_exit_codes: [2, 128]
 
   # MMHotline notices a pushed commit within minutes, not only at its next
   # run or the next nightly job: this job only asks MMHotline to check the

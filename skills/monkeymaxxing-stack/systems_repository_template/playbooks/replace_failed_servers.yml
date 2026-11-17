@@ -65,7 +65,7 @@ fleet_stages:
             INVENTORY_GROUPS: "{{ .inventory.groups }}"
             PRIVATE_IP_RANGES: "{{ .vars.private_ip_ranges }}"
             EVERYONE_LOCKED_OUT_EXCEPT_DESK: "{{ .vars.everyone_locked_out_except_desk }}"
-            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "root@127.0.0.1:{{ .vars.systems_repository.main_copy_path_on_util01 }}"
             SERVER_IMAGE: "{{ .vars.server_image }}"
             UTIL01_SSH_KEY_NAME: "{{ .vars.util01_ssh_key_name_at_the_provider }}"
             UTIL01_WIREGUARD_PUBLIC_KEY: "{{ .inventory.nodes.util01.vars.wireguard_public_key }}"

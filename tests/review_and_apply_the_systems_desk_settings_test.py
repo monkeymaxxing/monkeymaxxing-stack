@@ -253,13 +253,12 @@ class FirstDeskReview(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         root = Path(self.directory.name).resolve()
         environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull}
-        checkout = root/'home/coding-agent/systems_repository'
+        checkout = self.checkout = root/'home/coding-agent/systems_repository'
         shutil.copytree(T, checkout, symlinks=True, ignore=shutil.ignore_patterns('.mmx', '__pycache__'))
         for arguments in (['init', '--quiet', '-b', 'main'], ['add', '--all'],
                           ['-c', 'user.name=A', '-c', 'user.email=a@example.com', '-c', 'commit.gpgsign=false',
                            'commit', '--quiet', '-m', 'Start the systems repository on desk01']):
             subprocess.run(['git', *arguments], cwd=checkout, check=True, capture_output=True, env=environment)
-        (root/'repository-remote').write_text('git@github.com:example/systems.git\n')
         self.desk_copy = root/'var/lib/systems-desk/systems_repository'
         yaml = type(sys)('yaml')
         # The settings and the inventory as the review reads them: the test
@@ -268,7 +267,7 @@ class FirstDeskReview(unittest.TestCase):
                                        if 'project_name:' in text else {'nodes': CONNECTIONS})
         for target, name, value in [(DESK_REVIEW, 'RECORD_DIRECTORY', root/'record'), (DESK_REVIEW, 'DESK_COPY', self.desk_copy),
                                     (DESK_REVIEW, 'CODING_AGENT_CHECKOUT', checkout), (DESK_REVIEW, 'MMX', self.mmx),
-                                    (DESK_REVIEW, 'REPOSITORY_REMOTE', root/'repository-remote'), (DESK_REVIEW, 'GIT', 'git'),
+                                    (DESK_REVIEW, 'CODING_AGENT_GIT', ['git']), (DESK_REVIEW, 'CODING_AGENT_GIT_ENVIRONMENT', environment), (DESK_REVIEW, 'GIT', 'git'),
                                     (DESK_REVIEW, 'GIT_ENVIRONMENT', environment), (os, 'geteuid', lambda: 0), (os, 'chown', lambda *a: None),
                                     (DESK_REVIEW.socket, 'gethostname', lambda: 'desk01')]:
             patcher = patch.object(target, name, value)
@@ -282,8 +281,10 @@ class FirstDeskReview(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(DESK_REVIEW.record_the_first_desk_review(), 2)
             self.assertEqual(DESK_REVIEW.record_the_first_desk_review(), 0, 'a desk with a review records nothing new')
-        remote = subprocess.run(['git', 'remote', 'get-url', 'origin'], cwd=self.desk_copy, text=True, capture_output=True)
-        self.assertEqual(remote.stdout.strip(), 'git@github.com:example/systems.git')
+        # Before util01 exists, the coding agent's checkout is the main copy.
+        heads = [subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=where, text=True, capture_output=True).stdout
+                 for where in (self.desk_copy, self.checkout)]
+        self.assertEqual(heads[0], heads[1])
         self.assertEqual(self.desk_copy.stat().st_mode & 0o777, 0o700)
         view, _ = DESK_REVIEW.what_the_desk_playbook_does(self.desk_copy)
         self.assertTrue(any('write_the_desk_sshd_policy' in line for line in view))

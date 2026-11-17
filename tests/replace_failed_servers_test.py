@@ -477,7 +477,7 @@ class ReplaceFailedServers(unittest.TestCase):
         result, commands = self.run_program([node('app001', 'silent', 120), node('db01')],
                                             DESK_PUSHES_ONCE=str(self.root/'desk_pushed'), DESK_CLONE=str(desk))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('the Git host refused push 1 of 3 to main', result.stdout)
+        self.assertIn('the main copy refused push 1 of 3 to main', result.stdout)
         subjects = git(self.origin, 'log', '--format=%s', 'main').splitlines()
         self.assertEqual(subjects[:2], ['Replace app001 with app002', 'A desk change'])
         self.assertIn('A desk change.', self.main_at_the_git_host('README.md'))
@@ -488,7 +488,7 @@ class ReplaceFailedServers(unittest.TestCase):
         hook.write_text('#!/bin/sh\necho "refused by the test" >&2\nexit 1\n'); hook.chmod(0o755)
         result, commands = self.run_program([node('app001', 'silent', 120), node('db01')])
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertEqual(result.stdout.count('the Git host refused push'), 3, result.stdout)
+        self.assertEqual(result.stdout.count('the main copy refused push'), 3, result.stdout)
         self.assertEqual([c for c in commands if c[0] == 'destroy_a_server_at_the_provider'],
                          [['destroy_a_server_at_the_provider', '--server-id', 'created-app002']])
         self.assertIn(['ssh', '-F', 'ssh/config', 'root@10.20.0.1', 'wg', 'set', 'wg0', 'peer', NEW_KEY, 'remove'], commands)

@@ -206,7 +206,7 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
                 result, commands = self.run_job(job)
                 self.assertEqual(result.returncode, 1)
                 self.assertEqual(self.asked(commands), [])
-                self.assertIn('cannot read main at the Git host; nothing ran', result.stderr)
+                self.assertIn('cannot read main in the main copy of the systems repository; nothing ran', result.stderr)
 
     def test_a_checkout_behind_the_trusted_commit_runs_nothing(self):
         # Only MMHotline moves the checkout. Here it could not, such as for a

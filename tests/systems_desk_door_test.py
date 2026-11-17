@@ -6,7 +6,7 @@
 The door: renders the desk role's sshd files with `mmx explain` on a copy
 of the template, and asks a real sshd (`sshd -T`) what each login from a
 laptop gets, before and after the lock. sign-and-publish: runs the command
-on real Git repositories, with a stand-in Git host (a bare repository) and
+on real Git repositories, with a stand-in main copy on util01 (a bare repository) and
 a real SSH agent that holds a stand-in production key.
 """
 import json
@@ -195,7 +195,7 @@ class SignAndPublish(unittest.TestCase):
         public = (root/'production_key.pub').read_text().split()
         (root/'allowed-signers').write_text('root_ssh_public_keys %s %s\n' % (public[0], public[1]))
         (root/'gitconfig').write_text('[gpg "ssh"]\n\tallowedSignersFile = %s\n' % (root/'allowed-signers'))
-        # The Git host, the desk checkout as the bootstrap leaves it, and the laptop.
+        # The main copy on util01, the desk checkout with util01 as origin, and the laptop.
         self.origin, self.desk, self.laptop = root/'origin.git', root/'systems_repository', root/'laptop'
         self.git(root, 'init', '--quiet', '--bare', '-b', 'main', str(self.origin))
         self.git(root, 'init', '--quiet', '-b', 'main', str(self.desk))
@@ -255,7 +255,7 @@ class SignAndPublish(unittest.TestCase):
         self.assertEqual(self.git(self.desk, 'branch', '--list', 'work'), '', 'the branch is deleted')
         self.assertEqual(self.git(self.desk, 'rev-parse', 'main'), self.git(self.origin, 'rev-parse', 'main'))
 
-    def test_commits_that_reached_the_git_host_meanwhile_come_first(self):
+    def test_commits_that_reached_the_main_copy_meanwhile_come_first(self):
         other = self.root/'other'
         self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
         (other/'notes.md').write_text('a note\n')
@@ -276,16 +276,26 @@ class SignAndPublish(unittest.TestCase):
         self.git(other, 'push', '--quiet', 'origin', 'main')
         self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
         before = {name: self.git(repository, 'rev-parse', ref) for name, repository, ref in
-                  [('desk main', self.desk, 'main'), ('branch', self.desk, 'work'), ('git host', self.origin, 'main')]}
+                  [('desk main', self.desk, 'main'), ('branch', self.desk, 'work'), ('main copy', self.origin, 'main')]}
         result = self.sign_and_publish()
         self.assertEqual(result.returncode, 1)
         self.assertIn('stopped on a conflict in: inventory.yml', result.stderr)
         self.assertIn('Nothing changed', result.stderr)
         after = {name: self.git(repository, 'rev-parse', ref) for name, repository, ref in
-                 [('desk main', self.desk, 'main'), ('branch', self.desk, 'work'), ('git host', self.origin, 'main')]}
+                 [('desk main', self.desk, 'main'), ('branch', self.desk, 'work'), ('main copy', self.origin, 'main')]}
         self.assertEqual(after, before)
         self.assertEqual(self.git(self.desk, 'status', '--porcelain'), '')
         self.assertEqual(self.git(self.desk, 'symbolic-ref', '--short', 'HEAD').strip(), 'main')
+
+    def test_before_util01_exists_the_desks_main_is_the_main_copy_and_nothing_is_pushed(self):
+        self.git(self.desk, 'remote', 'remove', 'origin')
+        self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
+        result = self.sign_and_publish()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('on this desk, the main copy until util01 exists', result.stdout)
+        self.assertEqual(self.git(self.desk, 'log', '--format=%G? %s', 'main').splitlines(),
+                         ['G Add a server', 'G Start the systems repository on desk01'])
+        self.assertEqual(len(self.published()), 1, 'nothing reached the bare repository')
 
     def test_a_branch_that_was_not_pushed_or_main_is_refused(self):
         for branch, said in [('nothing-pushed', 'The desk has no branch nothing-pushed'), ('main', 'not main')]:

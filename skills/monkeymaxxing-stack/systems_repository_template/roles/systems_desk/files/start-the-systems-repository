@@ -14,13 +14,15 @@ repository from the laptop into the coding agent's checkout,
 3. makes the vault, secrets_vault.age, which holds its own passphrase as
    mmx_vault_passphrase, so util01 opens it for its runs;
 4. makes the checkout a Git repository on main that signs every commit with
-   the production key through the relay socket, with origin at the Git
-   host, and makes the first signed commit.
+   the production key through the relay socket, and makes the first signed
+   commit.
 
-It pushes nothing: the Git host lets this desk in only after the person
-registers the production public key there, which the bootstrap prints at
-its end. A rerun skips each step that is done, and does nothing once the
-first commit exists. Exit codes: 0 nothing to do, 2 changed, 1 stopped.
+It pushes nothing, and the checkout gets no origin: until util01 exists,
+this checkout is the team's main copy of the systems repository. Once
+util01 runs, the coding agent pushes main to the main copy on util01 and
+makes that origin (initial_setup/07_install_everything_on_the_production_servers.md).
+A rerun skips each step that is done, and does nothing once the first
+commit exists. Exit codes: 0 nothing to do, 2 changed, 1 stopped.
 --dryrun says what it would do and changes nothing.
 
 It starts a new team's repository. A desk that joins a team's existing
@@ -37,7 +39,6 @@ import sys
 
 REPOSITORY = Path('/home/coding-agent/systems_repository')
 PUBLIC_KEY = Path('/etc/systems-desk/production_key.pub')
-REMOTE = Path('/etc/systems-desk/repository-remote')
 VAULT_PASSPHRASE = Path('/etc/systems-desk/vault-passphrase')
 MMX = '/usr/local/bin/mmx'
 VAULT = 'secrets_vault.age'
@@ -143,11 +144,6 @@ def main(arguments):
             'the vault, and the first signed commit' % REPOSITORY)
         return 2
     import yaml  # python3-yaml, which the desk role installs
-    settings = yaml.safe_load((REPOSITORY/'mmx_project_settings.yml').read_text()) or {}
-    remote = REMOTE.read_text().strip()
-    if remote != ((settings.get('vars') or {}).get('systems_repository') or {}).get('ssh_url'):
-        raise Stop('systems_repository.ssh_url in mmx_project_settings.yml differs from the remote the desk role pinned, %s.'
-                   % remote)
 
     line = key_line(desk, person)
     for name, change in [('mmx_project_settings.yml', lambda text: set_root_ssh_public_keys(text, line, desk)),
@@ -180,17 +176,13 @@ def main(arguments):
     for key, value in [('gpg.format', 'ssh'), ('user.signingkey', str(PUBLIC_KEY)), ('commit.gpgsign', 'true'),
                        ('user.name', 'coding-agent on %s' % desk), ('user.email', 'coding-agent@%s' % desk)]:
         git('config', key, value)
-    if git('remote', 'get-url', 'origin', check=False).returncode:
-        git('remote', 'add', 'origin', remote)
-    else:
-        git('remote', 'set-url', 'origin', remote)
     git('add', '--all')
     git('commit', '--quiet', '-m', 'Start the systems repository on %s' % desk)
     if '\ngpgsig ' not in git('cat-file', 'commit', 'HEAD').stdout:
         raise Stop('The first commit is not signed. Check that ssh-add -l lists the production key with '
                    'SSH_AUTH_SOCK=/run/desk-ssh-agent/socket.')
-    say('Made the first commit, %s, signed with this desk\'s production key. It reaches the Git host once the person '
-        'registers the key there.' % git('rev-parse', '--short', 'HEAD').stdout.strip())
+    say('Made the first commit, %s, signed with this desk\'s production key. This checkout is the team\'s main copy '
+        'until util01 exists.' % git('rev-parse', '--short', 'HEAD').stdout.strip())
     return 2
 
 

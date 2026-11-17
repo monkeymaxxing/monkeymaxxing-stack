@@ -7,8 +7,11 @@ fails:
     sudo -n update-this-desks-wireguard-peers
 
 It fetches pushed main as servers-mmx, the way run-mmx-on-the-servers does,
-with the desk's SSH agent relay and the desk's own Git settings, never as
-root. It runs nothing from the repository: it reads only
+from the coding agent's checkout on this desk, never as root: main of the
+main copy on util01 as the checkout last fetched it (origin/main), or the
+checkout's own main before util01 exists. Reading the checkout, not util01,
+lets the desk learn a new or rebuilt util01's WireGuard peer, which it
+needs before it can reach util01 at all. It runs nothing from the repository: it reads only
 inventories/servers.yml, as data, and checks each value before root uses it.
 It writes the server peers to SERVER_PEERS, which only this command writes,
 and sets the same peers on the running interface wg0, keeping the other
@@ -44,8 +47,8 @@ the table next loads; the address then answers nothing on that port.
 
 Reason for a fixed program that the desk review installs: it runs as root,
 so a change to it reaches root only through the person's desk review, while
-the servers it reads come from the Git host. Reason for the checks: anyone
-who can push to the Git host could otherwise give a server a laptop's key
+the servers it reads come from pushed main. Reason for the checks: anyone
+who can push to the main copy could otherwise give a server a laptop's key
 or address and cut the person off from their desk, or take an address
 inside the desks' or the laptops' blocks.
 
@@ -64,7 +67,7 @@ MMX would cut the desk, its own controller, off from the servers. The
 laptops come from the reviewed run, ALLOWED_LAPTOPS_JSON being the desk's
 allowed_laptops, because wg0's file may not have SERVER_PEERS_LINE yet. When
 pushed main cannot be fetched, such as at a new desk's bootstrap, before the
-Git host knows the desk's key, SERVER_PEERS stays as it is. The coding
+checkout holds a commit, SERVER_PEERS stays as it is. The coding
 agent's sudo rule allows only the empty argument, so it never reaches this
 form.
 """
@@ -86,7 +89,8 @@ NOTRACK_ADDRESSES = Path('/etc/systems-desk/wireguard-notrack-addresses.nft')
 # The line in WG0_CONF, from roles/systems_desk/files/wireguard_wg0.conf,
 # above which the interface and the laptop peers are.
 SERVER_PEERS_LINE = '# Server peers, copied from /etc/systems-desk/wireguard-server-peers.conf'
-REPOSITORY_REMOTE = Path('/etc/systems-desk/repository-remote')
+# The coding agent's checkout, which holds pushed main (run-mmx-on-the-servers).
+DESK_CHECKOUT = '/home/coding-agent/systems_repository'
 # servers-mmx's own bare repository: only the fetched commits, no checkout.
 FETCH_REPOSITORY = '/var/lib/servers-mmx/wireguard-peers.git'
 FETCH_ACCOUNT = 'servers-mmx'
@@ -107,27 +111,29 @@ class Stop(Exception):
 
 
 class FetchFailed(Stop):
-    """Pushed main could not be fetched from the Git host."""
+    """Pushed main could not be fetched from the coding agent's checkout."""
 
 
 def as_the_fetch_account(arguments):
     account = pwd.getpwnam(FETCH_ACCOUNT)
     result = subprocess.run([SETPRIV, '--reuid=%d' % account.pw_uid, '--regid=%d' % account.pw_gid, '--init-groups', '--',
-                             GIT, '-c', 'core.hooksPath=/dev/null', *arguments],
+                             GIT, '-c', 'core.hooksPath=/dev/null', '-c', 'safe.directory=' + DESK_CHECKOUT, *arguments],
                             text=True, capture_output=True, cwd=account.pw_dir,
-                            env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': account.pw_dir, 'LANG': 'C.UTF-8',
-                                 'SSH_AUTH_SOCK': '/run/desk-ssh-agent/socket',
-                                 'GIT_SSH_COMMAND': 'ssh -F /etc/systems-desk/ssh.conf'})
+                            env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': account.pw_dir, 'LANG': 'C.UTF-8'})
     if result.returncode:
         raise FetchFailed('git %s failed: %s. Nothing changed.' % (arguments[0], ' '.join(result.stderr.split())[:400]))
     return result.stdout
 
 
 def fetch_the_pushed_inventory():
-    remote = REPOSITORY_REMOTE.read_text().strip()
     if not Path(FETCH_REPOSITORY, 'HEAD').exists():
         as_the_fetch_account(['init', '--quiet', '--bare', FETCH_REPOSITORY])
-    as_the_fetch_account(['-C', FETCH_REPOSITORY, 'fetch', '--quiet', '--no-tags', '--', remote, 'refs/heads/main'])
+    try:
+        as_the_fetch_account(['ls-remote', '--exit-code', '--', DESK_CHECKOUT, 'refs/remotes/origin/main'])
+        pushed = 'refs/remotes/origin/main'
+    except FetchFailed:
+        pushed = 'refs/heads/main'
+    as_the_fetch_account(['-C', FETCH_REPOSITORY, 'fetch', '--quiet', '--no-tags', '--', DESK_CHECKOUT, pushed])
     commit = as_the_fetch_account(['-C', FETCH_REPOSITORY, 'rev-parse', '--verify', 'FETCH_HEAD^{commit}']).strip()
     return commit, as_the_fetch_account(['-C', FETCH_REPOSITORY, 'show', '%s:%s' % (commit, INVENTORY)])
 
@@ -315,8 +321,8 @@ def only_write_the_server_peers_file(allowed_laptops_json):
     try:
         commit, text = fetch_the_pushed_inventory()
     except FetchFailed as failed:
-        print('%s stays as it is: the fetch of pushed main did not work (%s). On a new desk, before the Git host knows '
-              'this desk\'s key, that is expected; the server peers come with sudo -n update-this-desks-wireguard-peers.'
+        print('%s stays as it is: the fetch of pushed main did not work (%s). On a new desk, before the coding agent\'s '
+              'checkout holds a commit, that is expected; the server peers come with sudo -n update-this-desks-wireguard-peers.'
               % (SERVER_PEERS, str(failed).replace(' Nothing changed.', '')), flush=True)
         return 0
     inventory = parse_inventory(text)

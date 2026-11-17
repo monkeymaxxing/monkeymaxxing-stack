@@ -4,7 +4,7 @@
 start-the-systems-repository, the bootstrap's step, writes the desk's
 production key into the settings; these tests run its edits on the
 template's own files. The desk review and the lock-out button pull main
-into the desk's own copy; these tests pull from a stand-in Git host.
+into the desk's own copy; these tests pull from a stand-in main copy.
 lock-everyone-out, the lock-out button, pulls main, shows the
 inventory's servers and asks for yes, and runs the reviewed copies that the
 desk review installed, with only data from the pulled repository; these
@@ -319,7 +319,7 @@ class LockOutButtonPress(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def press(self, answers, pulled=(True, 'Pulled main from the Git host: your repository is at abc1234.'), mmx_exit_code=0):
+    def press(self, answers, pulled=(True, 'Pulled main from the main copy on util01: your repository is at abc1234.'), mmx_exit_code=0):
         def pull(repository):
             self.events.append(('pull', repository))
             # What the pull brings: the coding agent's pushed commit.
@@ -357,13 +357,13 @@ class LockOutButtonPress(unittest.TestCase):
         command = self.events[2][1]
         self.assertEqual(command[:3], [BUTTON.MMX, 'run', 'lock_everyone_out'])
         self.assertIn('desk_name=desk01', command)
-        self.assertTrue(self.output.startswith('Pulled main from the Git host'))
+        self.assertTrue(self.output.startswith('Pulled main from the main copy on util01'))
         self.assertTrue(self.output.rstrip().endswith('(operating_procedures/respond_to_a_break_in.md, "Undo a lock-out").'), self.output)
         self.assertIn('your coding agent removes everyone_locked_out_except_desk', self.output)
 
     def test_a_failed_pull_says_why_and_goes_on_with_the_repository_as_it_is(self):
-        self.press(['yes'], pulled=(False, 'The pull of main from the Git host did not work '
-                                           '(the Git host did not answer within 30 seconds).'))
+        self.press(['yes'], pulled=(False, 'The pull of main from the main copy on util01 did not work '
+                                           '(util01 did not answer within 30 seconds).'))
         self.assertIn('did not answer within 30 seconds). The lock-out button goes on with the desk\'s copy as it is.', self.output)
         self.assertEqual([event[0] for event in self.events], ['pull', 'question', 'mmx'])
 
@@ -450,21 +450,25 @@ class LockOutButtonPress(unittest.TestCase):
 
 class PullIntoTheDesksCopy(unittest.TestCase):
     """The pull that the desk review and the lock-out button share, on real
-    Git repositories: a bare repository stands in for the Git host."""
+    Git repositories: a bare repository stands in for the main copy on
+    util01, and a clone of it for the coding agent's checkout."""
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         root = Path(self.directory.name)
         self.origin, self.repository, self.other = root/'origin.git', root/'desk-copy', root/'other'
+        self.checkout = root/'home/coding-agent/systems_repository'
         self.run_git('init', '--quiet', '--bare', '-b', 'main', str(self.origin), cwd=root)
         self.run_git('clone', '--quiet', str(self.origin), str(self.other), cwd=root)
         self.commit('one\n', 'first')
         self.run_git('clone', '--quiet', str(self.origin), str(self.repository), cwd=root)
+        self.run_git('clone', '--quiet', str(self.origin), str(self.checkout), cwd=root)
         self.commit('two\n', 'second')
-        (root/'remote').write_text(str(self.origin) + '\n')
-        for name, value in [('GIT', 'git'), ('REPOSITORY_REMOTE', root/'remote'),
-                            ('GIT_ENVIRONMENT', {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull})]:
+        environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull}
+        for name, value in [('GIT', 'git'), ('CODING_AGENT_CHECKOUT', self.checkout),
+                            ('CODING_AGENT_GIT', ['git', '-c', 'core.hooksPath=/dev/null']),
+                            ('CODING_AGENT_GIT_ENVIRONMENT', environment), ('GIT_ENVIRONMENT', environment)]:
             patcher = patch.object(DESK_REVIEW, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -473,18 +477,36 @@ class PullIntoTheDesksCopy(unittest.TestCase):
         subprocess.run(['git', '-c', 'commit.gpgsign=false', '-c', 'user.name=A', '-c', 'user.email=a@example.com', *arguments],
                        cwd=cwd, check=True, capture_output=True, text=True, env={**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull})
 
-    def commit(self, text, message):
-        """A commit pushed to the stand-in Git host from another checkout."""
-        (self.other/'inventory.yml').write_text(text)
-        self.run_git('add', '.', cwd=self.other)
-        self.run_git('commit', '--quiet', '-m', message, cwd=self.other)
-        self.run_git('push', '--quiet', 'origin', 'main', cwd=self.other)
+    def commit(self, text, message, checkout=None):
+        """A commit pushed to the stand-in main copy from another checkout."""
+        checkout = checkout or self.other
+        (checkout/'inventory.yml').write_text(text)
+        self.run_git('add', '.', cwd=checkout)
+        self.run_git('commit', '--quiet', '-m', message, cwd=checkout)
+        self.run_git('push', '--quiet', 'origin', 'main', cwd=checkout)
 
-    def test_a_pull_makes_the_copy_the_pushed_main(self):
+    def test_a_pull_makes_the_copy_main_of_the_main_copy_on_util01(self):
+        """The coding agent's checkout is behind util01; the pull fetches util01's main through it."""
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
         self.assertTrue(pulled, said)
         self.assertEqual((self.repository/'inventory.yml').read_text(), 'two\n')
-        self.assertIn('Pulled main from the Git host', said)
+        self.assertIn('Pulled main from the main copy on util01', said)
+
+    def test_a_commit_only_in_the_checkout_is_not_pushed_main(self):
+        (self.checkout/'inventory.yml').write_text('committed on the desk, not pushed\n')
+        self.run_git('commit', '--quiet', '-am', 'not pushed', cwd=self.checkout)
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'two\n')
+
+    def test_before_util01_exists_the_checkouts_own_main_is_pushed_main(self):
+        self.run_git('remote', 'remove', 'origin', cwd=self.checkout)
+        (self.checkout/'inventory.yml').write_text('only on the desk\n')
+        self.run_git('commit', '--quiet', '-am', 'the desk is the main copy', cwd=self.checkout)
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'only on the desk\n')
+        self.assertIn('the main copy until util01 exists', said)
 
     def test_a_change_in_the_copy_never_runs_and_the_run_history_stays(self):
         """Nobody edits the desk copy; whatever is in it, the review sees pushed main."""
@@ -498,14 +520,14 @@ class PullIntoTheDesksCopy(unittest.TestCase):
         self.assertFalse((self.repository/'unpushed.yml').exists())
         self.assertEqual((self.repository/'.mmx/history').read_text(), 'a run\n')
 
-    def test_an_unreachable_git_host_stops_the_pull_and_keeps_the_copy(self):
-        self.run_git('remote', 'set-url', 'origin', str(self.origin) + '-gone', cwd=self.repository)
+    def test_an_unreachable_util01_stops_the_pull_and_keeps_the_copy(self):
+        self.run_git('remote', 'set-url', 'origin', str(self.origin) + '-gone', cwd=self.checkout)
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
         self.assertFalse(pulled)
-        self.assertTrue(said.startswith('The pull of main from the Git host did not work (git said: '), said)
+        self.assertTrue(said.startswith('The pull of main from the main copy on util01 did not work (git said: '), said)
         self.assertEqual((self.repository/'inventory.yml').read_text(), 'one\n')
 
-    def test_a_desk_without_a_copy_gets_one_from_the_git_host(self):
+    def test_a_desk_without_a_copy_gets_one(self):
         """A desk from an earlier Stack version ran its desk reviews in the person's checkout."""
         missing = Path(self.directory.name)/'var/lib/systems-desk/systems_repository'
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(missing)

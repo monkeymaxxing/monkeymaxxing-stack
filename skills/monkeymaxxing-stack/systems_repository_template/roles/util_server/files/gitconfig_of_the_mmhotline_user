@@ -14,7 +14,7 @@
 	format = ssh
 [commit]
 	gpgsign = true
-# OpenSSH would otherwise add the Git host's other host keys to
+# OpenSSH would otherwise add util01's other host keys to
 # ~/.ssh/known_hosts on a fetch, which MMX manages, so every run would
 # report a change.
 [core]

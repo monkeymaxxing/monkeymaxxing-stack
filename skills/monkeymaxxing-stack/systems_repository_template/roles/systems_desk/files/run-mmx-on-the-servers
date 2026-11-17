@@ -3,7 +3,6 @@ set -euo pipefail
 export HOME=/var/lib/servers-mmx
 export PATH=/usr/local/bin:/usr/bin:/bin
 export SSH_AUTH_SOCK=/run/desk-ssh-agent/socket
-export GIT_SSH_COMMAND='ssh -F /etc/systems-desk/ssh.conf'
 unset MMX_VAULT_PASSWORD
 export MMX_VAULT_PASSWORD_FILE=/etc/systems-desk/vault-passphrase
 refuse() { printf '%s\n' "$1" >&2; exit 64; }
@@ -32,13 +31,23 @@ done
 # prevents two button invocations from resetting files during an MMX run.
 exec 9>/var/lib/servers-mmx/run.lock
 flock -n 9 || refuse 'Another run-mmx-on-the-servers command is running. Wait for that command to finish.'
-IFS= read -r remote < /etc/systems-desk/repository-remote
+# Pushed main, as the coding agent's checkout on this desk last saw it:
+# main of the main copy on util01 (origin/main) once the checkout has an
+# origin, and before util01 exists the checkout's own main, because the
+# checkout is the main copy then. Read locally, so the button works while
+# util01 is lost or before it exists (operating_procedures/rebuild_the_utility_server_util01.md).
+desk_checkout=/home/coding-agent/systems_repository
+git_from_the_desk_checkout() { git -c core.hooksPath=/dev/null -c "safe.directory=$desk_checkout" "$@"; }
+pushed=refs/heads/main
+if git_from_the_desk_checkout ls-remote --exit-code -- "$desk_checkout" refs/remotes/origin/main > /dev/null; then
+    pushed=refs/remotes/origin/main
+fi
 checkout=/var/lib/servers-mmx/systems_repository
 if [ ! -d "$checkout/.git" ]; then
-    git -c core.hooksPath=/dev/null clone --branch main -- "$remote" "$checkout"
+    git -c core.hooksPath=/dev/null init --quiet -b main -- "$checkout"
 fi
 cd "$checkout"
-git -c core.hooksPath=/dev/null fetch -- "$remote" refs/heads/main
+git_from_the_desk_checkout fetch --quiet --no-tags -- "$desk_checkout" "$pushed"
 commit=$(git rev-parse FETCH_HEAD)
 printf 'Using pushed main commit %s\n' "$commit"
 # Only the button's execution copy is disposable. Keep MMX history.

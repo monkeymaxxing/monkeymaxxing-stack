@@ -23,7 +23,7 @@
 #   - the Postgres connections would pass 70 of 100 with the new server, by
 #     the sum of operating_procedures/add_an_app_server.md: then PgBouncer
 #     comes first;
-#   - the provider's list, or the Git host, does not answer, or the list
+#   - the provider's list, or the main copy on util01, does not answer, or the list
 #     does not hold util01 (steps_for_reading_the_providers_list.bash);
 #   - the pool has used every number up to 254, the last address of its block.
 #
@@ -117,7 +117,7 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 
-clone_main "$clone" || refuse "the Git host did not answer a fetch of main"
+clone_main "$clone" || refuse "the main copy on util01 did not answer a fetch of main"
 history=$(replacement_history "$clone")
 unfinished=$(pending_replacements "$history" | jq -r --arg pool "$pool" '[.[] | select(.pool == $pool) | .replaced + " by " + .replacement] | join(", ")')
 [ -z "$unfinished" ] || refuse "the replacement of $unfinished in $pool is unfinished: destroy_replaced_servers comes first"

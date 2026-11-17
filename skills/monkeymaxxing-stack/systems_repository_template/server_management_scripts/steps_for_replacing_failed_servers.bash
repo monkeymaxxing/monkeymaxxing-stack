@@ -56,8 +56,8 @@ fleet_classes_jq='
     end;
 '
 
-# A copy of the systems repository of this run's own, at origin/main of the
-# Git host. Commits go there and never into util01's shared copy, which
+# A copy of the systems repository of this run's own, at main of the
+# main copy on util01. Commits go there and never into util01's shared copy, which
 # MMHotline keeps at the judged commit.
 clone_main() {
   local clone=$1
@@ -242,7 +242,7 @@ push_to_main() {
     if git -C "$clone" push --quiet origin HEAD:main; then
       return 0
     fi
-    printf 'the Git host refused push %s of 3 to main; fetching main again\n' "$push"
+    printf 'the main copy refused push %s of 3 to main; fetching main again\n' "$push"
     fetch_main "$clone" || return 1
   done
   return 1

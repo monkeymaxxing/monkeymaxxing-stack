@@ -49,7 +49,7 @@ clone=$work_dir/repository
 trap 'rm -rf -- "$work_dir"' EXIT
 
 [ -z "$EVERYONE_LOCKED_OUT_EXCEPT_DESK" ] || { say "destroy_replaced_servers refuses: the lock-out is on; nothing destroyed"; exit 1; }
-clone_main "$clone" || { say "destroy_replaced_servers: the Git host did not answer a fetch of main; nothing destroyed"; exit 1; }
+clone_main "$clone" || { say "destroy_replaced_servers: the main copy on util01 did not answer a fetch of main; nothing destroyed"; exit 1; }
 pending=$(pending_replacements "$(replacement_history "$clone")")
 # Each chain, by its newest new server: the head is a pending replacement
 # whose new server no later pending replacement replaced.

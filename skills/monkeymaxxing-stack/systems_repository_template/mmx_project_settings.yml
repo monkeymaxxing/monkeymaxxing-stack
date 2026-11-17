@@ -523,15 +523,23 @@ vars:
   # header-adding proxy cannot do.
   systems_desk_provider_api_authentication: token_in_a_header
 
-  # This repository at the Git host, which util01 clones once, pulls from,
-  # and pushes to over SSH, with the mmhotline user's key as a deploy key
-  # with write access. The Git host's SSH host keys are its published ones:
-  # the github.com ssh-ed25519 entry below comes from GitHub's page
-  # "GitHub's SSH key fingerprints".
+  # The team's main copy of this repository is a bare Git repository on
+  # util01, owned by root. Each desk pushes to it and pulls from it as
+  # root@UTIL01_PRIVATE_IP:PATH, over the root SSH it already has; util01's
+  # mmhotline user does the same as root@127.0.0.1:PATH. So the keys in
+  # root_ssh_public_keys decide who can change the repository, and no key
+  # of a desk or a server is registered at the Git host. The util_server
+  # role makes the empty repository; until it exists, the main copy is the
+  # first desk's checkout (initial_setup/07_install_everything_on_the_production_servers.md).
+  # The main copy refuses a force push and a branch deletion, and keeps a
+  # log of every change to main, so history only grows.
+  # backup_url_at_the_git_host is the private copy at the Git host, a backup
+  # only: the coding agent on the laptop pushes it with the person's own
+  # login, and nothing reads from it (AGENTS.md, "The main copy and the backup at the Git host").
+  # No server or desk reads backup_url_at_the_git_host.
   systems_repository:
-    ssh_url: git@github.com:example/systems.git
-    git_host_ssh_known_hosts_lines:
-      - github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+    main_copy_path_on_util01: /var/lib/systems_repository.git
+    backup_url_at_the_git_host: https://github.com/example/example_systems.git
 
   # The weekly restore drill's server, restore01: util01 creates it at the
   # server provider, with the team's provider scripts and util01's own token

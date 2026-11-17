@@ -780,8 +780,9 @@ fleet_stages:
   # /etc/mmhotline/mmhotline_settings.yml belongs to the group mmhotline,
   # which roles/util_server makes.
   #
-  # roles/util_server also prepares the systems repository's clone once the
-  # Git host accepts the mmhotline Linux account's SSH key. MMHotline needs
+  # roles/util_server also prepares the systems repository's clone once a
+  # desk pushed main to the main copy on util01, and root on util01 accepts
+  # the mmhotline Linux account's SSH key. MMHotline needs
   # no clone to receive alerts, but the restore drill waits for the clone.
   # every_server already set up the WireGuard address MMHotline listens on.
   # The mmhotline stage needs no app databases or app containers, so

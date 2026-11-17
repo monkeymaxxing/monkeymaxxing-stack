@@ -76,7 +76,7 @@ choose() {
   [ -z "$not_reporting" ] || refuse "$not_reporting: no app server is removed while another one does not report"
   work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
   trap 'rm -rf -- "'"$work_dir"'"' EXIT
-  clone_main "$work_dir/repository" || refuse "the Git host did not answer a fetch of main"
+  clone_main "$work_dir/repository" || refuse "the main copy on util01 did not answer a fetch of main"
   unfinished=$(pending_replacements "$(replacement_history "$work_dir/repository")" | \
     jq -r --arg pool "$pool" '[.[] | select(.pool == $pool) | .replaced + " by " + .replacement] | join(", ")')
   [ -z "$unfinished" ] || refuse "the replacement of $unfinished in $pool is unfinished: destroy_replaced_servers comes first"
@@ -91,7 +91,7 @@ finish() {
   work_dir=$(mktemp -d "$state_dir/attempt.XXXXXX")
   trap 'rm -rf -- "'"$work_dir"'"' EXIT
   clone=$work_dir/repository
-  clone_main "$clone" || refuse "the Git host did not answer a fetch of main; $server is out of service: request every_server to put it back"
+  clone_main "$clone" || refuse "the main copy on util01 did not answer a fetch of main; $server is out of service: request every_server to put it back"
   address=$(jq -r --arg name "$server" '.[$name].vars.private_ip' <<< "$INVENTORY_NODES")
   public_ipv4_address=$(jq -r --arg name "$server" '.[$name].vars.public_ipv4_address' <<< "$INVENTORY_NODES")
   server_type=$(jq -r --arg name "$server" '.[$name].vars.server_type' <<< "$INVENTORY_NODES")

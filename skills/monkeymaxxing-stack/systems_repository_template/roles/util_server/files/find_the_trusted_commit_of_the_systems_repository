@@ -7,7 +7,7 @@
 #
 # MMHotline is the one place that decides which commit is trusted
 # (mmhotline_settings.yml, triage_agent). The script reads the commit that
-# main ends at on the Git host and asks MMHotline to check every new commit
+# main ends at in the main copy (origin, on util01 itself) and asks MMHotline to check every new commit
 # through that commit: mmhotline commit-reviews check. MMHotline fetches into
 # its copy, sends one alert for each commit that newly waits for review,
 # and moves the copy's checkout forward to the trusted commit, never past it.
@@ -22,7 +22,7 @@
 #
 # Exit codes:
 # 0  the trusted commit is on standard output.
-# 1  the Git host cannot be reached, or the copy is broken; nothing ran.
+# 1  the main copy cannot be reached, or the copy is broken; nothing ran.
 # 2  MMHotline trusts no commit of main yet; nothing ran. MMHotline's own
 #    warning names each commit that waits for review, so the jobs end
 #    without failing their unit, which would send a second, bare warning.
@@ -38,7 +38,7 @@ say() { printf 'find_the_trusted_commit_of_the_systems_repository: %s\n' "$*" >&
 
 current=$(git rev-parse --verify --quiet 'HEAD^{commit}') || { say "util01's copy of the systems repository has no commit checked out; nothing ran"; exit 1; }
 if ! head=$(git ls-remote --exit-code origin refs/heads/main) || [ -z "${head%%[[:space:]]*}" ]; then
-  say "cannot read main at the Git host; nothing ran"
+  say "cannot read main in the main copy of the systems repository; nothing ran"
   exit 1
 fi
 head=${head%%[[:space:]]*}

@@ -136,7 +136,7 @@ fleet_stages:
           env:
             INVENTORY_GROUPS: "{{ .inventory.groups }}"
             EVERYONE_LOCKED_OUT_EXCEPT_DESK: "{{ .vars.everyone_locked_out_except_desk }}"
-            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "root@127.0.0.1:{{ .vars.systems_repository.main_copy_path_on_util01 }}"
       - id: name_the_server_to_remove
         shell:
           # A dryrun names only the person's server_name: the choice of a
@@ -566,6 +566,6 @@ fleet_stages:
             INVENTORY_NODES: "{{ .inventory.nodes }}"
             INVENTORY_GROUPS: "{{ .inventory.groups }}"
             PRIVATE_IP_RANGES: "{{ .vars.private_ip_ranges }}"
-            SYSTEMS_REPOSITORY_SSH_URL: "{{ .vars.systems_repository.ssh_url }}"
+            SYSTEMS_REPOSITORY_SSH_URL: "root@127.0.0.1:{{ .vars.systems_repository.main_copy_path_on_util01 }}"
             UTIL01_PUBLIC_IPV4_ADDRESS: "{{ .inventory.nodes.util01.vars.public_ipv4_address }}"
             SERVER_PROVIDER_API_TOKEN: "{{ .secrets.util01_provider_api_token }}"

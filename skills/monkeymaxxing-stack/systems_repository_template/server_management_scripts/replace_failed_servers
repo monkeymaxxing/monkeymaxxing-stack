@@ -41,7 +41,7 @@
 #   - the replacement would be try number tries_to_replace_a_failed_server + 1;
 #   - destroy_replaced_servers finished a replacement in the pool within
 #     hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person;
-#   - the provider's list, or the Git host, does not answer;
+#   - the provider's list, or the main copy on util01, does not answer;
 #   - the pool has used every number up to 254, the last address of its block.
 # Every server but util01, the systems desks and the restore servers that
 # the hub calls silent counts for the bound.
@@ -148,7 +148,7 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 
-clone_main "$clone" || refuse "the Git host did not answer a fetch of main"
+clone_main "$clone" || refuse "the main copy on util01 did not answer a fetch of main"
 history=$(replacement_history "$clone")
 pending=$(pending_replacements "$history")
 now=$(date +%s)
