@@ -504,7 +504,8 @@ domain at Cloudflare, its DNS records, and the lock.
    The laptop keeps mmx, doubleshell, `~/.ssh/desk01`, `~/.ssh/desk01.pub`,
    `~/.ssh/desk01_known_hosts`, the desk's SSH entries, and
    `~/.config/doubleshell/desk01.conf`. Remove any provider tool's saved
-   login that the provider guide names, such as `~/.config/hcloud/cli.toml`.
+   login that the provider guide names; most guides name none, because the
+   scripts use `curl`.
 
    **Tell the person:** no message.
 

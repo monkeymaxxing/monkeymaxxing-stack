@@ -146,9 +146,9 @@ account screen of step 1 is the opening.
    into `server_management_scripts/` of the laptop's copy, from the guide
    and the
    [provider script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts).
-   At Hetzner Cloud, install `hcloud` on the laptop for now, as the
-   guide says, with the key only in the environment, so no saved
-   `hcloud` context remains. Check the key with the list script:
+   The scripts call the provider's API with `curl` and `jq`, so install
+   no provider program on the laptop. Check the key with the list script,
+   which reads it from the environment only:
 
    ```sh
    # On the laptop, in ~/code/example_systems:
