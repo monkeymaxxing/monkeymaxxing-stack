@@ -50,7 +50,13 @@ so a change to it reaches root only through the person's desk review, while
 the servers it reads come from pushed main. Reason for the checks: anyone
 who can push to the main copy could otherwise give a server a laptop's key
 or address and cut the person off from their desk, or take an address
-inside the desks' or the laptops' blocks.
+inside the desks' or the laptops' blocks. The keys and addresses a server
+never takes come from what the person reviewed, never from pushed main:
+this desk's own key and address, and each laptop peer's key and AllowedIPs,
+above SERVER_PEERS_LINE in WG0_CONF (the desk playbook's form: the reviewed
+run's allowed_laptops). The inventory's private_ip_ranges blocks are
+checked too, but a push can change them, so they catch mistakes, not a push
+that means harm.
 
 The desk playbook keeps the interface and the laptop peers in
 /etc/wireguard/wg0.conf, and copies SERVER_PEERS below SERVER_PEERS_LINE, so
@@ -149,10 +155,13 @@ def canonical_key(value):
         return False
 
 
-def server_peers(inventory, keys_that_are_not_servers):
+def server_peers(inventory, keys_that_are_not_servers, addresses_that_are_not_servers):
     """The desk's server peers from the pushed inventory, by public key:
     {key: (name, private_ip, public_ipv4_address)}. Stops on the first value
-    that a server must not have, naming the server and the value."""
+    that a server must not have, naming the server and the value.
+    keys_that_are_not_servers and addresses_that_are_not_servers, from what
+    the person reviewed, name the owner of each key and of each address
+    (an IPv4Network) that no server takes."""
     if not isinstance(inventory, dict):
         raise Stop('%s in pushed main is not a mapping. Nothing changed.' % INVENTORY)
     variables = inventory.get('vars') if isinstance(inventory.get('vars'), dict) else {}
@@ -211,6 +220,10 @@ def server_peers(inventory, keys_that_are_not_servers):
         except (TypeError, ValueError):
             raise Stop('%s.public_ipv4_address in %s is %r, not an IPv4 address. Nothing changed.'
                        % (where, INVENTORY, node_vars.get('public_ipv4_address')))
+        for network_of_another, owner in addresses_that_are_not_servers.items():
+            if private_ip in network_of_another:
+                raise Stop('%s.private_ip in %s is %s, the WireGuard address of %s. A server never takes it. Nothing changed.'
+                           % (where, INVENTORY, private_ip, owner))
         if key in keys_that_are_not_servers:
             raise Stop('%s.wireguard_public_key in %s is %s, the WireGuard key of %s. A server never takes it. Nothing changed.'
                        % (where, INVENTORY, key, keys_that_are_not_servers[key]))
@@ -237,18 +250,41 @@ def peer_sections(text):
     return found
 
 
-def keys_of_this_desks_other_peers():
-    """This desk's own key and its laptops' keys, from the reviewed
-    WG0_CONF, by key: none of them may become a server peer, and none is
-    removed here."""
+def own_address(text):
+    """This desk's WireGuard address, from the Address line of the reviewed
+    WG0_CONF's [Interface]."""
+    found = re.search(r'(?m)^\s*Address\s*=\s*([0-9.]+)/\d+\s*$', text.split('[Peer]', 1)[0])
+    if not found:
+        raise Stop('%s has no Address line in its [Interface]. Ask the person to run '
+                   'review-and-apply-the-systems-desk-settings once. Nothing changed.' % WG0_CONF)
+    return {ipaddress.IPv4Network(found.group(1) + '/32'): 'this desk'}
+
+
+def allowed_ips_of_peers(text):
+    """Each [Peer] section's AllowedIPs, by network: the name in its first
+    comment line, or its key."""
+    found = {}
+    for section in re.split(r'(?m)^\[Peer\]\s*$', text)[1:]:
+        name = re.search(r'(?m)^\s*#\s*(\S+)', section) or re.search(r'(?m)^\s*PublicKey\s*=\s*(\S+)', section)
+        allowed = re.search(r'(?m)^\s*AllowedIPs\s*=\s*(.+)$', section)
+        for value in (allowed.group(1).split(',') if allowed else []):
+            found[ipaddress.ip_network(value.strip(), strict=False)] = 'the laptop ' + (name.group(1) if name else '?')
+    return found
+
+
+def this_desks_other_peers():
+    """This desk's own key and address and its laptops' keys and AllowedIPs,
+    from the reviewed WG0_CONF: none of them may become a server peer's, and
+    no such peer is removed here. Returns (keys, addresses)."""
     text = WG0_CONF.read_text()
     if SERVER_PEERS_LINE not in text:
         raise Stop('%s has no line "%s": this desk\'s settings are from an earlier Stack version. Ask the person to run '
                    'review-and-apply-the-systems-desk-settings once, which also writes the server peers; '
                    'then this command has nothing to add (operating_procedures/upgrade_to_a_new_stack_version.md). Nothing changed.' % (WG0_CONF, SERVER_PEERS_LINE))
-    keys = {key: 'the laptop ' + name for key, name in peer_sections(text.split(SERVER_PEERS_LINE, 1)[0])}
+    reviewed = text.split(SERVER_PEERS_LINE, 1)[0]
+    keys = {key: 'the laptop ' + name for key, name in peer_sections(reviewed)}
     keys[own_public_key()] = 'this desk'
-    return keys
+    return keys, {**allowed_ips_of_peers(reviewed), **own_address(text)}
 
 
 def running_peers():
@@ -314,10 +350,12 @@ def only_write_the_server_peers_file(allowed_laptops_json):
     try:
         laptops = json.loads(allowed_laptops_json)
         others = {laptop['wireguard_public_key']: 'the laptop ' + laptop['laptop_name'] for laptop in laptops}
+        addresses = {ipaddress.IPv4Network(laptop['private_ip'] + '/32'): 'the laptop ' + laptop['laptop_name'] for laptop in laptops}
     except (ValueError, TypeError, KeyError):
-        raise Stop('%s takes the desk\'s allowed_laptops as JSON, a list of laptop_name and wireguard_public_key. '
+        raise Stop('%s takes the desk\'s allowed_laptops as JSON, a list of laptop_name, wireguard_public_key and private_ip. '
                    'Nothing changed.' % ONLY_WRITE_THE_SERVER_PEERS_FILE)
     others[own_public_key()] = 'this desk'
+    addresses.update(own_address(WG0_CONF.read_text()))
     try:
         commit, text = fetch_the_pushed_inventory()
     except FetchFailed as failed:
@@ -326,7 +364,7 @@ def only_write_the_server_peers_file(allowed_laptops_json):
               % (SERVER_PEERS, str(failed).replace(' Nothing changed.', '')), flush=True)
         return 0
     inventory = parse_inventory(text)
-    wanted = server_peers(inventory, others)
+    wanted = server_peers(inventory, others, addresses)
     new = server_peers_file(commit, wanted, listen_port(inventory))
     new_addresses = notrack_addresses_file(commit, wanted)
     names = ', '.join(name for name, _, _ in sorted(wanted.values())) or 'none yet'
@@ -349,8 +387,8 @@ def main(arguments):
     commit, text = fetch_the_pushed_inventory()
     print('Pushed main commit %s.' % commit, flush=True)
     inventory = parse_inventory(text)
-    others = keys_of_this_desks_other_peers()
-    wanted = server_peers(inventory, others)
+    others, addresses = this_desks_other_peers()
+    wanted = server_peers(inventory, others, addresses)
     port = listen_port(inventory)
     before = {key: name for key, name in peer_sections(SERVER_PEERS.read_text())} if SERVER_PEERS.exists() else {}
     before.update({key: name for key, name in peer_sections(WG0_CONF.read_text().split(SERVER_PEERS_LINE, 1)[1])})

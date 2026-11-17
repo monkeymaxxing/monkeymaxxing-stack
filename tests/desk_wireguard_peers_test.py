@@ -62,13 +62,16 @@ def inventory(state='default'):
 # library on this machine; the desk has python3-yaml.
 JSON_AS_YAML = types.SimpleNamespace(safe_load=json.loads, YAMLError=ValueError)
 LAPTOP_KEYS = {key('desk01-laptop'): 'the laptop desk01-laptop', key('desk01'): 'this desk'}
+# The addresses of the reviewed wg0.conf: the laptop peer's and this desk's.
+LAPTOP_ADDRESSES = {PEERS.ipaddress.IPv4Network('10.20.10.1/32'): 'the laptop desk01-laptop',
+                    PEERS.ipaddress.IPv4Network('10.20.9.1/32'): 'this desk'}
 
 
 class ServerPeers(unittest.TestCase):
     def test_a_desk_peers_with_every_server_it_peered_with_before_in_every_state(self):
         for state in connections.STATES:
             with self.subTest(state=state):
-                peers = PEERS.server_peers(inventory(state), LAPTOP_KEYS)
+                peers = PEERS.server_peers(inventory(state), LAPTOP_KEYS, LAPTOP_ADDRESSES)
                 names = sorted(name for name, _, _ in peers.values())
                 before = connections.PEERS_BEFORE_THE_TABLE[state]['desk01'].split()
                 self.assertEqual(names, [name for name in before if name != 'desk01-laptop'])
@@ -78,7 +81,7 @@ class ServerPeers(unittest.TestCase):
         servers = inventory()
         del servers['nodes']['jobs001']['vars']['wireguard_public_key']
         servers['groups']['database_restore_servers']['nodes'] = ['staging01']
-        names = {name for name, _, _ in PEERS.server_peers(servers, LAPTOP_KEYS).values()}
+        names = {name for name, _, _ in PEERS.server_peers(servers, LAPTOP_KEYS, LAPTOP_ADDRESSES).values()}
         self.assertNotIn('jobs001', names)
         self.assertNotIn('staging01', names)
 
@@ -92,7 +95,7 @@ class ServerPeers(unittest.TestCase):
             block['vars']['wireguard_public_key'] = key(name)
             servers['nodes'][name] = block
         servers['groups']['database_restore_servers']['nodes'] = ['db03', 'restore01']
-        peers = PEERS.server_peers(servers, LAPTOP_KEYS)
+        peers = PEERS.server_peers(servers, LAPTOP_KEYS, LAPTOP_ADDRESSES)
         self.assertEqual(peers[key('db03')], ('db03', '10.20.2.3', '203.0.113.23'))
         self.assertNotIn('restore01', {name for name, _, _ in peers.values()})
 
@@ -120,13 +123,23 @@ class ServerPeers(unittest.TestCase):
                 servers = inventory()
                 apply(servers)
                 with self.assertRaises(PEERS.Stop) as stopped:
-                    PEERS.server_peers(servers, LAPTOP_KEYS)
+                    PEERS.server_peers(servers, LAPTOP_KEYS, LAPTOP_ADDRESSES)
                 self.assertIn(message, str(stopped.exception))
                 self.assertTrue(str(stopped.exception).endswith('Nothing changed.'))
+        # A push that also moves the inventory's blocks still cannot give a
+        # server the laptop's or this desk's address from the reviewed wg0.
+        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this desk')):
+            with self.subTest(address=address):
+                servers = inventory()
+                servers['vars']['private_ip_ranges'].update(systems_desks='10.20.200.0/24', systems_desk_laptops='10.20.201.0/24')
+                servers['nodes']['app001']['vars']['private_ip'] = address
+                with self.assertRaises(PEERS.Stop) as stopped:
+                    PEERS.server_peers(servers, LAPTOP_KEYS, LAPTOP_ADDRESSES)
+                self.assertIn('is %s, the WireGuard address of %s. A server never takes it.' % (address, owner), str(stopped.exception))
         servers = inventory()
         servers['nodes']['app001\n[Peer]'] = servers['nodes'].pop('app001')
         with self.assertRaises(PEERS.Stop) as stopped:
-            PEERS.server_peers(servers, LAPTOP_KEYS)
+            PEERS.server_peers(servers, LAPTOP_KEYS, LAPTOP_ADDRESSES)
         self.assertIn('is not a server name', str(stopped.exception))
 
 
@@ -159,7 +172,7 @@ class DeskWireGuardFile(unittest.TestCase):
         return json.loads(explained.stdout)['fleet_stages'][0]['node_tasks'][0]['rendered_templates'][0]['text']
 
     def test_the_file_keeps_the_laptops_above_the_line_and_the_server_peers_below_it(self):
-        peers = PEERS.server_peers(inventory(), LAPTOP_KEYS)
+        peers = PEERS.server_peers(inventory(), LAPTOP_KEYS, LAPTOP_ADDRESSES)
         server_peers = PEERS.server_peers_file('0123abc', peers, 51820)
         text = self.rendered(server_peers)
         self.assertIn(PEERS.SERVER_PEERS_LINE + '\n', text)
@@ -266,7 +279,7 @@ class TheWholeCommand(unittest.TestCase):
 
     def test_a_second_run_changes_nothing_and_says_so(self):
         self.running = {key('desk01-laptop'): ('(none)', '10.20.10.1/32')}
-        for k, (name, ip, public) in PEERS.server_peers(inventory(), LAPTOP_KEYS).items():
+        for k, (name, ip, public) in PEERS.server_peers(inventory(), LAPTOP_KEYS, LAPTOP_ADDRESSES).items():
             self.running[k] = ('%s:51820' % public, '%s/32' % ip)
         said = self.press()
         self.assertIn('No change', said)
@@ -280,6 +293,22 @@ class TheWholeCommand(unittest.TestCase):
             self.press()
         self.assertFalse(self.server_peers.exists())
         self.assertFalse([call for call in self.calls if call[1:3] == ['set', 'wg0']])
+
+    def test_the_laptop_and_desk_addresses_come_from_the_reviewed_wg0_not_the_push(self):
+        # The pushed inventory moves the laptops' and desks' blocks and gives
+        # app001 the laptop's, or this desk's, address in the reviewed wg0.conf.
+        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this desk')):
+            with self.subTest(address=address):
+                servers = inventory()
+                servers['vars']['private_ip_ranges'].update(systems_desks='10.20.200.0/24', systems_desk_laptops='10.20.201.0/24')
+                servers['nodes']['app001']['vars']['private_ip'] = address
+                self.inventory = json.dumps(servers)
+                self.calls = []
+                with self.assertRaises(PEERS.Stop) as stopped:
+                    self.press()
+                self.assertIn('is %s, the WireGuard address of %s. A server never takes it.' % (address, owner), str(stopped.exception))
+                self.assertFalse(self.server_peers.exists())
+                self.assertFalse([call for call in self.calls if call[1:3] == ['set', 'wg0']])
 
     def test_it_takes_no_arguments(self):
         with self.assertRaises(PEERS.Stop) as stopped:
@@ -337,7 +366,7 @@ class TheDeskPlaybooksForm(unittest.TestCase):
         self.assertEqual(code, 2)
         written = self.server_peers.read_text()
         self.assertIn('pushed main commit abc123', written)
-        expected = PEERS.server_peers(inventory(), LAPTOP_KEYS)
+        expected = PEERS.server_peers(inventory(), LAPTOP_KEYS, LAPTOP_ADDRESSES)
         self.assertEqual(sorted(name for _, name in PEERS.peer_sections(written)), sorted(name for name, _, _ in expected.values()))
         self.assertIn('[Peer]\n# app001\nPublicKey = %s\nEndpoint = 203.0.113.11:51820\nAllowedIPs = 10.20.1.1/32\n' % key('app001'), written)
         self.assertEqual(oct(self.server_peers.stat().st_mode & 0o777), '0o600')
@@ -359,9 +388,24 @@ class TheDeskPlaybooksForm(unittest.TestCase):
         self.assertIn('is %s, the WireGuard key of the laptop desk01-laptop. A server never takes it. Nothing changed.' % key('desk01-laptop'),
                       str(stopped.exception))
         with self.assertRaises(PEERS.Stop) as same:
-            PEERS.server_peers(servers, LAPTOP_KEYS)
+            PEERS.server_peers(servers, LAPTOP_KEYS, LAPTOP_ADDRESSES)
         self.assertEqual(str(stopped.exception), str(same.exception))
         self.assertFalse(self.server_peers.exists())
+
+    def test_a_pushed_inventory_cannot_move_a_laptops_address_to_a_server(self):
+        # The pushed inventory moves the laptops' block and gives app001 the
+        # laptop's address; the reviewed wg0.conf still names the laptop's.
+        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this desk')):
+            with self.subTest(address=address):
+                servers = inventory()
+                servers['vars']['private_ip_ranges'].update(systems_desks='10.20.200.0/24', systems_desk_laptops='10.20.201.0/24')
+                servers['nodes']['app001']['vars']['private_ip'] = address
+                self.inventory = json.dumps(servers)
+                self.calls = []
+                with self.assertRaises(PEERS.Stop) as stopped:
+                    self.press()
+                self.assertIn('the WireGuard address of %s' % owner, str(stopped.exception))
+                self.assertFalse(any(call[1:3] == ['set', 'wg0'] for call in self.calls))
 
     def test_this_desks_own_key_is_refused_for_a_server(self):
         servers = inventory()
