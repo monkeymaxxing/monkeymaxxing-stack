@@ -1,0 +1,71 @@
+#!/bin/bash
+# Opens the coding agent's login on this laptop's systems desk with one
+# phone code, or says whether the login is open. On the laptop, from any
+# folder:
+#     ~/code/example_systems/ssh/open-the-desk-login CODE   CODE: the 6 digits the person typed
+#     ~/code/example_systems/ssh/open-the-desk-login --check
+# --check exits 0 when the login is open and 1 when it is closed. Opening
+# exits 0 when the login is open, 1 when the desk did not open it, and 64
+# for a wrong argument.
+# The desk is the one whose SSH settings file, ssh/DESK in this repository,
+# and whose laptop key, ~/.ssh/DESK.pub, belong together: the key is one of
+# that desk's allowed_laptops in inventories/servers.yml. The login is the
+# SSH entry DESK-agent (initial_setup/03_make_your_server_account_and_your_systems_desk.md).
+# The code reaches ssh through this same file as SSH_ASKPASS, in an
+# environment variable. Reason: no file holds the code, so none is left
+# behind, and another user on the laptop cannot read a process's
+# environment. ssh asks once (NumberOfPasswordPrompts=1), because a code
+# works only once and every wrong try counts toward the desk's lockout.
+# Bash 3.2 and BSD tools, so it runs on macOS as it ships.
+set -euo pipefail
+
+if [ -n "${OPEN_THE_DESK_LOGIN_CODE:-}" ]; then
+    # ssh runs this file as SSH_ASKPASS, with the desk's question as the argument.
+    printf '%s\n' "$OPEN_THE_DESK_LOGIN_CODE"
+    exit 0
+fi
+
+refuse() { printf '%s\n' "$1" >&2; exit 64; }
+[ "$#" = 1 ] || refuse 'Usage: open-the-desk-login CODE, with the 6 digits from the phone, or open-the-desk-login --check.'
+argument=$1
+case "$argument" in
+    --check) ;;
+    [0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+    *) refuse 'A phone code is exactly 6 digits. Ask the person for the code again; nothing was sent to the desk.';;
+esac
+
+this_file=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+repository=$(dirname "$(dirname "$this_file")")
+inventory=$repository/inventories/servers.yml
+desks=
+for settings in "$repository"/ssh/desk[0-9]*; do
+    [ -f "$settings" ] || continue
+    desk=$(basename "$settings")
+    key_file=$HOME/.ssh/$desk.pub
+    [ -f "$key_file" ] || continue
+    key=$(awk '{ print $2; exit }' "$key_file")
+    if [ -n "$key" ] && grep -qF -- "$key" "$inventory"; then
+        desks="$desks $desk"
+    fi
+done
+case "$desks" in
+    '') refuse "No desk in $inventory allows this laptop: no ssh/DESK file in the repository has a key ~/.ssh/DESK.pub that the desk's allowed_laptops lists.";;
+    ' '*' '*) refuse "Several desks allow this laptop:$desks. This command opens one desk's login; open the one you need with its own SSH entry, DESK-agent.";;
+esac
+entry=${desks# }-agent
+
+if ssh -O check "$entry" 2>/dev/null; then
+    echo "The desk login $entry is open."
+    exit 0
+fi
+if [ "$argument" = --check ]; then
+    echo "The desk login $entry is closed. Ask the person for one code from the phone."
+    exit 1
+fi
+if OPEN_THE_DESK_LOGIN_CODE=$argument SSH_ASKPASS=$this_file SSH_ASKPASS_REQUIRE=force \
+    ssh -o NumberOfPasswordPrompts=1 "$entry" true < /dev/null; then
+    echo "The desk login $entry is open."
+    exit 0
+fi
+echo "The desk did not open the login $entry: it refused the code, or the laptop could not reach it (ssh's message is above). A code works once and for 30 seconds: ask the person for a new code."
+exit 1

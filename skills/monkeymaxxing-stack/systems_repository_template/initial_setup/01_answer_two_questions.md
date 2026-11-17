@@ -11,8 +11,8 @@ install two tools and start the systems repository on the laptop.
 **Who acts:** the person answers two questions and says "go". You work
 out every other value from the laptop and the domain, and do the rest.
 
-**Tell the person when the chapter starts:** the one approval below,
-then the first question in the same reply.
+**Tell the person when the chapter starts:** the first question. The one
+approval below comes in the next reply, with the second question.
 
 Chapters 1 to 9 are the first sitting, "go live". The first sitting ends
 with the app live, protected and backed up. Phone alerts are the second
@@ -51,7 +51,7 @@ change, or web page, such as Claude Code's "Do you want to proceed?". The
 setup runs about a hundred commands, so ask for one approval at the start
 instead.
 
-In Claude Code, write the allow rules below into
+In Claude Code, write the rules below into
 `.claude/settings.local.json` in the app's folder, where the person
 started you. Claude Code reads the file at once, with no restart, and asks
 the person once before it writes the file, because the file is Claude
@@ -59,24 +59,40 @@ Code's own setting. That question is the one approval. Use the local file,
 not `.claude/settings.json`: the local file stays on this laptop and never
 goes into the app's code. Never commit it.
 
-The rules use no team name, so you write the file once, before the
-first question. Use the path of the skill's folder, the folder that holds
-`SKILL.md`, and add its real path too when the skill is installed as a
-link. Read web pages, such as the provider's price page, with `curl`.
+The rules name exact folders, never a wildcard folder, so write the file
+after the person names the domain, in the same reply as the second
+question: the company name comes from the domain, and the folders from the
+company name, as step 3 and step 5 say. Replace in the example:
+
+- `/Users/alex` with the laptop's home folder, written out (`$HOME`), in
+  `additionalDirectories`.
+- `example_systems` with the systems repository's name, and `example-setup`
+  with the company name in lowercase with hyphens followed by `-setup`.
+- The skill's folder, the folder that holds `SKILL.md`. Add its real path
+  too when the skill is installed as a link.
+
+When the person changes the company name at "go", write the file again
+with the new folders; Claude Code asks once more. Read web pages, such as
+the provider's price page, with `curl`.
 
 ```json
 {
   "permissions": {
+    "additionalDirectories": [
+      "/Users/alex/code/example_systems",
+      "/Users/alex/example-setup",
+      "/Users/alex/.claude/skills/monkeymaxxing-stack"
+    ],
     "allow": [
-      "Bash(mmx *)",
-      "Bash(doubleshell *)",
+      "Bash(~/.local/bin/mmx *)",
+      "Bash(~/.local/bin/doubleshell *)",
       "Bash(git *)",
       "Bash(gh *)",
       "Bash(ssh desk01-agent *)",
       "Bash(ssh root@desk01 *)",
       "Bash(ssh -o StrictHostKeyChecking=accept-new root@desk01 *)",
       "Bash(ssh -F ssh/desk01 *)",
-      "Bash(ssh -O check desk01-agent)",
+      "Bash(~/code/example_systems/ssh/open-the-desk-login *)",
       "Bash(ssh-keygen *)",
       "Bash(curl *)",
       "Bash(jq *)",
@@ -96,28 +112,39 @@ link. Read web pages, such as the provider's price page, with `curl`.
       "Bash(ln *)",
       "Bash(chmod *)",
       "Edit(./**)",
-      "Edit(~/code/*_systems/**)",
-      "Edit(~/*-setup/**)",
+      "Edit(~/code/example_systems/**)",
+      "Edit(~/example-setup/**)",
       "Edit(~/.ssh/config)",
-      "Edit(~/.config/doubleshell/**)",
-      "Read(~/code/*_systems/**)",
-      "Read(~/*-setup/**)",
-      "Read(~/.claude/skills/monkeymaxxing-stack/**)"
+      "Edit(~/.config/doubleshell/**)"
+    ],
+    "deny": [
+      "Bash(sed -i *)",
+      "Bash(perl -i *)"
     ]
   }
 }
 ```
 
-`Edit` rules cover every tool that writes a file. A compound command runs
-without a question only when each part matches a rule, and a command that
-starts with a variable, such as `COPYFILE_DISABLE=1 tar`, asks. So a few
-commands still ask, and `rm` always asks: the person approves each one
-as it comes. Never add `Bash(*)` or a rule for `rm`, and never turn off
-the questions with a mode that skips them all. Reason: a wildcard in an
-`rm` rule also matches a second path, such as `~/`.
+`additionalDirectories` lets you read the systems repository, the setup
+folder and the skill without a question. `Edit` rules cover every tool
+that writes a file. A compound command runs without a question only when
+each part matches a rule, and a command that starts with a variable, such
+as `COPYFILE_DISABLE=1 tar` or `export PATH=...`, asks. So run `mmx` and
+`doubleshell` by their full paths, `~/.local/bin/mmx`, and the desk login
+by its full path, as [`AGENTS.md`](../AGENTS.md#your-login-on-the-desk)
+says. A few commands still ask, and `rm` always asks: the person approves
+each one as it comes. Never add `Bash(*)`, a rule for `rm`, or a folder
+outside the three above, and never turn off the questions with a mode that
+skips them all. Reason: a wildcard in an `rm` rule also matches a second
+path, such as `~/`.
 
-**Tell the person first,** in your first reply, before you write the
-file:
+The two `deny` rules refuse `sed -i` and `perl -i` without a question,
+also inside a longer command: change files with your Edit and Write tools
+instead, so the person can see each change. Reason: a refusal costs the
+person nothing, and an edit by your own tools shows the person the change.
+
+**Tell the person first,** in the reply after the domain answer, before
+you write the file:
 
 ```text
 USE ONLY A CODING AGENT YOU TRUST.  It will have full control of your servers.
@@ -131,8 +158,10 @@ Before I start: one approval, so I do not ask "allow?" at every step.
 I add one list to this folder, in  .claude/settings.local.json.
 It lets me do these without asking each time:
   - run the setup's tools: mmx, doubleshell, git, ssh to your desk, curl, and a few more
-  - change files in this app's folder, and in the systems folder I make in  ~/code
+  - change files in this app's folder, and in the systems folder I make,  ~/code/example_systems
   - add your desk to your SSH settings,  ~/.ssh/config
+
+It also blocks two commands that change files out of your sight.  I change files with my editor, so you see each change.
 
 Your desk is a small server of your own that holds the keys to your servers.
 I work through it and never copy the keys.
@@ -142,20 +171,20 @@ Anything else still asks you.  The list stays on this laptop.  It never goes int
 Claude Code now asks you once.  Choose  Yes.
 ```
 
-Then write the file. After the person's approval, ask the first question
-in the same reply.
+Then write the file. After the person's approval, ask the second
+question in the same reply.
 
 With another coding agent, use its own way to approve the setup's
 commands once, and say plainly what it allows.
 
 **Check:** the person chose Yes, and `.claude/settings.local.json` holds
-the rules.
+the rules with this team's folders.
 
 ## Steps
 
 1. **The domain.**
 
-   **Ask the person,** in the same first reply, after the approval:
+   **Ask the person,** in your first reply, with no command before it:
 
    ```text
    Two questions, then I start.
@@ -167,7 +196,7 @@ the rules.
 
 2. **The server provider.** Read the [provider guides](../provider_guides/README.md).
 
-   **Ask the person:**
+   **Ask the person,** in the reply with the one approval, after it:
 
    ```text
    2. Which company should run your servers?
@@ -282,7 +311,13 @@ the rules.
 
    **Tell the person:** one line, "I am installing mmx and doubleshell."
 
-   **Check:** `mmx version`, `doubleshell version`, `git --version`,
+   Run both tools by their full paths on the laptop, `~/.local/bin/mmx`
+   and `~/.local/bin/doubleshell`, as the laptop's command blocks do, also
+   where a step names a command in the text, such as `mmx validate`. Never
+   start a command with `export PATH`: the approval's rules match the full
+   paths only. On the desk and the servers, `mmx` is on the path.
+
+   **Check:** `~/.local/bin/mmx version`, `~/.local/bin/doubleshell version`, `git --version`,
    `bash --version`, and `jq --version`.
 
 5. **Start the systems repository on the laptop.** `TEMPLATE_DIRECTORY`

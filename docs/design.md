@@ -5547,9 +5547,17 @@ conversation.
 **One door to the desk.** The laptop's SSH settings hold `desk01-agent`, as
 the desk's `coding-agent` user, with `ControlMaster auto`,
 `ControlPersist 1h` and `ServerAliveInterval 30`. The person types one
-phone code in the chat; the agent passes it to SSH through `SSH_ASKPASS`
+phone code in the chat; the agent passes it to the systems repository's
+`ssh/open-the-desk-login CODE`, which hands it to SSH through `SSH_ASKPASS`
 with `SSH_ASKPASS_REQUIRE=force`, so no terminal is needed, and every later
-command reuses the one shared connection. sshd gives `coding-agent`
+command reuses the one shared connection. The script is its own askpass
+program and reads the code from its environment, so no file ever holds the
+code; it asks once (`NumberOfPasswordPrompts=1`), because each wrong try
+counts toward the lockout. It takes the desk from the repository: the
+`ssh/DESK` file whose laptop key, `~/.ssh/DESK.pub`, the desk's
+`allowed_laptops` lists. Reason for a script: a command that starts with a
+variable assignment matches no Claude Code allow rule, so the earlier
+`mktemp` snippet asked the person each time. sshd gives `coding-agent`
 `DisableForwarding yes` and sets `SSH_AUTH_SOCK` and `GIT_CONFIG_SYSTEM` for
 its commands, so it uses the production key's relay socket and never holds
 the key. Both the person and `coding-agent` use one root-owned phone-code
@@ -5600,6 +5608,26 @@ desk job can keep doing after the login ends. Reason for desk jobs at all:
 nothing on the desk needs resuming, so no terminal-session program runs
 there; the agent's conversation lives on the laptop, where the agent
 already keeps it.
+
+**The agent waits with one command.** `wait-for-a-desk-job NAME` and
+`wait-for-the-setup` run in the agent's own login, with no sudo. Each
+prints a line at least once a minute, so the desk's idle `ChannelTimeout`
+never closes it, and ends after 9 minutes by default with its own exit
+code (124), before Claude Code's 10-minute command limit. The job's exit
+code passes through; 125 means the job ended without one, such as a
+`stopped:` line. The wait reads only `~/runs/NAME.log` and `NAME.exit`,
+so it works for any way the job was started.
+`wait-for-the-setup` reads `go-live`'s results file, and a stop counts only
+when the file was written after the wait started, because an earlier run's
+`stopped_with` stays until the next run's first write. Reason: in
+walk-through run 1 the agent wrote 25 polling loops, and one blocked
+`sleep 240` turned a wait into a turn that ended with a promise.
+`wait_for_the_app_image`, in `server_management_scripts/`, runs on the
+laptop, because the agent's desk account reaches no outside host and the
+desk's registry login is in the vault: it asks the registry's manifest
+address, with a login only when the laptop already saved one, and says
+"cannot tell" (exit 3), never "missing", when the registry refuses the
+laptop.
 
 **The agent's account reaches only the desk and WireGuard.** The desk
 firewall's output chain refuses every packet of `coding-agent` that leaves

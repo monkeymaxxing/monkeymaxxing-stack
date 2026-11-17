@@ -131,7 +131,8 @@ the laptop. Reason: while the login is open, any program on the laptop can
 use it, and nothing it starts may keep your powers after the login ends,
 or send what it reaches to an outside host.
 
-When the connection is closed, `ssh -O check desk01-agent` says so. Ask the
+`~/code/example_systems/ssh/open-the-desk-login --check` says whether the
+connection is open: exit 0 open, 1 closed. When it is closed, ask the
 person for one code in the chat, in one short message:
 
 ```text
@@ -147,10 +148,15 @@ capitals, before the last line. Then open the connection with the code:
 
 ```sh
 # On the laptop. CODE: the 6 digits the person typed.
-code_script=$(mktemp) && printf '#!/bin/sh\necho %s\n' CODE > "$code_script" && chmod 700 "$code_script"
-SSH_ASKPASS="$code_script" SSH_ASKPASS_REQUIRE=force ssh desk01-agent true < /dev/null
-rm -f "$code_script"
+~/code/example_systems/ssh/open-the-desk-login CODE
 ```
+
+The command finds this laptop's desk in the repository, hands the code to
+SSH without writing it to a file, and asks the desk once. It says
+`The desk login desk01-agent is open.`, or that the desk did not open it.
+It refuses anything but 6 digits, and uses no code when the connection is
+open already. Run it by its full path, from any folder, so it never needs
+a second approval.
 
 A code works once and for 30 seconds, so a refused code needs a new one.
 Five wrong codes within ten minutes lock the laptop out for five minutes
@@ -279,7 +285,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   no lock, because a run in progress holds the lock. Failed work needs investigation and
   an agent-run retry.
 
-  Run `mmx validate` locally for uncommitted structural checks.
+  Run `~/.local/bin/mmx validate` locally for uncommitted structural checks.
   Use `sudo -n -u servers-mmx run-mmx-on-the-servers` on the desk for direct production commands,
   including previews, production playbooks, initial production setup, recovery,
   a changed vault passphrase, and `util01`'s reboot. Push before using the button.
@@ -487,7 +493,7 @@ You edit on the laptop, in your clone of the desk's repository,
 each change, because only the desk holds the production key that lets a push into the main copy.
 
 1. Bring the clone up to date: `git pull --ff-only` from the desk. Edit the
-   required files. Run `mmx validate` to check the local structure. Review
+   required files. Run `~/.local/bin/mmx validate` to check the local structure. Review
    the diff.
 2. Stage only the intended paths with `git add PATH`, then commit on a
    branch named for the change, such as `add-app002`:
@@ -550,14 +556,29 @@ A desk job runs one of these, and the command refuses anything else:
 - `publish-branch-to-main BRANCH`.
 
 Run every other command, such as `status`, `results` or `validate`, in
-your login. The job writes its output to `~/runs/NAME.log`. The job is over
-when `~/runs/NAME.exit` exists; the file holds the run's exit code, or a
-line that starts with `stopped:` when the desk ended the job. The desk ends
-a desk job after `coding_agent_login_longest_hours` (ten hours). After a
-closed connection, ask the person for one code, as "Your login on the
-desk" says, then read the two files. Never start a run again only because
-the connection closed: read the exit file first. A name that was used
-before is refused, so give each run a new name.
+your login. The job writes its output to `~/runs/NAME.log`, and its exit
+code, or a line that starts with `stopped:` when the desk ended the job, to
+`~/runs/NAME.exit`. The desk ends a desk job after
+`coding_agent_login_longest_hours` (ten hours). Wait for the job with one
+command, never a loop of `sleep`s; give the command a 10-minute limit in
+Claude Code:
+
+```sh
+# On the laptop. NAME: the name you gave start-a-desk-job.
+ssh desk01-agent wait-for-a-desk-job NAME
+```
+
+It prints a few lines of the log as the job goes, ends when the job ends,
+and returns the job's exit code with a plain last line, such as
+`The desk job every-server-1405 ended with exit code 1.`, after the log's
+last 30 lines. Exit 125 means the job ended without an exit code, such
+as when the desk stopped it; the last line shows why. Exit 124 means the
+job still runs after 9 minutes: say in one line what the job is doing, and
+run the same command again. Run it for a job that already ended to read
+its result again. After a closed connection, open it again, as "Your
+login on the desk" says, then run the same command. Never start a run
+again only because the connection closed. A name that was used before is
+refused, so give each run a new name.
 Reason: the desk runs only the Stack's own runs after your login ends, so
 a program on the laptop cannot leave a job behind that keeps your powers.
 

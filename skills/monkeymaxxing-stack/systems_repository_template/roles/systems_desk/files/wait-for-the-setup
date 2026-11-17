@@ -1,0 +1,88 @@
+#!/bin/bash
+# Waits for the person's setup on the desk, set-up-outside-services go-live
+# (ssh desk01-setup), to finish or stop. The coding agent runs, from the
+# laptop:
+#     ssh desk01-agent wait-for-the-setup [--at-most-minutes N]
+# It reads go-live's results file, which holds step names, their states and
+# values that are not secrets, never a secret. It prints the steps that
+# changed, and a line at least once a minute, so the login is never idle.
+# At the end it prints the file's summary: the steps, finished,
+# stopped_with and for_the_coding_agent.
+# The wait ends when the file says finished, or when a go-live run that
+# wrote the file after the wait started stopped with a reason. Reason: an
+# earlier run's stopped_with stays in the file until the person's next run
+# starts, and must not end the wait for that run.
+# Exit codes:
+#     0     go-live finished
+#     1     go-live stopped; stopped_with says why
+#     124   go-live has not finished or stopped; the wait ended at its bound
+#     64    a wrong argument; nothing was waited for
+# Reason for the bound, 9 minutes by default: Claude Code stops a command
+# after 10 minutes, so the wait ends first and says so. A coding agent that
+# allows longer commands passes --at-most-minutes.
+set -euo pipefail
+export PATH=/usr/local/bin:/usr/bin:/bin
+results_file=/var/lib/monkeymaxxing-stack/setup_results.json
+seconds_between_checks=5
+seconds_between_lines_at_most=60
+
+refuse() { printf '%s Nothing was waited for.\n' "$1" >&2; exit 64; }
+at_most_minutes=9
+case "$#" in
+    0) ;;
+    2) [ "$1" = --at-most-minutes ] || refuse 'Usage: wait-for-the-setup [--at-most-minutes N]'
+       [[ "$2" =~ ^[1-9][0-9]{0,2}$ ]] || refuse "--at-most-minutes takes a whole number of minutes from 1 to 999, not $2."
+       at_most_minutes=$2;;
+    *) refuse 'Usage: wait-for-the-setup [--at-most-minutes N]';;
+esac
+
+# Prints one word for the file: finished, stopped (by a run written after
+# the wait started), or waiting.
+read_the_state() {
+    jq -r --argjson started "$started" '
+        if .finished == true then "finished"
+        elif ((.stopped_with // "") != "") and ((.updated_at | fromdateiso8601) >= $started) then "stopped"
+        else "waiting" end' "$results_file" 2>/dev/null || echo waiting
+}
+steps_line() {
+    jq -r '[.steps[] | "\(.name) \(.state)"] | join(", ")' "$results_file" 2>/dev/null || true
+}
+
+started=$(date +%s)
+last_line_at=$started
+shown_steps=
+state=waiting
+while :; do
+    now=$(date +%s)
+    [ -f "$results_file" ] && state=$(read_the_state)
+    [ "$state" = waiting ] || break
+    if [ $((now - started)) -ge $((at_most_minutes * 60)) ]; then
+        steps=$(steps_line)
+        printf 'go-live has not finished or stopped after %s minutes.%s Wait again with: wait-for-the-setup\n' \
+            "$at_most_minutes" "${steps:+ Steps: $steps.}"
+        exit 124
+    fi
+    steps=$(steps_line)
+    minutes=$(( (now - started) / 60 ))
+    if [ -n "$steps" ] && [ "$steps" != "$shown_steps" ]; then
+        printf -- '--- go-live (%s min): %s\n' "$minutes" "$steps"
+        shown_steps=$steps
+        last_line_at=$now
+    elif [ $((now - last_line_at)) -ge "$seconds_between_lines_at_most" ]; then
+        if [ -f "$results_file" ]; then
+            printf -- '--- go-live (%s min): no step changed.\n' "$minutes"
+        else
+            printf -- '--- go-live (%s min): the person has not started it yet (no %s).\n' "$minutes" "$results_file"
+        fi
+        last_line_at=$now
+    fi
+    sleep "$seconds_between_checks"
+done
+
+jq '{steps: [.steps[] | "\(.name)=\(.state)"], finished, stopped_with, for_the_coding_agent}' "$results_file"
+if [ "$state" = finished ]; then
+    echo 'go-live finished.'
+    exit 0
+fi
+echo 'go-live stopped. stopped_with above says why. After the fix, the person starts the setup again, and it continues where it stopped.'
+exit 1

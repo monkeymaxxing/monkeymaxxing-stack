@@ -82,8 +82,10 @@ approve the first release to production, when
    The person's "release" is the approval that
    [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release)
    asks for. Ask nothing else about the first release. Check CI yourself,
-   with `gh run watch` when `gh` is signed in. Without `gh`, `deploy`'s
-   image pull proves the image. Never ask the person whether CI is green.
+   with `gh run watch` when `gh` is signed in. Without `gh`, run
+   `./server_management_scripts/wait_for_the_app_image IMAGE:TAG`; when it
+   cannot tell (exit 3), `deploy`'s image pull proves the image. Never ask
+   the person whether CI is green.
 
    **Check:** the person said "release".
 

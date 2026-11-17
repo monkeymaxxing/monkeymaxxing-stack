@@ -348,6 +348,15 @@ node_tasks:
   # (files/start-a-desk-job says which runs and why).
   - id: install_the_desk_job_command
     file: {path: /usr/local/bin/start-a-desk-job, template: files/start-a-desk-job, owner: root, group: root, permissions_mode: "0755"}
+  # The coding agent's two waits, run in its own login with no sudo:
+  # for a desk job, and for the person's go-live. Each one prints a line at
+  # least once a minute and ends at a bound, so the agent waits with one
+  # command instead of a loop of sleeps (files/wait-for-a-desk-job and
+  # files/wait-for-the-setup say how).
+  - id: install_the_wait_for_a_desk_job_command
+    file: {path: /usr/local/bin/wait-for-a-desk-job, source: files/wait-for-a-desk-job, owner: root, group: root, permissions_mode: "0755"}
+  - id: install_the_wait_for_the_setup_command
+    file: {path: /usr/local/bin/wait-for-the-setup, source: files/wait-for-the-setup, owner: root, group: root, permissions_mode: "0755"}
   - id: allow_the_coding_agent_the_desk_job_command
     file:
       path: /etc/sudoers.d/start-a-desk-job

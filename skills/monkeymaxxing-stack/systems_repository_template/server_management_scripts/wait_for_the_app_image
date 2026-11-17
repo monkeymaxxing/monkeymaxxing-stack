@@ -1,0 +1,120 @@
+#!/bin/bash
+# Waits until the container registry holds an app image, on the laptop:
+#     ./server_management_scripts/wait_for_the_app_image IMAGE:TAG [--at-most-minutes N]
+# such as ghcr.io/example/shop:<full app commit ID>. It asks the
+# registry's standard manifest address, the address podman and docker
+# pull from, with a line at least once a minute.
+# Exit codes:
+#     0    the registry holds the image
+#     1    the registry does not hold it when the wait ended: the build
+#          failed, or still runs
+#     3    this laptop cannot tell: the registry refuses it without a login,
+#          or did not answer
+#     64   a wrong argument; nothing was asked
+# The image's presence says it was built and pushed. It says nothing about
+# whether the app's tests ran.
+# Login: a private image needs a registry login. The command uses one only
+# when this laptop already has it, saved by podman login or docker login
+# in the file itself (an "auth" entry for the registry), and sends it only
+# to the registry's own login address. It asks for no login and opens no
+# keychain.
+# Reason it runs on the laptop: the coding agent's account on the desk
+# reaches no outside host, and the registry login on the desk is in the
+# vault, which the coding agent never reads.
+# Reason for the bound, 9 minutes by default: Claude Code stops a command
+# after 10 minutes, so the wait ends first and says so.
+# Bash 3.2, curl and jq, so it runs on macOS as it ships plus jq.
+set -euo pipefail
+seconds_between_checks=15
+seconds_between_lines_at_most=60
+
+refuse() { printf '%s Nothing was asked.\n' "$1" >&2; exit 64; }
+usage='Usage: wait_for_the_app_image IMAGE:TAG [--at-most-minutes N], such as ghcr.io/example/shop:FULL_APP_COMMIT_ID.'
+[ "$#" = 1 ] || [ "$#" = 3 ] || refuse "$usage"
+image=$1
+at_most_minutes=9
+if [ "$#" = 3 ]; then
+    [ "$2" = --at-most-minutes ] || refuse "$usage"
+    [[ "$3" =~ ^[1-9][0-9]{0,2}$ ]] || refuse "--at-most-minutes takes a whole number of minutes from 1 to 999, not $3."
+    at_most_minutes=$3
+fi
+[[ "$image" =~ ^[a-z0-9.-]+\.[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] ||
+    refuse "$image is not IMAGE:TAG with the registry's host first, such as ghcr.io/example/shop:FULL_APP_COMMIT_ID."
+registry=${image%%/*}
+name_and_tag=${image#*/}
+repository=${name_and_tag%:*}
+tag=${name_and_tag##*:}
+
+# The laptop's saved registry login, base64 user:password, or nothing.
+saved_login() {
+    local file login
+    for file in "${REGISTRY_AUTH_FILE:-}" "${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/containers/auth.json}" \
+                "$HOME/.config/containers/auth.json" "$HOME/.docker/config.json"; do
+        [ -n "$file" ] && [ -f "$file" ] || continue
+        login=$(jq -r --arg registry "$registry" '.auths[$registry].auth // empty' "$file" 2>/dev/null) || true
+        if [ -n "$login" ]; then printf '%s\n' "$login"; return; fi
+    done
+}
+
+# Prints found, missing, refused or unreachable.
+ask_the_registry() {
+    local challenge realm service login token status_code config=
+    challenge=$(curl -sS --max-time 20 -o /dev/null -D - "https://$registry/v2/" 2>/dev/null |
+        tr -d '\r' | grep -i '^www-authenticate: *bearer ' | head -n 1) || true
+    if [ -n "$challenge" ]; then
+        realm=$(printf '%s' "$challenge" | sed -n 's/.*realm="\([^"]*\)".*/\1/p')
+        service=$(printf '%s' "$challenge" | sed -n 's/.*service="\([^"]*\)".*/\1/p')
+        case "$realm" in https://*) ;; *) echo unreachable; return;; esac
+        login=$(saved_login)
+        # The login goes in curl's configuration on standard input, never on
+        # its command line, which other users on the laptop can read.
+        token=$( { [ -z "$login" ] || printf 'header = "Authorization: Basic %s"\n' "$login"; } |
+            curl -sS --max-time 20 -K - -G --data-urlencode "service=$service" \
+                --data-urlencode "scope=repository:$repository:pull" "$realm" 2>/dev/null |
+            jq -r '.token // .access_token // empty' 2>/dev/null) || true
+        if [ -z "$token" ]; then echo refused; return; fi
+        config=$(printf 'header = "Authorization: Bearer %s"\n' "$token")
+    fi
+    status_code=$(printf '%s\n' "$config" | curl -sS --max-time 20 -K - -o /dev/null -w '%{http_code}' -I \
+        -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
+        "https://$registry/v2/$repository/manifests/$tag" 2>/dev/null) || true
+    case "$status_code" in
+        200) echo found;;
+        404) echo missing;;
+        401|403) echo refused;;
+        *) echo unreachable;;
+    esac
+}
+
+started=$(date +%s)
+last_line_at=$started
+while :; do
+    answer=$(ask_the_registry)
+    case "$answer" in
+        found)
+            echo "$image is at the registry: it was built and pushed. This says nothing about whether the app's tests ran."
+            exit 0;;
+        refused)
+            echo "The registry does not let this laptop read $image without a login, so this command cannot tell whether it was built. That is not a sign that the build failed. go-live's container_image_found (chapter 4) checks the image with the servers' registry login, and the deploy's image pull stops a deploy before any change when the image is missing."
+            exit 3;;
+    esac
+    now=$(date +%s)
+    minutes=$(( (now - started) / 60 ))
+    if [ $((now - started)) -ge $((at_most_minutes * 60)) ]; then
+        if [ "$answer" = missing ]; then
+            echo "$image is not at the registry after $at_most_minutes minutes. Its build failed, or still runs. The servers cannot start this release until the image is there, so deploy nothing with this tag. Wait again with: ./server_management_scripts/wait_for_the_app_image $image"
+            exit 1
+        fi
+        echo "The registry $registry did not answer for $at_most_minutes minutes, so this command cannot tell whether $image was built. Wait again with: ./server_management_scripts/wait_for_the_app_image $image"
+        exit 3
+    fi
+    if [ $((now - last_line_at)) -ge "$seconds_between_lines_at_most" ]; then
+        if [ "$answer" = missing ]; then
+            echo "--- $image is not at the registry yet ($minutes min)."
+        else
+            echo "--- The registry $registry did not answer ($minutes min)."
+        fi
+        last_line_at=$now
+    fi
+    sleep "$seconds_between_checks"
+done

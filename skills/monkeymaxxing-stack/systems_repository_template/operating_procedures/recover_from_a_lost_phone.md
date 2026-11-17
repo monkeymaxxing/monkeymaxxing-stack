@@ -146,7 +146,7 @@ Keep that login open until step 4.
 
    For the first desk, commit `recovery_bundle.age` in the desk's checkout
    and publish it, as [Making a change](../AGENTS.md#making-a-change) says.
-   **Check:** `ssh -O check desk01-agent` says the connection runs, and the
+   **Check:** `~/code/example_systems/ssh/open-the-desk-login --check` says the login is open, and the
    publishing step names the bundle's commit.
 6. **Remove the old phone code:**
 

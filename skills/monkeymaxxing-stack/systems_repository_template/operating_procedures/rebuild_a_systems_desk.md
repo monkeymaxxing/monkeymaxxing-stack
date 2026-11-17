@@ -189,7 +189,7 @@ inventory's real names and addresses, and the next unused desk name.
 
     ```sh
     # On the laptop, in ~/code/example_systems:
-    mmx run systems_desk --var desk_name=desk02 --only-fleet-stages systems_desk --connection ssh_only
+    ~/.local/bin/mmx run systems_desk --var desk_name=desk02 --only-fleet-stages systems_desk --connection ssh_only
     ```
 
     **Check:** the run stops at `start_the_systems_repository`, saying
@@ -267,7 +267,7 @@ inventory's real names and addresses, and the next unused desk name.
 
     ```sh
     # On the laptop, in ~/code/example_systems:
-    mmx run systems_desk --var desk_name=desk02 --only-fleet-stages lock --connection ssh_only
+    ~/.local/bin/mmx run systems_desk --var desk_name=desk02 --only-fleet-stages lock --connection ssh_only
     ```
 
     Then move the laptop's copy aside, and clone the desk's checkout in its
@@ -361,7 +361,7 @@ cd ~/code/example_systems
 # When MMX has a one-value command, such as `mmx secrets show`, use it here instead.
 bundle_item() {
   EDITOR="awk -v key=$1 '\$0 ~ \"^\" key \":\" {on=1; v=substr(\$0, length(key)+3); if (v !~ /^[|]/) {gsub(/^\"|\"\$/, \"\", v); print v; on=0}; next} on && /^[^ ]/ {on=0} on {sub(/^  /, \"\"); print}'" \
-    mmx secrets edit --vault recovery_bundle.age | grep -v '^Saved encrypted vault: '
+    ~/.local/bin/mmx secrets edit --vault recovery_bundle.age | grep -v '^Saved encrypted vault: '
   git restore recovery_bundle.age
 }
 ```
