@@ -110,6 +110,15 @@ func (g *goLive) steps() []goLiveStep {
 func runGoLive(e *environment) error {
 	g := &goLive{e: e}
 	if err := g.prepare(); err != nil {
+		// The coding agent waits for finished or stopped_with in the results
+		// file, so a refusal before the first screen is written there too.
+		// The message is the one the person sees; settings checks and the
+		// credential and vault errors name files and settings, never a value.
+		if g.results.ForTheCodingAgent == nil {
+			g.results = g.readResults()
+		}
+		g.results.StoppedWith = trimPeriod(err.Error())
+		_ = g.writeResults()
 		return err
 	}
 	if g.results.Finished {

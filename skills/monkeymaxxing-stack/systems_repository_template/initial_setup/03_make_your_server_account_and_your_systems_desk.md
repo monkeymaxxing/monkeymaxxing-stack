@@ -81,7 +81,10 @@ account screen of step 1 is the opening.
    I wait here until the key is in.
    ```
 
-   Then, in the same turn, wait for the key file. Write the wait before
+   Then, in the same turn, wait for the key file, as
+   [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
+   says: the screen is in your reply's text, and you say in one line what
+   you wait for. Write the wait before
    the screen, when you write the key command, as the script
    `~/code/example_systems/coding_agent_scratch/wait-for-the-provider-key`,
    as

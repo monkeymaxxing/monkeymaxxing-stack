@@ -247,9 +247,21 @@ the rules with this team's folders.
      manager do you use?" on the screen. Reason: a recommendation to a
      person who has a manager reads as not listening.
    - **Your name on the desk:** the laptop's user name, `$USER`.
-   - **Sign-in email:** the address from `git config user.email`. When it
-     is empty, ask for one. Reason: the sign-in link for the private pages
-     goes to this address, and the domain has no mailbox yet.
+   - **Status page and alerts page names:** `status.` and `ops.` before
+     the domain, such as `status.example.com` and `ops.example.com`.
+     Reason: `go-live` refuses a name that is still the template's
+     example, so chapter 1 fills both for the person's yes. Chapters 5
+     and 8 check that the domain has no DNS record for each name, and
+     pick another when it has.
+   - **Sign-in email:** read `git config user.email`. Use it as the
+     default when it looks real: it has a domain that is not
+     `example.invalid`, `example.com` or `localhost`, and no `noreply` in
+     it. When it is empty or such a placeholder, say so on the screen and
+     ask for an address the person reads today. Never offer an address on
+     the new domain, unless the person says mail already works there.
+     Reason: the sign-in link for the private alerts page, and the
+     setup's notices, go to this address, and the new domain has no
+     mailbox yet.
    - **Stock, before the cost:** check that the provider sells each
      recommended size in the chosen location now: the desk's size in the
      desk's location, and the servers' sizes in production's. Use the
@@ -288,7 +300,9 @@ the rules with this team's folders.
      Company name:       Example            (from your domain)
      Password manager:   1Password          (the one this laptop has)
      Your name on the systems desk:  alex           (your laptop's user name)
-     Sign-in email:      alex@gmail.com     (from your Git settings)
+     Status page:        status.example.com (the public page where your customers see if your site is up)
+     Alerts page:        ops.example.com    (your private page for alerts: only your team signs in)
+     Sign-in email:      alex@gmail.com     (from your Git settings; it signs you in to the alerts page and gets the setup's notices. It must be a mailbox you read today)
 
      Cost:               about €27 a month for the servers at Hetzner  (price from Hetzner's list; stock checked before ordering)
                          (one line per server with its real price: the systems desk, app001, db01, util01)
@@ -312,6 +326,12 @@ the rules with this team's folders.
    server type at creation differs from this screen (no stock, a changed
    price, a different size), stop and ask again with the new number,
    with the choices that the stock line above names.
+   When Git's address is empty or a placeholder, the sign-in line reads:
+
+   ```text
+     Sign-in email:      which address do you read today?  (Git has no real address for you, only a placeholder. This address signs you in to the alerts page and gets the setup's notices. Not one on your new domain, which has no mail yet)
+   ```
+
    When the person asks what one line means, answer in one or two
    sentences, then show the screen again.
 
@@ -375,6 +395,10 @@ the rules with this team's folders.
      as `1Password`, from the screen. The account screens of chapters 3
      and 4 name it.
    - `desk01.vars.person_unix_username` in `inventories/servers.yml`.
+   - `status_page_host_name` under `vars` in `mmx_project_settings.yml`,
+     and `util01_private_page_host_names.mmhotline` beside it, from the
+     screen's two names. The person's sign-in email goes into
+     `mmhotline_settings.yml` in chapter 7.
    - `stack_commit` in `monkeymaxxing_stack_checklist.yml`, from
      `git -C TEMPLATE_DIRECTORY rev-parse HEAD` when the template belongs
      to a clone. Without a source clone, remove `stack_commit`.
@@ -391,7 +415,15 @@ the rules with this team's folders.
    **Tell the person:** no message, because chapter 2 starts at once.
 
    **Check:** `~/code/example_systems` holds the template with the values
-   above, and `mmx validate` passes there.
+   above, and `mmx validate` passes there. `mmx validate` does not catch a
+   value that is still the template's example, and `go-live` refuses one.
+   Search the systems repository with your search tool for `example.com`,
+   `example.invalid` and `example-`. Replace each one that this chapter
+   owns, the status page and alerts page names, now. The others belong to
+   later chapters, which fill each before a step needs it: the app's
+   address in chapter 2, the bucket names in chapter 3, the Cloudflare
+   account and the registry account in chapter 4, and the example person
+   in chapter 7.
 
 ## If something is different
 

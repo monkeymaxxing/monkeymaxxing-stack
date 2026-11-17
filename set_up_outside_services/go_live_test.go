@@ -661,3 +661,28 @@ func TestTheDeskIsLockedOnlyWithTheRecordAndWithoutTheRootLoginFile(t *testing.T
 		t.Errorf("a systems desk that is not locked yet: %q", message)
 	}
 }
+
+// A refusal before the first screen still reaches the coding agent, which
+// waits for finished or stopped_with in the results file. Without it the
+// agent waits for a run that already ended.
+func TestGoLiveRefusalBeforeTheFirstScreenIsInTheResults(t *testing.T) {
+	h := newGoLiveHarness(t, true)
+	path := filepath.Join(h.e.directory, projectSettingsFile)
+	text, _ := os.ReadFile(path)
+	if !strings.Contains(string(text), "status_page_host_name: status.example.org") {
+		t.Fatal("the test settings changed: expected status.example.org")
+	}
+	writeFile(t, path, strings.Replace(string(text), "status_page_host_name: status.example.org", "status_page_host_name: status.example.com", 1))
+	h.commitAll("The status page's host name is still the template's example")
+	err := runGoLive(h.e)
+	if err == nil || !strings.Contains(err.Error(), "status.example.com") {
+		t.Fatalf("want the refusal for the example host name, got %v", err)
+	}
+	if len(h.results) == 0 {
+		t.Fatal("the refusal wrote nothing to the results file")
+	}
+	stopped := h.last()
+	if !strings.Contains(stopped.StoppedWith, "status.example.com") || stopped.Finished || stopped.UpdatedAt == "" {
+		t.Fatalf("the results do not say why the run stopped: %+v", stopped)
+	}
+}

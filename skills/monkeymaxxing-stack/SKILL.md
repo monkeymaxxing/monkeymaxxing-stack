@@ -154,6 +154,16 @@ match, so one plain command keeps the person's questions to what
 [chapter 1's one approval](systems_repository_template/initial_setup/01_answer_two_questions.md#first-one-approval-for-the-setups-commands)
 lists.
 
+## The two windows agree
+
+Before you send the person to their own terminal, show the exact command
+and what they will see in the chat reply itself, and while they work
+there, wait only on a result you can read. Read the whole rule in the
+template's
+[`AGENTS.md`, "The two windows agree"](systems_repository_template/AGENTS.md#the-two-windows-agree)
+before chapter 1's first command. Reason: the person never sees a tool
+call's description or summary.
+
 ## What the stack is
 
 The system is described on one page,

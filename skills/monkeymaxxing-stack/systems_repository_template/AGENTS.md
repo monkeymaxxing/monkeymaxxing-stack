@@ -523,6 +523,28 @@ lists.
 The person's own commands, typed in the person's terminal, keep their
 shape: the rule is for your tool calls.
 
+### The two windows agree
+
+The person sees the chat and their own terminal. The person never sees
+a tool call's description or summary. Two windows that disagree cost
+the person a refused tool call and a question.
+
+- Before you send the person to their own terminal, write in the chat
+  reply, as plain text, the exact command to type and what they will
+  see. Never put it only in a tool call's description or summary.
+- While the person works in their terminal, wait only on a result you
+  can read: `ssh desk01-agent wait-for-the-setup` for the setup,
+  `ssh desk01-agent wait-for-a-desk-job NAME` for a desk job, or the
+  file a laptop script writes. Never wait a fixed time on something you
+  cannot see. Keep each wait within the command's own bound, and say in
+  one line what you wait for before each one.
+- When a wait ends with a stop, say at once, in one plain sentence, what
+  stopped and what happens next. `wait-for-the-setup` prints the
+  stop's reason, also when `go-live` refused before its first screen.
+
+Reason: the chat is the only window the person reads, and a wait on a
+result you cannot read ends only by timeout.
+
 ### Making a change
 
 Use one branch, `main`, including when the team has only one person.

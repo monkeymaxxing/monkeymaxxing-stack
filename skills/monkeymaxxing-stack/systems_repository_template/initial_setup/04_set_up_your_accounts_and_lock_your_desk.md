@@ -95,8 +95,11 @@ domain at Cloudflare, its DNS records, and the lock.
      ssh desk01-setup
    ```
 
-   Put the screen first and whole in your reply's text. Then, in the same
-   turn, wait on the desk until `go-live` finishes or stops. Give the
+   Put the screen first and whole in your reply's text, as
+   [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
+   says, never only in a tool call's description. Say in one line that you
+   wait for `go-live` to finish or stop. Then, in the same
+   turn, wait on the desk until it does. Give the
    command the longest time your agent allows a command, 10 minutes in
    Claude Code:
 
@@ -109,6 +112,11 @@ domain at Cloudflare, its DNS records, and the lock.
    It ends with the results file's summary: the steps, `finished`,
    `stopped_with` and `for_the_coding_agent`. Exit 0 means `go-live`
    finished, 1 that it stopped, and 124 that it still runs after 9 minutes.
+   When it ends with a stop, say at once, in one plain sentence, what
+   `stopped_with` says and what happens next: a refusal before the first
+   screen, such as a setting that is still the template's example, is in
+   `stopped_with` too. Fix the setting, publish it, and ask the person to
+   type `ssh desk01-setup` again.
    A stop counts only when the run wrote the file after the wait started,
    so an earlier run's `stopped_with` never ends the wait for the next run.
    Reason for 9 minutes: the wait ends by itself before Claude Code's
