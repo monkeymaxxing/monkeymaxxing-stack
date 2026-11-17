@@ -222,7 +222,7 @@ domain at Cloudflare, its DNS records, and the lock.
 
      4. Press save.
 
-   Press Enter here when you saved.  I check it from here.
+   Nothing to press here.  The next account comes next, and I check the nameservers myself later.
    ```
 
    When DNSSEC is on, the screen has a loud line above "Do this now:", and
@@ -232,11 +232,13 @@ domain at Cloudflare, its DNS records, and the lock.
    TURN OFF DNSSEC FIRST.  YOUR SITE WILL NOT WORK WITH IT ON.
    ```
 
-   After the person presses Enter, check the change with
+   The command asks for no keypress and goes on to Backblaze by itself.
+   Once `go-live` has finished, check the change with
    `dig NS example.com +short` until the answer names the two nameservers
    in `cloudflare_nameservers` of `for_the_coding_agent`. Cloudflare's own
    "Active" can take hours. Nothing in chapters 4 to 7 waits for
-   "Active".
+   "Active". When the answer still names other nameservers at chapter 9,
+   say so plainly and say what the person changes at the registrar.
 
    **Tell the person after:**
 
