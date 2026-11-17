@@ -678,6 +678,21 @@ fleet_stages:
   # database server is primary. The monitor and hub must exist before
   # database servers register with the monitor and MMWatchdog nodes join
   # the hub.
+  # The Pushover keys go onto util01 before the hub validates its candidate
+  # configuration. The stage is left out while phone_alerts_are_set_up is
+  # false in mmx_project_settings.yml, so the first sitting needs no
+  # Pushover key in the vault: `secrets usage` lists the keys only for a
+  # stage that runs.
+  - id: util_push_app_keys
+    nodes: util_server
+    skip_when_no_nodes_are_selected: true
+    when: "{{ .vars.phone_alerts_are_set_up }}"
+    node_tasks:
+      - role: util_push_app_keys
+        inputs:
+          pushover_application_token: "{{ .secrets.pushover_application_token }}"
+          pushover_user_or_group_key: "{{ .secrets.mmwatchdog_pushover_user_or_group_key }}"
+
   - id: util_server
     nodes: util_server
     node_tasks:
@@ -702,8 +717,7 @@ fleet_stages:
           mmx_release: "{{ .vars.stack_software.mmx }}"
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           mmx_vault_passphrase: "{{ .secrets.mmx_vault_passphrase }}"
-          pushover_application_token: "{{ .secrets.pushover_application_token }}"
-          pushover_user_or_group_key: "{{ .secrets.mmwatchdog_pushover_user_or_group_key }}"
+          phone_alerts_are_set_up: "{{ .vars.phone_alerts_are_set_up }}"
           mmhotline_signing_secret_of_the_fleet_hub: "{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub }}"
           cloudflare_tunnel_token: "{{ .secrets.util01_cloudflare_tunnel_token }}"
           provider_api_token: "{{ .secrets.util01_provider_api_token }}"
