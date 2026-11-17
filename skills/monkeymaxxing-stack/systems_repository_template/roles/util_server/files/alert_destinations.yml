@@ -20,6 +20,8 @@ destinations:
       mmhotline_signing_secret_file: /etc/mmwatchdog/secrets/mmhotline-signing-secret
     alert_severities: [info, warn, sos]
 
+{{- if .inputs.phone_alerts_are_set_up }}
+
   # The servers reach Pushover directly to notify everyone who can be on
   # call.
   # Only the hub-outage alerters' alert that util01 stopped reporting goes to
@@ -36,3 +38,9 @@ destinations:
       repeat_sos_alerts_every: 5m
       stop_repeating_sos_alerts_after: 1h
     alert_severities: []
+{{- else }}
+
+  # phone_alerts_are_set_up is false in mmx_project_settings.yml, so there is
+  # no push destination yet and no alert pretends to reach a phone. The alerts
+  # sitting adds it.
+{{- end }}

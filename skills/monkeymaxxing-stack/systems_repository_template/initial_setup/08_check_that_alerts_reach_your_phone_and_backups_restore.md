@@ -192,13 +192,16 @@ You do the rest. It takes about 15 minutes.
 6. **Add Pushover and the MMHotline-down alarm to the settings.** Copy two
    sections back from the Stack template's `mmhotline_settings.yml`
    (`skills/monkeymaxxing-stack/systems_repository_template/mmhotline_settings.yml`
-   in the Stack's repository), each with its comments:
+   in the Stack's repository), each with its comments, and make one more change:
 
    - `sending_services`, with its `pushover` entry, in place of
      `sending_services: {}`;
    - `mmhotline_down_alarm`, from the comment line
      `# The MMHotline-down alarm is a small program` to
-     `wake_the_backup_after_minutes_without_a_check_in`.
+     `wake_the_backup_after_minutes_without_a_check_in`;
+   - `phone_alerts_are_set_up` in `mmx_project_settings.yml`: change
+     `false` to `true`. Until then, `every_server` asks for no Pushover key
+     and gives MMWatchdog's fleet hub no push destination.
 
    Leave `triage_agent` and `status_page` out: parts 3 and 4 add them.
    `go-live` already saved the MMHotline-down alarm's Cloudflare token in

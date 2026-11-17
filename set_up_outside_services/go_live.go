@@ -618,9 +618,11 @@ func (g *goLive) registrar() (string, error) {
 	}
 	screen.WriteString("\n")
 	e.show(screen.String())
-	if _, err := e.confirm("Press Enter here when you saved.  I check it from here."); err != nil {
-		return "", err
-	}
+	// Nothing waits for a keypress here. Reason: nothing before the domain's
+	// own chapter needs the nameservers, and a person who stops here to save
+	// them first has the next question wait on the screen anyway.
+	e.say("Nothing to press here.  The next account comes next, and I check the nameservers myself later.")
+	e.say("")
 	if registration.registrar != "" {
 		g.note("registrar", registration.registrar)
 	}

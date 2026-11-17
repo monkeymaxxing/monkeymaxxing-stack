@@ -11,7 +11,12 @@ alert_severity_when_this_node_goes_silent: sos
 alert_severity_when_this_node_has_rebooted: warn
 # MMHotline runs on util01 and stops with util01, so the hub-outage alerters send
 # the alert about util01 going silent straight to Pushover.
+{{- if .inputs.phone_alerts_are_set_up }}
 send_silence_alerts_of_this_node_only_to_destinations: [on_call_push_app]
+{{- else }}
+# No push destination yet: phone_alerts_are_set_up is false in
+# mmx_project_settings.yml until the alerts sitting.
+{{- end }}
 # MMHotline's dashboard draws one box per MMWatchdog node group.
 # MMWatchdog's node groups match the inventory groups: util01 uses util_server.
 this_node_is_in_node_groups: [util_server]

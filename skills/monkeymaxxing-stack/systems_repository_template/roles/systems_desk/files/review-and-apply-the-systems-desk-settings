@@ -595,10 +595,53 @@ def main(arguments):
     if not review(view, commit):
         raise Stop('Stopped. Nothing ran, and nothing was recorded.')
     write_record(view, commit, keys_view)
+    only, skipped = stages_to_run(only, (repository/PUSHED_MAIN_COMES_FROM_UTIL01).exists())
+    if skipped:
+        print(skipped, flush=True)
     command = [MMX, 'run', PLAYBOOK, '--var', 'desk_name=' + socket.gethostname(), *only, '--connection', 'ssh_only']
     print(' '.join(command), flush=True)
-    os.chdir(repository)
-    os.execve(MMX, command, {**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+    return run_and_explain_a_failure(command, repository)
+
+
+def stages_to_run(only, util01_exists):
+    """The --only-fleet-stages arguments for the run, and one plain line when
+    this skips the monitoring stages.
+
+    Joining the desk to MMWatchdog's fleet hub reads util01's join code, so
+    it cannot run before util01 exists. The pull marks util01 as the main
+    copy (PUSHED_MAIN_COMES_FROM_UTIL01) once it exists; until then the
+    review runs the desk's own stages only, as the bootstrap does, and the
+    first review after util01 exists joins the desk to monitoring. A person's
+    own --only-fleet-stages stays as given."""
+    if util01_exists or only:
+        return only, None
+    return ['--only-fleet-stages', 'systems_desk,lock'], (
+        'util01 does not exist yet, so this review skips joining the desk to monitoring. '
+        'The first review after util01 exists does it.')
+
+
+def run_and_explain_a_failure(command, repository):
+    """Runs mmx with the person's private agent socket, in the desk's copy,
+    on the person's own terminal (so MMX keeps its live display). When it
+    fails, one plain sentence follows: what failed, whether anything is
+    harmed, and what happens next. The lines above it are for the coding
+    agent. Reason it is printed after: buffering the run to print it first
+    would hide the progress of a run that takes minutes."""
+    run = subprocess.Popen(command, cwd=repository, env={**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+    try:
+        code = run.wait()
+    except KeyboardInterrupt:
+        code = run.wait()
+    if code:
+        print()
+        print(FAILED_REVIEW_SENTENCE, flush=True)
+    return code
+
+
+FAILED_REVIEW_SENTENCE = (
+    'The desk review failed: one step of the desk playbook did not work, and nothing else was touched. '
+    'Your site and servers are not affected, and the desk keeps working with the settings it had. '
+    'Tell your coding agent: it reads the technical lines above, fixes the cause, and you run the review again.')
 
 
 if __name__ == '__main__':

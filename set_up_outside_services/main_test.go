@@ -714,3 +714,28 @@ func TestBackblazeRefusesBackupLengthsBelowTheirMinimumsBeforeChangingAnything(t
 		}
 	}
 }
+
+func TestAFailedCommandStartsWithOnePlainSentenceThenTheTechnicalLine(t *testing.T) {
+	var out, errorOut bytes.Buffer
+	if code := run([]string{"go-live"}, &out, &errorOut); code != 1 {
+		t.Fatalf("exit code %d, want 1; output %q", code, errorOut.String())
+	}
+	text := errorOut.String()
+	plain := strings.Index(text, "The first setup stopped before it finished.")
+	technical := strings.Index(text, "Stopped: ")
+	if plain != 0 || technical < plain {
+		t.Fatalf("the plain sentence must come first, then the technical line: %q", text)
+	}
+	for _, answer := range []string{"stopped before it finished", "not affected", "tells you what to do next"} {
+		if !strings.Contains(text[:technical], answer) {
+			t.Errorf("the sentence before the technical line lacks %q: %q", answer, text)
+		}
+	}
+}
+
+func TestAWrongCommandLineGetsNoFailureSentence(t *testing.T) {
+	var out, errorOut bytes.Buffer
+	if code := run([]string{"no-such-command"}, &out, &errorOut); code != 4 || strings.Contains(errorOut.String(), "stopped before it finished") {
+		t.Fatalf("exit code %d, output %q", code, errorOut.String())
+	}
+}
