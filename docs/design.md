@@ -5602,10 +5602,12 @@ nothing. The laptop pushes the Git host's backup with the person's own login.
 
 **What the desk protects, and what it leaves.** The production key, the
 vault passphrase and the person's tokens stay on the desk, and the agent
-uses them without copying them. While the shared login is open, any
-program on the laptop could use it too. That is the main risk of this
-design, and the reason for the idle hour, the ten-hour limit, and the guide's
-rule to run the app's install and test commands in a container on the laptop.
+uses them without copying them. The idle hour and the ten-hour limit exist
+so a login does not stay open on a laptop that is lost, stolen or left
+unattended. The guide's rule to run the app's install and test commands in a
+container on the laptop keeps the app's own commands away from the open login
+by mistake. A laptop the person does not trust is outside what the desk
+protects ("The systems desk", below).
 
 ## Naming
 
