@@ -212,14 +212,17 @@ class PinnedProgramReleases(unittest.TestCase):
             self.assertIn(text, output)
 
     def test_a_newer_stack_release_is_found_by_its_semantic_version(self):
-        # The Stack tags v0.1.0, v0.1.1, v0.2.0 ... as the tools do; 0.10.0 is newer than 0.9.0.
-        for newer in ('0.1.1', '0.2.0', '0.10.0'):
+        # The Stack tags vMAJOR.MINOR.PATCH as the tools do; a minor of 10 is newer than one of 9.
+        pinned = re.search(r'(?m)^    set_up_outside_services:\n      version: "(\d+)\.(\d+)\.(\d+)"',
+                           (T/'mmx_project_settings.yml').read_text())
+        major, minor, patch = (int(part) for part in pinned.groups())
+        for newer in (f'{major}.{minor}.{patch + 1}', f'{major}.{minor + 1}.0', f'{major}.{minor + 10}.0'):
             code, output = self.run_script(self.check('set_up_outside_services'), {
                 'monkeymaxxing/monkeymaxxing-stack': [release('v' + newer, 'monkeymaxxing/monkeymaxxing-stack')]})
             self.assertEqual(code, 1, output)
             self.assertIn('set_up_outside_services has a newer release, ' + newer, output)
         code, output = self.run_script(self.check('set_up_outside_services'), {
-            'monkeymaxxing/monkeymaxxing-stack': [release('v0.1.0', 'monkeymaxxing/monkeymaxxing-stack')]})
+            'monkeymaxxing/monkeymaxxing-stack': [release(f'v{major}.{minor}.{patch}', 'monkeymaxxing/monkeymaxxing-stack')]})
         self.assertEqual(code, 0, output)
 
     def test_a_newer_release_by_number_fails_whatever_the_tag_prefix(self):
