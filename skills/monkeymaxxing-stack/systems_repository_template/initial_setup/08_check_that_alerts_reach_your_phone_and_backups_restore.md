@@ -5,7 +5,7 @@
 - **The first sitting** runs only part 1 (read the backup results), right
   after chapter 7 (install everything on the production servers). Then
   chapter 9 puts the app live.
-- **The alerts sitting,** when the person says "set up alerts", runs
+- **The alerts part of the setup,** when the person says "set up alerts", runs
   part 2 (phone alerts). It needs the domain to show "Active" at
   Cloudflare.
 - **The triage agent's sitting,** when the person asks for it, runs
@@ -13,7 +13,7 @@
 - **The status page's sitting,** when the person asks for it, runs part 4
   (the status page). It needs the domain to show "Active" too.
 
-Until the alerts sitting is done, say plainly that the site has no phone
+Until the alerts part of the setup is done, say plainly that the site has no phone
 alerts, whenever you report on the system. Keep the sittings that are
 still open in the README's next actions, so the person sees what is left.
 
@@ -125,7 +125,7 @@ This part runs in the first sitting. The person does nothing.
 
 ## Part 2: Phone alerts
 
-This part is the alerts sitting. The person makes a Pushover account,
+This part is the alerts part of the setup. The person makes a Pushover account,
 types two keys on the desk, and presses Acknowledge twice on the phone.
 You do the rest. It takes about 15 minutes.
 
@@ -177,17 +177,26 @@ You do the rest. It takes about 15 minutes.
      4. Open  https://pushover.net/apps/build.  Name it  Example alerts.  Press  Create Application.
      5. Open  https://pushover.net/groups.  Make a group named  Example on call,  and add yourself.
 
-   Then paste your user key here, in the chat.
-   It is at the top of  https://pushover.net.  It is not a secret.
+   Then paste your own user key here, in the chat.
+   It is at the top of  https://pushover.net, under "Your User Key".
+   It is not the group's key. It is not a secret.
+
+   Optional: to get alerts on one device only, such as your phone and not
+   your tablet, also tell me that device's name. It is listed at
+   https://pushover.net under "Your Devices". Leave it out to get alerts
+   on every device on your account.
    ```
 
    Each other person on call does steps 1 to 3 on their own phone, and
-   sends you their user key; the person adds each one to the group.
+   sends you their own user key, and a device name if they want one; the
+   person adds each one to the group.
    A delivery group's key lets the hub-outage alerters wake everyone in
-   it at once, when `util01` goes silent.
+   it at once, when `util01` goes silent. MMHotline needs each person's
+   own user key instead, because an acknowledgement from a group key
+   cannot claim an incident.
 
    **Check:** you have a user key of 30 letters and digits for each
-   person on call.
+   person on call, and none of them is the group's key.
 
 6. **Add Pushover and the MMHotline-down alarm to the settings.** Copy two
    sections back from the Stack template's `mmhotline_settings.yml`
@@ -250,50 +259,80 @@ You do the rest. It takes about 15 minutes.
 
    > MMHotline now tests Pushover and the MMHotline-down alarm before using them. The run takes several minutes.
 
-   **Check:** `mmhotline settings show` on `util01` shows the
-   `sending_services` and `mmhotline_down_alarm` parts applied.
+   **Check:** the run's results show the stage `util_push_app_keys` ran
+   (it is skipped while `phone_alerts_are_set_up` is `false`), and
+   `mmhotline settings show` on `util01` shows the `sending_services` and
+   `mmhotline_down_alarm` parts applied.
 
 9. **Add each phone to MMHotline.** For each person on call, add a
-   Pushover contact method with their user key. The key goes on standard
-   input, never on the command line:
+   Pushover contact method with their own user key. The key goes on standard
+   input, never on the command line. Add `--pushover-device-name NAME`
+   only for a person who named one device; leave it out to send to every
+   device on the person's account:
 
    ```sh
-   # On the laptop. USER_KEY: the person's Pushover user key. EMAIL: the person's sign-in address in people.
+   # On the laptop. USER_KEY: the person's own Pushover user key, never the group's key. EMAIL: the person's sign-in address in people.
    printf '%s\n' USER_KEY | ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 "mmhotline contact-methods add --sign-in-email-address EMAIL --contact-method-type pushover_notification --pushover-user-key-file -"'
+   # With one device (up to 25 letters, digits, _ and -), add to the end of the mmhotline command: --pushover-device-name NAME
    ```
 
-   Saving the contact method sends that phone MMHotline's test message at
-   once, at emergency priority, every 30 seconds until it is acknowledged.
+   You add the contact method yourself. Do not send the person to
+   MMHotline's Contact methods page for it.
+
+   MMHotline refuses a device name that Pushover does not list for the
+   key, and names the devices Pushover lists. With a group key, MMHotline
+   saves the contact method and prints a warning in capitals: use the
+   person's own user key instead (remove the contact method, then add it
+   again).
+
+   Saving the contact method sends that phone a quiet notification titled
+   "MMHotline can reach this phone". It needs no acknowledgement. The
+   command ends with the line "THIS PHONE HAS NOT PROVED IT WAKES YOU YET.
+   RUN: sudo mmhotline incidents send-test-sos --sign-in-email-address
+   EMAIL"; step 10 does that.
 
    **Tell the person first:**
 
-   > Your phone now rings with "MMHotline test message". It is only a test. Press Acknowledge on it.
+   > Your phone shows a quiet Pushover notification, "MMHotline can reach this phone". Nothing to do.
 
    **Check:** `mmhotline contact-methods list` on `util01` says
    `Last test message: accepted` for each person, and the person says the
-   phone rang.
+   notification arrived. `contact-methods list` shows only the last four
+   characters of each user key.
 
-10. **The test SOS.** MMHotline sends itself a test SOS, wakes the person
-    on call as a real SOS does, and waits up to 10 minutes for someone to
-    acknowledge it. It closes the test itself after the claim, so there is
-    nothing to resolve:
+10. **The test SOS.** MMHotline sends itself a test SOS and wakes one
+    person's phone as a real SOS does, whether or not that person is on
+    call. It waits up to 10 minutes for the acknowledgement. It closes the
+    test itself after the claim, so there is nothing to resolve. Run it for
+    each person on call, with their sign-in address:
 
     ```sh
-    # On the laptop:
-    ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 mmhotline incidents send-test-sos --json'
+    # On the laptop. EMAIL: the person's sign-in address in people.
+    ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 mmhotline incidents send-test-sos --sign-in-email-address EMAIL --json'
     ```
 
     **Tell the person first:**
 
     > Next, a test SOS. An SOS is the most urgent alert: it wakes the person on call, even at night, and repeats until someone acknowledges it.
     > Your phone rings with "Test of the alerts. Nothing is wrong: acknowledge this." Press Acknowledge on it.
+    > Please put the phone in Silent Mode first. Critical alerts should still sound.
 
-    Exit 0 means a person acknowledged it: `test_sos.claimed_by`,
-    `claimed_how` and `claimed_at` say who, how, and when. Exit 1 means
-    nobody acknowledged it within 10 minutes, and the test stays open.
-    Then ask the person to check that Pushover is signed in on the phone
-    and that critical alerts are allowed for Pushover in the phone's
-    settings, and run the command again: a new test closes the old one.
+    Exit 0 means the person acknowledged it: `test_sos.claimed_by`,
+    `claimed_how` and `claimed_at` say who, how, and when, and
+    `contact-methods list` then says `Emergency test: acknowledged at TIME.`
+    Exit 1 has two causes. Read the command's message:
+
+    - Nobody acknowledged within 10 minutes, and the test stays open. Ask the
+      person to check that Pushover is signed in on the phone and that
+      critical alerts are allowed for Pushover in the phone's settings.
+      Run the command again: a new test closes the old one.
+    - Someone pressed Acknowledge, but the acknowledgement came from another
+      Pushover user, so it did not claim the test. This happens with a
+      Pushover group key. The command stops at once and the test stays
+      open. Remove that person's contact method (`mmhotline contact-methods
+      remove --contact-method-id ID`, with the ID from `contact-methods
+      list`), add it again with the person's own user key (step 9), and run
+      the test again.
 
     **Ask the person after,** with `test_sos.incident_page_url`:
 
@@ -381,7 +420,7 @@ You do the rest. It takes about 15 minutes.
     >
     > It shows what changes on your desk: [the short summary]. Type yes.
 
-    **Tell the person after,** which ends the alerts sitting:
+    **Tell the person after,** which ends the alerts part of the setup:
 
     > Your phone alerts work. The test SOS woke you, and the MMHotline-down alarm reaches your phone too: [MMHotline's link].
     > Only addresses that end in `@example.com` can sign in to MMHotline.
@@ -588,13 +627,16 @@ command on the desk, looks at the page, and resolves one test notice.
 - **The test SOS is not acknowledged** (step 10): the command exits 1 and
   the test stays open. Check Pushover on the phone and its critical
   alerts, then run the command again.
+- **The acknowledgement did not claim the test** (step 10): the contact
+  method holds a Pushover group key. Add it again with the person's own
+  user key.
 - **Resolving the test notice from the desk fails** (step 19): resolve it
   from `util01` at once.
 
 ## Why the chapter works this way
 
 **Go live first, alerts the same day.** The site goes live without phone
-alerts, and the alerts sitting adds them in about 15 minutes. Reason: the
+alerts, and the alerts part of the setup adds them in about 15 minutes. Reason: the
 first sitting is long already, and each extra account in it is one more
 chance to stop before the site is live.
 
@@ -604,7 +646,7 @@ from the triage agent's settings. Before they are applied, the helper
 refuses with "no commit signing keys are applied".
 
 **MMHotline's own test SOS.** `mmhotline incidents send-test-sos` pages the
-person on call exactly as a real SOS does, and closes the test itself
+person you name exactly as a real SOS does, and closes the test itself
 after the claim. So the person presses Acknowledge once, and nobody
 resolves a test by hand. It does not pass through MMWatchdog: MMWatchdog's
 signed check-ins prove that path every minute, and MMHotline warns when

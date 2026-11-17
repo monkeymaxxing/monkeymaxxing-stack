@@ -686,9 +686,12 @@ items:
     protects_against: an SOS that reaches nobody, and an operations page anyone could open
     verification: >-
       each person's own Pushover contact method in MMHotline shows its test
-      as accepted, and the person saw it on the phone; `sudo mmhotline
-      incidents send-test-sos` exited 0: the person on call acknowledged the
-      test SOS on the phone, and MMHotline closed the test;
+      as accepted, and the person saw its quiet notification on the phone;
+      `sudo mmhotline incidents send-test-sos --sign-in-email-address EMAIL`
+      exited 0 for each person on call: the person acknowledged the test SOS
+      on the phone, and MMHotline closed the test (exit 1 after an
+      acknowledgement from a Pushover group key means the contact method
+      needs the person's own user key);
       https://ops.example.com shows Cloudflare Access's sign-in first and
       admits a company address with its emailed code, and the coding agent
       read the application's Access policy through Cloudflare's API: each

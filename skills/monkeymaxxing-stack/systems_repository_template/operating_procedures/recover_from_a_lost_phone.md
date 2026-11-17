@@ -53,17 +53,13 @@ each term. Pushover is the push app that puts the alerts on the phone.
    receives no more alerts.
    **Check:** the account's list of devices no longer shows the old phone.
 4. **Send a test alert to the new phone.** **Warn the person first:** the
-   test rings like an alarm. It is an emergency-priority Pushover message
-   that repeats every 30 seconds, for up to 10 minutes, until the person
-   acknowledges it on the phone. It is only a test, and nothing is wrong.
-   The person opens MMHotline's page, such as `https://ops.example.com`.
-   The team's address is in the system's `README.md`, under "Operating
-   links", and in `util01_private_page_host_names.mmhotline` in
-   `mmx_project_settings.yml`. The person signs in through Access, opens **Contact methods**, and sends a test to
-   the Pushover contact method.
-   **Check:** the new phone shows the test, and the person acknowledges the
-   test in Pushover. The contact method's card saying "Accepted by
-   Pushover" does not prove that the phone received the test.
+   test is a quiet Pushover notification, "MMHotline can reach this
+   phone". It needs no acknowledgement; nothing is wrong. On `util01`, run
+   `sudo mmhotline contact-methods send-test --contact-method-id ID`, with
+   the ID from `sudo mmhotline contact-methods list`.
+   **Check:** the new phone shows the notification. `contact-methods list`
+   saying "accepted" does not prove that the phone received it. Step 5's
+   test SOS proves that the phone wakes the person.
 5. **When the person is on call now, send the test SOS** of
    [chapter 8 (check that alerts reach your phone and backups restore)](../initial_setup/08_check_that_alerts_reach_your_phone_and_backups_restore.md#chapter-8-check-that-alerts-reach-your-phone-and-backups-restore),
    part 2 (each person on call signs in and adds a phone), with the new
@@ -177,8 +173,10 @@ Keep that login open until step 4.
   trial.
 - **If step 4's test alert never arrives on the new phone:** check that
   the new phone is signed in to the team's Pushover account, with the login
-  from the password manager. Then, in MMHotline, remove the person's
-  Pushover contact method and add it again, and send the test again.
+  from the password manager. Then remove the person's
+  Pushover contact method (`sudo mmhotline contact-methods remove
+  --contact-method-id ID`) and add it again as chapter 8, step 9 shows,
+  and send the test again.
   Reason: the contact method holds the Pushover user key, and a new
   contact method makes MMHotline send to the account as it is now.
 - **If the person is not on call now,** skip the test SOS in step 5 of

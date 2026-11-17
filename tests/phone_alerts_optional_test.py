@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The first sitting needs no Pushover key; the alerts sitting adds them.
+"""The first sitting needs no Pushover key; the alerts part of the setup adds them.
 
   MMX_BINARY=/path/to/mmx python3 tests/phone_alerts_optional_test.py
 

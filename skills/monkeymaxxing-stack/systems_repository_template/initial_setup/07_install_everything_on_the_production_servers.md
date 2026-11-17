@@ -58,7 +58,7 @@ chapter.
    Replace the example administrator with the person, using the person's
    email address at the company's domain when the laptop's
    `git config user.email` has one, and otherwise `admin@` the domain. The
-   alerts sitting confirms the address with the person's first sign-in.
+   alerts part of the setup confirms the address with the person's first sign-in.
 
    **Tell the person first.** Say what the triage agent may do by itself,
    from `what_the_triage_agent_may_do_without_a_person`. The example below
@@ -71,7 +71,7 @@ chapter.
    > Every start or stop of the database's failover program also waits for a person, because starting the wrong database server can bring back old data and lose newer changes.
 
    Put the person alone on call in `on_call_schedule`, with the laptop's
-   time zone. The alerts sitting asks who else goes on call. Set the rules for running the agent's playbooks and MMWatchdog's fleet hub on `util01` as the only alert
+   time zone. The alerts part of the setup asks who else goes on call. Set the rules for running the agent's playbooks and MMWatchdog's fleet hub on `util01` as the only alert
    source, as the YAML example below shows.
 
    `mmx_project_settings.yml` keeps only MMHotline's backup address,
@@ -184,7 +184,7 @@ chapter.
    not needed. For example, the uploads copy needs no keys when no app
    keeps uploads and `backups.uploads_backup_runs_on` is `[]`.
 
-   **Tell the person after:** no message. The alerts sitting tells the
+   **Tell the person after:** no message. The alerts part of the setup tells the
    person about the schedule, when alerts can reach a phone.
 
    **Check:** `mmx validate` and `mmx explain every_server` pass, and
@@ -316,7 +316,7 @@ chapter.
 
    > Next, the second run installs `util01`'s SSH keys on every server, sets up the database, and starts your app and the system tools.
    > MMWatchdog, the program that watches every server, starts in this run. MMWatchdog checks your app's public address only from chapter 9, when your site goes live, so your app raises no alert before then.
-   > Other alerts from the servers reach nobody yet. They can ring your phone after the alerts sitting.
+   > Other alerts from the servers reach nobody yet. They can ring your phone after the alerts part of the setup.
 
    Do not call an unrelated failure an expected alert.
 
@@ -460,10 +460,10 @@ chapter.
 
 ## Part 5: Join the systems desk to monitoring
 
-9. **Join the systems desk to monitoring, in the alerts sitting.** The
+9. **Join the systems desk to monitoring, in the alerts part of the setup.** The
    full desk playbook joins the desk to MMWatchdog. It runs as root on the
    desk, so the person runs it, with `ssh desk01-review` and a phone code.
-   Ask for it in the alerts sitting, together with the other alert steps,
+   Ask for it in the alerts part of the setup, together with the other alert steps,
    not in the first sitting. After it ran, verify that `desk01` appears in
    the fleet (`sudo mmwatchdog fleet` on `util01`). The test of the desk's
    wrong-code alert is optional:
@@ -471,7 +471,7 @@ chapter.
 
    **Tell the person:** no message in the first sitting.
 
-   **Check:** in the alerts sitting, `sudo mmwatchdog fleet` on `util01`
+   **Check:** in the alerts part of the setup, `sudo mmwatchdog fleet` on `util01`
    lists `desk01`.
 
 ## Part 6: The fuller system
@@ -555,7 +555,7 @@ cannot fail over.
 **No public checks yet.** The fleet hub does not check each app at the app's public host name
 yet: `public_site_checks_run` in `mmx_project_settings.yml` stays
 `false` until chapter 9 (go live), so no SOS can come from an app that
-nobody has announced. Signing in to MMHotline in the alerts sitting requires MMHotline's own
+nobody has announced. Signing in to MMHotline in the alerts part of the setup requires MMHotline's own
 host name to work through Cloudflare Access, after the domain is active.
 
 **The reboots come now.** No users use the system yet, so the reboots
