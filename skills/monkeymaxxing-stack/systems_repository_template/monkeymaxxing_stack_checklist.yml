@@ -296,7 +296,8 @@ items:
       system; a person signed in with the saved login, in a private browser
       window, to the four accounts whose loss would lock the team out of the
       system: Cloudflare, the server provider, Backblaze, and the Git host; the
-      password manager also holds the shared console password and each
+      password manager also holds the recovery passphrase, which opens the
+      recovery bundle with the shared console password and a copy of each
       configured pgBackRest cipher passphrase.
     waits_for: the initial setup
 
@@ -330,8 +331,9 @@ items:
       the password manager holds the phone-code secret, production SSH key,
       desk WireGuard key, vault passphrase, and Git-host
       recovery access, each saved by the person while the coding agent named
-      the item and its label; the shared root console password and the
-      production pgBackRest cipher passphrase are saved too.
+      the item and its label; the recovery bundle holds the shared root console password and a copy
+      of the production pgBackRest cipher passphrase, and the person saved
+      the recovery passphrase that opens it.
     waits_for: the initial setup
 
   - id: cloudflare_account
@@ -398,21 +400,6 @@ items:
       every_server run in chapter 7 pulled each app's image on app001 with
       that token from the vault (caddy_app_containers_and_the_first_deploy),
       which proves its login without anyone reading it.
-    waits_for: the initial setup
-
-  - id: email_sending_service
-    title: An email sending service, with SPF, DKIM, and DMARC
-    state: open
-    part: setup
-    protects_against: the app's email landing in spam, and other people sending email in the company's name
-    verification: >-
-      the email sending service shows the company's domain as verified, and
-      the coding agent read the domain's SPF, DKIM, and DMARC records at
-      Cloudflare (through the API proxy) and found each record the
-      service names. A test email that reaches an outside mailbox with
-      spf=pass, dkim=pass, and dmarc=pass in its Authentication-Results
-      header is an optional extra check. A system whose app sends no email
-      marks this item deviated, with no email as the reason.
     waits_for: the initial setup
 
   - id: coding_agent_provider_key
@@ -816,9 +803,9 @@ items:
     protects_against: being locked out during a Cloudflare outage, or after a broken SSH or network setting
     verification: >-
       a person logged in as root at one server's provider console with the
-      shared root console password from the password manager item
-      "Shared root console password", which set-up-outside-services secrets
-      made. Every server
+      shared root console password (the recovery bundle's item, which
+      go-live made; after a rotation, the password manager item "Shared
+      root console password"). Every server
       has the password hash from vault key shared_root_console_password_hash,
       applied on every MMX run. SSH refuses the console password. The
       second way in, an SSH port-forward (`ssh -L 8480:127.0.0.1:8480 util01`)
@@ -1355,6 +1342,20 @@ growth_and_improvement_items:
       harmless test identities. Every containment and undo check passed.
     verify_again_every: 12 months
     trigger: break_in_staging_drill, and the team choosing to practice every year; the drill is optional
+
+  - id: email_sending_service
+    title: An email sending service, with SPF, DKIM, and DMARC
+    state: waits_for_its_trigger
+    protects_against: the app's email landing in spam, and other people sending email in the company's name
+    verification: >-
+      the email sending service shows the company's domain as verified, and
+      the coding agent read the domain's SPF, DKIM, and DMARC records at
+      Cloudflare (through the API proxy) and found each record the
+      service names. A test email that reaches an outside mailbox with
+      spf=pass, dkim=pass, and dmarc=pass in its Authentication-Results
+      header is an optional extra check. A system whose app sends no email
+      marks this item deviated, with no email as the reason.
+    trigger: the app sending email, such as sign-up or password-reset messages, or receipts; no chapter of the initial setup sets up an email sending service, so the coding agent and the person set it up when an app first needs it
 
 # what_this_system_does_not_survive is a section, not a checklist item.
 # The section never has an open state, so MMHotline's dashboard never

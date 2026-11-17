@@ -20,7 +20,7 @@ hosting at a platform such as Heroku.
 
 - Hosting 10-30x cheaper than Heroku, Railway, Replit, etc.
 - Fully open source (Apache 2.0)
-- Set up in about a day
+- Live in a few hours; the whole setup, with phone alerts, the triage agent and a status page, in about a day
 - Migration guides for 19 platforms (Heroku, Railway, Replit, Vercel, etc.)
 - Guides for 11 app frameworks (Rails, Django, Laravel, Next.js, etc.)
 - Runs on any Linux VPS or bare metal
@@ -368,7 +368,7 @@ Stack is open source: you can copy it and change any part to fit your needs.
 | Operating system | [Debian](https://www.debian.org/) | Widely used and well supported. Debian's own security team fixes security flaws in the programs that the Stack installs from Debian, at no charge. The Stack checks every day for fixes that wait to be installed. |
 | Database | [Postgres](https://www.postgresql.org/) | Widely used and well supported. Postgres can also be the job queue and the search index, so you run fewer services, and a second database server can take over automatically. |
 | Database backups | [pgBackRest](https://pgbackrest.org/) | It saves every change to the database as the change happens. So you can restore the database to any minute, such as the minute before a mistake, and you lose almost nothing when a server dies. It also checks that its own backups are good. |
-| Backup storage | [Backblaze B2](https://www.backblaze.com/cloud-storage) | Your backups are at a different company from your servers, so losing one account does not lose both. Nobody can delete a backup before its lock ends, not even the account's owner. The database backup key on your servers can delete a backup only after its lock ends, which is how old backups are cleared out. MMHotline's own backup has no lock, and its key can delete it. |
+| Backup storage | [Backblaze B2](https://www.backblaze.com/cloud-storage) | Your backups are at a different company from your servers, so losing one account does not lose both. Nobody can delete a backup before its lock ends, not even the account's owner. The database backup key on your servers can delete a backup only after its lock ends, which is how old backups are cleared out. `util01`'s key for the nightly copy of uploaded files can only write, never delete: a file deleted from your app's storage is hidden in the copy, not deleted. MMHotline's own backup has no lock, and its key can delete it. |
 | Your app | A container image, run by [Podman](https://podman.io/) | A release puts a new image in place of the old one, and a rollback puts the old one back. Podman runs each container as an ordinary systemd service, with no extra background service. Only your app runs in a container. |
 | Load balancer | [Caddy](https://caddyserver.com/) | It spreads your users' requests over all the app servers, so each app server that you add takes its share of the load. It switches to a new release of your app without dropping a connection, and its configuration is one short file. |
 | In front of the servers | [Cloudflare](https://www.cloudflare.com/) | The servers connect out to Cloudflare, so no server has an open web port, and attack traffic stays off your servers. One account covers the tunnel, the sign-in for private pages, caching, attack filtering, and file storage. |
@@ -423,7 +423,7 @@ You tell your agent: "Set up the Monkeymaxxing Stack for my app." Your agent
 asks two questions, your domain and your server provider, and shows every
 other choice as a default, with the monthly cost. You say "go".
 
-**The first sitting puts your app live.** It takes a few hours, and you are
+**The first part of the setup puts your app live.** It takes a few hours, and you are
 busy for about an hour of it:
 
 1. You approve your agent's changes to your app, once.
@@ -436,9 +436,9 @@ busy for about an hour of it:
 
 Then your agent works alone: it creates the servers, installs everything,
 sets up the backups, proves a restore, and puts your app live. Your laptop
-may sleep meanwhile. At the end, you approve your app's first release.
+may sleep meanwhile. The last step needs nothing from you: the first release goes live without a second approval.
 
-**Then short sittings.** Phone alerts, the same day, in about 15 minutes.
+**Then short parts.** Phone alerts, the same day, in about 15 minutes.
 Later: the triage agent, a status page for your customers, and your
 written operating guide.
 

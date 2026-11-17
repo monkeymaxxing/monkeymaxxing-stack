@@ -519,7 +519,7 @@ The secrets that servers use are:
   logins.
 - The backups' B2 keys and passphrases, and MMHotline's backup keys.
 - `util01`'s R2 key that reads the apps' uploads, and `util01`'s B2 key
-  that copies the uploads.
+  that copies the uploads, which can write but never delete.
 - The Pushover application's token and the Pushover group's key.
 - `util01`'s own provider token and the triage agent's credential.
 - The MMHotline-down alarm's Cloudflare token and the status page's R2 key.
@@ -588,10 +588,6 @@ desk and `util01` reach it with the root SSH they already have. So the
 person registers no deploy key, and a break-in at the Git host reaches no
 server. The Git host keeps a backup that the laptop pushes with the
 person's own login, and nothing reads from it.
-
-**Git 2.34 or later.** Git 2.34 is fixed: it is the first Git release that
-makes and checks commits signed with an SSH key, which the systems
-repository's history uses.
 
 **A console independent of SSH.** Recovery must work when SSH or
 WireGuard fails.

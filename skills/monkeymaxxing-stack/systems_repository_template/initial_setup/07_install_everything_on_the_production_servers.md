@@ -35,7 +35,7 @@ chapter.
   sleep during the runs.
 - **Every MMX run in this chapter uses the systems desk's button,**
   `sudo -n -u servers-mmx run-mmx-on-the-servers`, until the triage
-  agent's sitting applies the triage agent's settings
+  agent's part of the setup applies the triage agent's settings
   ([chapter 8, part 3](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-3-the-triage-agent)). After that, run MMX on `util01` through the
   `./server_management_scripts/run_mmx_on_util01` helper
   ([the helper guide](../server_management_scripts/README.md#run-mmx-on-util01)).
@@ -512,9 +512,10 @@ with the fuller system:
 ## Why the chapter works this way
 
 **The desk's button first.** Why: the helper runs only commits that MMHotline trusts, and MMHotline
-learns which keys to trust from the triage agent's settings. Until a
-run applies those settings, the helper refuses with "no commit signing
-keys are applied", and the button is the way to make that run.
+learns that it trusts every commit on `origin` from the triage agent's
+settings (`trusted_commits`). Until a run applies those settings, the
+helper refuses with "MMHotline did not answer the commit check", and the
+button is the way to make that run.
 
 **Two runs.** Reason: WireGuard is ready at first boot, but `util01`'s SSH keys must
 be registered before `util01` can operate every server and pull Git.

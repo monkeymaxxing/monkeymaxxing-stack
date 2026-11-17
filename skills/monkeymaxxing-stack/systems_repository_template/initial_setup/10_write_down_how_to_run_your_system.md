@@ -181,7 +181,9 @@ and when.
    event, offer the optional check of the system's protections, and
    confirm who will do the next actions and when. If responsibility
    or timing for a next action is not agreed, state that the handover still
-   has unassigned work.
+   has unassigned work. If an app sends email, name the checklist's
+   `email_sending_service` item among them: no chapter sets up an email
+   sending service, so the app's first email needs it.
 
    **Ask the person:**
 

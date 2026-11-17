@@ -52,7 +52,8 @@ phone.
   part 3. After that, use the helper,
   `./server_management_scripts/run_mmx_on_util01 run every_server`.
   Reason: the helper runs only commits that MMHotline trusts, and
-  MMHotline learns its trusted keys with the triage agent's settings.
+  MMHotline learns that it trusts every commit on `origin` with the
+  triage agent's settings (`trusted_commits`).
 - **The domain must be active for parts 2 and 4.** Signing in to MMHotline
   and the status page need the domain active at Cloudflare. While the
   domain is pending, tell the person which part waits, and when you check
@@ -642,9 +643,10 @@ first sitting is long already, and each extra account in it is one more
 chance to stop before the site is live.
 
 **The button until the triage agent's settings.** `util01`'s helper runs
-only commits that MMHotline trusts, and MMHotline learns its trusted keys
-from the triage agent's settings. Before they are applied, the helper
-refuses with "no commit signing keys are applied".
+only commits that MMHotline trusts, and MMHotline learns that it trusts
+every commit on `origin` from the triage agent's settings
+(`trusted_commits`). Before they are applied, the helper refuses with
+"MMHotline did not answer the commit check".
 
 **MMHotline's own test SOS.** `mmhotline incidents send-test-sos` pages the
 person you name exactly as a real SOS does, and closes the test itself

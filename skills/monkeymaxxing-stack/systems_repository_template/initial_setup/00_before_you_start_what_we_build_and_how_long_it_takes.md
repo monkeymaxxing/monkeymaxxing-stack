@@ -30,7 +30,7 @@ account, so this chapter has no numbered steps.
   person after" with the result and the link where the person sees it.
   Say each message when its step comes, in your own words, with the
   team's own names and links.
-- **Commits.** Commit each chapter's changes to the systems repository as you go, signed,
+- **Commits.** Commit each chapter's changes to the systems repository as you go,
   with a message that says what changed and why (the systems repository's [`AGENTS.md`, "Making a
   change"](../AGENTS.md#making-a-change)). The coding agent builds images or uses existing CI,
   then records each selected image tag and runs MMX explicitly.
@@ -88,7 +88,7 @@ further when the person first needs it.
 > I ask you only for something outside your limits.
 > You approve each change to your app.
 >
-> The setup comes in sittings. The first sitting puts your app live, protected and backed up:
+> The setup comes in parts. The first part puts your app live, protected and backed up:
 >
 > 1. Chapter 1: Answer two questions: your domain and your server provider.
 > 2. Chapter 2: Get your app ready to deploy. You approve my changes to your app once.
@@ -97,11 +97,11 @@ further when the person first needs it.
 > 5. Chapter 5: Put your site behind Cloudflare and lock your private pages.
 > 6. Chapter 6: Create your three production servers.
 > 7. Chapter 7: Install everything on the production servers.
-> 8. Chapter 8: Check that your backups restore.
-> 9. Chapter 9: Go live, and approve your app's first release.
+> 8. Chapter 8, first part: Check that your backups restore. Chapter 8's other parts come later, in the alerts part of the setup and after it.
+> 9. Chapter 9: Go live. You approve nothing again here: you already approved my changes to your app in chapter 2.
 >
-> The second sitting adds phone alerts, the same day, in about 15 minutes.
-> Later short sittings add the triage agent, the status page for your customers, and chapter 10, your written operating guide.
+> The alerts part of the setup adds phone alerts, the same day, in about 15 minutes.
+> Later short parts add the triage agent, the status page for your customers, and chapter 10, your written operating guide.
 >
 > The smallest system has one app server and one database server. If
 > `app001` or `db01` fails, your site stops until the failed server is
@@ -130,7 +130,7 @@ check.
 
 **Tell the person, with the map:**
 
-> The first sitting takes a few hours. You are busy for about an hour of it:
+> The first part takes a few hours. You are busy for about an hour of it:
 > answering two questions, approving changes to your app, signing up at four websites, and saving one passphrase.
 > If your app needs bigger changes first, such as moving from SQLite to
 > PostgreSQL or its uploads to R2, chapter 2 can take days, and the day's
@@ -145,7 +145,7 @@ check.
 >   for the servers' security updates. Your laptop may sleep: the work
 >   continues on your desk.
 >
-> After the first two sittings, your site is live, alerts reach your phone, and your
+> After the first part and the alerts part, your site is live, alerts reach your phone, and your
 > backups are proven to restore. After the setup, your team has one
 > regular duty. Each week, one person and I do the weekly system review:
 > the week's alerts, the waiting updates, the restore drill's result, and

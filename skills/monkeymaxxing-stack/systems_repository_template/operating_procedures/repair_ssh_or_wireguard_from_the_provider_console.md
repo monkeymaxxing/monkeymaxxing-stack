@@ -58,8 +58,14 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
   **Check:** Git accepts the push, as step 4 of Making a change says.
 - **The server still runs at the provider.** The provider's website shows
   the server running.
-- **The person can open the password manager item
-  `Shared root console password`.** The password works only at the
+- **The person can read the shared root console password.** It is the
+  recovery bundle's item `shared_root_console_password`, which the person
+  reads in their own terminal as
+  [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
+  says, never in the chat. After
+  [a rotation](rotate_a_secret.md#the-shared-root-console-password), the
+  password manager item `Shared root console password` holds the current
+  password instead. The password works only at the
   console, never over SSH.
 - **Know which way in the provider gives.** Some consoles show the running
   system and take a login (step 1; steps 2 to 4 work there as written).
@@ -113,7 +119,8 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
 ## 1. Log in at the provider's console
 
 1. **The person opens the server in the provider's website and logs in as
-   `root`** with the password manager item `Shared root console password`.
+   `root`** with the shared root console password (the recovery bundle's
+   item, or the password manager item after a rotation).
    The console's place in the website is in the provider guide's section
    "Console and rescue access" ([Before you start](#before-you-start) links
    each guide).

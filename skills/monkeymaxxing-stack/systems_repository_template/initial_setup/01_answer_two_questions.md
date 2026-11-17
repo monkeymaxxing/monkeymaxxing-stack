@@ -304,7 +304,7 @@ the rules with this team's folders.
    `laptop_archive_sha256` for that platform, and copy the binary to
    `~/.local/bin`, as
    [doubleshell installation](https://github.com/monkeymaxxing/doubleshell#install)
-   says. A SHA-256 that differs stops the install. The laptop also needs Git 2.34 or later,
+   says. A SHA-256 that differs stops the install. The laptop also needs Git,
    OpenSSH, Bash, jq, curl, and OpenSSL. On Windows, every command runs
    inside WSL.
 
