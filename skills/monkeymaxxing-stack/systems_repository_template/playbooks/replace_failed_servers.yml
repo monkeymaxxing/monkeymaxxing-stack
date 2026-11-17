@@ -2,7 +2,7 @@
 # stopped reporting to the fleet hub, in the pools that
 # triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces
 # in mmx_project_settings.yml names, and puts it in the inventory in place of
-# the failed one with one commit on main, signed by util01's mmhotline user.
+# the failed one with one commit on main, made by util01's mmhotline user.
 # It is the first of the three runs of a replacement, in this order:
 #
 #   replace_failed_servers     creates the new server and commits it

@@ -1,5 +1,5 @@
 [Unit]
-Description=Persistent production SSH and Git signing agent
+Description=Persistent production SSH agent
 [Service]
 Type=forking
 User={{ .inputs.person_unix_username }}

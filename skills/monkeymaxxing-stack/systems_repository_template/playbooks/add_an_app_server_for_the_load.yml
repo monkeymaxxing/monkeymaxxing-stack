@@ -1,6 +1,6 @@
 # add_an_app_server_for_the_load creates one app server when the load calls
 # for it, inside growth_limits.app_servers in mmx_project_settings.yml, and
-# puts it in the inventory with one commit on main, signed by util01's
+# puts it in the inventory with one commit on main, made by util01's
 # mmhotline user. every_server, the next run, installs it, and the tunnel
 # and every Caddy send it requests.
 #

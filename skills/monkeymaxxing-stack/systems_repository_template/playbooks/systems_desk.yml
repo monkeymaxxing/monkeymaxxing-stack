@@ -4,8 +4,8 @@
 # WireGuard address with the laptop key that the provider put on the new
 # desk (the laptop's own copy of ssh/desk01 and the inventory point at it):
 #     mmx run systems_desk --var desk_name=desk01 --only-fleet-stages systems_desk --connection ssh_only
-# It sets the desk up, starts the systems repository with its vault and
-# signing in /home/coding-agent/systems_repository, records the first desk
+# It sets the desk up, starts the systems repository with its vault
+# in /home/coding-agent/systems_repository, records the first desk
 # review, and ends with "The desk is ready." and the production public key.
 # Right after it, the coding agent moves the provider key that the person
 # typed on the laptop to the desk's API proxy, over the same root login on
@@ -79,7 +79,6 @@ fleet_stages:
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           allowed_laptops: "{{ .vars.allowed_laptops }}"
           systems_desk_laptop_addresses: "{{ .vars.private_ip_ranges.systems_desk_laptops }}"
-          root_ssh_public_keys: "{{ .vars.root_ssh_public_keys }}"
           provider_api_url: "{{ .vars.systems_desk_provider_api_url }}"
           provider_api_authentication: "{{ .vars.systems_desk_provider_api_authentication }}"
           mmx_release: "{{ .vars.stack_software.mmx }}"

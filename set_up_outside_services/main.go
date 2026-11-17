@@ -43,7 +43,7 @@ Commands:
                                 a question, then the lock: your
                                 recovery passphrase and your phone code. It saves the
                                 recovery bundle, recovery_bundle.age, commits and pushes it
-                                with the vault, signed, and copies it into the locked backup
+                                with the vault, and copies it into the locked backup
                                 bucket. It writes which steps are done, never a secret, to
                                 /var/lib/monkeymaxxing-stack/setup_results.json. A rerun
                                 continues where a run stopped.
@@ -91,7 +91,7 @@ Commands:
                                 for your password manager, and random ones nobody needs to see.
                                 --replace KEY enters one again.
                                 go-live, backblaze, cloudflare and secrets each commit and push
-                                the vault, signed, to the main copy on util01, and refuse a
+                                the vault to the main copy on util01, and refuse a
                                 repository with other changes not pushed. Before util01
                                 exists, the desk's checkout is the main copy: they commit there.
   version                       Print this program's version.
@@ -211,7 +211,7 @@ type environment struct {
 	// for the servers' run, after a break-in.
 	deleteOldKeysAtOnce bool
 	// git runs git in the systems repository, through the production key's
-	// agent socket, which signs the vault's commits.
+	// agent socket, which reaches the main copy.
 	git func(arguments ...string) (string, error)
 	// inTheCodingAgentsCheckout says the systems repository is the coding
 	// agent's checkout on the desk, which the person's account reaches
@@ -299,7 +299,7 @@ func (e *environment) quietly(work func() error) error {
 // working copy of the systems repository, the coding agent's checkout,
 // where the desk's bootstrap made the vault: MMX runs as root with the
 // desk's vault passphrase file, and git runs as coding-agent with the
-// production key's relay socket, so each commit is signed and every file
+// production key's relay socket, so a push reaches the main copy and every file
 // stays coding-agent's own. The person keeps no checkout on the desk.
 func (e *environment) useTheCodingAgentsCheckout() {
 	e.directory = codingAgentCheckout

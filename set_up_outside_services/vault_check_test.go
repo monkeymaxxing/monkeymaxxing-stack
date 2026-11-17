@@ -21,7 +21,7 @@ func pushFromAnotherCheckout(t *testing.T, run func(string, ...string) string, d
 	other := filepath.Join(t.TempDir(), "other")
 	run(t.TempDir(), "clone", "--quiet", originOf(t, directory), other)
 	writeFile(t, filepath.Join(other, vaultFile), "vault from another checkout\n")
-	run(other, "-c", "commit.gpgsign=false", "commit", "--quiet", "-am", "Add keys elsewhere")
+	run(other, "commit", "--quiet", "-am", "Add keys elsewhere")
 	run(other, "push", "--quiet")
 }
 
@@ -30,8 +30,8 @@ func pushFromAnotherCheckout(t *testing.T, run func(string, ...string) string, d
 func (h *harness) requirePushedVaultCommit(command string) {
 	h.t.Helper()
 	pushed := h.git(h.e.directory, "--git-dir", h.origin, "cat-file", "commit", "main")
-	if !strings.Contains(pushed, "\ngpgsig ") || !strings.Contains(pushed, "vault keys with set-up-outside-services "+command) {
-		h.t.Fatalf("origin's main is not a signed vault commit by %s:\n%s", command, pushed)
+	if !strings.Contains(pushed, "vault keys with set-up-outside-services "+command) {
+		h.t.Fatalf("origin's main is not a vault commit by %s:\n%s", command, pushed)
 	}
 	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != vaultFile {
 		h.t.Fatalf("the pushed commit changes %q, not only the vault", files)

@@ -39,15 +39,6 @@ vars:
   # of 24 is because restore01 is paid by the hour and a drill must finish
   # well before the next week's drill.
   restore_drill_time_limit_hours: 6
-  # check_new_commits_on_main_every_minutes: 5. How often util01 asks
-  # MMHotline to check the new commits on main at the Git host
-  # (roles/util_server, the job check_new_commits_on_main). MMHotline sends
-  # one alert for each commit that waits for review. Reason
-  # for 5: a push from outside the team is noticed within minutes, and one
-  # git fetch every few minutes costs the Git host nothing. From 1 to 59: the
-  # job's systemd schedule repeats within each hour. A number that does not
-  # divide 60 gives a shorter gap once an hour.
-  check_new_commits_on_main_every_minutes: 5
   # The weekly window for database updates and the reboots that wait for
   # them (operating_procedures/update_and_restart_the_database_servers.md).
   # starts_at is UTC. The agent runs updates and reboots only inside the
@@ -769,9 +760,9 @@ vars:
       download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.1.0/mmwatchdog-0.1.0-linux-amd64.tar.gz
       sha256: "06b456c332aabd462eade788cf3dbd812dbe7eb256a58422d41c1bf545cfa180"
     mmhotline:
-      version: "0.1.0"
-      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.1.0/mmhotline-0.1.0-linux-amd64.tar.gz
-      sha256: "60fefbc099d1f4696e70199ea4257b968b1c8b126fde10f2e068919140d80660"
+      version: "0.3.0"
+      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.3.0/mmhotline-0.3.0-linux-amd64.tar.gz
+      sha256: "fa88417214403a20e92f7ccf2a3b65c92edaa9fbc35040111a56f41ce64e44c0"
     # The Stack's command for the account and secret setup on the systems
     # desk (initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
     # Its release is the Stack version's, built reproducibly by the Stack

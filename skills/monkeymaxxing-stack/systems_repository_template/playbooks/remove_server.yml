@@ -26,7 +26,7 @@
 # holds the refusals (the lock-out, a pool of mixed types, an app server
 # that does not report, an unfinished replacement). The app server's
 # stages below then take it out of service, as for a person, and the last
-# stage commits its removal from the inventory, signed by util01's mmhotline
+# stage commits its removal from the inventory, made by util01's mmhotline
 # user, and destroys it at the provider by its ID, once every other app
 # server does its work. The next run is every_server.
 #
@@ -537,7 +537,7 @@ fleet_stages:
 
   # Without server_name only: the removal of the app server the load no
   # longer needs ends here, with no person. Once every other app server does
-  # its work, the server leaves the inventory with one commit signed by
+  # its work, the server leaves the inventory with one commit made by
   # util01's mmhotline user, and is destroyed at the provider by its ID
   # (server_management_scripts/remove_an_app_server_for_the_load, finish).
   # With server_name, a person does both, as operating_procedures/remove_a_server.md

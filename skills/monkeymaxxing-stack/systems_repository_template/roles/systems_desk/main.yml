@@ -18,8 +18,6 @@ inputs:
   # the coding agent's shared SSH login.
   coding_agent_login_idle_minutes: {type: integer, required: true}
   coding_agent_login_longest_hours: {type: integer, required: true}
-  # The keys whose commit signatures Git on this desk accepts (files/allowed-signers).
-  root_ssh_public_keys: {type: list, required: true}
   provider_api_url: {type: string, default: "https://api.hetzner.cloud/v1/"}
   # From systems_desk_provider_api_authentication: token_in_a_header, where
   # the API proxy adds the token on 127.0.0.1:8081, or
@@ -243,7 +241,7 @@ node_tasks:
   # /home/coding-agent/systems_repository as root, before the coding-agent
   # account exists. Make the copy the coding agent's own, so its Git can
   # write it. It is the desk's one working copy: the laptop's coding agent
-  # clones it over SSH and pushes its branches to it (sign-and-publish).
+  # clones it over SSH and pushes its branches to it (publish-branch-to-main).
   - id: make_the_copied_systems_repository_the_coding_agents_own
     shell:
       script: |
@@ -295,11 +293,6 @@ node_tasks:
     file: {path: /etc/profile.d/desk-buttons.sh, template: files/desk-buttons-profile.sh, owner: root, group: root, permissions_mode: "0644"}
   - id: install_the_coding_agent_git_settings
     file: {path: /etc/systems-desk/coding-agent-gitconfig, source: files/coding-agent-gitconfig, owner: root, group: root, permissions_mode: "0644"}
-  # The one allowed signers file on the desk, which the coding agent's Git
-  # settings name. Each desk review rewrites it from root_ssh_public_keys, so a desk
-  # that joins or leaves reaches it at this desk's next desk review.
-  - id: write_the_keys_whose_commit_signatures_git_accepts
-    file: {path: /etc/systems-desk/allowed-signers, template: files/allowed-signers, owner: root, group: root, permissions_mode: "0644"}
   # How the desk's root-run commands and the MMX button read pushed main
   # from the coding agent's checkout: as data, from a copy of its objects
   # and refs, never with Git in the checkout, whose settings coding-agent
@@ -316,13 +309,12 @@ node_tasks:
   # in the review before it applies.
   - id: install_the_desk_review_command
     file: {path: /usr/local/bin/review-and-apply-the-systems-desk-settings, source: files/review-and-apply-the-systems-desk-settings, owner: root, group: root, permissions_mode: "0755"}
-  # The coding agent's command that signs the commits the laptop pushed to a
-  # branch of its checkout with the production key, and publishes them on
-  # main (files/sign-and-publish says how). Reason: MMHotline trusts only
-  # commits signed by a key in root_ssh_public_keys, and the production key
-  # never leaves this desk.
-  - id: install_the_sign_and_publish_command
-    file: {path: /usr/local/bin/sign-and-publish, source: files/sign-and-publish, owner: root, group: root, permissions_mode: "0755"}
+  # The coding agent's command that publishes the commits the laptop pushed
+  # to a branch of its checkout on main in the main copy
+  # (files/publish-branch-to-main says how). Reason: only this desk holds the
+  # production key that lets a push into the main copy on util01.
+  - id: install_the_publish_branch_to_main_command
+    file: {path: /usr/local/bin/publish-branch-to-main, source: files/publish-branch-to-main, owner: root, group: root, permissions_mode: "0755"}
   # The lock-out button runs as root on this desk and on every server. It
   # runs only these copies, which this desk review installs, never the pushed
   # ones. Reason: an intruder who can push to the main copy, such as through util01, must not
@@ -616,38 +608,6 @@ node_tasks:
       changed_when: false
       env: {AUTHENTICATION: "{{ .inputs.provider_api_authentication }}"}
 
-  # Earlier desks ran a coding agent of their own (Claude Code or Codex),
-  # started with start-the-coding-agent, in Rex's persistent terminals. The
-  # coding agent now works from the laptop over SSH as coding-agent, so a
-  # desk review removes those programs, their apt repositories and Rex's
-  # service. A desk without them changes nothing here. Reason: a program
-  # that nothing uses still needs updates, and the less runs beside the
-  # production key, the less can go wrong.
-  - id: stop_the_earlier_persistent_terminal_service
-    when: {path_exists: /etc/systemd/system/rex-desk.service}
-    systemd_service: {name: rex-desk, state: stopped, start_at_boot: false}
-  - id: delete_the_earlier_files_of_the_desks_own_coding_agent
-    loop:
-      - /etc/systemd/system/rex-desk.service
-      - /usr/local/bin/start-the-coding-agent
-      - /usr/local/bin/set-up-coding-agent-repository
-      - /usr/local/bin/set-up-the-systems-repository
-    as: earlier_file
-    file: {path: "{{ .earlier_file }}", state: absent}
-  - id: delete_the_earlier_links_to_codex
-    loop: [codex, codex-code-mode-host, rg]
-    as: earlier_link
-    symlink: {path: "/usr/local/bin/{{ .earlier_link }}", state: absent}
-  - id: delete_the_earlier_codex_releases
-    directory: {path: /usr/local/lib/codex, state: absent, also_delete_everything_inside: true}
-  - id: remove_the_earlier_coding_agent_and_terminal_packages
-    apt_package:
-      packages: [{name: claude-code}, {name: rex}]
-      state: absent
-  - id: remove_the_earlier_coding_agent_and_terminal_apt_repositories
-    loop: [claude-code, rex]
-    as: repository_name
-    apt_repository: {name: "{{ .repository_name }}", state: absent}
   - id: allow_exactly_the_allowed_laptops_ssh_keys
     file:
       path: "/home/{{ .inputs.person_unix_username }}/.ssh/authorized_keys"
@@ -1016,7 +976,7 @@ node_tasks:
   - role: systems_desk_lockout
 
   # The bootstrap's desk work, before the lock: the systems repository, its
-  # vault and its signing, and the first desk review recorded. Each step
+  # vault, and the first desk review recorded. Each step
   # runs once; a rerun of an unfinished bootstrap finishes it.
   - id: install_the_command_that_starts_the_systems_repository
     file: {path: /usr/local/lib/systems-desk/start-the-systems-repository, source: files/start-the-systems-repository, owner: root, group: root, permissions_mode: "0700"}

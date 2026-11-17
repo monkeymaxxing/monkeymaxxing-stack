@@ -5,9 +5,9 @@ Runs each job's script from roles/util_server/main.yml, with
 roles/util_server/files/find_the_trusted_commit_of_the_systems_repository, real
 Git against a local origin, and a stand-in for `sudo -n /usr/local/bin/mmhotline
 commit-reviews check`. The stand-in answers as MMHotline does:
-it fetches into the copy, moves the copy's checkout forward to the trusted
-commit, prints the JSON answer, and exits 0 when the checked commit is trusted
-and 1 when a commit waits for review. It fails the test when it is called while
+it fetches into the copy, moves the copy's checkout forward to the checked
+commit (MMHotline trusts every commit on origin), prints the JSON answer, and exits 0 when the checked commit is trusted
+and 1 when MMHotline trusts nothing. It fails the test when it is called while
 the job holds /var/lib/mmhotline/systems_repository.lock: MMHotline's check
 takes that lock itself and waits for it without a time limit.
 """
@@ -45,13 +45,11 @@ if answer == 'locked_out':
     sys.exit(4)
 git = lambda *a: subprocess.run(['git', *a], check=True, capture_output=True, text=True).stdout.strip()
 git('fetch', '-q', 'origin', '+refs/heads/main:refs/remotes/origin/main')
-trusted = {'trusts_everything': commit, 'waits': os.environ.get('TRUSTED', ''), 'trusts_nothing': ''}[answer]
+trusted = {'trusts_everything': commit, 'trusts_nothing': ''}[answer]
 if trusted:
     git('merge', '--ff-only', '-q', trusted)
-waiting = [] if trusted == commit else [{'commit_id': commit, 'reason_kind': 'not_signed_by_a_trusted_key',
-           'reason': 'which no key the team trusts signed', 'review_url': 'https://ops.example.com/approvals/commits/' + commit}]
 print(json.dumps({'message': 'Checked.', 'web_url': 'https://ops.example.com', 'commit_check': {
-    'checked_commit_id': commit, 'trusted_through_commit_id': trusted, 'commits_waiting_for_review': waiting}}))
+    'checked_commit_id': commit, 'trusted_through_commit_id': trusted, 'commits_waiting_for_review': []}}))
 sys.exit(0 if trusted == commit else 1)
 ''',
     'flock': r'''
@@ -138,7 +136,7 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
         return {c[1] for c in commands if c[0] == 'mmx'}
 
     def test_a_trusted_head_runs_at_the_head(self):
-        head = self.push('signed by a systems desk')
+        head = self.push('pushed to the main copy')
         for job in JOBS[:2]:
             with self.subTest(job=job):
                 result, commands = self.run_job(job)
@@ -146,18 +144,6 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
                 self.assertEqual(self.ran_at(commands), {head})
                 self.assertIn(['mmhotline', '-n', '/usr/local/bin/mmhotline', 'commit-reviews', 'check', '--commit-id', head, '--json'], commands)
                 self.assertLess(next(i for i, c in enumerate(commands) if c[0] == 'mmhotline'), next(i for i, c in enumerate(commands) if c[0] == 'mmx'))
-
-    def test_a_commit_that_waits_leaves_the_job_at_the_older_trusted_commit(self):
-        trusted = self.push('signed by a systems desk')
-        waits = self.push('merged with the Git host web button')
-        for job in JOBS[:2]:
-            with self.subTest(job=job):
-                result, commands = self.run_job(job, MMHOTLINE='waits', TRUSTED=trusted)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(self.ran_at(commands), {trusted})
-                self.assertEqual(self.git(self.copy, 'rev-parse', 'HEAD'), trusted)
-                self.assertIn("find_the_trusted_commit_of_the_systems_repository: commits waiting for review: 1, "
-                              f'at https://ops.example.com/approvals. This job runs at the trusted commit {trusted[:12]}, not at main\'s {waits[:12]}\n', result.stderr)
 
     def test_mmhotline_that_does_not_answer_keeps_the_commit_util01_has(self):
         self.push('pushed while MMHotline is stopped')
@@ -174,7 +160,7 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.ran_at(commands), {self.first})
         self.assertEqual(result.stderr, 'find_the_trusted_commit_of_the_systems_repository: MMHotline checks no commit during a '
-                         'lock-out, because its settings then hold no trusted keys; this job runs at the commit util01 already '
+                         'lock-out, because its settings then hold no trusted_commits; this job runs at the commit util01 already '
                          f'has, {self.first[:12]}, and at nothing newer\n')
         # Outside a lock-out the same refusal keeps MMHotline's own words and the did-not-answer line.
         self.settings.write_text(self.rendered_mmhotline_settings(['ssh-ed25519 AAAA desk']))
@@ -189,15 +175,12 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
         self.assertEqual(self.ran_at(commands), {self.first})
         self.assertEqual(result.stderr, '')
 
-    def test_no_trusted_commit_runs_nothing_and_does_not_fail_the_unit(self):
-        self.push('a whole history no key the team trusts signed')
-        for job in JOBS:
-            with self.subTest(job=job):
-                result, commands = self.run_job(job, MMHOTLINE='trusts_nothing')
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(self.ran_at(commands), set())
-                self.assertFalse((self.root / 'lock-held').exists())
-                self.assertIn('MMHotline trusts no commit of main yet', result.stderr)
+    def test_a_check_that_trusts_nothing_keeps_the_commit_util01_has(self):
+        self.push('pushed, but MMHotline trusts nothing')
+        result, commands = self.run_job(JOBS[0], MMHOTLINE='trusts_nothing')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.ran_at(commands), {self.first})
+        self.assertIn('this job runs at the commit util01 already has', result.stderr)
 
     def test_an_unreachable_git_host_fails_the_job_and_asks_nothing(self):
         self.git(self.copy, 'remote', 'set-url', 'origin', str(self.root / 'missing.git'))
@@ -211,7 +194,7 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
     def test_a_checkout_behind_the_trusted_commit_runs_nothing(self):
         # Only MMHotline moves the checkout. Here it could not, such as for a
         # local change, so the job refuses rather than run an older commit.
-        head = self.push('trusted, but the copy did not move')
+        head = self.push('checked, but the copy did not move')
         self.git(self.copy, 'fetch', '-q', 'origin')
         script = job_script(JOBS[0]).replace('/var/lib/mmhotline', str(self.root))
         script = script.replace('trusted=$(find_the_trusted_commit_of_the_systems_repository)', f'trusted=$(echo {head})')
@@ -227,30 +210,6 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
                 self.assertLess(script.index('find_the_trusted_commit_of_the_systems_repository'), script.index('exec 9>>'))
                 for moves in ('git pull', 'git fetch', 'git merge ', 'git checkout', 'git reset'):
                     self.assertNotIn(moves, script)
-
-    def test_the_check_of_new_commits_asks_mmhotline_and_never_fails_or_runs(self):
-        text = ROLE.read_text().split('      name: check_new_commits_on_main\n', 1)[1]
-        self.assertIn('systemd_calendar_schedule: "*-*-* *:00/{{ .inputs.check_new_commits_on_main_every_minutes }}:00 UTC"', text)
-        body = re.search(r'      script: \|\n((?:        .*\n)+)', text)[1]
-        script = '\n'.join(line[8:] for line in body.splitlines()).replace('/var/lib/mmhotline', str(self.root))
-        head = self.push('noticed within minutes')
-        for answer in ('trusts_everything', 'waits', 'trusts_nothing', 'down'):
-            with self.subTest(answer=answer):
-                (self.root / 'commands').write_text('')
-                result = subprocess.run(['bash', '-c', script], cwd=self.copy, text=True, capture_output=True, timeout=60,
-                                        stdin=subprocess.DEVNULL, env={**self.env, 'MMHOTLINE': answer, 'TRUSTED': self.first})
-                commands = self.asked([json.loads(line) for line in (self.root / 'commands').read_text().splitlines()])
-                self.assertEqual((result.returncode, result.stdout), (0, ''), result.stderr)
-                self.assertEqual([c[0] for c in commands], ['mmhotline'])
-                self.assertEqual(commands[0][6], head)
-                self.assertFalse((self.root / 'lock-held').exists())
-        # While another holder, such as the restore drill, has the lock, the
-        # job asks nothing: MMHotline's waiting marker would end the drill.
-        (self.root / 'commands').write_text('')
-        result = subprocess.run(['bash', '-c', script], cwd=self.copy, text=True, capture_output=True, timeout=60,
-                                stdin=subprocess.DEVNULL, env={**self.env, 'LOCK_BUSY': 'yes'})
-        self.assertEqual((result.returncode, result.stdout), (0, ''), result.stderr)
-        self.assertEqual(self.asked([json.loads(line) for line in (self.root / 'commands').read_text().splitlines()]), [])
 
     def test_the_comparison_and_the_leftover_check_ask_only_once_the_lock_is_free(self):
         for job in (JOBS[0], JOBS[2]):
@@ -292,27 +251,15 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)['fleet_stages'][0]['node_tasks'][0]['rendered_templates'][0]['text']
 
-    def test_the_trusted_keys_are_root_ssh_public_keys(self):
-        keys = ['ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIR+J8OoEVNHl3P/KSWFruheEQaq8Cgw/PziDAinSTJJ alex on desk01, "quoted"',
-                'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4Jcw7Fq2URbtI72IZ9N/p0WjdFGpZ0VJcet+YVhxZx util01, the mmhotline user']
-        text = self.rendered_mmhotline_settings(keys)
-        block = re.search(r'(?m)^  trusted_commit_signing_public_keys:\n((?:    - .*\n)+)', text)[1]
-        self.assertEqual([json.loads(line[6:]) for line in block.splitlines()], keys)
-
-    def test_the_triage_agent_approves_unsigned_commits_except_the_short_list_of_paths(self):
-        """The triage agent approves by default; only the files that set its
-        own powers and the trusted keys wait for a person, and each listed file exists."""
+    def test_mmhotline_trusts_every_commit_on_origin_and_holds_no_signing_settings(self):
         text = self.rendered_mmhotline_settings(['ssh-ed25519 AAAA desk'])
-        self.assertEqual(re.findall(r'(?m)^  commits_without_a_trusted_signature_are_approved_by: (.*)$', text),
-                         ['a_person_or_the_triage_agent'])
-        block = re.search(r'(?m)^  paths_only_a_person_may_approve:\n((?:    (?:#.*|- .*)\n)+)', text)[1]
-        paths = [line.strip()[2:] for line in block.splitlines() if line.strip().startswith('- ')]
-        self.assertEqual(paths, ['mmhotline_settings.yml', 'mmx_project_settings.yml', 'triage_agent_rules.md', 'AGENTS.md', 'CLAUDE.md',
-                                 'roles/every_server/files/sudoers_triage',
-                                 'roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings'])
-        # A renamed or moved file must take the list with it, or MMHotline protects a path that no longer exists.
-        for path in paths:
-            self.assertTrue((TEMPLATE / path).is_file(), f'{path} is in paths_only_a_person_may_approve but not in the template')
+        self.assertEqual(re.findall(r'(?m)^  trusted_commits: (.*)$', text), ['every_commit_on_origin'])
+        for removed in ('commit_signing_public_key', 'trusted_commit_signing_public_keys',
+                        'commits_without_a_trusted_signature_are_approved_by', 'paths_only_a_person_may_approve'):
+            self.assertNotRegex(text, r'(?m)^\s*' + removed + ':')
+        # A lock-out leaves the section out, and MMHotline then trusts no commit.
+        locked = self.rendered_mmhotline_settings(['ssh-ed25519 AAAA desk'], everyone_locked_out_except_desk='desk01')
+        self.assertNotIn('trusted_commits', locked)
 
     def test_the_triage_key_among_root_ssh_public_keys_is_counted_by_its_key_part(self):
         playbook = (TEMPLATE / 'playbooks/every_server.yml').read_text()

@@ -1,6 +1,6 @@
 #!/bin/bash
 # add_an_app_server_for_the_load: creates one app server when the load calls
-# for it, and puts it in the inventory with one signed commit on main.
+# for it, and puts it in the inventory with one commit on main.
 # every_server then installs it and every Caddy and the tunnel take it in.
 # Runs as the mmhotline user on util01, from util01's copy of the systems
 # repository, after read_the_fleet_hub_for_server_replacement and

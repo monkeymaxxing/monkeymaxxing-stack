@@ -1,19 +1,14 @@
-# Managed by MMX. The mmhotline user signs MMHotline's commits with the
-# utility server's SSH key. Signing records attribution. MMHotline runs
-# judged fixes in /var/lib/mmhotline/systems_repository, under the shared
-# lock /var/lib/mmhotline/systems_repository.lock. MMHotline's runs create
-# no commits there. Two playbooks commit with this key, each in a clone of
+# Managed by MMX. The mmhotline user's name on the commits MMHotline's
+# merges and two playbooks make. MMHotline runs judged fixes in
+# /var/lib/mmhotline/systems_repository, under the shared lock
+# /var/lib/mmhotline/systems_repository.lock. MMHotline's runs create
+# no commits there. Two playbooks commit with this name, each in a clone of
 # its own and never in the shared copy: replace_failed_servers and
 # destroy_replaced_servers (server_management_scripts/).
 # The .invalid address identifies commits and receives no email.
 [user]
 	name = util01, the mmhotline user
 	email = mmhotline@util01.invalid
-	signingkey = /var/lib/mmhotline/.ssh/id_ed25519
-[gpg]
-	format = ssh
-[commit]
-	gpgsign = true
 # OpenSSH would otherwise add util01's other host keys to
 # ~/.ssh/known_hosts on a fetch, which MMX manages, so every run would
 # report a change.

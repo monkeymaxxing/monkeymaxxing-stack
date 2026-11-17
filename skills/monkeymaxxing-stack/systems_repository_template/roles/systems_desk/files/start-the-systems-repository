@@ -13,9 +13,7 @@ repository from the laptop into the coding agent's checkout,
    (root:servers-mmx 0640), which the buttons read and nobody sees;
 3. makes the vault, secrets_vault.age, which holds its own passphrase as
    mmx_vault_passphrase, so util01 opens it for its runs;
-4. makes the checkout a Git repository on main that signs every commit with
-   the production key through the relay socket, and makes the first signed
-   commit.
+4. makes the checkout a Git repository on main and makes the first commit.
 
 It pushes nothing, and the checkout gets no origin: until util01 exists,
 this checkout is the team's main copy of the systems repository. Once
@@ -25,9 +23,10 @@ A rerun skips each step that is done, and does nothing once the first
 commit exists. Exit codes: 0 nothing to do, 2 changed, 1 stopped.
 --dryrun says what it would do and changes nothing.
 
-It starts a new team's repository. A desk that joins a team's existing
-repository, such as a new member's desk or a rebuilt desk, gets the team's
-vault passphrase from the recovery bundle instead, and is not started here.
+It starts a new team's repository only. It builds nothing for a desk that
+joins a team's existing repository, such as a new member's desk or a rebuilt
+desk: when the checkout already has commits but the vault passphrase file is
+missing, it stops and says the passphrase must come from the recovery bundle.
 """
 import base64
 import os
@@ -43,7 +42,8 @@ VAULT_PASSPHRASE = Path('/etc/systems-desk/vault-passphrase')
 MMX = '/usr/local/bin/mmx'
 VAULT = 'secrets_vault.age'
 # The coding agent's Git, as its SSH logins get it from sshd (sshd.conf):
-# the relay socket signs with the production key.
+# the relay socket reaches the servers and the main copy with the
+# production key.
 CODING_AGENT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/home/coding-agent', 'LANG': 'C.UTF-8',
                             'SSH_AUTH_SOCK': '/run/desk-ssh-agent/socket',
                             'GIT_CONFIG_SYSTEM': '/etc/systems-desk/coding-agent-gitconfig'}
@@ -141,7 +141,7 @@ def main(arguments):
         return 0
     if dryrun:
         say('would start the systems repository in %s: the production key into the settings, the vault passphrase, '
-            'the vault, and the first signed commit' % REPOSITORY)
+            'the vault, and the first commit' % REPOSITORY)
         return 2
     import yaml  # python3-yaml, which the desk role installs
 
@@ -173,15 +173,11 @@ def main(arguments):
 
     if not (REPOSITORY/'.git').exists():
         git('init', '--quiet', '-b', 'main')
-    for key, value in [('gpg.format', 'ssh'), ('user.signingkey', str(PUBLIC_KEY)), ('commit.gpgsign', 'true'),
-                       ('user.name', 'coding-agent on %s' % desk), ('user.email', 'coding-agent@%s' % desk)]:
+    for key, value in [('user.name', 'coding-agent on %s' % desk), ('user.email', 'coding-agent@%s' % desk)]:
         git('config', key, value)
     git('add', '--all')
     git('commit', '--quiet', '-m', 'Start the systems repository on %s' % desk)
-    if '\ngpgsig ' not in git('cat-file', 'commit', 'HEAD').stdout:
-        raise Stop('The first commit is not signed. Check that ssh-add -l lists the production key with '
-                   'SSH_AUTH_SOCK=/run/desk-ssh-agent/socket.')
-    say('Made the first commit, %s, signed with this desk\'s production key. This checkout is the team\'s main copy '
+    say('Made the first commit, %s. This checkout is the team\'s main copy '
         'until util01 exists.' % git('rev-parse', '--short', 'HEAD').stdout.strip())
     return 2
 

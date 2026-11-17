@@ -3,7 +3,7 @@
 # stopped reporting, in the pools that
 # triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces
 # names, and puts the new server in the inventory in place of the failed one
-# with one signed commit on main. every_server then installs the new server,
+# with one commit on main. every_server then installs the new server,
 # and destroy_replaced_servers destroys the failed server once the new one
 # does its work. Runs as the mmhotline user on util01, from util01's copy of
 # the systems repository, after read_the_fleet_hub_for_server_replacement

@@ -1,7 +1,7 @@
 #!/bin/bash
 # destroy_replaced_servers: destroys, at the provider, each failed server
 # that replace_failed_servers replaced, once its newest replacement does its
-# work, and records it with one signed commit on main. The last of the three
+# work, and records it with one commit on main. The last of the three
 # runs of a replacement (playbooks/destroy_replaced_servers.yml). Runs as the
 # mmhotline user on util01, from util01's copy of the systems repository,
 # after read_the_fleet_hub_for_server_replacement.

@@ -203,11 +203,13 @@ class PinnedProgramReleases(unittest.TestCase):
         return checks[program + CHECK_SUFFIX]
 
     def test_a_newer_release_fails_and_names_the_program_both_versions_and_the_procedure(self):
+        pinned = re.search(r'(?m)^    mmhotline:\n      version: "(\d+\.\d+)\.(\d+)"', (T/'mmx_project_settings.yml').read_text())
+        newer = f'{pinned[1]}.{int(pinned[2]) + 1}'
         code, output = self.run_script(self.check('mmhotline'), {
-            'monkeymaxxing/mmhotline': [release('v0.1.1', 'monkeymaxxing/mmhotline')]})
+            'monkeymaxxing/mmhotline': [release('v' + newer, 'monkeymaxxing/mmhotline')]})
         self.assertEqual(code, 1, output)
-        for text in ('mmhotline has a newer release, 0.1.1', 'pins 0.1.0',
-                     'https://github.com/monkeymaxxing/mmhotline/releases/tag/v0.1.1',
+        for text in (f'mmhotline has a newer release, {newer}', f'pins {pinned[1]}.{pinned[2]}',
+                     f'https://github.com/monkeymaxxing/mmhotline/releases/tag/v{newer}',
                      'add_or_update_a_program_from_outside_the_distribution.md'):
             self.assertIn(text, output)
 

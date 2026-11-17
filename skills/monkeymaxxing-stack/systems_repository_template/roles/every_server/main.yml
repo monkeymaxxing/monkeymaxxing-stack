@@ -237,6 +237,7 @@ node_tasks:
       wireguard_peer_names: "{{ .inputs.wireguard_peer_names }}"
       root_ssh_public_keys: "{{ .inputs.root_ssh_public_keys }}"
       triage_ssh_public_key: "{{ .inputs.triage_ssh_public_key }}"
+      is_util_server: "{{ .inputs.is_util_server }}"
 
   # Load the app containers' policy before the app and jobs roles run.
   # Debian's named crun profile is stacked with a no-new-privileges

@@ -2,8 +2,8 @@
 """Run the helper with fake git, ssh, mmx, flock and mmhotline; no server access.
 
 The stand-in mmhotline answers commit-reviews check as MMHotline
-does (exit 0 when the commit is trusted, exit 1 after printing the answer when a
-commit waits for review) and fails the test when it is called while the helper
+does with trusted_commits: every_commit_on_origin (exit 0 with the commit as
+the trusted one; an empty answer when MMHotline trusts nothing) and fails the test when it is called while the helper
 holds util01's lock: MMHotline's check takes the same lock itself and waits for
 it without a time limit.
 """
@@ -131,28 +131,13 @@ class Helper(unittest.TestCase):
         moves = [c for c in commands if c[0] and c[1] == 'git' and c[2] in ('pull', 'fetch', 'merge', 'checkout', 'reset')]
         self.assertEqual(moves, [])
 
-    def test_a_commit_that_waits_for_review_stops_the_run_and_names_the_one_act(self):
-        for answer in ('waits', 'none'):
+    def test_mmhotline_that_does_not_answer_stops_the_run(self):
+        for answer in ('down', 'none'):
             with self.subTest(answer=answer):
                 result, commands = self.run_helper(CHECK_ANSWER=answer)
                 self.assertEqual(result.returncode, 1)
+                self.assertIn('MMHotline did not answer the commit check', result.stderr)
                 self.assertFalse(any(c[:2] == [True, 'mmx'] or c[1] == 'flock' for c in commands))
-                self.assertIn(f'  {COMMIT} which no key the team trusts signed: https://ops.example.com/approvals/commits/{COMMIT}\n', result.stderr)
-                self.assertIn('./server_management_scripts/run_mmx_on_util01 commit-reviews mark-reviewed --commit-id COMMIT', result.stderr)
-                # True under both settings: the triage agent may still be reviewing the commit, or a person must.
-                self.assertIn("may be under the triage agent's review for a short time: wait for the review's alert in MMHotline and run this again, or review the commit with the person now", result.stderr)
-                self.assertNotIn("wait for a person's review", result.stderr)
-                # Pushed text never reaches the terminal: no author, no message, no escape.
-                self.assertNotIn('Mallory', result.stderr)
-                self.assertNotIn('\x1b', result.stderr)
-                # The helper marks nothing reviewed by itself.
-                self.assertFalse(any('mark-reviewed' in c or 'trust-through' in c for c in commands))
-
-    def test_mmhotline_that_does_not_answer_stops_the_run(self):
-        result, commands = self.run_helper(CHECK_ANSWER='down')
-        self.assertEqual(result.returncode, 1)
-        self.assertIn('MMHotline did not answer the commit check (exit 1)', result.stderr)
-        self.assertFalse(any(c[:2] == [True, 'mmx'] or c[1] == 'flock' for c in commands))
 
     def test_laptop_refusals_never_contact_util01(self):
         for settings in ({'DIRTY': ' M vault'}, {'BRANCH': 'topic'}, {'PUSHED_COMMIT': 'other'}, {'FETCH_EXIT': '1'}, {'STATUS_EXIT': '1'}):
@@ -226,24 +211,6 @@ class Helper(unittest.TestCase):
                 self.assertIn([True, 'mmx', command, '--non-interactive', 'run-7f3a'], commands)
                 self.assertEqual([c for c in commands if c[1] in ('flock', 'git', 'mmhotline')], [])
 
-    def test_commit_reviews_reach_mmhotline_as_root_without_the_lock(self):
-        # The commands change no server setting and MMHotline takes its own
-        # lock, so a dirty desk copy on another branch is fine.
-        for arguments in (('list',), ('show', '--commit-id', COMMIT), ('mark-reviewed', '--commit-id', COMMIT), ('trust-through', '--commit-id', COMMIT)):
-            for status in ('0', '4'):
-                with self.subTest(arguments=arguments, status=status):
-                    result, commands = self.run_helper(('commit-reviews', *arguments), MMHOTLINE_EXIT=status, BUSY='1', DIRTY=' M notes.md', BRANCH='work')
-                    self.assertEqual(result.returncode, int(status), result.stderr)
-                    self.assertEqual([c for c in commands if c[0]], [[True, 'mmhotline', 'commit-reviews', *arguments]])
-                    self.assertIn('MMHotline answered commit-reviews ' + arguments[0], result.stdout)
-
-    def test_commit_reviews_refuses_other_subcommands(self):
-        for arguments in ((), ('check', '--commit-id', COMMIT), ('delete',)):
-            with self.subTest(arguments=arguments):
-                result, commands = self.run_helper(('commit-reviews', *arguments))
-                self.assertEqual(result.returncode, 1)
-                self.assertIn('give list, show, mark-reviewed or trust-through after commit-reviews', result.stderr)
-                self.assertFalse(any(c[1] == 'ssh' for c in commands))
 
 
 if __name__ == '__main__':

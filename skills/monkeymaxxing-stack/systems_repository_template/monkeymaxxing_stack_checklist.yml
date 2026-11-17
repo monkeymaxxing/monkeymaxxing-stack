@@ -309,7 +309,7 @@ items:
       each person's numbered desk is in systems_desks in a location different
       from production; the laptop's wg-quick file has only the desk peer;
       a fresh SSH login needs the laptop key and a phone code;
-      coding-agent can use production SSH, signed Git push, run-mmx-on-the-servers,
+      coding-agent can use production SSH, Git push to the main copy, run-mmx-on-the-servers,
       and both API proxies without reading personal private keys or tokens;
       run-mmx-on-the-servers selects the pushed main commit and cannot enter a desk;
       the person's loopback self-management works; the desk reports to
