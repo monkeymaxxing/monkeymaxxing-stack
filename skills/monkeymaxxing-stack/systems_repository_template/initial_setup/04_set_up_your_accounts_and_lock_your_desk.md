@@ -571,8 +571,8 @@ domain at Cloudflare, its DNS records, and the lock.
   at the first screen that is not done. When Backblaze was done in the
   earlier run, a short screen asks for the master key once more, because
   the lock step at the end writes the recovery bundle's copy into the
-  locked backup bucket, and only the master key can write there; every run
-  forgets the master key when it ends. The same key works; a new master key works too.
+  locked backup bucket with the master key, and every run forgets the
+  master key when it ends. The same key works; a new master key works too.
 - **The domain shows "Pending" for longer than the setup takes:** chapters
   5 to 8 continue. Chapter 9's check through the public address waits for
   "Active".
