@@ -570,8 +570,9 @@ domain at Cloudflare, its DNS records, and the lock.
 - **The person stops in the middle:** `ssh desk01-setup` again continues
   at the first screen that is not done. When Backblaze was done in the
   earlier run, a short screen asks for the master key once more, because
-  the key is never kept and the recovery bundle's copy goes into the
-  locked backup bucket. The same key works; a new master key works too.
+  the lock step at the end writes the recovery bundle's copy into the
+  locked backup bucket, and only the master key can write there; every run
+  forgets the master key when it ends. The same key works; a new master key works too.
 - **The domain shows "Pending" for longer than the setup takes:** chapters
   5 to 8 continue. Chapter 9's check through the public address waits for
   "Active".

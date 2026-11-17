@@ -59,7 +59,7 @@ hosting at a platform such as Heroku.
 - Offsite backups of user uploads (images, docs), also deletion-proof
 
 You do not need to be a systems engineer to get all of this. Your coding
-agent builds it with you in about one working day and explains each step as
+agent builds it with you in about a day, with the site live in a few hours and explains each step as
 it goes, so a startup founder or a developer who is new to running servers
 ends the day with the whole system and understands it.
 
@@ -417,7 +417,7 @@ risk.
 Your coding agent does every step it can. Before you start, you need a
 domain, a password manager, a GitHub account with your app's repository,
 and your coding agent on your laptop. The setup adds accounts at your
-server provider, Cloudflare, and Backblaze.
+server provider, Cloudflare, your domain's registrar, and Backblaze.
 
 You tell your agent: "Set up the Monkeymaxxing Stack for my app." Your agent
 asks two questions, your domain and your server provider, and shows every

@@ -4,7 +4,7 @@
 # systems repository, before each job.
 #
 # MMHotline trusts every commit on origin (mmhotline_settings.yml,
-# triage_agent.trusted_commits: every_commit_on_origin), and origin is the
+# systems_repository_commits.trusted_commits: every_commit_on_origin), and origin is the
 # main copy, a bare repository on util01 that only the keys in
 # root_ssh_public_keys can push to. The script reads the commit that main
 # ends at in the main copy and asks MMHotline to check through that commit:
@@ -24,8 +24,8 @@
 # When MMHotline does not answer, such as while MMHotline is stopped, the
 # script prints the commit the copy already has, with one line that says
 # so: the job runs nothing newer than what util01 ran before. During a
-# lock-out, MMHotline's settings have no triage_agent section, which holds
-# trusted_commits (mmhotline_settings.yml), so MMHotline refuses the check;
+# lock-out, MMHotline's settings have no systems_repository_commits section, which
+# holds trusted_commits (mmhotline_settings.yml), so MMHotline refuses the check;
 # the one line then says that, in place of MMHotline's own error.
 set -euo pipefail
 SETTINGS=/etc/mmhotline/mmhotline_settings.yml
@@ -46,8 +46,8 @@ if [ "$status" -le 1 ] && trusted=$(jq -er '.commit_check.trusted_through_commit
   printf '%s\n' "$trusted"
   exit 0
 fi
-if [ -r "$SETTINGS" ] && ! grep -q '^triage_agent:' "$SETTINGS"; then
-  say "MMHotline checks no commit during a lock-out, because its settings then hold no trusted_commits; this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"
+if [ -r "$SETTINGS" ] && ! grep -q '^systems_repository_commits:' "$SETTINGS"; then
+  say "MMHotline checks no commit during a lock-out, because its settings then hold no systems_repository_commits.trusted_commits; this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"
 else
   cat "$errors" >&2
   say "MMHotline did not answer the commit check (exit $status); this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"

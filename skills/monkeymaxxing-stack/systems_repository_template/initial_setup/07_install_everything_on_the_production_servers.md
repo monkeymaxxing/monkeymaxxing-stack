@@ -34,9 +34,9 @@ chapter.
   in [`AGENTS.md`](../AGENTS.md#making-a-change) says. So the laptop may
   sleep during the runs.
 - **Every MMX run in this chapter uses the systems desk's button,**
-  `sudo -n -u servers-mmx run-mmx-on-the-servers`, until the triage
-  agent's part of the setup applies the triage agent's settings
-  ([chapter 8, part 3](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-3-the-triage-agent)). After that, run MMX on `util01` through the
+  `sudo -n -u servers-mmx run-mmx-on-the-servers`, until run 2 (configure
+  every server) has applied MMHotline's settings, which include
+  `systems_repository_commits`. After that, run MMX on `util01` through the
   `./server_management_scripts/run_mmx_on_util01` helper
   ([the helper guide](../server_management_scripts/README.md#run-mmx-on-util01)).
   Use the systems desk for `util01`'s own
@@ -103,6 +103,9 @@ chapter.
    of the `triage_agent` section start at column 0, so a cut by key
    leaves an `{{ if }}` without its `{{ end }}` and the file does not
    render.
+   The `systems_repository_commits` section, with its own `{{ if ... }}`
+   and `{{ end }}` lines, sits above that comment line, so the cuts leave
+   it in place; keep it.
    A section absent from `mmhotline_settings.yml` needs no vault key, so
    the first run needs none of their keys.
 
@@ -144,6 +147,8 @@ chapter.
        preset: routine_fixes_without_permission
    services_whose_changes_a_person_must_approve: [pgautofailover.service]
    sending_services: {}
+   systems_repository_commits:                # keep this section: util01's helper needs it from run 2 on
+     trusted_commits: every_commit_on_origin
    ```
 
    - **`rules_for_running_agent_playbooks`:** the template writes this
@@ -157,6 +162,10 @@ chapter.
      anything MMHotline cannot recognize, waits for a person's approval.
      The answer `routine_fixes_and_server_work` adds four playbooks listed
      by name, which run without a person.
+   - **`systems_repository_commits`** is outside the triage agent's
+     section, so it stays in this chapter's file. It tells MMHotline to
+     trust every commit on `origin`, the main copy on `util01`. After run 2
+     applies it, `util01`'s helper runs commits without the triage agent.
    - **`pgautofailover.service`** waits for a person whatever the rules for
      running the agent's playbooks say. The service name covers two programs: the keeper on each
      database server, and the failover monitor on `util01`.
@@ -386,7 +395,7 @@ chapter.
 
    ```sh
    # This systems desk, in the systems repository; these runs execute on the systems desk,
-   # because util01's helper refuses until chapter 8 applies the triage agent's settings:
+   # because util01's helper refuses until run 2 has applied MMHotline's settings:
    sudo -n -u servers-mmx run-mmx-on-the-servers run update_database_servers --connection ssh_only
    sudo -n -u servers-mmx run-mmx-on-the-servers run reboot_servers_after_updates --connection ssh_only
    ```
@@ -516,8 +525,8 @@ with the fuller system:
 ## Why the chapter works this way
 
 **The desk's button first.** Why: the helper runs only commits that MMHotline trusts, and MMHotline
-learns that it trusts every commit on `origin` from the triage agent's
-settings (`trusted_commits`). Until a run applies those settings, the
+learns that it trusts every commit on `origin` from the `systems_repository_commits`
+section of its settings (`trusted_commits`). Until run 2 applies those settings, the
 helper refuses with "MMHotline did not answer the commit check", and the
 button is the way to make that run.
 

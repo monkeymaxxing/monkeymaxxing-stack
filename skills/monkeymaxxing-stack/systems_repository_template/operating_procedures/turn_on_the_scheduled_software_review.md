@@ -10,7 +10,7 @@ server's packages and programs for known flaws.
 
 **Who acts:** the coding agent does every step from the systems desk.
 The person decides what the task leaves out (step 1) and the interval
-(step 3). Each person runs `review-and-apply-the-systems-desk-settings`
+(step 3). Each person runs `ssh desk01-review`
 in the person's own terminal (step 3).
 
 Read [the systems repository rules](../AGENTS.md#the-rules) first.
@@ -124,7 +124,7 @@ Read [the systems repository rules](../AGENTS.md#the-rules) first.
    ```
 
    The run's stage `apply_the_mmhotline_settings` applies the interval.
-   Tell each person to run `review-and-apply-the-systems-desk-settings`,
+   Tell each person to run `ssh desk01-review` (with the person's own desk name),
    as that procedure says.
    **Check:** the run passes; step 4 checks the interval.
 

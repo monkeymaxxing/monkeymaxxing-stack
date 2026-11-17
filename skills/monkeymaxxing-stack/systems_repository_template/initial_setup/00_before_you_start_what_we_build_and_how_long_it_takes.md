@@ -101,7 +101,7 @@ further when the person first needs it.
 > 9. Chapter 9: Go live. You approve nothing again here: you already approved my changes to your app in chapter 2.
 >
 > The alerts part of the setup adds phone alerts, the same day, in about 15 minutes.
-> Later short parts add the triage agent, the status page for your customers, and chapter 10, your written operating guide.
+> Later short parts add the triage agent, the status page for your customers, and chapter 10, your written operating guide, which includes the break-in response page.
 >
 > The smallest system has one app server and one database server. If
 > `app001` or `db01` fails, your site stops until the failed server is

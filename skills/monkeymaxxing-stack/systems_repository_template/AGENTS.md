@@ -257,7 +257,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   settings comparison and restore drill use the same lock.
 
   MMHotline trusts every commit on `main` in the main copy
-  (`trusted_commits: every_commit_on_origin` in `mmhotline_settings.yml`).
+  (`systems_repository_commits.trusted_commits: every_commit_on_origin` in `mmhotline_settings.yml`).
   Commits are not signed, and no commit waits for review. Reason: only
   the keys in `root_ssh_public_keys` can push to the main copy, and those
   keys already log in as root on every server, so a signature would
@@ -341,7 +341,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   MMHotline's included: never in another file of this repository, a commit
   message, an image, or a log. The person types each secret once, at a hidden
   prompt of `set-up-outside-services` on the desk, never in the chat. In the
-  the first part of the setup, `ssh desk01-setup` asks for each key a website gives and makes
+  first part of the setup, `ssh desk01-setup` asks for each key a website gives and makes
   every random key itself
   ([chapter 4 (set up your accounts and lock your systems desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)).
   Later, give the person `ssh desk01-secrets`: it asks for each key the vault

@@ -243,7 +243,7 @@ and nobody, the intruder included, reaches the app from outside.
 **When:** a commit that nobody on the team made is on `main` in the main copy on `util01`.
 
 **What the intruder can reach:** MMHotline and `util01` trust every commit on the main copy
-(`triage_agent.trusted_commits: every_commit_on_origin`), so the next run applies the commit on every server as root.
+(`systems_repository_commits.trusted_commits: every_commit_on_origin`), so the next run applies the commit on every server as root.
 Only a key in `root_ssh_public_keys` can push to the main copy, as root: a desk's production key or `util01`'s
 `mmhotline` key. So a commit nobody made means one of those keys is in someone else's hands.
 The triage agent cannot push: MMHotline pushes its commits only when they change nothing but its notes and one-time

@@ -28,7 +28,7 @@ commit=$1; shift
 # Ask MMHotline before taking the lock: MMHotline's check takes the lock
 # itself and waits for it without a time limit, so a check made while
 # holding the lock would wait forever. MMHotline trusts every commit on
-# origin (mmhotline_settings.yml, trusted_commits), fetches, and moves its
+# origin (mmhotline_settings.yml, systems_repository_commits.trusted_commits), fetches, and moves its
 # checkout forward to the commit. The helper never moves the checkout.
 if [ "$commit" != none ]; then
   status=0
