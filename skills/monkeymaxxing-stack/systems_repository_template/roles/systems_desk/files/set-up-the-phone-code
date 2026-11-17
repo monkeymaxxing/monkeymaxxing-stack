@@ -3,8 +3,10 @@
 # person and of coding-agent asks for (sshd_pam). No secret passes through
 # MMX. Run as root, from the person's terminal:
 #     sudo -n set-up-the-phone-code --emergency-codes-to PATH
-# It shows the QR code, asks for one code from the phone, and only after the
-# code matches writes the secret to /etc/systems-desk/phone-code (root:root
+# It shows the QR code and asks for a code from the phone until one matches,
+# as step 2 of 2 of set-up-outside-services go-live's lock screen goes on
+# (go-live prints the screen's title and steps 1 and 2). Only after the
+# code matches it writes the secret to /etc/systems-desk/phone-code (root:root
 # 0400) and the emergency codes to PATH (0600, owned by the person who ran
 # sudo), for the recovery bundle. The secret itself goes nowhere else.
 set -euo pipefail
@@ -51,7 +53,9 @@ secret_on_screen=yes
 # other lines name a website that would show the secret, print a code that
 # works now, and list the emergency codes, which go to the recovery bundle.
 printf '%s\n' "$generated" | grep -a "^$(printf '\033')\[" || true
-printf '\nOr type this key into the app instead: %s\n\n' "$secret"
+printf '\n  Or type this key into the app instead:  %s\n\n' "$secret"
+printf '  3. Type the 6 digits your phone shows.\n\n'
+
 code_matches() {
     local typed=$1 now offset
     [[ "$typed" =~ ^[0-9]{6}$ ]] || return 1
@@ -61,18 +65,16 @@ code_matches() {
     done
     return 1
 }
-matched=no
-for try in 1 2 3; do
-    read -r -p 'Code: ' typed_code
-    if code_matches "$typed_code"; then matched=yes; break; fi
-    [ "$try" = 3 ] || printf 'That code did not match. Type the 6 digits your phone shows now.\n'
+# Asks again after a wrong code, as long as the person keeps typing: the
+# person is at the desk already, so a guess here opens nothing. Ctrl-C or
+# the end of input stops it, with nothing saved.
+while :; do
+    read -r -p '  Code: ' typed_code || exit 1
+    code_matches "$typed_code" && break
+    printf '\n  That code did not match.  Type the 6 digits your phone shows now.\n  If every code fails, check that your phone sets its clock automatically.\n\n'
 done
 clear_the_secret_from_the_screen
 secret_on_screen=no
-if [ "$matched" = no ]; then
-    printf 'Three codes did not match, so nothing was saved. Check that the phone'"'"'s clock is set automatically, then run this again.\n' >&2
-    exit 1
-fi
 # The emergency codes first, then the secret: a desk that asks for a code
 # always has its emergency codes saved.
 owner=${SUDO_UID:-0}:${SUDO_GID:-0}

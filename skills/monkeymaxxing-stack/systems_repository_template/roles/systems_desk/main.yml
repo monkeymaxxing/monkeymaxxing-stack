@@ -212,6 +212,11 @@ node_tasks:
       shell: /bin/bash
       supplementary_groups: [desk-buttons]
       supplementary_groups_not_listed: remove
+  # The bootstrap's copy made /home/coding-agent as root before the account
+  # existed, and useradd leaves an existing home as it is. The coding agent
+  # writes its desk jobs' logs there.
+  - id: protect_the_coding_agents_home
+    directory: {path: /home/coding-agent, owner: coding-agent, group: coding-agent, permissions_mode: "0700"}
   # Rootless Podman talks to the user's systemd (sd-bus) for a container's
   # cgroup. coding-agent starts through sudo, with no login session, so
   # without lingering every podman build RUN step failed with "sd-bus call:
