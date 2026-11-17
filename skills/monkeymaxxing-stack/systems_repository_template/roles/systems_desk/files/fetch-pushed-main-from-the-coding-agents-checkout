@@ -1,0 +1,135 @@
+#!/usr/bin/python3
+"""Fetch pushed main from the coding agent's checkout, reading it as data only.
+
+    fetch-pushed-main-from-the-coding-agents-checkout CHECKOUT REPOSITORY
+
+The desk's root-run commands and the MMX button (servers-mmx) read pushed
+main from the coding agent's checkout, which coding-agent owns. They run
+this, as their own account, with REPOSITORY a repository that account owns.
+It prints the commit it fetched, and REPOSITORY's FETCH_HEAD names it.
+
+Pushed main is main of the main copy on util01 as the checkout last fetched
+it (refs/remotes/origin/main) when the checkout has an origin, and before
+util01 exists the checkout's own main (refs/heads/main), because the
+checkout is the main copy then. The checkout has an origin when its copied
+refs hold refs/remotes/origin/main.
+
+It never runs Git in the checkout or with the checkout as the remote.
+Reason: Git in a repository runs commands that the repository's own
+settings name (core.fsmonitor, core.alternateRefsCommand,
+uploadpack.packObjectsHook, core.hooksPath and more), and coding-agent
+writes those settings. Git also refuses, as "dubious ownership", a
+repository another account owns, and a local fetch starts git-upload-pack
+with a cleaned environment, so no -c safe.directory value reaches it.
+Instead it copies the checkout's .git/objects (without objects/info/alternates
+and objects/info/http-alternates, which would point Git at other
+directories), .git/refs and .git/packed-refs, regular files only, into a
+new bare repository of its own account, with Git's default settings and no
+hooks, fetches the one ref from that copy, and deletes the copy.
+
+A missing or damaged object stops it with a plain message, before
+REPOSITORY's FETCH_HEAD or any of its refs or files change.
+"""
+import os
+from pathlib import Path
+import pwd
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+
+GIT = '/usr/bin/git'
+# Git with its default settings only: no global or system settings file.
+GIT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8', 'HOME': pwd.getpwuid(os.geteuid()).pw_dir,
+                   'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1'}
+NEVER_COPIED = {Path('objects/info/alternates'), Path('objects/info/http-alternates')}
+
+
+class Stop(Exception):
+    """A reason to stop before anything changed."""
+
+
+def git(*arguments):
+    result = subprocess.run([GIT, '-c', 'core.hooksPath=/dev/null', *arguments], text=True, capture_output=True,
+                            env=GIT_ENVIRONMENT)
+    if result.returncode:
+        raise Stop(' '.join((result.stderr or result.stdout).split())[:400] or 'git exited %d' % result.returncode)
+    return result.stdout
+
+
+def copy_regular_file(source, target):
+    """Copies source only when it is a regular file; never follows a link,
+    and never waits on a pipe."""
+    try:
+        descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return
+    with open(descriptor, 'rb') as reading:
+        if not stat.S_ISREG(os.fstat(reading.fileno()).st_mode):
+            return
+        with open(target, 'xb') as writing:
+            shutil.copyfileobj(reading, writing)
+
+
+def copy_tree(git_directory, copy, name):
+    """Copies git_directory/name, a directory, into copy/name: directories
+    and regular files only."""
+    top = git_directory/name
+    if not top.is_dir() or top.is_symlink():
+        return
+    for directory, directories, files in os.walk(top):
+        relative = Path(directory).relative_to(git_directory)
+        (copy/relative).mkdir(exist_ok=True)
+        directories[:] = [d for d in directories if not (Path(directory)/d).is_symlink()]
+        for file in files:
+            if relative/file not in NEVER_COPIED and not (copy/relative/file).exists():
+                copy_regular_file(Path(directory)/file, copy/relative/file)
+
+
+def has_origin(copy):
+    """Whether the copied refs hold refs/remotes/origin/main, read as text."""
+    if (copy/'refs/remotes/origin/main').is_file():
+        return True
+    packed = copy/'packed-refs'
+    return packed.is_file() and any(line.split()[1:] == ['refs/remotes/origin/main']
+                                    for line in packed.read_text(errors='replace').splitlines() if not line.startswith(('#', '^')))
+
+
+def fetch_pushed_main(checkout, repository):
+    git_directory = checkout/'.git'
+    if not git_directory.is_dir() or git_directory.is_symlink():
+        raise Stop('%s is not a directory, so %s is not a Git checkout' % (git_directory, checkout))
+    copy = Path(tempfile.mkdtemp(prefix='.pushed-main-', dir=repository.parent))
+    try:
+        git('init', '--quiet', '--bare', '--template=', str(copy))
+        copy_tree(git_directory, copy, 'objects')
+        copy_tree(git_directory, copy, 'refs')
+        copy_regular_file(git_directory/'packed-refs', copy/'packed-refs')
+        pushed = 'refs/remotes/origin/main' if has_origin(copy) else 'refs/heads/main'
+        try:
+            git('-C', str(repository), 'fetch', '--quiet', '--no-tags', '--', str(copy), pushed)
+        except Stop as error:
+            raise Stop('the fetch of %s did not work, so the checkout lacks that ref, or an object it needs is missing or '
+                       'damaged (git said: %s)' % (pushed, error))
+        return git('-C', str(repository), 'rev-parse', '--verify', 'FETCH_HEAD^{commit}').strip()
+    finally:
+        shutil.rmtree(copy, ignore_errors=True)
+
+
+def main(arguments):
+    if len(arguments) != 2:
+        print('Usage: fetch-pushed-main-from-the-coding-agents-checkout CHECKOUT REPOSITORY. Nothing changed.', file=sys.stderr)
+        return 64
+    checkout, repository = Path(arguments[0]), Path(arguments[1]).absolute()
+    try:
+        print(fetch_pushed_main(checkout, repository))
+    except Stop as error:
+        print('Pushed main could not be read from the coding agent\'s checkout %s: %s. Nothing changed.' % (checkout, error),
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

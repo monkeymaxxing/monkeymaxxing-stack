@@ -51,6 +51,8 @@ import tempfile
 INSTALLED_PATH = '/usr/local/bin/review-and-apply-the-systems-desk-settings'
 MMX = '/usr/local/bin/mmx'
 GIT = '/usr/bin/git'
+# Reads pushed main without running Git in the coding agent's checkout.
+FETCH_PUSHED_MAIN = '/usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout'
 # The desk's own copy of pushed main, root-only, so neither the coding agent
 # nor a program of the person's can change what is reviewed and run. Its
 # .mmx keeps the desk reviews' run history.
@@ -58,8 +60,9 @@ DESK_COPY = Path('/var/lib/systems-desk/systems_repository')
 # Where the bootstrap's copy of the systems repository is, which the desk
 # copy starts from.
 CODING_AGENT_CHECKOUT = Path('/home/coding-agent/systems_repository')
-# Root's Git reads only local repositories: it fetches pushed main from the
-# coding agent's checkout, never from util01 itself.
+# Root's Git reads only local repositories: it fetches pushed main from a
+# copy of the coding agent's checkout (FETCH_PUSHED_MAIN), never from util01
+# itself.
 GIT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8',
                    'GIT_CONFIG_GLOBAL': os.devnull}
 # The coding agent's own Git, as its logins get it (sshd.conf), which
@@ -331,15 +334,15 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY):
         repository.mkdir(mode=0o700, parents=True, exist_ok=True)
         repository.chmod(0o700)
         git(repository, 'init', '--quiet', '-b', 'main')
-    pushed = 'refs/remotes/origin/main' if has_origin else 'refs/heads/main'
-    # The checkout belongs to coding-agent; root only reads it.
-    for arguments in [('-c', 'safe.directory=' + str(CODING_AGENT_CHECKOUT), 'fetch', '--quiet', '--no-tags', '--',
-                       str(CODING_AGENT_CHECKOUT), pushed),
-                      ('reset', '--quiet', '--hard', 'FETCH_HEAD'), ('clean', '--quiet', '-d', '--force', '-x', '--exclude=.mmx')]:
+    # Root reads the checkout, which coding-agent owns, as data only.
+    fetched = subprocess.run([FETCH_PUSHED_MAIN, str(CODING_AGENT_CHECKOUT), str(repository)], text=True, capture_output=True,
+                             env=GIT_ENVIRONMENT)
+    if fetched.returncode:
+        return False, visible(' '.join(fetched.stderr.split()) or 'The fetch of pushed main did not work.')
+    for arguments in [('reset', '--quiet', '--hard', 'FETCH_HEAD'), ('clean', '--quiet', '-d', '--force', '-x', '--exclude=.mmx')]:
         done = git(repository, *arguments)
         if done.returncode:
-            return False, 'git %s in %s did not work: %s' % (arguments[2] if arguments[0] == '-c' else arguments[0], repository,
-                                                            visible(' '.join(done.stderr.split())[:400]))
+            return False, 'git %s in %s did not work: %s' % (arguments[0], repository, visible(' '.join(done.stderr.split())[:400]))
     if has_origin:
         return True, 'Pulled main from the main copy on util01: the desk\'s copy is at %s.' % current_commit(repository)
     return True, ('Pulled main from the coding agent\'s checkout, the main copy until util01 exists: the desk\'s copy is at %s.'

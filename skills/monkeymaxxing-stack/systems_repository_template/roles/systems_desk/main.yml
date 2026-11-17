@@ -300,6 +300,12 @@ node_tasks:
   # that joins or leaves reaches it at this desk's next desk review.
   - id: write_the_keys_whose_commit_signatures_git_accepts
     file: {path: /etc/systems-desk/allowed-signers, template: files/allowed-signers, owner: root, group: root, permissions_mode: "0644"}
+  # How the desk's root-run commands and the MMX button read pushed main
+  # from the coding agent's checkout: as data, from a copy of its objects
+  # and refs, never with Git in the checkout, whose settings coding-agent
+  # writes (files/fetch-pushed-main-from-the-coding-agents-checkout says why).
+  - id: install_the_command_that_reads_pushed_main_as_data
+    file: {path: /usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout, source: files/fetch-pushed-main-from-the-coding-agents-checkout, owner: root, group: root, permissions_mode: "0755"}
   - id: install_the_run_mmx_on_the_servers_command
     file: {path: /usr/local/bin/run-mmx-on-the-servers, source: files/run-mmx-on-the-servers, owner: root, group: root, permissions_mode: "0755"}
   # The person's desk review. It runs the desk playbook as root only after
