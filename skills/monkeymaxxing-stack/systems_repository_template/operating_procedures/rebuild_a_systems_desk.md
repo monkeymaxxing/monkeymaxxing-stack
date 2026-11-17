@@ -217,11 +217,16 @@ inventory's real names and addresses, and the next unused desk name.
     # This systems desk, as the coding agent, in ~/systems_repository:
     sudo -n update-this-desks-wireguard-peers
     git switch main
+    git remote remove origin 2>/dev/null  # the laptop clone's origin, copied in step 12
     git remote add origin root@10.20.0.1:/var/lib/systems_repository.git
     git fetch origin && git reset --hard origin/main && git branch --set-upstream-to=origin/main main
     sudo -n update-this-desks-wireguard-peers
     ```
 
+    The bootstrap of steps 12 and 14 read `main` from the copy, so it
+    works while `util01` is lost too. From the first desk review after this
+    step, the desk review and the lock-out button fetch `main` from `util01`
+    only.
     The first peers command gives the desk its server peers, `util01`
     included, from the copy. `util01` lets the desk in because the
     restored production key is in `root_ssh_public_keys`.

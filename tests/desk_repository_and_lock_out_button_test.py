@@ -585,6 +585,34 @@ class PullIntoTheDesksCopy(unittest.TestCase):
             self.assertIn(option, ssh)
         self.assertEqual(ssh[:3], ['ssh', '-F', '/dev/null'])
 
+    def test_the_bootstrap_records_from_the_checkout_while_util01_is_lost(self):
+        """A desk rebuilt while util01 is lost: its checkout, copied from the
+        laptop's clone, has an origin, and util01 does not answer."""
+        self.main_copy_url = str(self.origin) + '-gone'
+        missing = Path(self.directory.name)/'var/lib/systems-desk/systems_repository'
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(missing, at_the_bootstrap=True)
+        self.assertTrue(pulled, said)
+        self.assertIn('the main copy until util01 exists', said)
+        self.assertFalse((missing/DESK_REVIEW.PUSHED_MAIN_COMES_FROM_UTIL01).exists())
+        # The next desk review, after the lock, fetches from util01.
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(missing)
+        self.assertFalse(pulled)
+        self.assertIn('The pull of main from the main copy on util01 did not work', said)
+
+    def test_a_new_util01_with_an_empty_main_copy_stops_the_pull_and_keeps_the_copy(self):
+        """Rebuild util01's step 3 makes an empty main copy; step 4 pushes main."""
+        empty = Path(self.directory.name)/'new-util01.git'
+        self.run_git('init', '--quiet', '--bare', '-b', 'main', str(empty), cwd=self.directory.name)
+        self.main_copy_url = str(empty)
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertFalse(pulled)
+        self.assertIn('The pull of main from the main copy on util01 did not work', said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'one\n')
+        self.run_git('push', '--quiet', str(empty), 'main', cwd=self.other)
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'two\n')
+
     def test_an_unreachable_util01_stops_the_pull_and_keeps_the_copy(self):
         self.main_copy_url = str(self.origin) + '-gone'
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)

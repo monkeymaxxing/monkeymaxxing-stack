@@ -382,7 +382,7 @@ def ssh_to_the_main_copy(known_hosts):
             '-o ForwardAgent=no -o ClearAllForwardings=yes -o ConnectTimeout=10' % (PRIVATE_AGENT_SOCKET, known_hosts))
 
 
-def pull_main_into_the_desks_copy(repository=DESK_COPY):
+def pull_main_into_the_desks_copy(repository=DESK_COPY, at_the_bootstrap=False):
     """Makes the desk copy pushed main: fetch, then reset, keeping only the
     run history in .mmx. Returns whether the pull worked, and one plain
     sentence that says what happened or what is in the way.
@@ -398,6 +398,11 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY):
     writes PUSHED_MAIN_COMES_FROM_UTIL01, and from then on root fetches from
     util01 only, also while util01 is lost: a desk review then waits for
     the new util01, and the lock-out button goes on with the copy it has.
+    at_the_bootstrap, for --record-the-first-desk-review only, reads the
+    checkout and leaves no mark. Reason: until the lock, the laptop that runs
+    the bootstrap is root on the desk anyway, and a desk rebuilt while
+    util01 is lost must still finish its bootstrap
+    (operating_procedures/rebuild_a_systems_desk.md).
     util01's host key comes from ssh/known_hosts of both the desk copy and
     the checkout's main, so a rebuilt util01's committed key works."""
     if not (repository/'.git').is_dir():
@@ -407,7 +412,7 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY):
         repository.chmod(0o700)
         git(repository, 'init', '--quiet', '-b', 'main')
     marker = repository/PUSHED_MAIN_COMES_FROM_UTIL01
-    from_util01 = marker.exists() or as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0
+    from_util01 = marker.exists() or (not at_the_bootstrap and as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0)
     # Root reads the checkout, which coding-agent owns, as data only.
     fetched = subprocess.run([FETCH_PUSHED_MAIN, str(CODING_AGENT_CHECKOUT), str(repository)], text=True, capture_output=True,
                              env=GIT_ENVIRONMENT)
@@ -555,7 +560,7 @@ def record_the_first_desk_review():
     if read_record()[0] is not None:
         return 0
     DESK_COPY.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pulled, reason = pull_main_into_the_desks_copy(DESK_COPY)
+    pulled, reason = pull_main_into_the_desks_copy(DESK_COPY, at_the_bootstrap=True)
     if not pulled:
         raise Stop('The desk copy could not be made from %s: %s' % (CODING_AGENT_CHECKOUT, reason))
     view, keys_view = what_the_desk_playbook_does(DESK_COPY)

@@ -39,6 +39,12 @@ an open SOS when step 3 asks.
   inventory commit, are gone; a failing run or a leftover server shows
   such a gap
   ([The main copy and the backup at the Git host](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host)).
+- **No step here needs a desk review or the lock-out button,** which
+  fetch `main` from `util01` only: the MMX button and
+  `update-this-desks-wireguard-peers` read the desk's checkout. While
+  `util01` is lost, a desk review stops at its pull with nothing run, and
+  the lock-out button goes on with the desk's copy as it is. Both work
+  again once step 4 has pushed `main` to the new `util01`.
 - **A push alone changes no server.** Apply each configuration change as
   [Making a change](../AGENTS.md#making-a-change) says: run `every_server`
   or the playbook the step names.
@@ -128,7 +134,9 @@ an open SOS when step 3 asks.
    pull fails with a changed host key. On each such desk, its coding agent
    puts the new `util01` line of `ssh/known_hosts` into its checkout by
    hand from this desk's commit, pulls with `git pull --ff-only`, and
-   drops the hand edit if the pull keeps it changed.
+   drops the hand edit if the pull keeps it changed. That desk's desk
+   review trusts the new host key only after this pull, because it reads
+   `util01`'s host key from the checkout's `main` too.
 
    Then read the SSH public keys with
    `sudo -n -u servers-mmx run-mmx-on-the-servers results --node util01 --json`.
