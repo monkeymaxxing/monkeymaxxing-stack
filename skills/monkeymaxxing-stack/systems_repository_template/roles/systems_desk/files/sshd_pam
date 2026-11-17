@@ -1,10 +1,14 @@
 # PAM configuration for the Secure Shell service
 
-# Standard Un*x authentication.
-# Before enrollment the allowed laptop key admits the person.
-# nullok returns IGNORE for a missing file; pam_permit supplies success then.
-# A present file still requires a successful code from the required module.
-auth required pam_google_authenticator.so nullok
+# The desk's one phone code, for the person and for coding-agent alike:
+# secret= names the root-owned file and user=root reads it as root, so one
+# QR code serves both accounts, and a code used by one is refused for the
+# other (the reuse and rate state live in the same file).
+# Before the lock the file does not exist yet, and the allowed laptop key
+# alone admits: nullok returns IGNORE for a missing file; pam_permit
+# supplies success then. A present file still requires a successful code
+# from the required module.
+auth required pam_google_authenticator.so nullok secret=/etc/systems-desk/phone-code user=root
 auth required pam_permit.so
 
 # Disallow non-root logins when /etc/nologin exists.

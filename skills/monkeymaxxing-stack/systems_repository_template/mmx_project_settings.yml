@@ -125,6 +125,20 @@ vars:
     wrong_codes_before_lockout: 5
     lockout_minutes: 5
     alert_severity_when_a_laptop_is_locked_out: warn
+  # How long the coding agent's shared login to a systems desk stays open.
+  # The coding agent on the laptop logs in to the desk as coding-agent with
+  # one phone code and shares that login for its later commands. While the
+  # login is open, any program on the laptop could use it, so the desk ends
+  # it, whatever the laptop's own settings say:
+  #   coding_agent_login_idle_minutes: after this many minutes with no
+  #     command. Reason for 60: a lunch break or a short sleep of the laptop
+  #     keeps the login, and a laptop left alone loses it within the hour.
+  #   coding_agent_login_longest_hours: after this many hours, used or not.
+  #     Reason for 10: one working day, so each day starts with a new code.
+  # The next command after either end needs one new phone code. Both are
+  # whole numbers of at least 1.
+  coding_agent_login_idle_minutes: 60
+  coding_agent_login_longest_hours: 10
   # The public-address checks (MMWatchdog's public_sites check group on
   # util01) request each app's health URL at its public host name and send
   # an sos alert when the app does not answer. Until go-live the domain can
@@ -456,9 +470,9 @@ vars:
   triage_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPsX9pp+bDzWfdnB2oQs5Hfkdg86mfoXg/fTLpSaAVrE util01, the triage agent
 
   # The coding agent that the triage agent runs on util01: claude_code or
-  # codex; by default the same as systems_desk_coding_agent below, which
-  # chapter 4 copies here. Reason for the default: the team already has an
-  # account with that vendor and trusts that agent. A team that wants the
+  # codex; by default the vendor of the coding agent the team works with on
+  # the laptop. Reason for the default: the team already has an account
+  # with that vendor and trusts that agent. A team that wants the
   # other one sets it here, has the person save the matching credential
   # with set-up-outside-services secrets --replace
   # mmhotline_triage_agent_credential, and runs every_server.
@@ -469,18 +483,6 @@ vars:
   # installed either way. Reason: one setting decides both what MMHotline
   # runs and what util01 installs, so the two cannot disagree.
   triage_agent_coding_agent: claude_code
-
-  # The coding agent on each systems desk: claude_code or codex. The desk
-  # review installs it, Codex at the version pinned in stack_software.codex,
-  # and writes the command start-the-coding-agent, which starts it as the
-  # coding-agent account in its checkout. After a change, the other
-  # program stays installed until the desk is rebuilt; that is harmless,
-  # because start-the-coding-agent starts only the program named here and
-  # nothing else runs it. It is separate from
-  # triage_agent_coding_agent. Reason: the desks' coding agent and the
-  # triage agent on util01 are different jobs, and a team may use one
-  # vendor's plan for one and another vendor's key for the other.
-  systems_desk_coding_agent: claude_code
 
   # MMHotline's private dashboard, protected by Cloudflare Access.
   util01_private_page_host_names:

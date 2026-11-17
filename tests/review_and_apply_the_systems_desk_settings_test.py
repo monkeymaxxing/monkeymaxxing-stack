@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -238,6 +239,66 @@ class Review(unittest.TestCase):
         with patch.object(os, 'chown'):
             DESK_REVIEW.write_record([], 'abc1234', new)
         self.assertEqual(DESK_REVIEW.read_record('lock_out_button_keys_view')[0], new)
+
+
+class FirstDeskReview(unittest.TestCase):
+    """The bootstrap records the first desk review without a question, from
+    a copy of the coding agent's checkout, with MMX's real explain output."""
+
+    def setUp(self):
+        self.mmx = os.environ.get('MMX_BINARY') or shutil.which('mmx')
+        if not self.mmx:
+            raise RuntimeError('Set MMX_BINARY to test with the actual MMX explain output.')
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name).resolve()
+        environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull}
+        checkout = root/'home/coding-agent/systems_repository'
+        shutil.copytree(T, checkout, symlinks=True, ignore=shutil.ignore_patterns('.mmx', '__pycache__'))
+        for arguments in (['init', '--quiet', '-b', 'main'], ['add', '--all'],
+                          ['-c', 'user.name=A', '-c', 'user.email=a@example.com', '-c', 'commit.gpgsign=false',
+                           'commit', '--quiet', '-m', 'Start the systems repository on desk01']):
+            subprocess.run(['git', *arguments], cwd=checkout, check=True, capture_output=True, env=environment)
+        (root/'repository-remote').write_text('git@github.com:example/systems.git\n')
+        self.desk_copy = root/'var/lib/systems-desk/systems_repository'
+        yaml = type(sys)('yaml')
+        # The settings and the inventory as the review reads them: the test
+        # runs on laptops without a YAML library.
+        yaml.safe_load = lambda text: ({'default_inventory': 'servers', 'vars': {'root_ssh_public_keys': ['ssh-ed25519 AAAAone alex on desk01']}}
+                                       if 'project_name:' in text else {'nodes': CONNECTIONS})
+        for target, name, value in [(DESK_REVIEW, 'RECORD_DIRECTORY', root/'record'), (DESK_REVIEW, 'DESK_COPY', self.desk_copy),
+                                    (DESK_REVIEW, 'CODING_AGENT_CHECKOUT', checkout), (DESK_REVIEW, 'MMX', self.mmx),
+                                    (DESK_REVIEW, 'REPOSITORY_REMOTE', root/'repository-remote'), (DESK_REVIEW, 'GIT', 'git'),
+                                    (DESK_REVIEW, 'GIT_ENVIRONMENT', environment), (os, 'geteuid', lambda: 0), (os, 'chown', lambda *a: None),
+                                    (DESK_REVIEW.socket, 'gethostname', lambda: 'desk01')]:
+            patcher = patch.object(target, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for patcher in (patch.dict(sys.modules, {'yaml': yaml}), patch.dict(os.environ, {'SUDO_USER': ''})):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_the_bootstrap_records_the_first_desk_review_and_the_next_review_asks_nothing(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(DESK_REVIEW.record_the_first_desk_review(), 2)
+            self.assertEqual(DESK_REVIEW.record_the_first_desk_review(), 0, 'a desk with a review records nothing new')
+        remote = subprocess.run(['git', 'remote', 'get-url', 'origin'], cwd=self.desk_copy, text=True, capture_output=True)
+        self.assertEqual(remote.stdout.strip(), 'git@github.com:example/systems.git')
+        self.assertEqual(self.desk_copy.stat().st_mode & 0o777, 0o700)
+        view, _ = DESK_REVIEW.what_the_desk_playbook_does(self.desk_copy)
+        self.assertTrue(any('write_the_desk_sshd_policy' in line for line in view))
+        questions = []
+        output = io.StringIO()
+        with patch.object(DESK_REVIEW, 'ask_the_person', side_effect=questions.append), contextlib.redirect_stdout(output):
+            self.assertTrue(DESK_REVIEW.review(view, 'abc1234'))
+        self.assertEqual(questions, [])
+        self.assertIn('same as at your last desk review', output.getvalue())
+
+    def test_only_the_bootstrap_records_without_a_question(self):
+        with patch.dict(os.environ, {'SUDO_USER': 'alex'}):
+            with self.assertRaisesRegex(DESK_REVIEW.Stop, 'bootstrap'):
+                DESK_REVIEW.record_the_first_desk_review()
+        self.assertFalse((Path(self.directory.name)/'record').exists())
 
 
 class Question(unittest.TestCase):

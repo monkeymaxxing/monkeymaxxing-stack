@@ -1,0 +1,80 @@
+#!/bin/bash
+# Signs the coding agent's commits with this desk's production key and
+# publishes them on main. The coding agent edits the systems repository on
+# the laptop and pushes a branch to its checkout on this desk, then runs:
+#     git push desk01-agent:systems_repository HEAD:refs/heads/BRANCH
+#     ssh desk01-agent sign-and-publish BRANCH
+# It brings main up to main at the Git host, rebases BRANCH onto main with
+# every commit signed again here (git rebase --force-rebase --gpg-sign),
+# fast-forwards main, pushes main to the Git host, and deletes BRANCH. The
+# laptop's author stays on each commit; this desk is the committer.
+# On a rebase conflict it names the files and changes nothing: BRANCH and
+# main stay as they were.
+# Reason: MMHotline and util01 trust only commits signed by a key in
+# root_ssh_public_keys, and the production key never leaves this desk.
+set -euo pipefail
+export SSH_AUTH_SOCK=/run/desk-ssh-agent/socket
+export GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig
+repository=/home/coding-agent/systems_repository
+stop() { printf '%s\n' "$1" >&2; exit 1; }
+# Hooks off: no file in the pushed branch runs here.
+git() { command git -c core.hooksPath=/dev/null "$@"; }
+
+[ "$(id -un)" = coding-agent ] || stop 'Run sign-and-publish as coding-agent: ssh desk01-agent sign-and-publish BRANCH. Nothing changed.'
+[ "$#" = 1 ] || stop 'Usage: sign-and-publish BRANCH, the branch you pushed to the desk. Nothing changed.'
+branch=$1
+case "$branch" in main | -*) stop "sign-and-publish takes the branch you pushed, not $branch. Nothing changed." ;; esac
+git check-ref-format --branch "$branch" > /dev/null 2>&1 || stop "$branch is not a branch name. Nothing changed."
+cd "$repository"
+[ "$(git symbolic-ref --quiet --short HEAD || true)" = main ] || stop "The desk's checkout, $repository, is not on main. Nothing changed."
+[ -z "$(git status --porcelain --untracked-files=no)" ] || stop "The desk's checkout, $repository, has changes that are not committed: $(git status --porcelain --untracked-files=no | tr '\n' ' ')Nothing changed."
+git rev-parse --verify --quiet "refs/heads/$branch^{commit}" > /dev/null ||
+    stop "The desk has no branch $branch. Push it first: git push desk01-agent:systems_repository HEAD:refs/heads/$branch. Nothing changed."
+
+main_before=$(git rev-parse main)
+# main at the Git host, when it has one yet: before the first push there is
+# none, and this desk's main is the start.
+if git ls-remote --exit-code --heads origin main > /dev/null; then
+    git fetch --quiet --no-tags origin main
+    published=$(git rev-parse FETCH_HEAD)
+    git merge-base --is-ancestor main "$published" ||
+        stop "main on this desk has commits that main at the Git host does not have: git log $published..main shows them. Nothing changed."
+    git merge --quiet --ff-only "$published"
+else
+    status=$?
+    [ "$status" = 2 ] || stop "The Git host did not answer (git ls-remote exited $status). Nothing changed."
+fi
+put_main_back() { git checkout --quiet main; git reset --quiet --hard "$main_before"; }
+base=$(git rev-parse main)
+
+branch_before=$(git rev-parse "refs/heads/$branch")
+if ! git rebase --quiet --force-rebase --gpg-sign main "$branch" > /dev/null 2>&1; then
+    conflicts=$(git diff --name-only --diff-filter=U | paste -sd , - | sed 's/,/, /g')
+    git rebase --abort > /dev/null 2>&1 || true
+    git update-ref "refs/heads/$branch" "$branch_before"
+    put_main_back
+    stop "Rebasing $branch onto main stopped on a conflict in: ${conflicts:-files Git did not name}. Nothing changed: $branch and main are as they were. Never resolve the conflict yourself: tell the person which files conflicted."
+fi
+git checkout --quiet main
+count=$(git rev-list --count "main..$branch")
+if [ "$count" = 0 ]; then
+    git branch --quiet -D "$branch"
+    stop "$branch adds nothing to main. Deleted $branch; nothing was published."
+fi
+# Every commit to publish must carry a good signature of a key in the
+# allowed signers file, which the desk review writes from
+# root_ssh_public_keys.
+if git log --format=%G? "main..$branch" | grep -qv '^G$'; then
+    git update-ref "refs/heads/$branch" "$branch_before"
+    put_main_back
+    stop "A rebased commit has no good signature of this desk's production key. Check that ssh-add -l lists it with SSH_AUTH_SOCK=$SSH_AUTH_SOCK, and that root_ssh_public_keys holds it. Nothing changed."
+fi
+git merge --quiet --ff-only "$branch"
+if ! git push --quiet origin main; then
+    put_main_back
+    stop "The Git host refused the push: main there moved, or the Git host does not let this desk in yet. main on this desk is as it was; $branch holds the signed commits. Run sign-and-publish $branch again."
+fi
+git branch --quiet --set-upstream-to=origin/main main 2> /dev/null || true
+git branch --quiet -d "$branch"
+printf 'Published %s commits on main, signed with this desk'"'"'s production key. main is at %s at the Git host:\n' "$count" "$(git rev-parse --short HEAD)"
+git log --format='  %h %s (%an)' "$base..main"

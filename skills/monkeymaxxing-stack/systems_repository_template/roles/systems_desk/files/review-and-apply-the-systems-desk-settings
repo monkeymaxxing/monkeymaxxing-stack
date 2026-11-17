@@ -23,7 +23,14 @@ The review also shows and records the keys in the project settings that
 the lock-out button's undo lets in on every server, because the lock-out
 button compares the pulled settings with that record.
 
-Run it from your systems repository, as yourself:
+It works in the desk's own copy of the systems repository,
+/var/lib/systems-desk/systems_repository, root-only, which it makes main
+at the Git host first, so it reviews and runs only what is pushed. The
+bootstrap makes that copy and records the first desk review with
+--record-the-first-desk-review: the person has nothing to compare it with.
+
+Run it as yourself, in your own terminal on the desk (ssh desk01-review
+from the laptop):
     review-and-apply-the-systems-desk-settings [--only-fleet-stages systems_desk]
 """
 import datetime
@@ -32,7 +39,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import pwd
 import re
 import shutil
 import socket
@@ -43,7 +49,18 @@ import tempfile
 INSTALLED_PATH = '/usr/local/bin/review-and-apply-the-systems-desk-settings'
 MMX = '/usr/local/bin/mmx'
 GIT = '/usr/bin/git'
-RUNUSER = '/usr/sbin/runuser'
+# The desk's own copy of pushed main, root-only, so neither the coding agent
+# nor a program of the person's can change what is reviewed and run. Its
+# .mmx keeps the desk reviews' run history.
+DESK_COPY = Path('/var/lib/systems-desk/systems_repository')
+# Where the bootstrap's copy of the systems repository is, which the desk
+# copy starts from.
+CODING_AGENT_CHECKOUT = Path('/home/coding-agent/systems_repository')
+REPOSITORY_REMOTE = Path('/etc/systems-desk/repository-remote')
+# Root's Git reaches the Git host through the relay socket with the
+# production key and only the Git host's verified keys (ssh.conf).
+GIT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8',
+                   'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_SSH_COMMAND': 'ssh -F /etc/systems-desk/ssh.conf'}
 # The person's private agent socket: root may use it, and the desk playbook
 # reads util01's join code through it.
 PRIVATE_AGENT_SOCKET = '/run/desk-ssh-agent/private.sock'
@@ -258,25 +275,15 @@ def changes(old, new):
     return out
 
 
-def find_repository(start):
-    for directory in [start, *start.parents]:
-        if (directory/'mmx_project_settings.yml').is_file():
-            return directory
-    raise Stop('Run review-and-apply-the-systems-desk-settings from your systems repository on this desk, '
-               'for example after cd ~/example_systems. Nothing ran.')
+def git(repository, *arguments):
+    """Root's Git in the desk copy, with hooks off: no pushed file runs."""
+    return subprocess.run([GIT, '-c', 'core.hooksPath=/dev/null', *arguments], cwd=repository, text=True,
+                          capture_output=True, env=GIT_ENVIRONMENT)
 
 
-def run_as(person, home, arguments, repository):
-    return subprocess.run([RUNUSER, '-u', person, '--', *arguments], cwd=repository, text=True, capture_output=True,
-                          env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': home, 'LANG': 'C.UTF-8'})
-
-
-def current_commit(person, home, repository):
-    head = run_as(person, home, [GIT, 'rev-parse', 'HEAD'], repository)
-    if head.returncode:
-        return 'no commit yet'
-    status = run_as(person, home, [GIT, 'status', '--porcelain'], repository)
-    return head.stdout.strip() + (' plus uncommitted changes' if status.stdout.strip() else '')
+def current_commit(repository):
+    head = git(repository, 'rev-parse', 'HEAD')
+    return head.stdout.strip() if head.returncode == 0 else 'no commit yet'
 
 
 # The longest the pull from the Git host may take. Reason: long enough for a
@@ -285,24 +292,35 @@ def current_commit(person, home, repository):
 PULL_TIME_LIMIT_SECONDS = 30
 
 
-def pull_main_as_the_person(person, repository):
-    """git pull --ff-only origin main, as the person, in the person's
-    repository, with the person's own Git settings and SSH agent. Returns
-    whether the pull worked, and one plain sentence that says what happened
-    or what is in the way."""
-    home = pwd.getpwnam(person).pw_dir
-    if run_as(person, home, [GIT, 'remote', 'get-url', 'origin'], repository).returncode:
-        return True, 'Your systems repository has no origin remote yet, so there is nothing to pull.'
-    pulled = run_as(person, home, ['timeout', '--kill-after=5', str(PULL_TIME_LIMIT_SECONDS), GIT, 'pull', '--ff-only',
-                                   '--quiet', 'origin', 'main'], repository)
-    if pulled.returncode == 0:
-        return True, 'Pulled main from the Git host: your repository is at %s.' % current_commit(person, home, repository)
-    said = ' '.join((pulled.stderr or pulled.stdout).split())[:400] or 'no message'
-    if pulled.returncode in (124, 137):
-        cause = 'the Git host did not answer within %d seconds' % PULL_TIME_LIMIT_SECONDS
+def pull_main_into_the_desks_copy(repository=DESK_COPY):
+    """Makes the desk copy main at the Git host: fetch, then reset, keeping
+    only the run history in .mmx. Returns whether the pull worked, and one
+    plain sentence that says what happened or what is in the way."""
+    if (repository/'.git').is_dir():
+        command = ['fetch', '--quiet', '--no-tags', 'origin', 'main']
     else:
-        cause = 'git said: %s' % visible(said)
-    return False, 'The pull of main from the Git host did not work (%s).' % cause
+        # A desk from an earlier Stack version, whose desk reviews ran in the
+        # person's own checkout, gets its desk copy at its first such pull.
+        repository.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        command = ['clone', '--quiet', '--no-checkout', '--branch', 'main', '--', REPOSITORY_REMOTE.read_text().strip(), str(repository)]
+    fetched = subprocess.run(['timeout', '--kill-after=5', str(PULL_TIME_LIMIT_SECONDS), GIT, '-c', 'core.hooksPath=/dev/null',
+                              *command], cwd=repository.parent if command[0] == 'clone' else repository, text=True,
+                             capture_output=True, env=GIT_ENVIRONMENT)
+    if fetched.returncode == 0 and command[0] == 'clone':
+        repository.chmod(0o700)
+        git(repository, 'fetch', '--quiet', '--no-tags', 'origin', 'main')
+    if fetched.returncode:
+        said = ' '.join((fetched.stderr or fetched.stdout).split())[:400] or 'no message'
+        if fetched.returncode in (124, 137):
+            cause = 'the Git host did not answer within %d seconds' % PULL_TIME_LIMIT_SECONDS
+        else:
+            cause = 'git said: %s' % visible(said)
+        return False, 'The pull of main from the Git host did not work (%s).' % cause
+    for arguments in [('reset', '--quiet', '--hard', 'FETCH_HEAD'), ('clean', '--quiet', '-d', '--force', '-x', '--exclude=.mmx')]:
+        done = git(repository, *arguments)
+        if done.returncode:
+            return False, 'git %s in %s did not work: %s' % (arguments[0], repository, visible(done.stderr.strip()))
+    return True, 'Pulled main from the Git host: the desk\'s copy is at %s.' % current_commit(repository)
 
 
 def read_record(name='desk_run_view'):
@@ -384,7 +402,50 @@ def review(view, commit):
     return answer.lower() == 'yes'
 
 
+def what_the_desk_playbook_does(repository):
+    """The view of the desk playbook in repository, and its part that the
+    lock-out button compares with: what a desk review shows and records."""
+    import yaml  # python3-yaml, which the desk role installs
+    explained = subprocess.run([MMX, 'explain', PLAYBOOK, '--var', 'desk_name=' + socket.gethostname(), '--json'],
+                               cwd=repository, text=True, capture_output=True,
+                               env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8'})
+    if explained.returncode:
+        raise Stop('mmx explain could not read the desk playbook:\n%s\nNothing ran.' % explained.stderr.strip())
+    settings = yaml.safe_load((repository/'mmx_project_settings.yml').read_text()) or {}
+    inventory_path = repository/'inventories'/(str(settings.get('default_inventory', '')) + '.yml')
+    inventory = yaml.safe_load(inside(repository, inventory_path).read_text()) or {}
+    keys_view = lock_out_button_keys_view(settings)
+    return desk_run_view(repository, json.loads(explained.stdout), inventory) + keys_view, keys_view
+
+
+def record_the_first_desk_review():
+    """The bootstrap's step, as root, before the lock: makes the desk copy
+    from the coding agent's checkout, with origin at the Git host, and
+    records what the desk playbook does there as reviewed. Returns 2 when
+    it recorded, 0 when this desk has a desk review already."""
+    if os.geteuid() != 0 or os.environ.get('SUDO_USER'):
+        raise Stop('--record-the-first-desk-review is the bootstrap\'s step, run by the desk playbook as root. Nothing ran.')
+    if read_record()[0] is not None:
+        return 0
+    if not (DESK_COPY/'.git').is_dir():
+        DESK_COPY.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # The checkout belongs to coding-agent; this one clone reads it as root.
+        cloned = subprocess.run([GIT, '-c', 'safe.directory=' + str(CODING_AGENT_CHECKOUT), 'clone', '--quiet', '--no-hardlinks',
+                                 '--branch', 'main', '--', str(CODING_AGENT_CHECKOUT), str(DESK_COPY)],
+                                text=True, capture_output=True, env=GIT_ENVIRONMENT)
+        if cloned.returncode:
+            raise Stop('The desk copy could not be made from %s: %s' % (CODING_AGENT_CHECKOUT, cloned.stderr.strip()))
+        DESK_COPY.chmod(0o700)
+    git(DESK_COPY, 'remote', 'set-url', 'origin', REPOSITORY_REMOTE.read_text().strip())
+    view, keys_view = what_the_desk_playbook_does(DESK_COPY)
+    write_record(view, '%s, recorded by the bootstrap' % current_commit(DESK_COPY), keys_view)
+    print('Recorded the first desk review at %s. Later desk reviews show only what changed since.' % current_commit(DESK_COPY))
+    return 2
+
+
 def main(arguments):
+    if arguments == ['--record-the-first-desk-review']:
+        return record_the_first_desk_review()
     only = []
     if arguments[:1] == ['--only-fleet-stages'] and len(arguments) == 2 and re.fullmatch(r'[a-z0-9_]+(,[a-z0-9_]+)*', arguments[1]):
         only = arguments
@@ -394,35 +455,21 @@ def main(arguments):
         os.execv('/usr/bin/sudo', ['sudo', '--', INSTALLED_PATH, *arguments])
     person = os.environ.get('SUDO_USER', '')
     if not person or person in ACCOUNTS_THAT_ARE_NOT_A_PERSON:
-        raise Stop('Run review-and-apply-the-systems-desk-settings as yourself, without sudo, from your systems repository. Nothing ran.')
-    account = pwd.getpwnam(person)
-    repository = find_repository(Path.cwd().resolve())
-    for path in [repository, repository/'mmx_project_settings.yml']:
-        if path.stat().st_uid != account.pw_uid:
-            raise Stop('%s does not belong to %s. Run review-and-apply-the-systems-desk-settings from your own systems repository. '
-                       'Nothing ran.' % (path, person))
-    pulled, reason = pull_main_as_the_person(person, repository)
+        raise Stop('Run review-and-apply-the-systems-desk-settings as yourself, without sudo, in your own terminal. Nothing ran.')
+    repository = DESK_COPY
+    pulled, reason = pull_main_into_the_desks_copy(repository)
     print(reason, flush=True)
     if not pulled:
         # Nothing about a desk review is urgent, so it reviews only what is
         # pushed; the lock-out button goes on instead.
-        raise Stop('Stopped before the review. Pull main yourself, or ask your coding agent why the pull did not work, '
+        raise Stop('Stopped before the review. Ask your coding agent why the pull did not work, '
                    'then run review-and-apply-the-systems-desk-settings again. Nothing ran.')
-    import yaml  # python3-yaml, which the desk role installs
-    desk = socket.gethostname()
-    explained = run_as(person, account.pw_dir, [MMX, 'explain', PLAYBOOK, '--var', 'desk_name=' + desk, '--json'], repository)
-    if explained.returncode:
-        raise Stop('mmx explain could not read the desk playbook:\n%s\nNothing ran.' % explained.stderr.strip())
-    settings = yaml.safe_load((repository/'mmx_project_settings.yml').read_text()) or {}
-    inventory_path = repository/'inventories'/(str(settings.get('default_inventory', '')) + '.yml')
-    inventory = yaml.safe_load(inside(repository, inventory_path).read_text()) or {}
-    keys_view = lock_out_button_keys_view(settings)
-    view = desk_run_view(repository, json.loads(explained.stdout), inventory) + keys_view
-    commit = current_commit(person, account.pw_dir, repository)
+    view, keys_view = what_the_desk_playbook_does(repository)
+    commit = current_commit(repository)
     if not review(view, commit):
         raise Stop('Stopped. Nothing ran, and nothing was recorded.')
     write_record(view, commit, keys_view)
-    command = [MMX, 'run', PLAYBOOK, '--var', 'desk_name=' + desk, *only, '--connection', 'ssh_only']
+    command = [MMX, 'run', PLAYBOOK, '--var', 'desk_name=' + socket.gethostname(), *only, '--connection', 'ssh_only']
     print(' '.join(command), flush=True)
     os.chdir(repository)
     os.execve(MMX, command, {**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
@@ -430,7 +477,7 @@ def main(arguments):
 
 if __name__ == '__main__':
     try:
-        main(sys.argv[1:])
+        sys.exit(main(sys.argv[1:]))
     except Stop as stop:
         print(stop, file=sys.stderr)
         sys.exit(1)

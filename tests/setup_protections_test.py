@@ -106,12 +106,6 @@ class Rendered(unittest.TestCase):
         self.assertNotIn('shop-jobs', self.render(policy, is_app_server=True))
         self.assertIn("$nrconf{restart} = 'a';", self.render(policy, is_app_server=True))
 
-    def test_needrestart_never_ends_the_persons_rex_sessions_on_a_desk(self):
-        # A restart of rex-desk.service ends every terminal in it, with any MMX run started there.
-        policy = 'roles/every_server/files/needrestart.conf'
-        self.assertIn(r"$nrconf{override_rc}{qr(^rex-desk\.service$)} = 0;", self.render(policy, is_systems_desk=True))
-        self.assertNotIn('rex-desk', self.render(policy, is_app_server=True))
-
     def test_journald_limits_are_written_and_applied_by_a_restart(self):
         main = (T/'roles/every_server/main.yml').read_text()
         block = main[main.index('id: journal_size_limits'):]

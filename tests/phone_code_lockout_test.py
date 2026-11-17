@@ -98,7 +98,7 @@ class Rendered(unittest.TestCase):
 
     def test_first_login_says_the_lockout_once(self):
         script = self.render('roles/systems_desk/files/set-up-the-phone-code', **self.lockout(lockout_minutes=7))
-        self.assertEqual(script.count('lock this laptop out'), 1)
+        self.assertEqual(script.count('lock that laptop out'), 1)
         self.assertIn("'5' '7'", script)
 
     def test_public_site_checks_start_only_after_go_live(self):
@@ -106,14 +106,14 @@ class Rendered(unittest.TestCase):
         names = dict(production=dict(shop='shop.example.com'))
         before = self.render('mmwatchdog_checks/util_server.yml', apps=apps, public_host_names=names,
                              public_site_checks_run=False, backups=dict(uploads_backup_runs_on=[]), stack_software={},
-                            triage_agent_coding_agent='claude_code', systems_desk_coding_agent='claude_code',
+                            triage_agent_coding_agent='claude_code',
                             app_pool_load_settings=dict(what_the_triage_agent_may_do_without_a_person='routine_fixes'),
                             inventory_nodes={})
         self.assertNotIn('public_sites:', before)
         self.assertNotIn('alert_severity: sos', before)
         after = self.render('mmwatchdog_checks/util_server.yml', apps=apps, public_host_names=names,
                             public_site_checks_run=True, backups=dict(uploads_backup_runs_on=[]), stack_software={},
-                            triage_agent_coding_agent='claude_code', systems_desk_coding_agent='claude_code',
+                            triage_agent_coding_agent='claude_code',
                             app_pool_load_settings=dict(what_the_triage_agent_may_do_without_a_person='routine_fixes'),
                             inventory_nodes={})
         self.assertIn('https://shop.example.com/up', after)

@@ -712,7 +712,6 @@ fleet_stages:
           triage_agent_coding_agent: "{{ .vars.triage_agent_coding_agent }}"
           codex_release: "{{ .vars.stack_software.codex }}"
           stack_software: "{{ .vars.stack_software }}"
-          systems_desk_coding_agent: "{{ .vars.systems_desk_coding_agent }}"
           mmx_release: "{{ .vars.stack_software.mmx }}"
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           mmx_vault_passphrase: "{{ .secrets.mmx_vault_passphrase }}"

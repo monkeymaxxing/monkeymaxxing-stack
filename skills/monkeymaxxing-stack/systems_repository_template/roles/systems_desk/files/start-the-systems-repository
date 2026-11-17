@@ -1,0 +1,202 @@
+#!/usr/bin/python3
+"""Start the systems repository on this desk, as root, at the bootstrap.
+
+The desk playbook runs it before the lock (roles/systems_desk/main.yml,
+start_the_systems_repository), after the bootstrap copied the systems
+repository from the laptop into the coding agent's checkout,
+/home/coding-agent/systems_repository. Nobody types anything:
+
+1. writes this desk's production public key, which the desk role made, into
+   root_ssh_public_keys and the desk's production_ssh_public_key, so the
+   servers will let this desk in;
+2. makes the vault passphrase, /etc/systems-desk/vault-passphrase
+   (root:servers-mmx 0640), which the buttons read and nobody sees;
+3. makes the vault, secrets_vault.age, which holds its own passphrase as
+   mmx_vault_passphrase, so util01 opens it for its runs;
+4. makes the checkout a Git repository on main that signs every commit with
+   the production key through the relay socket, with origin at the Git
+   host, and makes the first signed commit.
+
+It pushes nothing: the Git host lets this desk in only after the person
+registers the production public key there, which the bootstrap prints at
+its end. A rerun skips each step that is done, and does nothing once the
+first commit exists. Exit codes: 0 nothing to do, 2 changed, 1 stopped.
+--dryrun says what it would do and changes nothing.
+
+It starts a new team's repository. A desk that joins a team's existing
+repository, such as a new member's desk or a rebuilt desk, gets the team's
+vault passphrase from the recovery bundle instead, and is not started here.
+"""
+import base64
+import os
+from pathlib import Path
+import re
+import secrets
+import subprocess
+import sys
+
+REPOSITORY = Path('/home/coding-agent/systems_repository')
+PUBLIC_KEY = Path('/etc/systems-desk/production_key.pub')
+REMOTE = Path('/etc/systems-desk/repository-remote')
+VAULT_PASSPHRASE = Path('/etc/systems-desk/vault-passphrase')
+MMX = '/usr/local/bin/mmx'
+VAULT = 'secrets_vault.age'
+# The coding agent's Git, as its SSH logins get it from sshd (sshd.conf):
+# the relay socket signs with the production key.
+CODING_AGENT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/home/coding-agent', 'LANG': 'C.UTF-8',
+                            'SSH_AUTH_SOCK': '/run/desk-ssh-agent/socket',
+                            'GIT_CONFIG_SYSTEM': '/etc/systems-desk/coding-agent-gitconfig'}
+
+
+class Stop(Exception):
+    """A reason to stop. A rerun skips what is done."""
+
+
+def say(text=''):
+    print(text, flush=True)
+
+
+def git(*arguments, check=True):
+    """Git as coding-agent in its checkout, with hooks off."""
+    result = subprocess.run(['/usr/sbin/runuser', '-u', 'coding-agent', '--', 'git', '-c', 'core.hooksPath=/dev/null', *arguments],
+                            cwd=REPOSITORY, text=True, capture_output=True, env=CODING_AGENT_ENVIRONMENT)
+    if check and result.returncode:
+        raise Stop('git %s failed: %s' % (' '.join(arguments), (result.stderr or result.stdout).strip()))
+    return result
+
+
+def key_line(desk, person):
+    """This desk's production public key, as the settings record it."""
+    parts = PUBLIC_KEY.read_text().split()
+    if len(parts) < 2:
+        raise Stop('%s holds no public key. The desk role makes it; run the bootstrap again.' % PUBLIC_KEY)
+    return '%s %s %s on %s' % (parts[0], parts[1], person, desk)
+
+
+def set_root_ssh_public_keys(text, line, desk):
+    """Puts this desk's key into root_ssh_public_keys in the project
+    settings, in place of an earlier key of this desk, keeping every other
+    desk's key and util01's."""
+    match = re.search(r'(?m)^(  root_ssh_public_keys:)[ \t]*(\[\])?[ \t]*\n((?:    - .*\n|[ \t]*#.*\n)*)', text)
+    if not match:
+        raise Stop('mmx_project_settings.yml has no root_ssh_public_keys list under vars.')
+    keys = [item[len('    - '):] for item in match.group(3).splitlines() if item.startswith('    - ')]
+    comments = [item for item in match.group(3).splitlines() if not item.startswith('    - ')]
+    kept = [key for key in keys if key.split()[:2] != line.split()[:2] and not key.endswith(' on ' + desk)]
+    block = match.group(1) + '\n' + ''.join(item + '\n' for item in comments) + ''.join('    - %s\n' % key for key in [line, *kept])
+    return text[:match.start()] + block + text[match.end():]
+
+
+def set_desk_production_key(text, line, desk):
+    """Sets nodes.DESK.vars.production_ssh_public_key in the inventory."""
+    node = re.search(r'(?m)^  %s:[ \t]*\n' % re.escape(desk), text)
+    if not node:
+        raise Stop('inventories/servers.yml has no node %s. The laptop setup names this desk there.' % desk)
+    end = re.compile(r'(?m)^  \S').search(text, node.end())
+    end = end.start() if end else len(text)
+    field = re.compile(r'(?m)^(\s+production_ssh_public_key:)[ \t]*.*$').search(text, node.end(), end)
+    if not field:
+        raise Stop('nodes.%s.vars in inventories/servers.yml has no production_ssh_public_key line.' % desk)
+    return text[:field.start()] + field.group(1) + ' ' + line + text[field.end():]
+
+
+def write_the_vault_passphrase():
+    """A random passphrase, readable by root and the buttons' servers-mmx
+    group only. O_EXCL: an existing passphrase is never replaced."""
+    import grp
+    descriptor = os.open(VAULT_PASSPHRASE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, 'w') as out:
+        out.write(base64.b64encode(secrets.token_bytes(32)).decode() + '\n')
+    os.chown(VAULT_PASSPHRASE, 0, grp.getgrnam('servers-mmx').gr_gid)
+    VAULT_PASSPHRASE.chmod(0o640)
+
+
+def vault_keys():
+    listed = subprocess.run([MMX, 'secrets', 'list-keys'], cwd=REPOSITORY, text=True, capture_output=True,
+                            env={**os.environ, 'MMX_VAULT_PASSWORD_FILE': str(VAULT_PASSPHRASE)})
+    return listed.stdout.split() if listed.returncode == 0 else []
+
+
+def started():
+    return (REPOSITORY/'.git').exists() and git('rev-parse', '--verify', '--quiet', 'HEAD', check=False).returncode == 0
+
+
+def main(arguments):
+    if arguments not in ([], ['--dryrun']):
+        raise Stop('Usage: start-the-systems-repository [--dryrun]')
+    dryrun = arguments == ['--dryrun']
+    if os.geteuid() != 0:
+        raise Stop('start-the-systems-repository runs as root, from the desk playbook.')
+    desk, person = os.environ.get('DESK', ''), os.environ.get('PERSON', '')
+    if not desk or not person:
+        raise Stop('DESK and PERSON must be set, as the desk playbook sets them.')
+    if not (REPOSITORY/'mmx_project_settings.yml').is_file():
+        raise Stop('%s holds no systems repository. The bootstrap copies it there from the laptop before the desk playbook runs.'
+                   % REPOSITORY)
+    if started():
+        if not VAULT_PASSPHRASE.exists():
+            raise Stop('%s has commits, but %s is missing. A desk that joins a team\'s repository gets the team\'s vault '
+                       'passphrase from the recovery bundle.' % (REPOSITORY, VAULT_PASSPHRASE))
+        return 0
+    if dryrun:
+        say('would start the systems repository in %s: the production key into the settings, the vault passphrase, '
+            'the vault, and the first signed commit' % REPOSITORY)
+        return 2
+    import yaml  # python3-yaml, which the desk role installs
+    settings = yaml.safe_load((REPOSITORY/'mmx_project_settings.yml').read_text()) or {}
+    remote = REMOTE.read_text().strip()
+    if remote != ((settings.get('vars') or {}).get('systems_repository') or {}).get('ssh_url'):
+        raise Stop('systems_repository.ssh_url in mmx_project_settings.yml differs from the remote the desk role pinned, %s.'
+                   % remote)
+
+    line = key_line(desk, person)
+    for name, change in [('mmx_project_settings.yml', lambda text: set_root_ssh_public_keys(text, line, desk)),
+                         ('inventories/servers.yml', lambda text: set_desk_production_key(text, line, desk))]:
+        path = REPOSITORY/name
+        text = path.read_text()
+        if change(text) != text:
+            path.write_text(change(text))
+            say('Wrote this desk\'s production key into %s.' % name)
+    written = yaml.safe_load((REPOSITORY/'inventories/servers.yml').read_text())['nodes'][desk]['vars']
+    root_keys = yaml.safe_load((REPOSITORY/'mmx_project_settings.yml').read_text())['vars'].get('root_ssh_public_keys') or []
+    if written.get('production_ssh_public_key') != line or line not in root_keys:
+        raise Stop('The production key did not land where the settings read it. Check both files.')
+
+    if not VAULT_PASSPHRASE.exists():
+        write_the_vault_passphrase()
+        say('Made the vault passphrase, %s, readable by root and the buttons only.' % VAULT_PASSPHRASE)
+    if not (REPOSITORY/VAULT).exists() or 'mmx_vault_passphrase' not in vault_keys():
+        saved = subprocess.run([MMX, 'secrets', 'set', 'mmx_vault_passphrase'], cwd=REPOSITORY, text=True,
+                               input=VAULT_PASSPHRASE.read_text().strip(), capture_output=True,
+                               env={**os.environ, 'MMX_VAULT_PASSWORD_FILE': str(VAULT_PASSPHRASE)})
+        if saved.returncode:
+            raise Stop('mmx secrets set mmx_vault_passphrase failed: %s' % (saved.stderr or saved.stdout).strip())
+        say('Made the vault, %s, which holds its own passphrase as mmx_vault_passphrase.' % VAULT)
+    # Root wrote the vault and the settings; the checkout stays the coding agent's.
+    subprocess.run(['chown', '-R', '--no-dereference', 'coding-agent:coding-agent', '--', str(REPOSITORY)], check=True)
+
+    if not (REPOSITORY/'.git').exists():
+        git('init', '--quiet', '-b', 'main')
+    for key, value in [('gpg.format', 'ssh'), ('user.signingkey', str(PUBLIC_KEY)), ('commit.gpgsign', 'true'),
+                       ('user.name', 'coding-agent on %s' % desk), ('user.email', 'coding-agent@%s' % desk)]:
+        git('config', key, value)
+    if git('remote', 'get-url', 'origin', check=False).returncode:
+        git('remote', 'add', 'origin', remote)
+    else:
+        git('remote', 'set-url', 'origin', remote)
+    git('add', '--all')
+    git('commit', '--quiet', '-m', 'Start the systems repository on %s' % desk)
+    if '\ngpgsig ' not in git('cat-file', 'commit', 'HEAD').stdout:
+        raise Stop('The first commit is not signed. Check that ssh-add -l lists the production key with '
+                   'SSH_AUTH_SOCK=/run/desk-ssh-agent/socket.')
+    say('Made the first commit, %s, signed with this desk\'s production key. It reaches the Git host once the person '
+        'registers the key there.' % git('rev-parse', '--short', 'HEAD').stdout.strip())
+    return 2
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Stop as stop:
+        print('Stopped: %s' % stop, file=sys.stderr)
+        sys.exit(1)

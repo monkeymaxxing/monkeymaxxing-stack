@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+"""The systems desk's SSH door, and the coding agent's sign-and-publish.
+
+  MMX_BINARY=/path/to/mmx python3 tests/systems_desk_door_test.py
+
+The door: renders the desk role's sshd files with `mmx explain` on a copy
+of the template, and asks a real sshd (`sshd -T`) what each login from a
+laptop gets, before and after the lock. sign-and-publish: runs the command
+on real Git repositories, with a stand-in Git host (a bare repository) and
+a real SSH agent that holds a stand-in production key.
+"""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
+FILES = T/'roles/systems_desk/files'
+SSHD = shutil.which('sshd') or '/usr/sbin/sshd'
+LAPTOP = '10.20.10.1'    # an allowed laptop, in private_ip_ranges.systems_desk_laptops
+SERVER = '10.20.0.1'     # util01: a WireGuard address that is no laptop
+
+
+def explain(settings_changes=()):
+    """The desk playbook's node tasks, by name, from mmx explain."""
+    mmx = os.environ.get('MMX_BINARY') or shutil.which('mmx')
+    if not mmx:
+        raise RuntimeError('Set MMX_BINARY to test with the actual MMX explain output.')
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)/'systems'
+        shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+        settings = root/'mmx_project_settings.yml'
+        text = settings.read_text()
+        for old, new in settings_changes:
+            assert old in text, old
+            text = text.replace(old, new)
+        settings.write_text(text)
+        explained = subprocess.run([mmx, 'explain', 'systems_desk', '--var', 'desk_name=desk01', '--json'],
+                                   cwd=root, text=True, capture_output=True)
+    if explained.returncode:
+        raise AssertionError(explained.stderr)
+    return [(stage['path'], task) for stage in json.loads(explained.stdout)['fleet_stages'] for task in stage['node_tasks']]
+
+
+def rendered(tasks, name):
+    for _, task in tasks:
+        if task['path'].endswith('/' + name):
+            return task['rendered_templates'][0]['text']
+    raise AssertionError('no task %s' % name)
+
+
+def before_the_lock_file():
+    """The before-the-lock file, rendered as the desk role renders it. MMX
+    does not render a template of a task whose condition reads the node, so
+    the test fills in its one value, the laptops' address block."""
+    text = (FILES/'sshd_root_login_before_the_lock.conf').read_text()
+    reference = '{{ .inputs.systems_desk_laptop_addresses }}'
+    assert text.count('{{') == 1 and reference in text, 'the file reads one value'
+    return text.replace(reference, '10.20.10.0/24')
+
+
+class TheDeskDoor(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not os.path.exists(SSHD):
+            raise unittest.SkipTest('needs sshd for sshd -T')
+        cls.tasks = explain()
+        cls.directory = tempfile.TemporaryDirectory()
+        cls.host_key = Path(cls.directory.name)/'host_key'
+        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(cls.host_key)], check=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.directory.cleanup()
+
+    def login(self, files, user, address):
+        """What sshd decides for a login of user from address, with these
+        files in sshd_config.d, as sshd -T prints it: keyword -> values."""
+        with tempfile.TemporaryDirectory() as temporary:
+            included = Path(temporary)/'sshd_config.d'
+            included.mkdir()
+            for name, text in files.items():
+                (included/name).write_text(text)
+            main = Path(temporary)/'sshd_config'
+            # Debian's own sshd_config includes the directory first, as here.
+            main.write_text('Include %s/*.conf\nHostKey %s\n' % (included, self.host_key))
+            shown = subprocess.run([SSHD, '-T', '-f', str(main), '-C', 'user=%s,addr=%s,host=laptop,laddr=10.20.9.1,lport=22'
+                                    % (user, address)], text=True, capture_output=True)
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        values = {}
+        for line in shown.stdout.splitlines():
+            keyword, _, value = line.partition(' ')
+            values.setdefault(keyword, []).append(value)
+        return values
+
+    def locked(self, tasks=None):
+        return {'00-systems-desk.conf': rendered(tasks or self.tasks, 'write_the_desk_sshd_policy')}
+
+    def before_the_lock(self):
+        return {**self.locked(), '00-systems-desk-root-login-before-the-lock.conf': before_the_lock_file()}
+
+    def test_after_the_lock_the_person_and_the_coding_agent_need_the_key_and_a_phone_code(self):
+        for user in ('alex', 'coding-agent'):
+            login = self.login(self.locked(), user, LAPTOP)
+            self.assertEqual(login['allowusers'], ['alex', 'coding-agent'])
+            self.assertEqual(login['authenticationmethods'], ['publickey,keyboard-interactive'])
+
+    def test_after_the_lock_root_never_logs_in_from_a_laptop(self):
+        login = self.login(self.locked(), 'root', LAPTOP)
+        self.assertNotIn('root', login['allowusers'])
+        self.assertEqual(login['permitrootlogin'], ['no'])
+        self.assertIn('root', self.login(self.locked(), 'root', '127.0.0.1')['allowusers'])
+
+    def test_before_the_lock_root_logs_in_from_a_laptop_with_the_key_alone(self):
+        login = self.login(self.before_the_lock(), 'root', LAPTOP)
+        self.assertIn('root', login['allowusers'])
+        self.assertEqual(login['authenticationmethods'], ['publickey'])
+        # Debian's sshd prints the older name of the same value.
+        self.assertIn(login['permitrootlogin'], [['prohibit-password'], ['without-password']])
+
+    def test_before_the_lock_root_logs_in_from_no_other_address_and_the_others_keep_their_door(self):
+        self.assertNotIn('root', self.login(self.before_the_lock(), 'root', SERVER)['allowusers'])
+        for user in ('alex', 'coding-agent'):
+            self.assertEqual(self.login(self.before_the_lock(), user, LAPTOP)['authenticationmethods'],
+                             ['publickey,keyboard-interactive'])
+
+    def test_the_coding_agent_gets_the_socket_and_its_git_settings_and_no_forwarding(self):
+        login = self.login(self.locked(), 'coding-agent', LAPTOP)
+        self.assertEqual(login['setenv'], ['SSH_AUTH_SOCK=/run/desk-ssh-agent/socket',
+                                           'GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig'])
+        self.assertEqual(login['disableforwarding'], ['yes'])
+        person = self.login(self.locked(), 'alex', LAPTOP)
+        self.assertNotIn('setenv', person)
+        self.assertEqual(person['disableforwarding'], ['no'])
+
+    def test_the_desk_ends_the_coding_agents_unused_login_after_the_setting(self):
+        self.assertEqual(self.login(self.locked(), 'coding-agent', LAPTOP)['unusedconnectiontimeout'], ['3600'])
+        changed = explain([('  coding_agent_login_idle_minutes: 60\n', '  coding_agent_login_idle_minutes: 45\n')])
+        self.assertEqual(self.login(self.locked(changed), 'coding-agent', LAPTOP)['unusedconnectiontimeout'], ['2700'])
+        self.assertEqual(self.login(self.locked(), 'alex', LAPTOP)['unusedconnectiontimeout'], ['none'])
+
+    def test_the_longest_login_follows_its_setting(self):
+        changed = explain([('  coding_agent_login_longest_hours: 10\n', '  coding_agent_login_longest_hours: 8\n')])
+        job = [task for _, task in changed if task['path'].endswith('/end_the_coding_agents_long_logins')][0]
+        values = {argument['field']: argument.get('value') for argument in job['arguments']}
+        self.assertEqual(str(values['systemd_scheduled_job.env.LONGEST_HOURS']), '8')
+
+    def test_both_accounts_read_the_one_root_owned_phone_code(self):
+        lines = [line.split() for line in (FILES/'sshd_pam').read_text().splitlines() if 'pam_google_authenticator' in line
+                 and not line.startswith('#')]
+        self.assertEqual(lines, [['auth', 'required', 'pam_google_authenticator.so', 'nullok',
+                                  'secret=/etc/systems-desk/phone-code', 'user=root']])
+
+    def test_the_desk_installs_no_coding_agent_or_terminal_of_its_own(self):
+        installed = [task for _, task in self.tasks if task['action'] == 'apt_package'
+                     and not any(argument['field'] == 'apt_package.state' and argument.get('value') == 'absent'
+                                 for argument in task.get('arguments') or [])]
+        names = {argument.get('value') for task in installed for argument in task.get('arguments') or []
+                 if argument['field'].endswith('.name')}
+        self.assertTrue(names & {'git', 'openssh-server'}, names)
+        self.assertFalse(names & {'claude-code', 'rex'}, names)
+        def values(task):
+            return {argument['field']: argument.get('value') for argument in task.get('arguments') or []}
+        written = [values(task).get('file.path') for _, task in self.tasks if values(task).get('file.state') != 'absent']
+        self.assertNotIn('/usr/local/bin/start-the-coding-agent', written)
+
+    def test_the_lock_refuses_without_a_phone_code_and_closes_roots_login_last(self):
+        lock = [task['path'].rsplit('/', 1)[-1] for stage, task in self.tasks if stage == 'lock']
+        self.assertEqual(lock[0], 'refuse_the_lock_before_the_phone_code_is_set_up')
+        self.assertEqual(lock[-1], 'restart_ssh_without_the_root_login')
+
+
+class SignAndPublish(unittest.TestCase):
+    """sign-and-publish with its desk paths pointed at temporary ones."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name).resolve()
+        self.root = root
+        self.environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'HOME': str(root)}
+        self.environment.pop('GIT_CONFIG_SYSTEM', None)
+        # The desk's production key, in an SSH agent, as the relay socket serves it.
+        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'alex on desk01', '-f', str(root/'production_key')],
+                       check=True)
+        self.socket = root/'agent.sock'
+        agent = subprocess.run(['ssh-agent', '-a', str(self.socket)], text=True, capture_output=True, check=True)
+        pid = [part.split('=')[1].rstrip(';') for part in agent.stdout.split() if part.startswith('SSH_AGENT_PID=')][0]
+        self.addCleanup(subprocess.run, ['kill', pid])
+        subprocess.run(['ssh-add', '-q', str(root/'production_key')], env={**self.environment, 'SSH_AUTH_SOCK': str(self.socket)},
+                       check=True, capture_output=True)
+        public = (root/'production_key.pub').read_text().split()
+        (root/'allowed-signers').write_text('root_ssh_public_keys %s %s\n' % (public[0], public[1]))
+        (root/'gitconfig').write_text('[gpg "ssh"]\n\tallowedSignersFile = %s\n' % (root/'allowed-signers'))
+        # The Git host, the desk checkout as the bootstrap leaves it, and the laptop.
+        self.origin, self.desk, self.laptop = root/'origin.git', root/'systems_repository', root/'laptop'
+        self.git(root, 'init', '--quiet', '--bare', '-b', 'main', str(self.origin))
+        self.git(root, 'init', '--quiet', '-b', 'main', str(self.desk))
+        for key, value in [('gpg.format', 'ssh'), ('user.signingkey', str(root/'production_key.pub')),
+                           ('commit.gpgsign', 'true'), ('user.name', 'coding-agent on desk01'),
+                           ('user.email', 'coding-agent@desk01'), ('remote.origin.url', str(self.origin)),
+                           ('remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*')]:
+            self.git(self.desk, 'config', key, value)
+        (self.desk/'inventory.yml').write_text('servers: one\n')
+        (self.desk/'settings.yml').write_text('setting: one\n')
+        self.git(self.desk, 'add', '.')
+        self.git(self.desk, 'commit', '--quiet', '-m', 'Start the systems repository on desk01', signed=True)
+        self.git(self.desk, 'push', '--quiet', '-u', 'origin', 'main')
+        self.git(root, 'clone', '--quiet', str(self.desk), str(self.laptop))
+        self.git(self.laptop, 'config', 'user.name', 'Alex Laptop')
+        self.git(self.laptop, 'config', 'user.email', 'alex@example.com')
+        # The command, with its desk paths and account pointed at this test's.
+        script = (FILES/'sign-and-publish').read_text()
+        for old, new in [('export SSH_AUTH_SOCK=/run/desk-ssh-agent/socket', 'export SSH_AUTH_SOCK=%s' % self.socket),
+                         ('export GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig', 'export GIT_CONFIG_SYSTEM=%s' % (root/'gitconfig')),
+                         ('repository=/home/coding-agent/systems_repository', 'repository=%s' % self.desk),
+                         ('[ "$(id -un)" = coding-agent ]', '[ "$(id -un)" = "$(id -un)" ]')]:
+            self.assertEqual(script.count(old), 1, old)
+            script = script.replace(old, new)
+        self.command = root/'sign-and-publish'
+        self.command.write_text(script)
+
+    def git(self, cwd, *arguments, signed=False):
+        environment = {**self.environment, 'SSH_AUTH_SOCK': str(self.socket), 'GIT_CONFIG_SYSTEM': str(self.root/'gitconfig')}
+        result = subprocess.run(['git', *arguments], cwd=cwd, text=True, capture_output=True, env=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def laptop_commit(self, name, text, message, branch='work'):
+        """An unsigned commit on the laptop, pushed to a branch of the desk checkout."""
+        (self.laptop/name).write_text(text)
+        self.git(self.laptop, 'add', name)
+        self.git(self.laptop, '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', message)
+        self.git(self.laptop, 'push', '--quiet', 'origin', 'HEAD:refs/heads/%s' % branch)
+
+    def sign_and_publish(self, branch='work'):
+        return subprocess.run(['bash', str(self.command), branch], text=True, capture_output=True, env=self.environment)
+
+    def published(self):
+        return self.git(self.origin, 'log', '--format=%G? %an <%ae> / %cn: %s', 'main').splitlines()
+
+    def test_laptop_commits_are_published_signed_with_the_laptops_author(self):
+        self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
+        self.laptop_commit('settings.yml', 'setting: two\n', 'Change a setting')
+        result = self.sign_and_publish()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.published(), ['G Alex Laptop <alex@example.com> / coding-agent on desk01: Change a setting',
+                                            'G Alex Laptop <alex@example.com> / coding-agent on desk01: Add a server',
+                                            'G coding-agent on desk01 <coding-agent@desk01> / coding-agent on desk01: '
+                                            'Start the systems repository on desk01'])
+        self.assertIn('Published 2 commits on main', result.stdout)
+        self.assertEqual(self.git(self.desk, 'branch', '--list', 'work'), '', 'the branch is deleted')
+        self.assertEqual(self.git(self.desk, 'rev-parse', 'main'), self.git(self.origin, 'rev-parse', 'main'))
+
+    def test_commits_that_reached_the_git_host_meanwhile_come_first(self):
+        other = self.root/'other'
+        self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
+        (other/'notes.md').write_text('a note\n')
+        self.git(other, 'add', 'notes.md')
+        self.git(other, 'commit', '--quiet', '-m', 'A note from util01', signed=True)
+        self.git(other, 'push', '--quiet', 'origin', 'main')
+        self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
+        result = self.sign_and_publish()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([line.rsplit(': ', 1)[1] for line in self.published()],
+                         ['Add a server', 'A note from util01', 'Start the systems repository on desk01'])
+
+    def test_a_conflict_names_the_files_and_changes_nothing(self):
+        other = self.root/'other'
+        self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
+        (other/'inventory.yml').write_text('servers: three\n')
+        self.git(other, 'commit', '--quiet', '-am', 'Another server', signed=True)
+        self.git(other, 'push', '--quiet', 'origin', 'main')
+        self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
+        before = {name: self.git(repository, 'rev-parse', ref) for name, repository, ref in
+                  [('desk main', self.desk, 'main'), ('branch', self.desk, 'work'), ('git host', self.origin, 'main')]}
+        result = self.sign_and_publish()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('stopped on a conflict in: inventory.yml', result.stderr)
+        self.assertIn('Nothing changed', result.stderr)
+        after = {name: self.git(repository, 'rev-parse', ref) for name, repository, ref in
+                 [('desk main', self.desk, 'main'), ('branch', self.desk, 'work'), ('git host', self.origin, 'main')]}
+        self.assertEqual(after, before)
+        self.assertEqual(self.git(self.desk, 'status', '--porcelain'), '')
+        self.assertEqual(self.git(self.desk, 'symbolic-ref', '--short', 'HEAD').strip(), 'main')
+
+    def test_a_branch_that_was_not_pushed_or_main_is_refused(self):
+        for branch, said in [('nothing-pushed', 'The desk has no branch nothing-pushed'), ('main', 'not main')]:
+            result = self.sign_and_publish(branch)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(said, result.stderr)
+        self.assertEqual(len(self.published()), 1)
+
+
+if __name__ == '__main__':
+    unittest.main()

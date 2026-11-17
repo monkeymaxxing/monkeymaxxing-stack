@@ -2,14 +2,15 @@
 """The lock-out button: run playbooks/lock_everyone_out.yml as root on this
 desk, from the copies the person last reviewed, never from pushed main.
 
-The person presses it in their own desk terminal, in their systems
-repository. The coding agent prepares and pushes the one-line inventory
-commit, everyone_locked_out_except_desk: DESK; only the person starts a
-lock-out or its undo.
+The person presses it in their own desk terminal. The coding agent
+prepares and pushes the one-line inventory commit,
+everyone_locked_out_except_desk: DESK; only the person starts a lock-out
+or its undo.
 
-1. It pulls main from the Git host as the person. A break-in must not wait
-   for the Git host: when the pull fails, the lock-out button says why and uses the
-   repository as it is.
+1. It pulls main from the Git host into the desk's own copy of the systems
+   repository, the one the desk review uses. A break-in must not wait for
+   the Git host: when the pull fails, the lock-out button says why and uses
+   the desk's copy as it is.
 2. It shows every server of the inventory, one line each, and the desk that
    keeps access, and asks the person to type yes, in the person's own
    terminal. Reason: the lock-out peers every server with the servers the
@@ -33,7 +34,7 @@ lock-out or its undo.
    the lock-out; a pushed change to what the lock-out runs or installs
    reaches root only through the person's desk review.
 
-Run it from your systems repository, in your own desk terminal:
+Run it in your own desk terminal:
     sudo lock-everyone-out
 """
 import base64
@@ -88,13 +89,6 @@ class Stop(Exception):
     pass
 
 
-def find_repository(start):
-    for directory in [start, *start.parents]:
-        if (directory/'mmx_project_settings.yml').is_file():
-            return directory
-    raise Stop('Run sudo lock-everyone-out from your systems repository, for example after cd ~/example_systems. Nothing changed.')
-
-
 def build_run_directory(repository, reviewed, run_directory):
     """The pulled repository with every reviewed path replaced by its
     reviewed copy. A pulled link that leaves the run directory stops the
@@ -125,13 +119,13 @@ def build_run_directory(repository, reviewed, run_directory):
     for link in sorted(path for path in pulled if path.is_symlink() and path.relative_to(run_directory).parts[0] != '.mmx'):
         target = link.resolve()
         if target != inside and inside not in target.parents:
-            raise Stop('%s in your systems repository is a link to %s, outside the repository. The lock-out button copies only '
+            raise Stop('%s in the pulled systems repository is a link to %s, outside the repository. The lock-out button copies only '
                        'files inside it. Remove the link. Nothing changed.' % (link.relative_to(run_directory), target))
     for path in REVIEWED_PATHS:
         target = run_directory/path
         for parent in target.relative_to(run_directory).parents:
             if parent != Path('.') and (run_directory/parent).is_symlink():
-                raise Stop('%s in your systems repository is a link, and the lock-out button puts its reviewed copy of %s there. '
+                raise Stop('%s in the pulled systems repository is a link, and the lock-out button puts its reviewed copy of %s there. '
                            'Make %s a directory. Nothing changed.' % (parent, path, parent))
         if target.is_dir() and not target.is_symlink():
             shutil.rmtree(target)
@@ -319,13 +313,15 @@ def main(arguments):
     person = os.environ.get('SUDO_USER', '')
     if not person or person in ('root', 'coding-agent', 'servers-mmx'):
         raise Stop('Run sudo lock-everyone-out as yourself, from your own desk terminal. Nothing changed.')
-    repository = find_repository(Path.cwd().resolve())
     desk_review = load_the_desk_review_command()
-    pulled, reason = desk_review.pull_main_as_the_person(person, repository)
+    repository = desk_review.DESK_COPY
+    pulled, reason = desk_review.pull_main_into_the_desks_copy(repository)
     if pulled:
         print(reason, flush=True)
+    elif (repository/'mmx_project_settings.yml').is_file():
+        print('%s The lock-out button goes on with the desk\'s copy as it is.' % reason, flush=True)
     else:
-        print('%s The lock-out button goes on with your repository as it is.' % reason, flush=True)
+        raise Stop('%s The desk has no copy of the systems repository to run from. Nothing changed.' % reason)
     import yaml  # python3-yaml, which the desk role installs
     build_run_directory(repository, REVIEWED, RUN_DIRECTORY)
     settings = yaml.safe_load((RUN_DIRECTORY/'mmx_project_settings.yml').read_text()) or {}
@@ -341,7 +337,7 @@ def main(arguments):
                '--connection', 'ssh_only', '--vault-password-file', VAULT_PASSPHRASE]
     print('Running the reviewed lock-out copies from %s, with the inventory of %s.' % (REVIEWED, repository), flush=True)
     for path in paths_that_differ(repository, REVIEWED):
-        print('Your repository changes %s since your last desk review. The lock-out button uses the reviewed copy. '
+        print('The pulled repository changes %s since your last desk review. The lock-out button uses the reviewed copy. '
               'After the incident, run review-and-apply-the-systems-desk-settings and read the change.' % path, flush=True)
     print(' '.join(command), flush=True)
     # Ctrl-C reaches MMX, which stops its run; the button waits for MMX and

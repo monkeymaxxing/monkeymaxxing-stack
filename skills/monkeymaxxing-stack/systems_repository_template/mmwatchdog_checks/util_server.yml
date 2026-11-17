@@ -7,8 +7,8 @@
   /etc/mmwatchdog/check_groups/util_server.yml. It reads the role inputs apps,
   public_host_names (the inventory's public_host_names), public_site_checks_run,
   backups, whose uploads_backup_runs_on decides whether the uploads'
-  checks are here, stack_software, triage_agent_coding_agent and
-  systems_desk_coding_agent for the pinned programs' release checks, and
+  checks are here, stack_software and triage_agent_coding_agent for the
+  pinned programs' release checks, and
   app_pool_load_settings and inventory_nodes for the checks that add and
   remove app servers with the load.
 */ -}}
@@ -130,8 +130,8 @@ check_groups:
   # Caddy, update themselves and need no check. A pin whose download_url is
   # not a GitHub release gets no check; the comment below names it, and the
   # scheduled software review covers it when the team turns the review on.
-  # codex is checked only while triage_agent_coding_agent or
-  # systems_desk_coding_agent is codex, and rclone only while
+  # codex is checked only while triage_agent_coding_agent is codex, and
+  # rclone only while
   # backups.uploads_backup_runs_on names util01, because only then does the
   # system install the program.
   #
@@ -205,7 +205,7 @@ check_groups:
 {{- $checked_programs := dict }}
 {{- range $program, $release := .inputs.stack_software }}
 {{- $installed := true }}
-{{- if eq $program "codex" }}{{ $installed = or (eq $.inputs.triage_agent_coding_agent "codex") (eq $.inputs.systems_desk_coding_agent "codex") }}{{ end }}
+{{- if eq $program "codex" }}{{ $installed = eq $.inputs.triage_agent_coding_agent "codex" }}{{ end }}
 {{- if eq $program "rclone" }}{{ $installed = not (empty $.inputs.backups.uploads_backup_runs_on) }}{{ end }}
 {{- if $installed }}
 {{- if regexMatch "^https://github[.]com/[^/]+/[^/]+/releases/download/" $release.download_url }}

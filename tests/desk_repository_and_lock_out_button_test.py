@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Check the desk's two new commands without a desk.
+"""Check the desk's repository commands without a desk.
 
-set-up-the-systems-repository writes the desk's production key into the
-settings; these tests run its edits on the template's own files.
-lock-everyone-out, the lock-out button, pulls main as the person, shows the
+start-the-systems-repository, the bootstrap's step, writes the desk's
+production key into the settings; these tests run its edits on the
+template's own files. The desk review and the lock-out button pull main
+into the desk's own copy; these tests pull from a stand-in Git host.
+lock-everyone-out, the lock-out button, pulls main, shows the
 inventory's servers and asks for yes, and runs the reviewed copies that the
 desk review installed, with only data from the pulled repository; these
 tests build its run directory from a pulled repository whose lock-out
@@ -36,7 +38,7 @@ def load(name, path):
     return module
 
 
-SETUP = load('set_up_the_systems_repository', T/'roles/systems_desk/files/set-up-the-systems-repository')
+SETUP = load('start_the_systems_repository', T/'roles/systems_desk/files/start-the-systems-repository')
 BUTTON = load('lock_everyone_out', T/'roles/systems_desk/files/lock-everyone-out')
 DESK_REVIEW = load('review_and_apply_the_systems_desk_settings', T/'roles/systems_desk/files/review-and-apply-the-systems-desk-settings')
 KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGfakefakefakefakefakefakefakefakefakefakefake alex on desk01'
@@ -146,20 +148,20 @@ class BreakInButton(unittest.TestCase):
         (outside/'files').mkdir(parents=True)
         shutil.rmtree(self.repository/'roles/every_server')
         (self.repository/'roles/every_server').symlink_to(outside)
-        with self.assertRaisesRegex(BUTTON.Stop, 'roles/every_server in your systems repository is a link to .*outside'):
+        with self.assertRaisesRegex(BUTTON.Stop, 'roles/every_server in the pulled systems repository is a link to .*outside'):
             BUTTON.build_run_directory(self.repository, self.reviewed, self.run_directory)
         self.assertFalse((outside/'files/wireguard_wg0.conf').exists())
         (self.repository/'roles/every_server').unlink()
         shutil.copytree(T/'roles/every_server', self.repository/'roles/every_server')
         (self.repository/'inventories/servers.yml').unlink()
         (self.repository/'inventories/servers.yml').symlink_to('/tmp/servers.yml')
-        with self.assertRaisesRegex(BUTTON.Stop, 'inventories/servers.yml in your systems repository is a link'):
+        with self.assertRaisesRegex(BUTTON.Stop, 'inventories/servers.yml in the pulled systems repository is a link'):
             BUTTON.build_run_directory(self.repository, self.reviewed, self.run_directory)
 
     def test_a_link_inside_the_repository_cannot_move_a_reviewed_copy(self):
         shutil.rmtree(self.repository/'roles/util_server')
         (self.repository/'roles/util_server').symlink_to('app_server')
-        with self.assertRaisesRegex(BUTTON.Stop, 'roles/util_server in your systems repository is a link, and the lock-out button'):
+        with self.assertRaisesRegex(BUTTON.Stop, 'roles/util_server in the pulled systems repository is a link, and the lock-out button'):
             BUTTON.build_run_directory(self.repository, self.reviewed, self.run_directory)
 
     def test_the_run_history_stays_and_old_files_go(self):
@@ -313,10 +315,13 @@ class LockOutButtonPress(unittest.TestCase):
         current = os.getcwd()
         os.chdir(self.repository)
         self.addCleanup(os.chdir, current)
+        patcher = patch.object(DESK_REVIEW, 'DESK_COPY', self.repository)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def press(self, answers, pulled=(True, 'Pulled main from the Git host: your repository is at abc1234.'), mmx_exit_code=0):
-        def pull(person, repository):
-            self.events.append(('pull', person, repository))
+        def pull(repository):
+            self.events.append(('pull', repository))
             # What the pull brings: the coding agent's pushed commit.
             (repository/'mmx_project_settings.yml').write_text(json.dumps(self.settings))
             (repository/'inventories/servers.yml').write_text(json.dumps(self.inventory))
@@ -338,7 +343,7 @@ class LockOutButtonPress(unittest.TestCase):
                     patch.object(BUTTON.signal, 'signal'), patch.object(BUTTON.socket, 'gethostname', return_value='desk01'), \
                     patch.object(BUTTON, 'REVIEWED', self.reviewed), patch.object(BUTTON, 'RUN_DIRECTORY', self.root/'button-run'), \
                     patch.object(BUTTON, 'load_the_desk_review_command', return_value=DESK_REVIEW), \
-                    patch.object(DESK_REVIEW, 'pull_main_as_the_person', side_effect=pull), \
+                    patch.object(DESK_REVIEW, 'pull_main_into_the_desks_copy', side_effect=pull), \
                     patch.object(DESK_REVIEW, 'ask_the_person', side_effect=ask), contextlib.redirect_stdout(output):
                 return BUTTON.main([])
         finally:
@@ -347,7 +352,7 @@ class LockOutButtonPress(unittest.TestCase):
     def test_the_pull_comes_first_then_the_servers_then_mmx_then_how_to_undo(self):
         self.assertEqual(self.press(['yes']), 0)
         self.assertEqual([event[0] for event in self.events], ['pull', 'question', 'mmx'])
-        self.assertEqual(self.events[0][1:], ('alex', self.repository.resolve()))
+        self.assertEqual(self.events[0][1:], (self.repository,))
         self.assertIn('lock everyone out except desk01', self.events[1][1])
         command = self.events[2][1]
         self.assertEqual(command[:3], [BUTTON.MMX, 'run', 'lock_everyone_out'])
@@ -359,7 +364,7 @@ class LockOutButtonPress(unittest.TestCase):
     def test_a_failed_pull_says_why_and_goes_on_with_the_repository_as_it_is(self):
         self.press(['yes'], pulled=(False, 'The pull of main from the Git host did not work '
                                            '(the Git host did not answer within 30 seconds).'))
-        self.assertIn('did not answer within 30 seconds). The lock-out button goes on with your repository as it is.', self.output)
+        self.assertIn('did not answer within 30 seconds). The lock-out button goes on with the desk\'s copy as it is.', self.output)
         self.assertEqual([event[0] for event in self.events], ['pull', 'question', 'mmx'])
 
     def test_enter_at_the_servers_question_leaves_mmx_unrun(self):
@@ -443,288 +448,70 @@ class LockOutButtonPress(unittest.TestCase):
             BUTTON.main(['--rex-session-to-keep', 'x'])
 
 
-def render_allowed_signers(root_ssh_public_keys):
-    """The desk role's allowed signers file for these keys, rendered by MMX."""
-    mmx = os.environ.get('MMX_BINARY') or shutil.which('mmx')
-    if not mmx:
-        raise RuntimeError('Set MMX_BINARY to render the desk\'s allowed signers file with MMX.')
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        (root/'inventories').mkdir()
-        (root/'playbooks').mkdir()
-        (root/'mmx_project_settings.yml').write_text(json.dumps(dict(
-            project_name='render_test', default_inventory='servers', vars=dict(root_ssh_public_keys=root_ssh_public_keys))))
-        (root/'inventories/servers.yml').write_text(json.dumps(dict(nodes={'desk02': {'address': '127.0.0.1'}})))
-        (root/'source.template').write_text((T/'roles/systems_desk/files/allowed-signers').read_text().replace('.inputs', '.vars'))
-        (root/'playbooks/render.yml').write_text(json.dumps(dict(fleet_stages=[dict(id='render', nodes='all', node_tasks=[
-            dict(id='render', file=dict(path='/tmp/rendered', template='source.template', permissions_mode='0644'))])])))
-        result = subprocess.run([mmx, 'explain', 'render', '--json'], cwd=root, text=True, capture_output=True, check=True)
-    return json.loads(result.stdout)['fleet_stages'][0]['node_tasks'][0]['rendered_templates'][0]['text']
-
-
-class JoinTheTeamsRepository(unittest.TestCase):
-    """set-up-the-systems-repository on a desk whose team already has a
-    systems repository, as a new member's desk and a rebuilt desk have it:
-    a stand-in Git host (a bare repository on disk), real SSH signatures,
-    and stand-ins for MMX, the desk review and the coding agent's checkout."""
-
-    PASSPHRASE = 'the team passphrase from the password manager'
-
-    def setUp(self):
-        self.directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
-        self.root = Path(self.directory.name).resolve()
-        self.keys = {name: self.key(name) for name in ['alex', 'desk02', 'mallory']}
-        self.host = self.root/'host.git'
-        self.git('init', '--quiet', '--bare', '-b', 'main', str(self.host), cwd=self.root)
-        self.team = self.root/'team'
-        self.git('clone', '--quiet', str(self.host), str(self.team), cwd=self.root)
-        self.settings = {'project_name': 'example_systems', 'default_inventory': 'servers',
-                         'vars': {'systems_repository': {'ssh_url': str(self.host)},
-                                  'root_ssh_public_keys': [self.line('alex', 'alex on desk01')]}}
-        self.inventory = {'nodes': {'desk01': {'vars': {'production_ssh_public_key': self.line('alex', 'alex on desk01')}}},
-                          'groups': {'systems_desks': {'nodes': ['desk01']}}}
-        self.first = self.push('Start the systems repository on desk01', 'alex')
-        # The bootstrap's copy: the new person's laptop clone, with the desk's
-        # values written in and not committed.
-        self.desk = self.root/'home/blair/example_systems'
-        self.git('clone', '--quiet', str(self.host), str(self.desk), cwd=self.root)
-        (self.desk/'inventories/servers.yml').write_text('the bootstrap copy\'s own edit\n')
-        self.events = []
-        self.mmx = self.root/'mmx'
-        self.mmx.write_text('#!/bin/sh\n[ "$*" = "secrets list-keys" ] && [ "$(cat "$MMX_VAULT_PASSWORD_FILE")" = "%s" ] '
-                            '&& echo mmx_vault_passphrase\n' % self.PASSPHRASE)
-        self.mmx.chmod(0o755)
-
-    def git(self, *arguments, cwd):
-        result = subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.com', *arguments], cwd=cwd,
-                                text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return result
-
-    def key(self, name):
-        path = self.root/name
-        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', name, '-f', str(path)], check=True)
-        return path
-
-    def line(self, name, comment):
-        return ' '.join(Path(str(self.keys[name]) + '.pub').read_text().split()[:2] + [comment])
-
-    def push(self, message, signer):
-        """A commit of the current settings and inventory at the Git host,
-        signed by signer's key, or unsigned for signer None."""
-        (self.team/'inventories').mkdir(exist_ok=True)
-        (self.team/'mmx_project_settings.yml').write_text(json.dumps(self.settings))
-        (self.team/'inventories/servers.yml').write_text(json.dumps(self.inventory))
-        (self.team/SETUP.VAULT).write_text('the vault\n')
-        self.git('add', '--all', cwd=self.team)
-        signing = ['-c', 'gpg.format=ssh', '-c', 'user.signingkey=%s' % self.keys[signer], 'commit', '-S'] if signer else ['commit']
-        self.git(*signing, '--quiet', '--allow-empty', '-m', message, cwd=self.team)
-        self.git('push', '--quiet', 'origin', 'main', cwd=self.team)
-        return self.git('rev-parse', 'HEAD', cwd=self.team).stdout.strip()
-
-    def add_this_desk(self, signer='alex'):
-        """What the existing member's coding agent pushes for the new desk."""
-        self.settings['vars']['root_ssh_public_keys'].append(self.line('desk02', 'blair on desk02'))
-        self.inventory['nodes']['desk02'] = {'vars': {'production_ssh_public_key': self.line('desk02', 'blair on desk02')}}
-        self.inventory['groups']['systems_desks']['nodes'].append('desk02')
-        return self.push('Add desk02 for blair', signer)
-
-    def run_the_command(self, passphrase=PASSPHRASE):
-        real_run = subprocess.run
-
-        def run(command, *arguments, **options):
-            if command[0] in (SETUP.DESK_REVIEW, 'sudo'):
-                self.events.append(command)
-                return subprocess.CompletedProcess(command, 0, '', '')
-            return real_run(command, *arguments, **options)
-        remote = self.root/'repository-remote'
-        remote.write_text(str(self.host) + '\n')
-        output = io.StringIO()
-        current = os.getcwd()
-        os.chdir(self.desk)
-        try:
-            with patch.dict(sys.modules, {'yaml': stand_in_yaml()}), patch.object(SETUP.subprocess, 'run', side_effect=run), \
-                    patch.object(SETUP, 'PUBLIC_KEY', Path(str(self.keys['desk02']) + '.pub')), \
-                    patch.object(SETUP, 'REMOTE', remote), patch.object(SETUP, 'MMX', str(self.mmx)), \
-                    patch.object(SETUP, 'PRIVATE_AGENT_SOCKET', str(self.root/'no-agent')), \
-                    patch.object(SETUP.socket, 'gethostname', return_value='desk02'), \
-                    patch.object(SETUP.pwd, 'getpwnam', return_value=types.SimpleNamespace(pw_dir=str(self.root/'home/blair'))), \
-                    patch.object(SETUP.getpass, 'getpass', return_value=passphrase), contextlib.redirect_stdout(output):
-                SETUP.main(['--author-name', 'Blair Example', '--author-email', 'blair@example.com'])
-        finally:
-            os.chdir(current)
-            self.output = output.getvalue()
-
-    def head(self):
-        return self.git('rev-parse', 'HEAD', cwd=self.desk).stdout.strip()
-
-    def assert_nothing_from_main_was_used(self, stopped, message):
-        self.assertIn(message, str(stopped.exception))
-        self.assertTrue(str(stopped.exception).endswith('Nothing from main was used.'), str(stopped.exception))
-        self.assertEqual(self.head(), self.first)
-        self.assertEqual((self.desk/'inventories/servers.yml').read_text(), 'the bootstrap copy\'s own edit\n')
-        self.assertEqual(self.events, [])
-        self.assertFalse((self.root/'home/blair/.config/monkeymaxxing-stack/example_systems_mmx_vault_passphrase').exists())
-
-    def test_a_desk_the_team_added_becomes_a_signed_clone_of_main_with_the_teams_passphrase(self):
-        commit = self.add_this_desk()
-        self.run_the_command()
-        self.assertEqual(self.head(), commit)
-        self.assertEqual(self.git('status', '--porcelain', '--untracked-files=no', cwd=self.desk).stdout, '')
-        self.assertIn('Main is at commit %s, signed by alex on desk01 (SHA256:' % commit, self.output)
-        # The bootstrap copy's edit is kept, not lost.
-        self.assertIn('the bootstrap copy\'s own edit', self.git('stash', 'show', '-p', cwd=self.desk).stdout)
-        settings = {key: subprocess.run(['git', 'config', '--get', key], cwd=self.desk, text=True, capture_output=True).stdout.strip()
-                    for key in ['gpg.format', 'commit.gpgsign', 'user.signingkey', 'user.name', 'remote.origin.url', 'branch.main.remote']}
-        self.assertEqual(settings, {'gpg.format': 'ssh', 'commit.gpgsign': 'true', 'user.signingkey': str(self.keys['desk02']) + '.pub',
-                                    'user.name': 'Blair Example', 'remote.origin.url': str(self.host), 'branch.main.remote': 'origin'})
-        passphrase = self.root/'home/blair/.config/monkeymaxxing-stack/example_systems_mmx_vault_passphrase'
-        self.assertEqual(passphrase.read_text(), self.PASSPHRASE + '\n')
-        self.assertEqual(oct(passphrase.stat().st_mode & 0o777), '0o600')
-        self.assertTrue((self.root/'home/blair/.config/monkeymaxxing-stack/example_systems.env').exists())
-        self.assertIn([SETUP.DESK_REVIEW, '--only-fleet-stages', 'systems_desk'], self.events)
-        self.assertNotIn('Made a random vault passphrase', self.output)
-        # A rerun changes nothing that is done and still checks main.
-        self.events.clear()
-        self.run_the_command()
-        self.assertEqual(self.head(), commit)
-        self.assertIn('Main is at commit %s' % commit, self.output)
-
-    def test_a_file_marked_with_intent_to_add_is_unmarked_and_the_join_finishes(self):
-        # The new desk's ssh/desk02, which an earlier procedure marked with git add --intent-to-add.
-        (self.desk/'ssh').mkdir()
-        (self.desk/'ssh/desk02').write_text('Host desk02\n')
-        self.git('add', '--intent-to-add', 'ssh/desk02', cwd=self.desk)
-        commit = self.add_this_desk()
-        self.run_the_command()
-        self.assertEqual(self.head(), commit)
-        self.assertIn('Unmarked ssh/desk02, which git add --intent-to-add had marked; the file stays.', self.output)
-        self.assertEqual(self.git('status', '--porcelain', '--untracked-files=no', cwd=self.desk).stdout, '')
-        self.assertEqual((self.desk/'ssh/desk02').read_text(), 'Host desk02\n')
-        self.assertIn('the bootstrap copy\'s own edit', self.git('stash', 'show', '-p', cwd=self.desk).stdout)
-
-    def test_after_the_command_git_verifies_the_signatures_with_the_desks_allowed_signers_file(self):
-        commit = self.add_this_desk()
-        signers = self.root/'allowed-signers'
-        signers.write_text(render_allowed_signers(self.settings['vars']['root_ssh_public_keys']))
-        with patch.object(SETUP, 'ALLOWED_SIGNERS', str(signers)):
-            self.run_the_command()
-        shown = subprocess.run(['git', 'log', '--show-signature', '-1'], cwd=self.desk, text=True, capture_output=True)
-        self.assertEqual(shown.returncode, 0, shown.stderr)
-        self.assertIn('Good "git" signature for alex_on_desk01 with ED25519 key', shown.stdout + shown.stderr)
-        self.assertIn(commit, shown.stdout)
-        self.assertNotIn('allowedSignersFile needs to be configured', shown.stdout + shown.stderr)
-
-    def test_main_before_the_team_added_this_desk_is_refused(self):
-        with self.assertRaises(SETUP.Stop) as stopped:
-            self.run_the_command()
-        self.assert_nothing_from_main_was_used(stopped, 'does not list this desk, desk02, with this desk\'s production key yet')
-        self.assertIn(Path(str(self.keys['desk02']) + '.pub').read_text().split()[1], str(stopped.exception))
-
-    def test_an_unsigned_commit_on_top_is_refused(self):
-        self.add_this_desk()
-        self.push('Merged with the Git host\'s web button', None)
-        with self.assertRaises(SETUP.Stop) as stopped:
-            self.run_the_command()
-        self.assert_nothing_from_main_was_used(stopped, 'is not signed by a key in its root_ssh_public_keys')
-
-    def test_a_commit_signed_by_a_key_outside_root_ssh_public_keys_is_refused(self):
-        self.add_this_desk(signer='mallory')
-        with self.assertRaises(SETUP.Stop) as stopped:
-            self.run_the_command()
-        self.assert_nothing_from_main_was_used(stopped, 'is not signed by a key in its root_ssh_public_keys')
-
-    def test_another_teams_repository_is_refused(self):
-        self.add_this_desk()
-        self.settings['project_name'] = 'other_team_systems'
-        self.push('Another team\'s repository', 'alex')
-        with self.assertRaises(SETUP.Stop) as stopped:
-            self.run_the_command()
-        self.assert_nothing_from_main_was_used(stopped, 'is not the example_systems systems repository')
-
-    def test_a_passphrase_that_does_not_open_the_vault_is_not_kept(self):
-        self.add_this_desk()
-        with self.assertRaises(SETUP.Stop) as stopped:
-            self.run_the_command(passphrase='a wrong passphrase')
-        self.assertIn('does not open the vault', str(stopped.exception))
-        self.assertFalse((self.root/'home/blair/.config/monkeymaxxing-stack/example_systems_mmx_vault_passphrase').exists())
-        self.assertEqual(self.events, [])
-
-    def test_an_empty_repository_at_the_git_host_starts_a_new_one_instead(self):
-        empty = self.root/'empty.git'
-        self.git('init', '--quiet', '--bare', '-b', 'main', str(empty), cwd=self.root)
-        self.host = empty
-        shutil.rmtree(self.desk/'.git')
-        (self.desk/'mmx_project_settings.yml').write_text(json.dumps(dict(self.settings, vars=dict(
-            self.settings['vars'], systems_repository={'ssh_url': str(empty)}))))
-        with patch.object(SETUP, 'start_a_new_repository', side_effect=SETUP.Stop('the first desk\'s form')) as started, \
-                patch.object(SETUP, 'join_the_teams_repository') as joined:
-            with self.assertRaisesRegex(SETUP.Stop, 'the first desk\'s form'):
-                self.run_the_command()
-        self.assertEqual(started.call_count, 1)
-        self.assertEqual(joined.call_count, 0)
-
-
-class PullAsThePerson(unittest.TestCase):
+class PullIntoTheDesksCopy(unittest.TestCase):
     """The pull that the desk review and the lock-out button share, on real
-    Git repositories, run as the current user instead of through runuser."""
+    Git repositories: a bare repository stands in for the Git host."""
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         root = Path(self.directory.name)
-        self.origin, self.repository, other = root/'origin.git', root/'repository', root/'other'
+        self.origin, self.repository, self.other = root/'origin.git', root/'desk-copy', root/'other'
         self.run_git('init', '--quiet', '--bare', '-b', 'main', str(self.origin), cwd=root)
-        self.run_git('clone', '--quiet', str(self.origin), str(other), cwd=root)
-        (other/'inventory.yml').write_text('one\n')
-        self.run_git('add', '.', cwd=other)
-        self.run_git('commit', '--quiet', '-m', 'first', cwd=other)
-        self.run_git('push', '--quiet', 'origin', 'main', cwd=other)
+        self.run_git('clone', '--quiet', str(self.origin), str(self.other), cwd=root)
+        self.commit('one\n', 'first')
         self.run_git('clone', '--quiet', str(self.origin), str(self.repository), cwd=root)
-        (other/'inventory.yml').write_text('two\n')
-        self.run_git('commit', '--quiet', '-am', 'second', cwd=other)
-        self.run_git('push', '--quiet', 'origin', 'main', cwd=other)
-
-        def run_as(person, home, arguments, repository):
-            return subprocess.run(arguments, cwd=repository, text=True, capture_output=True,
-                                  env={**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull})
-        for name, stand_in in [('run_as', run_as), ('GIT', 'git')]:
-            patcher = patch.object(DESK_REVIEW, name, stand_in)
+        self.commit('two\n', 'second')
+        (root/'remote').write_text(str(self.origin) + '\n')
+        for name, value in [('GIT', 'git'), ('REPOSITORY_REMOTE', root/'remote'),
+                            ('GIT_ENVIRONMENT', {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull})]:
+            patcher = patch.object(DESK_REVIEW, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        patcher = patch.object(DESK_REVIEW.pwd, 'getpwnam', return_value=types.SimpleNamespace(pw_dir=str(root)))
-        patcher.start()
-        self.addCleanup(patcher.stop)
 
     def run_git(self, *arguments, cwd):
         subprocess.run(['git', '-c', 'commit.gpgsign=false', '-c', 'user.name=A', '-c', 'user.email=a@example.com', *arguments],
                        cwd=cwd, check=True, capture_output=True, text=True, env={**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull})
 
-    def test_a_pull_fast_forwards_to_the_pushed_main(self):
-        pulled, said = DESK_REVIEW.pull_main_as_the_person('alex', self.repository)
+    def commit(self, text, message):
+        """A commit pushed to the stand-in Git host from another checkout."""
+        (self.other/'inventory.yml').write_text(text)
+        self.run_git('add', '.', cwd=self.other)
+        self.run_git('commit', '--quiet', '-m', message, cwd=self.other)
+        self.run_git('push', '--quiet', 'origin', 'main', cwd=self.other)
+
+    def test_a_pull_makes_the_copy_the_pushed_main(self):
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
         self.assertTrue(pulled, said)
         self.assertEqual((self.repository/'inventory.yml').read_text(), 'two\n')
         self.assertIn('Pulled main from the Git host', said)
 
-    def test_a_local_change_in_the_way_stops_the_pull_and_says_what_git_said(self):
-        (self.repository/'inventory.yml').write_text('a local edit\n')
-        pulled, said = DESK_REVIEW.pull_main_as_the_person('alex', self.repository)
+    def test_a_change_in_the_copy_never_runs_and_the_run_history_stays(self):
+        """Nobody edits the desk copy; whatever is in it, the review sees pushed main."""
+        (self.repository/'inventory.yml').write_text('a change nobody pushed\n')
+        (self.repository/'unpushed.yml').write_text('x\n')
+        (self.repository/'.mmx').mkdir()
+        (self.repository/'.mmx/history').write_text('a run\n')
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'two\n')
+        self.assertFalse((self.repository/'unpushed.yml').exists())
+        self.assertEqual((self.repository/'.mmx/history').read_text(), 'a run\n')
+
+    def test_an_unreachable_git_host_stops_the_pull_and_keeps_the_copy(self):
+        self.run_git('remote', 'set-url', 'origin', str(self.origin) + '-gone', cwd=self.repository)
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
         self.assertFalse(pulled)
         self.assertTrue(said.startswith('The pull of main from the Git host did not work (git said: '), said)
-        self.assertIn('inventory.yml', said)
-        self.assertEqual((self.repository/'inventory.yml').read_text(), 'a local edit\n')
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'one\n')
 
-    def test_an_unreachable_git_host_stops_the_pull(self):
-        self.run_git('remote', 'set-url', 'origin', str(self.origin) + '-gone', cwd=self.repository)
-        pulled, said = DESK_REVIEW.pull_main_as_the_person('alex', self.repository)
-        self.assertFalse(pulled)
-        self.assertIn('did not work', said)
-
-    def test_a_repository_without_origin_has_nothing_to_pull(self):
-        self.run_git('remote', 'remove', 'origin', cwd=self.repository)
-        self.assertEqual(DESK_REVIEW.pull_main_as_the_person('alex', self.repository),
-                         (True, 'Your systems repository has no origin remote yet, so there is nothing to pull.'))
+    def test_a_desk_without_a_copy_gets_one_from_the_git_host(self):
+        """A desk from an earlier Stack version ran its desk reviews in the person's checkout."""
+        missing = Path(self.directory.name)/'var/lib/systems-desk/systems_repository'
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(missing)
+        self.assertTrue(pulled, said)
+        self.assertEqual((missing/'inventory.yml').read_text(), 'two\n')
+        self.assertEqual(missing.stat().st_mode & 0o777, 0o700)
 
 
 def public_key_line(seed, comment):

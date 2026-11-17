@@ -143,22 +143,10 @@ software_outside_the_distribution:
     releases_page: https://downloads.claude.ai/claude-code-releases/stable   # the newest stable version, as plain text, which the apt repository's stable channel serves
     security_advisories_page: https://github.com/anthropics/claude-code/security/advisories
 
-  rex:
-    installed_on_server_groups: [systems_desks]
-    installed_from: vendor_apt_repository
-    installed_version_command: rex version
-    # The preview apt index lists published versions and their checksums.
-    # Release notes are in the beta Discord's #changelog, behind login:
-    # https://www.superlogical.com/rex/docs/beta/community-mcp
-    releases_page: https://pkgs.superlogical.com/rex/apt/dists/preview/main/binary-amd64/Packages
-    # No public security advisories page was found. Do not invent a URL.
-    security_advisories_page: ""
-
   # util_server installs Codex only while triage_agent_coding_agent in
-  # mmx_project_settings.yml is codex, and a systems desk only while
-  # systems_desk_coding_agent is codex, at the version in stack_software.codex.
+  # mmx_project_settings.yml is codex, at the version in stack_software.codex.
   codex:
-    installed_on_server_groups: [util_server, systems_desks]
+    installed_on_server_groups: [util_server]
     installed_from: downloaded_binary         # Codex's release package in /usr/local/lib/codex/releases/<version>; codex, codex-code-mode-host, and rg linked in /usr/local/bin
     installed_version_command: codex --version
     releases_page: https://github.com/openai/codex/releases

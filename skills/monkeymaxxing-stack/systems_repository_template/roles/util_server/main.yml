@@ -93,12 +93,9 @@ inputs:
     required: true
   # The pinned_program_releases checks (mmwatchdog_checks/util_server.yml)
   # compare every pin in stack_software with its newest release; codex is
-  # checked only while one of the two coding agent settings is codex.
+  # checked only while triage_agent_coding_agent is codex.
   stack_software:                           # vars.stack_software
     type: mapping
-    required: true
-  systems_desk_coding_agent:                # vars.systems_desk_coding_agent: claude_code or codex
-    type: string
     required: true
   mmx_release:                              # each release: version, download_url, and sha256
     type: mapping

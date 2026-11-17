@@ -13,10 +13,11 @@ inputs:
   mmx_release: {type: mapping, required: true}
   mmhotline_release: {type: mapping, required: true}
   set_up_outside_services_release: {type: mapping, required: true}
-  # From systems_desk_coding_agent in mmx_project_settings.yml: claude_code
-  # or codex, and the Codex release pinned in stack_software.codex.
-  systems_desk_coding_agent: {type: string, required: true}
-  codex_release: {type: mapping, required: true}
+  # From coding_agent_login_idle_minutes and coding_agent_login_longest_hours
+  # in mmx_project_settings.yml, which give the reasons: when the desk ends
+  # the coding agent's shared SSH login.
+  coding_agent_login_idle_minutes: {type: integer, required: true}
+  coding_agent_login_longest_hours: {type: integer, required: true}
   systems_repository: {type: mapping, required: true}
   # The keys whose commit signatures Git on this desk accepts (files/allowed-signers).
   root_ssh_public_keys: {type: list, required: true}
@@ -35,16 +36,16 @@ inputs:
   is_database_server: {type: boolean, default: false}
   is_util_server: {type: boolean, default: false}
 node_tasks:
-  - id: check_the_systems_desk_coding_agent_setting
+  - id: check_the_coding_agent_login_settings
     assert:
       that:
-        any:
-          - {equals: ["{{ .inputs.systems_desk_coding_agent }}", claude_code]}
-          - {equals: ["{{ .inputs.systems_desk_coding_agent }}", codex]}
+        all:
+          - {number_at_least: ["{{ .inputs.coding_agent_login_idle_minutes }}", 1]}
+          - {number_at_least: ["{{ .inputs.coding_agent_login_longest_hours }}", 1]}
       message: >-
-        systems_desk_coding_agent in mmx_project_settings.yml is
-        "{{ .inputs.systems_desk_coding_agent }}". It must be claude_code or
-        codex. Nothing changed.
+        coding_agent_login_idle_minutes is {{ .inputs.coding_agent_login_idle_minutes }} and
+        coding_agent_login_longest_hours is {{ .inputs.coding_agent_login_longest_hours }}
+        in mmx_project_settings.yml. Each must be a whole number of at least 1. Nothing changed.
   - id: check_the_systems_desk_provider_api_authentication_setting
     assert:
       that:
@@ -185,44 +186,15 @@ node_tasks:
       owner: "{{ .inputs.person_unix_username }}"
       group: "{{ .inputs.person_unix_username }}"
       permissions_mode: "0700"
-  # The bootstrap copies the systems repository into the person's home as
-  # root, before the person's account exists. Make each such copy the
-  # person's own, so the person's commands and Git can write it.
-  - id: make_the_copied_systems_repository_the_persons_own
-    shell:
-      script: |
-        set -eu
-        changed=0
-        for settings in /home/"$PERSON"/*/mmx_project_settings.yml; do
-          [ -f "$settings" ] && [ ! -L "$settings" ] || continue
-          repository=${settings%/mmx_project_settings.yml}
-          if [ -n "$(find "$repository" -xdev ! -user "$PERSON" -print -quit)" ]; then
-            chown -R --no-dereference "$PERSON:$PERSON" -- "$repository"
-            printf 'Made %s the property of %s.\n' "$repository" "$PERSON"
-            changed=1
-          fi
-        done
-        [ "$changed" = 0 ] || exit 2
-      dryrun: |
-        for settings in /home/"$PERSON"/*/mmx_project_settings.yml; do
-          [ -f "$settings" ] || continue
-          repository=${settings%/mmx_project_settings.yml}
-          if [ -n "$(find "$repository" -xdev ! -user "$PERSON" -print -quit)" ]; then
-            printf 'would make %s the property of %s\n' "$repository" "$PERSON"; exit 2
-          fi
-        done
-      success_exit_codes: [0, 2]
-      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
-      env: {PERSON: "{{ .inputs.person_unix_username }}"}
   - id: create_the_persons_ssh_directory
     directory:
       path: "/home/{{ .inputs.person_unix_username }}/.ssh"
       owner: "{{ .inputs.person_unix_username }}"
       group: "{{ .inputs.person_unix_username }}"
       permissions_mode: "0700"
-  # install_the_buttons_vault_passphrase below writes
-  # /etc/systems-desk/vault-passphrase (root:servers-mmx 0640) from the
-  # person's own passphrase file. set-up-outside-services (personal-token server-provider,
+  # start_the_systems_repository below makes
+  # /etc/systems-desk/vault-passphrase (root:servers-mmx 0640) at the
+  # bootstrap. set-up-outside-services (personal-token server-provider,
   # and cloudflare for the desk's Cloudflare token) writes each
   # *-api-token.conf (root:root 0600), restarts the API proxy, and
   # checks a request through it. Each token file contains only one line,
@@ -256,6 +228,29 @@ node_tasks:
       dryrun: |
         [ -e /var/lib/systemd/linger/coding-agent ] && exit 0
         printf 'would run: loginctl enable-linger coding-agent\n'
+        exit 2
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+  # The bootstrap copies the systems repository from the laptop into
+  # /home/coding-agent/systems_repository as root, before the coding-agent
+  # account exists. Make the copy the coding agent's own, so its Git can
+  # write it. It is the desk's one working copy: the laptop's coding agent
+  # clones it over SSH and pushes its branches to it (sign-and-publish).
+  - id: make_the_copied_systems_repository_the_coding_agents_own
+    shell:
+      script: |
+        set -eu
+        repository=/home/coding-agent/systems_repository
+        [ -d "$repository" ] && [ ! -L "$repository" ] || exit 0
+        [ -z "$(find "$repository" -xdev ! -user coding-agent -print -quit)" ] && exit 0
+        chown -R --no-dereference coding-agent:coding-agent -- "$repository"
+        printf 'Made %s the property of coding-agent.\n' "$repository"
+        exit 2
+      dryrun: |
+        repository=/home/coding-agent/systems_repository
+        [ -d "$repository" ] && [ ! -L "$repository" ] || exit 0
+        [ -z "$(find "$repository" -xdev ! -user coding-agent -print -quit)" ] && exit 0
+        printf 'would make %s the property of coding-agent\n' "$repository"
         exit 2
       success_exit_codes: [0, 2]
       changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
@@ -299,20 +294,18 @@ node_tasks:
       permissions_mode: "0644"
   - id: install_the_buttons_ssh_settings
     file: {path: /etc/systems-desk/ssh.conf, source: files/ssh.conf, owner: root, group: root, permissions_mode: "0644"}
-  # Each login's SSH agent: the coding agent's relay socket, and the person's
-  # own agent, which signs the person's commits with the production key.
-  - id: install_the_login_profile_with_each_accounts_ssh_agent
+  # The person's own SSH agent, which holds the production key, for the
+  # person's login shells. The coding agent's values come from sshd
+  # (files/sshd.conf, SetEnv), because its commands are not login shells.
+  - id: install_the_login_profile_with_the_persons_ssh_agent
     file: {path: /etc/profile.d/desk-buttons.sh, template: files/desk-buttons-profile.sh, owner: root, group: root, permissions_mode: "0644"}
   - id: install_the_coding_agent_git_settings
     file: {path: /etc/systems-desk/coding-agent-gitconfig, source: files/coding-agent-gitconfig, owner: root, group: root, permissions_mode: "0644"}
-  # The one allowed signers file on the desk, which the person's repository
-  # (set-up-the-systems-repository) and the coding agent's Git settings
-  # name. Each desk review rewrites it from root_ssh_public_keys, so a desk
+  # The one allowed signers file on the desk, which the coding agent's Git
+  # settings name. Each desk review rewrites it from root_ssh_public_keys, so a desk
   # that joins or leaves reaches it at this desk's next desk review.
   - id: write_the_keys_whose_commit_signatures_git_accepts
     file: {path: /etc/systems-desk/allowed-signers, template: files/allowed-signers, owner: root, group: root, permissions_mode: "0644"}
-  - id: install_the_repository_setup_command
-    file: {path: /usr/local/bin/set-up-coding-agent-repository, source: files/set-up-coding-agent-repository, owner: root, group: root, permissions_mode: "0755"}
   - id: install_the_run_mmx_on_the_servers_command
     file: {path: /usr/local/bin/run-mmx-on-the-servers, source: files/run-mmx-on-the-servers, owner: root, group: root, permissions_mode: "0755"}
   # The person's desk review. It runs the desk playbook as root only after
@@ -323,10 +316,13 @@ node_tasks:
   # in the review before it applies.
   - id: install_the_desk_review_command
     file: {path: /usr/local/bin/review-and-apply-the-systems-desk-settings, source: files/review-and-apply-the-systems-desk-settings, owner: root, group: root, permissions_mode: "0755"}
-  # The person's one command that finishes the copied systems repository:
-  # Git, signing, origin, the vault, and the first push.
-  - id: install_the_repository_finishing_command
-    file: {path: /usr/local/bin/set-up-the-systems-repository, source: files/set-up-the-systems-repository, owner: root, group: root, permissions_mode: "0755"}
+  # The coding agent's command that signs the commits the laptop pushed to a
+  # branch of its checkout with the production key, and publishes them on
+  # main (files/sign-and-publish says how). Reason: MMHotline trusts only
+  # commits signed by a key in root_ssh_public_keys, and the production key
+  # never leaves this desk.
+  - id: install_the_sign_and_publish_command
+    file: {path: /usr/local/bin/sign-and-publish, source: files/sign-and-publish, owner: root, group: root, permissions_mode: "0755"}
   # The lock-out button runs as root on this desk and on every server. It
   # runs only these copies, which this desk review installs, never the pushed
   # ones. Reason: an outside attacker who can push to the Git host must not
@@ -431,35 +427,6 @@ node_tasks:
           systemd_service: {name: desk-ssh-agent, state: running, start_at_boot: true, refresh: restart}
         - id: start_the_shared_socket_relay
           systemd_service: {name: desk-ssh-agent-relay, state: running, start_at_boot: true, refresh: restart}
-  # The coding agent's button and the lock-out button open the vault with
-  # a root-owned copy of the person's vault passphrase, which
-  # set-up-the-systems-repository makes. The copy follows the person's file,
-  # such as after a passphrase change. A desk serves one systems repository.
-  - id: install_the_buttons_vault_passphrase
-    shell:
-      script: |
-        set -eu
-        found=$(find "/home/$PERSON/.config/monkeymaxxing-stack" -maxdepth 1 -type f -user "$PERSON" -name '*_mmx_vault_passphrase' 2>/dev/null || true)
-        [ -n "$found" ] || exit 0
-        if [ "$(printf '%s\n' "$found" | wc -l)" != 1 ]; then
-          printf 'This desk has more than one vault passphrase in /home/%s/.config/monkeymaxxing-stack: %s. A desk serves one systems repository; move the other away.\n' "$PERSON" "$(printf '%s ' $found)" >&2
-          exit 1
-        fi
-        target=/etc/systems-desk/vault-passphrase
-        if cmp -s -- "$found" "$target" && [ "$(stat -c %U:%G:%a "$target")" = root:servers-mmx:640 ]; then exit 0; fi
-        install -o root -g servers-mmx -m 0640 -- "$found" "$target"
-        printf 'Installed the vault passphrase for the buttons as %s.\n' "$target"
-        exit 2
-      dryrun: |
-        found=$(find "/home/$PERSON/.config/monkeymaxxing-stack" -maxdepth 1 -type f -user "$PERSON" -name '*_mmx_vault_passphrase' 2>/dev/null || true)
-        [ -n "$found" ] || exit 0
-        target=/etc/systems-desk/vault-passphrase
-        if cmp -s -- "$found" "$target" && [ "$(stat -c %U:%G:%a "$target")" = root:servers-mmx:640 ]; then exit 0; fi
-        printf 'would install the vault passphrase for the buttons as %s\n' "$target"
-        exit 2
-      success_exit_codes: [0, 2]
-      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
-      env: {PERSON: "{{ .inputs.person_unix_username }}"}
   - id: create_the_mmx_program_directory
     directory:
       path: /usr/local/lib/mmx
@@ -649,101 +616,57 @@ node_tasks:
       changed_when: false
       env: {AUTHENTICATION: "{{ .inputs.provider_api_authentication }}"}
 
-  # The coding agent that systems_desk_coding_agent picks. Claude Code comes
-  # from its apt repository and updates with the security updates. Codex has
-  # no apt repository, so the desk unpacks the release pinned in
-  # stack_software.codex, checked against its SHA-256, as util01 does for
-  # the triage agent (roles/util_server/main.yml), and links codex, its
-  # helper and rg into /usr/local/bin. An unpacked release takes about
-  # 520 MB, so earlier ones are deleted after the links move.
-  - id: add_the_claude_code_apt_repository
-    when: {equals: ["{{ .inputs.systems_desk_coding_agent }}", claude_code]}
-    apt_repository:
-      name: claude-code
-      uris: [https://downloads.claude.ai/claude-code/apt/stable]
-      suites: [stable]
-      components: [main]
-      signing_key_source: ../util_server/files/claude_code_apt_signing_key.asc
-  - id: install_claude_code_for_the_coding_agent
-    when: {equals: ["{{ .inputs.systems_desk_coding_agent }}", claude_code]}
+  # Earlier desks ran a coding agent of their own (Claude Code or Codex),
+  # started with start-the-coding-agent, in Rex's persistent terminals. The
+  # coding agent now works from the laptop over SSH as coding-agent, so a
+  # desk review removes those programs, their apt repositories and Rex's
+  # service. A desk without them changes nothing here. Reason: a program
+  # that nothing uses still needs updates, and the less runs beside the
+  # production key, the less can go wrong.
+  - id: stop_the_earlier_persistent_terminal_service
+    when: {path_exists: /etc/systemd/system/rex-desk.service}
+    systemd_service: {name: rex-desk, state: stopped, start_at_boot: false}
+  - id: delete_the_earlier_files_of_the_desks_own_coding_agent
+    loop:
+      - /etc/systemd/system/rex-desk.service
+      - /usr/local/bin/start-the-coding-agent
+      - /usr/local/bin/set-up-coding-agent-repository
+      - /usr/local/bin/set-up-the-systems-repository
+    as: earlier_file
+    file: {path: "{{ .earlier_file }}", state: absent}
+  - id: delete_the_earlier_links_to_codex
+    loop: [codex, codex-code-mode-host, rg]
+    as: earlier_link
+    symlink: {path: "/usr/local/bin/{{ .earlier_link }}", state: absent}
+  - id: delete_the_earlier_codex_releases
+    directory: {path: /usr/local/lib/codex, state: absent, also_delete_everything_inside: true}
+  - id: remove_the_earlier_coding_agent_and_terminal_packages
     apt_package:
-      packages: [{name: claude-code, version: newest_when_first_installed}]
-  - when: {equals: ["{{ .inputs.systems_desk_coding_agent }}", codex]}
-    task_block:
-      id: install_codex_for_the_coding_agent
-      changes:
-        - id: create_the_codex_releases_directory
-          directory:
-            path: /usr/local/lib/codex/releases
-            create_missing_parent_directories: true
-            owner: root
-            group: root
-            permissions_mode: "0755"
-        - id: unpack_the_codex_release
-          unpack_archive:
-            url: "{{ .inputs.codex_release.download_url }}"
-            sha256: "{{ .inputs.codex_release.sha256 }}"
-            path: "/usr/local/lib/codex/releases/{{ .inputs.codex_release.version }}"
-        - id: use_the_codex_release_programs
-          loop:
-            - {name: codex, in_release: bin/codex}
-            - {name: codex-code-mode-host, in_release: bin/codex-code-mode-host}
-            - {name: rg, in_release: codex-path/rg}
-          as: program
-          symlink:
-            path: "/usr/local/bin/{{ .program.name }}"
-            target: "/usr/local/lib/codex/releases/{{ .inputs.codex_release.version }}/{{ .program.in_release }}"
-        - id: delete_the_earlier_codex_releases
-          directory:
-            path: /usr/local/lib/codex/releases
-            owner: root
-            group: root
-            permissions_mode: "0755"
-            delete_everything_inside_except: ["{{ .inputs.codex_release.version }}"]
-  - id: install_the_command_that_starts_the_coding_agent
-    file: {path: /usr/local/bin/start-the-coding-agent, template: files/start-the-coding-agent, owner: root, group: root, permissions_mode: "0755"}
-  - id: add_the_superlogical_rex_apt_repository
-    apt_repository:
-      name: rex
-      uris: [https://pkgs.superlogical.com/rex/apt]
-      suites: [preview]
-      components: [main]
-      signing_key_url: https://pkgs.superlogical.com/rex/keys/rex-archive-keyring.gpg
-      # The marker at the end of the next line makes the weekly secret scan
-      # (gitleaks) skip the line: the SHA-256 of Rex's published signing key
-      # is public, not a secret.
-      signing_key_sha256: 07a92e758ac2fc189efa17c24bf3df70d75e4216f6c262283a5c812377deb83e # gitleaks:allow
-  # Debian's unrelated Perl package is also called rex. MMX writes apt
-  # preferences that allow only this version pattern, including on updates.
-  - id: install_superlogicals_rex_preview
-    apt_package:
-      packages: [{name: rex, version: "0.1.0~preview.*"}]
-  # Only the person's SSH phone-code door reaches Rex. Do not activate
-  # the package's shared account or its separate login server.
-  - id: stop_the_packaged_rex_socket
-    systemd_service: {name: rex.socket, state: stopped, start_at_boot: false}
-  - id: stop_the_packaged_rex_login_socket
-    systemd_service: {name: rex-login-server.socket, state: stopped, start_at_boot: false}
-  - id: stop_the_packaged_rex_service
-    systemd_service: {name: rex.service, state: stopped, start_at_boot: false}
-  - id: stop_the_packaged_rex_login_service
-    systemd_service: {name: rex-login-server.service, state: stopped, start_at_boot: false}
-  - task_block:
-      id: persistent_rex_sessions
-      changes:
-        - id: install_the_persons_rex_service
-          file: {path: /etc/systemd/system/rex-desk.service, template: files/rex-desk.service, owner: root, group: root, permissions_mode: "0644"}
-      activate:
-        - id: load_the_rex_desk_service
-          shell: {script: systemctl daemon-reload, dryrun: 'true'}
-        - id: start_the_persons_rex_service
-          systemd_service: {name: rex-desk, state: running, start_at_boot: true, refresh: restart}
+      packages: [{name: claude-code}, {name: rex}]
+      state: absent
+  - id: remove_the_earlier_coding_agent_and_terminal_apt_repositories
+    loop: [claude-code, rex]
+    as: repository_name
+    apt_repository: {name: "{{ .repository_name }}", state: absent}
   - id: allow_exactly_the_allowed_laptops_ssh_keys
     file:
       path: "/home/{{ .inputs.person_unix_username }}/.ssh/authorized_keys"
       template: files/laptop_authorized_keys
       owner: "{{ .inputs.person_unix_username }}"
       group: "{{ .inputs.person_unix_username }}"
+      permissions_mode: "0600"
+  # The coding agent on an allowed laptop logs in as coding-agent with the
+  # same laptop key and a phone code (files/sshd.conf). Its powers are the
+  # coding-agent account's: the relay socket, the buttons and the API proxy,
+  # never the production key or a token file.
+  - id: create_the_coding_agents_ssh_directory
+    directory: {path: /home/coding-agent/.ssh, owner: coding-agent, group: coding-agent, permissions_mode: "0700"}
+  - id: allow_the_allowed_laptops_ssh_keys_for_the_coding_agent
+    file:
+      path: /home/coding-agent/.ssh/authorized_keys
+      template: files/laptop_authorized_keys
+      owner: coding-agent
+      group: coding-agent
       permissions_mode: "0600"
   - id: create_the_root_owned_self_management_key
     ssh_key_pair:
@@ -757,19 +680,67 @@ node_tasks:
       owner: root
       group: root
       permissions_mode: "0755"
-  # The person creates this file. MMX supplies no secret and never copies it.
+  # The desk's one phone code, /etc/systems-desk/phone-code, which PAM asks
+  # for at every outside login of the person and of coding-agent
+  # (files/sshd_pam), so the person scans one QR code. set-up-the-phone-code
+  # writes it, root:root 0400; MMX supplies no secret and never copies it.
+  # Reason for a root-owned file: no program of the person's or the coding
+  # agent's can change or read it.
+  #
+  # An earlier desk kept the phone code in the person's home and marked its
+  # first finished run in first-desk-playbook-run-finished. Carry both over
+  # before the door below reads the new file: the same secret, so the phone
+  # keeps working, and the lock, so the desk keeps asking for a code.
+  - id: carry_an_earlier_desks_phone_code_over
+    when:
+      all:
+        - {path_exists: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"}
+        - not: {path_exists: /etc/systems-desk/phone-code}
+    shell:
+      script: |
+        set -eu
+        install -o root -g root -m 0400 -- "/home/$PERSON/.google_authenticator" /etc/systems-desk/phone-code
+        rm -f -- "/home/$PERSON/.google_authenticator"
+        printf 'Moved the phone code from /home/%s/.google_authenticator to /etc/systems-desk/phone-code.\n' "$PERSON"
+      dryrun: printf 'would move the phone code from /home/%s/.google_authenticator to /etc/systems-desk/phone-code\n' "$PERSON"
+      env: {PERSON: "{{ .inputs.person_unix_username }}"}
+  - id: delete_an_earlier_desks_second_phone_code
+    file: {path: "/home/{{ .inputs.person_unix_username }}/.google_authenticator", state: absent}
+  - id: carry_an_earlier_desks_lock_over
+    when:
+      all:
+        - {path_exists: /etc/systems-desk/first-desk-playbook-run-finished}
+        - not: {path_exists: /etc/systems-desk/locked}
+    shell:
+      script: mv -- /etc/systems-desk/first-desk-playbook-run-finished /etc/systems-desk/locked
+      dryrun: printf 'would record this earlier desk as locked in /etc/systems-desk/locked\n'
   # PAM updates its rate and reuse state, so preserve all existing content.
   - id: keep_the_phone_code_and_its_live_state
-    when: {path_exists: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"}
+    when: {path_exists: /etc/systems-desk/phone-code}
     file:
-      path: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"
+      path: /etc/systems-desk/phone-code
       content: ""
       if_file_exists: keep_existing_content
-      owner: "{{ .inputs.person_unix_username }}"
-      group: "{{ .inputs.person_unix_username }}"
-      # 0400, the mode google-authenticator and PAM write, so a run after a
+      owner: root
+      group: root
+      # 0400, the mode set-up-the-phone-code and PAM write, so a run after a
       # login reports no change.
       permissions_mode: "0400"
+  # On a locked desk a missing phone code must never pass: PAM's nullok
+  # would let the laptop key alone in.
+  - id: require_the_phone_code_on_a_locked_desk
+    when:
+      all:
+        - {path_exists: /etc/systems-desk/locked}
+        - not: {path_exists: /etc/systems-desk/phone-code}
+    assert:
+      that: false
+      message: >-
+        This desk is locked, but its phone code, /etc/systems-desk/phone-code,
+        is missing, so the laptop key alone would open the desk. Log in as
+        {{ .inputs.person_unix_username }} and run sudo set-up-the-phone-code
+        --emergency-codes-to ~/phone-code-emergency-codes, scan the QR code,
+        and type a code from your phone. Nothing else changed in this run.
   # The server peers that update-this-desks-wireguard-peers wrote, which
   # wg0's file copies (files/wireguard_wg0.conf says why). Empty on a new
   # desk until the Git host knows the desk's key.
@@ -922,42 +893,6 @@ node_tasks:
         - id: restart_the_resolver_if_installed
           when: {path_exists: /lib/systemd/system/systemd-resolved.service}
           systemd_service: {name: systemd-resolved, state: running, refresh: restart}
-  - id: allow_only_the_self_management_key_for_root
-    authorized_keys:
-      for_user_account: root
-      keys: ["{{ .node_tasks.create_the_root_owned_self_management_key.public_key }}"]
-      keys_not_listed: remove
-      replace_options_of_listed_keys: true
-  - task_block:
-      id: phone_code_door
-      changes:
-        - id: write_the_phone_code_pam_policy
-          file: {path: /etc/pam.d/sshd, source: files/sshd_pam, owner: root, group: root, permissions_mode: "0644"}
-        - id: write_the_desk_sshd_policy
-          file: {path: /etc/ssh/sshd_config.d/00-systems-desk.conf, template: files/sshd.conf, owner: root, group: root, permissions_mode: "0644"}
-        - id: create_the_ssh_service_drop_in_directory
-          directory: {path: /etc/systemd/system/ssh.service.d, owner: root, group: root, permissions_mode: "0755"}
-        - id: start_ssh_after_wireguard
-          file:
-            path: /etc/systemd/system/ssh.service.d/wireguard.conf
-            content: |
-              [Unit]
-              Requires=wg-quick@wg0.service
-              After=wg-quick@wg0.service
-            owner: root
-            group: root
-            permissions_mode: "0644"
-      validate:
-        - id: check_the_sshd_policy
-          shell: {script: sshd -t, dryrun: sshd -t, changed_when: false}
-      activate:
-        - id: reload_the_systemd_units
-          shell: {script: systemctl daemon-reload, dryrun: 'true'}
-        - id: stop_socket_activation_of_ssh_if_installed
-          when: {path_exists: /lib/systemd/system/ssh.socket}
-          systemd_service: {name: ssh.socket, state: stopped, start_at_boot: false}
-        - id: reload_ssh_with_the_private_door
-          systemd_service: {name: ssh, state: running, start_at_boot: true, refresh: restart}
   - task_block:
       id: phone_code_ban
       changes:
@@ -1033,33 +968,6 @@ node_tasks:
       state: running
       start_at_boot: true
 
-  # Until a run of this desk playbook has finished once, the person has not
-  # had the chance to enroll the phone code, so a run only says how. A rerun
-  # of an unfinished first run, such as at the bootstrap, is still the first.
-  - id: show_the_first_login_phone_code_setup_command
-    when:
-      all:
-        - not: {path_exists: /etc/systems-desk/first-desk-playbook-run-finished}
-        - not: {path_exists: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"}
-    shell:
-      script: printf 'Log in as %s and run /usr/local/bin/set-up-the-phone-code to add your phone code. Until then, login needs only your allowed laptop key.\n' "$PERSON"
-      dryrun: printf 'The first login sets up the phone code with /usr/local/bin/set-up-the-phone-code.\n'
-      changed_when: false
-      env: {PERSON: "{{ .inputs.person_unix_username }}"}
-  # After the first finished run, a missing secret must never pass as setup:
-  # PAM's nullok would let the laptop key alone in.
-  - id: require_phone_code_enrollment_after_the_first_run
-    when:
-      all:
-        - {path_exists: /etc/systems-desk/first-desk-playbook-run-finished}
-        - not: {path_exists: "/home/{{ .inputs.person_unix_username }}/.google_authenticator"}
-    assert:
-      that: false
-      message: >-
-        The phone code is missing. Log in as {{ .inputs.person_unix_username }} and run
-        /usr/local/bin/set-up-the-phone-code. Scan the QR code, save the
-        secret in your password manager, and confirm a code from your phone.
-
   - id: create_the_mmwatchdog_group
     group:
       name: mmwatchdog
@@ -1106,12 +1014,128 @@ node_tasks:
       unpack_without_wrapping_folder: true
 
   - role: systems_desk_lockout
-  # The last task: the first run of this desk playbook finished, so later
-  # runs require the phone code (require_phone_code_enrollment_after_the_first_run).
-  - id: record_that_the_first_desk_playbook_run_finished
-    file:
-      path: /etc/systems-desk/first-desk-playbook-run-finished
-      content: "A run of the desk playbook finished on this desk. From now on each run requires the person's phone code.\n"
-      owner: root
-      group: root
-      permissions_mode: "0644"
+
+  # The bootstrap's desk work, before the lock: the systems repository, its
+  # vault and its signing, and the first desk review recorded. Each step
+  # runs once; a rerun of an unfinished bootstrap finishes it.
+  - id: install_the_command_that_starts_the_systems_repository
+    file: {path: /usr/local/lib/systems-desk/start-the-systems-repository, source: files/start-the-systems-repository, owner: root, group: root, permissions_mode: "0700"}
+  - id: start_the_systems_repository
+    when: {not: {path_exists: /etc/systems-desk/locked}}
+    shell:
+      script: exec /usr/local/lib/systems-desk/start-the-systems-repository
+      dryrun: exec /usr/local/lib/systems-desk/start-the-systems-repository --dryrun
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+      env: {DESK: "{{ .node.name }}", PERSON: "{{ .inputs.person_unix_username }}"}
+  # The first desk review, recorded without a question (decision DT): the
+  # person has nothing to compare it with, and the bootstrap ran this very
+  # desk playbook from the same repository. Later desk reviews show only
+  # what changed since.
+  - id: record_the_first_desk_review
+    when: {not: {path_exists: /etc/systems-desk/locked}}
+    shell:
+      script: exec /usr/local/bin/review-and-apply-the-systems-desk-settings --record-the-first-desk-review
+      dryrun: printf 'would record the first desk review when this desk has none\n'
+      success_exit_codes: [0, 2]
+      changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+
+  # The coding agent's shared login ends after
+  # coding_agent_login_longest_hours, used or not; sshd ends it after
+  # coding_agent_login_idle_minutes unused (files/sshd.conf). The settings
+  # give the reasons. Ending the login session ends its SSH connection;
+  # the coding agent's desk jobs run in its own systemd, outside the login,
+  # and keep running.
+  - id: end_the_coding_agents_long_logins
+    systemd_scheduled_job:
+      name: end-long-coding-agent-logins
+      run_as_user_account: root
+      systemd_calendar_schedule: "*:0/5"
+      env: {LONGEST_HOURS: "{{ .inputs.coding_agent_login_longest_hours }}"}
+      script: |
+        set -eu
+        now=$(date +%s)
+        loginctl list-sessions --no-legend | while read -r session _ user _; do
+          [ "$user" = coding-agent ] || continue
+          [ "$(loginctl show-session "$session" --property=Service --value)" = sshd ] || continue
+          started=$(date -d "$(loginctl show-session "$session" --property=Timestamp --value)" +%s)
+          if [ $((now - started)) -ge $((LONGEST_HOURS * 3600)) ]; then
+            loginctl terminate-session "$session"
+            printf 'Ended the coding agent'"'"'s login %s: it was open for more than %s hours.\n' "$session" "$LONGEST_HOURS"
+          fi
+        done
+
+  # Root logs in over SSH only with the desk's own self-management key, from
+  # loopback, once the desk is locked. Before the lock, the bootstrap's root
+  # login from the laptop keeps working: its key, which the provider put in
+  # root's authorized_keys, stays, beside the self-management key, and
+  # files/sshd_root_login_before_the_lock.conf admits root from the laptops'
+  # WireGuard addresses. The playbook's lock stage writes
+  # /etc/systems-desk/locked and closes both; these tasks keep them closed.
+  # Reason: the
+  # bootstrap does the whole desk setup as root before the lock, and after
+  # the lock nobody on a laptop is root on the desk.
+  - id: keep_the_laptops_root_login_until_the_lock
+    when: {not: {path_exists: /etc/systems-desk/locked}}
+    authorized_keys:
+      for_user_account: root
+      keys: ["{{ .node_tasks.create_the_root_owned_self_management_key.public_key }}"]
+      keys_not_listed: keep
+  - id: allow_only_the_self_management_key_for_root
+    when: {path_exists: /etc/systems-desk/locked}
+    authorized_keys:
+      for_user_account: root
+      keys: ["{{ .node_tasks.create_the_root_owned_self_management_key.public_key }}"]
+      keys_not_listed: remove
+      replace_options_of_listed_keys: true
+  - task_block:
+      id: phone_code_door
+      changes:
+        - id: write_the_phone_code_pam_policy
+          file: {path: /etc/pam.d/sshd, source: files/sshd_pam, owner: root, group: root, permissions_mode: "0644"}
+        - id: write_the_desk_sshd_policy
+          file: {path: /etc/ssh/sshd_config.d/00-systems-desk.conf, template: files/sshd.conf, owner: root, group: root, permissions_mode: "0644"}
+        # sshd reads this file before 00-systems-desk.conf ("-" sorts before
+        # "."), so its root rule comes first. A Match block ends at the end
+        # of its file.
+        - id: admit_the_laptops_root_login_until_the_lock
+          when: {not: {path_exists: /etc/systems-desk/locked}}
+          file: {path: /etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf, template: files/sshd_root_login_before_the_lock.conf, owner: root, group: root, permissions_mode: "0644"}
+        - id: close_the_laptops_root_login_at_the_lock
+          when: {path_exists: /etc/systems-desk/locked}
+          file: {path: /etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf, state: absent}
+        - id: create_the_ssh_service_drop_in_directory
+          directory: {path: /etc/systemd/system/ssh.service.d, owner: root, group: root, permissions_mode: "0755"}
+        - id: start_ssh_after_wireguard
+          file:
+            path: /etc/systemd/system/ssh.service.d/wireguard.conf
+            content: |
+              [Unit]
+              Requires=wg-quick@wg0.service
+              After=wg-quick@wg0.service
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      validate:
+        - id: check_the_sshd_policy
+          shell: {script: sshd -t, dryrun: sshd -t, changed_when: false}
+      activate:
+        - id: reload_the_systemd_units
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: stop_socket_activation_of_ssh_if_installed
+          when: {path_exists: /lib/systemd/system/ssh.socket}
+          systemd_service: {name: ssh.socket, state: stopped, start_at_boot: false}
+        - id: reload_ssh_with_the_private_door
+          systemd_service: {name: ssh, state: running, start_at_boot: true, refresh: restart}
+
+  # The bootstrap's last line, before the lock. The person registers this
+  # key at the Git host, on one screen the coding agent shows; the
+  # bootstrap registers it nowhere.
+  - id: say_that_the_desk_is_ready
+    when: {not: {path_exists: /etc/systems-desk/locked}}
+    shell:
+      script: |
+        printf '\nThe desk is ready.\n\nThis desk'"'"'s production public key, for your Git host:\n\n'
+        cat /etc/systems-desk/production_key.pub
+      dryrun: "printf 'The bootstrap ends with the line The desk is ready.\\n'"
+      changed_when: false

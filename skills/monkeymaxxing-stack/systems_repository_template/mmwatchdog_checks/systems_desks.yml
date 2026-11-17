@@ -57,5 +57,5 @@ check_groups:
     checks:
       phone_code_file_exists:
         file:
-          path: /home/{{ .inputs.person_unix_username }}/.google_authenticator
+          path: /etc/systems-desk/phone-code
         alert_severity: warn

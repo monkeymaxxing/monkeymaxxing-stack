@@ -1,5 +1,5 @@
-# Git's system-level settings for the coding agent, through GIT_CONFIG_SYSTEM
-# in /etc/profile.d/desk-buttons.sh. Installed by the systems_desk role.
+# Git's system-level settings for the coding agent, through GIT_CONFIG_SYSTEM,
+# which sshd sets for its logins (sshd.conf). Installed by the systems_desk role.
 [core]
 	sshCommand = ssh -F /etc/systems-desk/ssh.conf
 [gpg "ssh"]

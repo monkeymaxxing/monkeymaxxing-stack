@@ -1,10 +1,39 @@
-# Run on this desk with review-and-apply-the-systems-desk-settings, in the person's terminal. It
-# shows what changed since the person's last desk review and asks first,
-# then runs: mmx run systems_desk --var desk_name=<this desk> --connection
-# ssh_only, with the person's private SSH agent socket. Root uses that socket for util01;
-# ssh/desk01 disables the agent and uses only the root-owned loopback key.
-# Initial setup uses this node's WireGuard address and bootstrap root key.
-# ssh/desk01 pins the loopback server to desk01's entry in ssh/known_hosts.
+# The desk playbook. Three ways run it:
+#
+# The bootstrap, from the laptop, before the lock, as root over the desk's
+# WireGuard address with the laptop key that the provider put on the new
+# desk (the laptop's own copy of ssh/desk01 and the inventory point at it):
+#     mmx run systems_desk --var desk_name=desk01 --only-fleet-stages systems_desk --connection ssh_only
+# It sets the desk up, starts the systems repository with its vault and
+# signing in /home/coding-agent/systems_repository, records the first desk
+# review, and ends with "The desk is ready." and the production public key.
+# Then the bootstrap moves the provider key that the person typed on the
+# laptop to the desk's API proxy, over the same root login on standard
+# input, and deletes the laptop file, with the provider guide's listing
+# path (and, at a provider whose requests the proxy signs,
+# --provider-api-authentication and --provider-api-address), and the desk's
+# private_ip for DESK_WIREGUARD_ADDRESS:
+#     ssh -F ssh/desk01 root@DESK_WIREGUARD_ADDRESS set-up-outside-services write-api-token-proxy-file \
+#       --api server-provider --server-listing-path servers < ~/example-setup/provider-key \
+#       && rm ~/example-setup/provider-key
+# Reason it is not a task of this playbook: MMX keeps every file a run reads
+# on the controller machine in the run's history, and the key must not stay
+# on the laptop.
+# The phone code comes next, in set-up-outside-services go-live.
+#
+# The lock, from the laptop, once go-live set up the phone code:
+#     mmx run systems_desk --var desk_name=desk01 --only-fleet-stages lock --connection ssh_only
+# It records the lock and closes root SSH from the laptop: from then on
+# only the person and coding-agent log in from a laptop, each with the
+# laptop key and a phone code.
+#
+# Every later run, on this desk, with review-and-apply-the-systems-desk-settings
+# in the person's terminal. It shows what changed since the person's last
+# desk review and asks first, then runs: mmx run systems_desk --var
+# desk_name=<this desk> --connection ssh_only, with the person's private SSH
+# agent socket. Root uses that socket for util01; ssh/desk01 disables the
+# agent and uses only the root-owned loopback key. ssh/desk01 pins the
+# loopback server to desk01's entry in ssh/known_hosts.
 command_line_vars:
   desk_name:
     type: string
@@ -58,8 +87,72 @@ fleet_stages:
           mmhotline_release: "{{ .vars.stack_software.mmhotline }}"
           phone_code_lockout: "{{ .vars.phone_code_lockout }}"
           set_up_outside_services_release: "{{ .vars.stack_software.set_up_outside_services }}"
-          systems_desk_coding_agent: "{{ .vars.systems_desk_coding_agent }}"
-          codex_release: "{{ .vars.stack_software.codex }}"
+          coding_agent_login_idle_minutes: "{{ .vars.coding_agent_login_idle_minutes }}"
+          coding_agent_login_longest_hours: "{{ .vars.coding_agent_login_longest_hours }}"
+
+  # The lock: from now on this desk asks every outside login for the phone
+  # code, and root logs in only from loopback. The coding agent runs it from
+  # the laptop once set-up-outside-services go-live set up the phone code,
+  # with --only-fleet-stages lock: it records the lock, then closes root's
+  # login from the laptops, its last change, so nothing after it needs that
+  # login. From then on the desk role keeps it closed
+  # (roles/systems_desk/main.yml reads /etc/systems-desk/locked). A desk
+  # review runs this stage too, which changes nothing on a locked desk.
+  - id: lock
+    nodes: "{{ .vars.desk_name }}"
+    on_node_failure: stop_run
+    node_tasks:
+      # Reason: PAM's nullok lets the laptop key alone in while the phone
+      # code is missing, so a lock without it would lock nothing.
+      - id: refuse_the_lock_before_the_phone_code_is_set_up
+        when: {not: {path_exists: /etc/systems-desk/phone-code}}
+        assert:
+          that: false
+          message: >-
+            The phone code is not set up on {{ .vars.desk_name }} yet, so the lock would
+            leave the laptop key alone at the door. The person sets it up at the end of
+            set-up-outside-services go-live. Nothing changed.
+      # Reason: closing root's login before the desk role opened the
+      # person's and the coding agent's door would leave no way in.
+      - id: refuse_the_lock_before_the_bootstrap_finished
+        when: {not: {path_exists: /etc/ssh/sshd_config.d/00-systems-desk.conf}}
+        assert:
+          that: false
+          message: >-
+            The bootstrap has not set {{ .vars.desk_name }} up yet: run it first, with
+            --only-fleet-stages systems_desk. Nothing changed.
+      - id: record_that_this_desk_is_locked
+        file:
+          path: /etc/systems-desk/locked
+          content: "This desk is locked: every outside login needs a laptop key and the phone code, and root logs in only from loopback.\n"
+          owner: root
+          group: root
+          permissions_mode: "0644"
+      # The same closed state the desk role keeps on a locked desk
+      # (allow_only_the_self_management_key_for_root and
+      # close_the_laptops_root_login_at_the_lock there).
+      - id: read_the_root_owned_self_management_key
+        ssh_key_pair:
+          for_user_account: root
+          private_key_path: /root/.ssh/systems_desk_self_management_key
+          key_type: ed25519
+      - id: allow_only_the_self_management_key_for_root
+        authorized_keys:
+          for_user_account: root
+          keys: ["{{ .node_tasks.read_the_root_owned_self_management_key.public_key }}"]
+          keys_not_listed: remove
+          replace_options_of_listed_keys: true
+      - task_block:
+          id: close_the_laptops_root_login
+          changes:
+            - id: delete_the_root_login_before_the_lock
+              file: {path: /etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf, state: absent}
+          validate:
+            - id: check_the_sshd_policy
+              shell: {script: sshd -t, dryrun: sshd -t, changed_when: false}
+          activate:
+            - id: restart_ssh_without_the_root_login
+              systemd_service: {name: ssh, state: running, refresh: restart}
 
   # The hub stage reads only the join code; it applies no production role.
   - id: read_the_mmwatchdog_fleet_hub_join_code
