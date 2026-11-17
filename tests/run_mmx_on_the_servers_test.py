@@ -100,8 +100,41 @@ class ServersMmxTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout.splitlines()[-1])['args'][-3:], ['--', 'printf', '--vault-password-file=literal'])
 
+    def test_refuses_the_vault_editor_and_the_passphrase_change(self):
+        # mmx secrets edit opens vi on the decrypted vault, and vi's :! is a
+        # shell as servers-mmx, which reads the vault passphrase file.
+        for action in ['edit', 'passwd']:
+            with self.subTest(action=action):
+                result = self.invoke('secrets', action)
+                self.assertEqual(result.returncode, 64)
+                self.assertIn('secrets set, add-random, list-keys, diff-keys and usage', result.stderr)
+
+    def test_accepts_the_vault_actions_that_show_key_names_or_take_a_value(self):
+        for action in ['set', 'add-random', 'list-keys', 'diff-keys', 'usage']:
+            with self.subTest(action=action):
+                self.assertEqual(self.args('secrets', action)[:4], ['secrets', action, '--inventory', 'servers'])
+
+    def test_refuses_a_vault_file_outside_the_pushed_repository(self):
+        for arguments in [('secrets', 'list-keys', '--vault', '/etc/systems-desk/x'), ('secrets', 'usage', '-vault=/x'),
+                          ('secrets', 'set', 'KEY', '--vault=/x'), ('secrets', 'add-random', '--new-vault-password-file', '/x'),
+                          ('secrets', 'diff-keys', '-new-vault-password-file=/x')]:
+            with self.subTest(arguments=arguments):
+                result = self.invoke(*arguments)
+                self.assertEqual(result.returncode, 64)
+                self.assertIn('vault of pushed main', result.stderr)
+
+    def test_refuses_commands_that_open_a_pager_or_write_files_on_the_desk(self):
+        # describe-module pages through less -FRX on a terminal; less's ! is a
+        # shell. The others write files the button would only throw away.
+        for arguments in [('describe-module', 'file'), ('init',), ('new-one-time-playbook', 'x'),
+                          ('module-json', 'request'), ('secrets',), ('no-such-command',)]:
+            with self.subTest(arguments=arguments):
+                result = self.invoke(*arguments)
+                self.assertEqual(result.returncode, 64)
+                self.assertIn('run-mmx-on-the-servers runs only', result.stderr)
+
     def test_local_commands_receive_no_invented_options(self):
-        for arguments in [('version',), ('describe-module', 'file', '--reference-only'), ('module-usage', '--module', 'file'), ('new-one-time-playbook', '--help')]:
+        for arguments in [('version',), ('module-usage', '--module', 'file'), ('help',)]:
             with self.subTest(arguments=arguments):
                 result = self.invoke(*arguments)
                 self.assertEqual(result.returncode, 0, result.stderr)

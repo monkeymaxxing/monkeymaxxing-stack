@@ -17,6 +17,8 @@ for argument in "$@"; do
     case "$argument" in
         -vault-password-file|--vault-password-file|-vault-password-file=*|--vault-password-file=*)
             refuse 'run-mmx-on-the-servers supplies its own vault passphrase file.';;
+        -vault|--vault|-vault=*|--vault=*|-new-vault-password-file|--new-vault-password-file|-new-vault-password-file=*|--new-vault-password-file=*)
+            refuse 'run-mmx-on-the-servers uses only the vault of pushed main and its own vault passphrase file.';;
         -inventory|--inventory) expect_inventory=true;;
         -inventory=*|--inventory=*)
             case "${argument#*=}" in servers|servers.yml|inventories/servers.yml) ;; *) refuse 'run-mmx-on-the-servers uses only inventories/servers.yml.';; esac;;
@@ -53,9 +55,15 @@ git -c core.hooksPath=/dev/null clean -fdx -e .mmx
 # staging only. An arbitrary committed playbook retains production root power.
 # Desk SSH still accepts only its separate, root-owned self-management key.
 # Force this inventory even if default_inventory names another file.
-# MMX's local commands (version, describe-module, module-usage, init,
-# module-json and new-one-time-playbook) do not accept --inventory.
-# This is argument placement, not a command allow-list: every command runs.
+# MMX's local commands (version, module-usage, help) do not accept --inventory.
+# The commands are an allow-list: each one below reads pushed main and talks
+# to the servers, or prints. Refused, because each gives servers-mmx's
+# powers, the vault passphrase file among them, to whoever holds the terminal:
+# secrets edit (it opens vi on the decrypted vault, and vi's :! is a shell),
+# secrets passwd, and describe-module (it pages through less, whose ! is a
+# shell). Also refused: init, new-one-time-playbook and module-json, which
+# only write files this disposable checkout throws away; the coding agent
+# runs those in its own checkout.
 # The lock-out button leaves /etc/systems-desk/everyone-locked-out, which only
 # root writes, on the desk where the person pressed it, and its undo removes
 # the file. Its first line names the desk that keeps access, its WireGuard
@@ -75,12 +83,15 @@ case "${1:-}" in
         else
             set -- "$1" --inventory servers "${@:2}"
         fi;;
-    resume|run-command|status|stop|results|check-one-time-playbooks|complete-one-time-playbook)
+    resume|run-command|status|stop|results|check-one-time-playbooks|complete-one-time-playbook|remove-mmx-from-node)
         set -- "$1" --inventory servers "${@:2}";;
+    mark-node-work-failed|version|module-usage|help|--help) ;;
     secrets)
         case "${2:-}" in
-            edit|passwd|add-random|set|list-keys|diff-keys|usage)
+            add-random|set|list-keys|diff-keys|usage)
                 set -- "$1" "$2" --inventory servers "${@:3}";;
+            *) refuse 'run-mmx-on-the-servers runs only secrets set, add-random, list-keys, diff-keys and usage: never secrets edit or passwd, which show or change the whole vault.';;
         esac;;
+    *) refuse "run-mmx-on-the-servers runs only validate, explain, nodes, dryrun, run, resume, run-command, status, stop, results, check-one-time-playbooks, complete-one-time-playbook, remove-mmx-from-node, mark-node-work-failed, version, module-usage and the secrets commands set, add-random, list-keys, diff-keys and usage. Run other MMX commands, such as describe-module, in your own checkout.";;
 esac
 exec /usr/local/bin/mmx "$@"
