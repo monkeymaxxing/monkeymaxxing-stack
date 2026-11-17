@@ -168,6 +168,38 @@ class DeskRunView(unittest.TestCase):
         with self.assertRaisesRegex(DESK_REVIEW.Stop, 'points outside the systems repository'):
             self.view()
 
+    def test_an_absolute_file_path_stops_the_desk_review(self):
+        # The review would not show the named file, so a later change of
+        # its content would run as root with no question.
+        named = str(self.repository/'roles/systems_desk/files/coding-agent-gitconfig')
+        self.edit('roles/systems_desk/main.yml', 'source: files/coding-agent-gitconfig', 'source: ' + named)
+        with self.assertRaisesRegex(DESK_REVIEW.Stop, r'names %s, a path outside the systems repository' % re.escape(named)):
+            self.view()
+
+    def test_a_relative_file_path_that_leaves_the_repository_stops_the_desk_review(self):
+        # MMX refuses such a path too; the review does not rely on that.
+        for field, value in (('file.source', '../../../outside'), ('file.template', '../../../../etc/x'),
+                             ('apt_repository.signing_key_source', '/etc/key'),
+                             ('authorized_keys.key_files_on_controller_machine[0]', '/home/coding-agent/keys')):
+            with self.subTest(field=field):
+                task = {'path': 'systems_desk/x', 'source': {'file': 'roles/systems_desk/main.yml'},
+                        'arguments': [{'field': field, 'value': value}]}
+                with self.assertRaisesRegex(DESK_REVIEW.Stop, 'a path outside the systems repository'):
+                    list(DESK_REVIEW.referenced_files(self.repository, task))
+        # Other fields that end in "file" name a file on the desk, not one of the repository.
+        task = {'path': 'systems_desk/x', 'arguments': [{'field': 'shell.run_only_once_marker_file', 'value': '/var/lib/mmx/x'},
+                                                        {'field': 'wireguard_interface.template_text', 'value': '/x'}]}
+        self.assertEqual(list(DESK_REVIEW.referenced_files(self.repository, task)), [])
+
+    def test_an_absolute_ssh_settings_file_of_the_desk_stops_the_desk_review(self):
+        for field in ('ssh_config', 'ssh_known_hosts'):
+            with self.subTest(field=field):
+                connections = {**CONNECTIONS, 'desk01': {**CONNECTIONS['desk01'], field: str(self.repository/'ssh/desk01')}}
+                explained = subprocess.run([self.mmx, 'explain', 'systems_desk', '--var', 'desk_name=desk01', '--json'],
+                                           cwd=self.repository, text=True, capture_output=True)
+                with self.assertRaisesRegex(DESK_REVIEW.Stop, 'a path outside the systems repository'):
+                    DESK_REVIEW.desk_run_view(self.repository, json.loads(explained.stdout), {'nodes': connections})
+
     def test_control_characters_cannot_hide_a_line(self):
         before = self.view()
         self.edit('roles/systems_desk/files/run-mmx-on-the-servers', '#!', '#!/bin/sh\ncp key /tmp \x1b[1A\x1b[2K‮\n#!')

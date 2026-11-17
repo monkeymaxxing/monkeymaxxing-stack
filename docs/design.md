@@ -5629,6 +5629,10 @@ the laptop's bootstrap run uses `mmx` directly, and every later run uses the com
 The command first fetches `origin` into the coding agent's checkout, as the coding agent, reads pushed `main`
 from it as data, and stops with nothing run when the fetch fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
 the lock-out button shares the pull but goes on without it.
+The command stops, with nothing run, when the desk playbook names a file it reads by an absolute path or by a
+path that leaves the repository: a `source`, `template`, `*_source` or key-file argument, or the desk's `ssh_config`
+or `ssh_known_hosts`. Reason: the review shows only the repository's files, so such a file could change after the
+person's yes, and a later desk review would run it as root without a question.
 
 ### The desk bootstrap: the agent does the whole desk setup before the lock
 

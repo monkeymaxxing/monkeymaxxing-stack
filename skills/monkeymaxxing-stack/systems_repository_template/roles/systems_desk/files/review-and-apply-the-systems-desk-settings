@@ -166,6 +166,25 @@ def shown_name(repository, path):
     return os.path.normpath(path.relative_to(repository).as_posix())
 
 
+# The arguments through which MMX reads a file of the controller machine:
+# source, template, signing_key_source, package_file_source and
+# key_files_on_controller_machine. A field such as
+# shell.run_only_once_marker_file names a file on the desk instead.
+CONTROLLER_FILE_ARGUMENT = re.compile(r'(source|template|[a-z_]+_source|key_files_on_controller_machine(\[\d+\])?)')
+
+
+def refuse_a_path_outside_the_repository(repository, base, where, value):
+    """Stops the desk review when a file the desk playbook reads is named
+    by an absolute path, or by a relative one that leaves the repository.
+    Reason: the review shows only files of the repository, so such a file
+    could change after the person's yes, and the next desk review would run
+    it as root without a question. Same kind of Stop as inside()."""
+    if value.startswith('/') or not os.path.normpath(base/value).startswith(str(repository) + os.sep):
+        raise Stop('%s names %s, a path outside the systems repository. The desk playbook reads only files inside '
+                   'the repository, which your review shows: name the file by its path inside the repository. '
+                   'Nothing ran.' % (where, visible(value)))
+
+
 def referenced_files(repository, task):
     """Repository files a task copies as they are, named by an argument
     such as file.source or apt_repository.signing_key_source. A template's
@@ -179,6 +198,9 @@ def referenced_files(repository, task):
     for argument in task.get('arguments', []):
         value = argument.get('value')
         last = argument['field'].rsplit('.', 1)[-1]
+        if CONTROLLER_FILE_ARGUMENT.fullmatch(last) and isinstance(value, str) and value and '{{' not in value:
+            refuse_a_path_outside_the_repository(repository, bases[0], 'Task %s, argument %s,' % (
+                visible(task.get('path', '')), visible(argument['field'])), value)
         if not any(word in last for word in ('source', 'template', 'file')):
             continue
         if (argument['field'] in rendered or not isinstance(value, str) or not value or '\n' in value
@@ -239,7 +261,8 @@ def desk_run_view(repository, explain, inventory):
         for key in sorted(settings):
             lines += value_lines(key, settings[key])
             value = settings[key]
-            if key in CONNECTION_FILE_FIELDS and isinstance(value, str) and not value.startswith('/'):
+            if key in CONNECTION_FILE_FIELDS and isinstance(value, str):
+                refuse_a_path_outside_the_repository(repository, repository, 'The inventory\'s %s of %s' % (key, visible(node)), value)
                 path = repository/value
                 if path.exists() or path.is_symlink():
                     files[shown_name(repository, path)] = file_lines(repository, path)
