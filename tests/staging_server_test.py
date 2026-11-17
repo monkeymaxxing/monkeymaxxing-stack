@@ -13,9 +13,12 @@ pgBackRest, backups, or backup checks: staging holds only seed data.
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 
 T = Path(os.environ.get('STACK_TEMPLATE_DIR') or Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template')
@@ -141,6 +144,101 @@ class TwoShapes(unittest.TestCase):
         self.assertIn('postgres', staging)
         self.assertNotIn('backups', staging)
         self.assertNotIn('write_ahead_log_archiving', staging)
+
+
+
+class StagingSettingsStayOffProduction(unittest.TestCase):
+    """staging01 gets each app's env with staging_env laid over it, and
+    every_server refuses to configure staging01 when that would reach
+    production's bucket or address."""
+
+    SHOP = {'env': {'RAILS_ENV': 'production', 'APP_ORIGIN': 'https://shop.example.com', 'R2_BUCKET': 'shop-uploads'},
+            'staging_env': {'APP_ORIGIN': 'https://staging.shop.example.com', 'R2_BUCKET': 'shop-staging-uploads'},
+            'production_uploads_r2_bucket': 'shop-uploads'}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mmx = os.environ.get('MMX_BINARY') or shutil.which('mmx')
+        if not cls.mmx:
+            raise RuntimeError('Set MMX_BINARY to test the actual MMX templates.')
+        text = (T/'playbooks/every_server.yml').read_text()
+        match = re.search(r"- id: refuse_staging_settings_that_reach_production\n.*?<<'PYTHON'\n(.*?)\n\s+PYTHON\n", text, re.S)
+        cls.script = textwrap.dedent(match[1]) if match else None
+
+    def render_settings_file(self, is_staging_server, app):
+        values = {'app': {'key': 'shop', 'value': app}, 'is_staging_server': is_staging_server}
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
+            root = Path(temporary)
+            (root/'inventories').mkdir()
+            (root/'playbooks').mkdir()
+            (root/'mmx_project_settings.yml').write_text(json.dumps(dict(project_name='render_test', default_inventory='servers', vars=values)))
+            (root/'inventories/servers.yml').write_text(json.dumps(dict(nodes={'app001': {'address': '127.0.0.1'}})))
+            # MMX explain defers role .inputs until execution; resolve them in project vars.
+            text = (T/'files_used_by_several_roles/app_settings.env').read_text().replace('.inputs', '.vars').replace('.app.', '.vars.app.')
+            (root/'rendered.template').write_text(text)
+            (root/'playbooks/render.yml').write_text(json.dumps(dict(fleet_stages=[dict(id='render', nodes='all', node_tasks=[dict(
+                id='render', file=dict(path='/tmp/rendered', template='rendered.template', permissions_mode='0600'))])])))
+            result = subprocess.run([self.mmx, 'explain', 'render', '--json'], cwd=root, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return json.loads(result.stdout)['fleet_stages'][0]['node_tasks'][0]['rendered_templates'][0]['text']
+
+    def lines(self, text):
+        return {line for line in text.splitlines() if '=' in line and not line.startswith('#')}
+
+    def test_staging01_gets_its_own_origin_and_bucket_and_production_keeps_its_own(self):
+        staging = self.lines(self.render_settings_file(True, self.SHOP))
+        self.assertIn('R2_BUCKET=shop-staging-uploads', staging)
+        self.assertIn('APP_ORIGIN=https://staging.shop.example.com', staging)
+        self.assertIn('RAILS_ENV=production', staging)
+        self.assertNotIn('R2_BUCKET=shop-uploads', staging)
+        production = self.lines(self.render_settings_file(False, self.SHOP))
+        self.assertIn('R2_BUCKET=shop-uploads', production)
+        self.assertIn('APP_ORIGIN=https://shop.example.com', production)
+        self.assertNotIn('R2_BUCKET=shop-staging-uploads', production)
+
+    def test_an_app_without_staging_env_gets_its_env_on_staging01(self):
+        app = {'env': {'RAILS_ENV': 'production'}}
+        self.assertEqual(self.lines(self.render_settings_file(True, app)), {'RAILS_ENV=production'})
+
+    def refusal(self, **changes):
+        self.assertIsNotNone(self.script, 'every_server has no refuse_staging_settings_that_reach_production task')
+        app = json.loads(json.dumps(self.SHOP))
+        for name, value in changes.items():
+            if '__' not in name:
+                app[name] = value
+                continue
+            part, key = name.split('__')
+            if value is None:
+                app[part].pop(key, None)
+            else:
+                app[part][key] = value
+        return subprocess.run([sys.executable, '-I', '-c', self.script], env=dict(os.environ, APPS=json.dumps({'shop': app})),
+                              text=True, capture_output=True)
+
+    def test_the_example_app_is_accepted(self):
+        self.assertEqual(self.refusal().returncode, 0)
+
+    def test_staging_uploads_without_their_own_bucket_are_refused_naming_the_app_and_the_line(self):
+        result = self.refusal(staging_env__R2_BUCKET=None)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('apps.shop', result.stderr)
+        self.assertIn('staging_env: {R2_BUCKET:', result.stderr)
+
+    def test_production_buckets_in_staging_env_are_refused(self):
+        for bucket in ('shop-uploads',):
+            self.assertNotEqual(self.refusal(staging_env__R2_BUCKET=bucket).returncode, 0)
+        self.assertNotEqual(self.refusal(production_uploads_r2_bucket='', env__R2_BUCKET='shop-uploads',
+                                         staging_env__R2_BUCKET='shop-uploads').returncode, 0)
+
+    def test_an_app_without_uploads_needs_no_bucket(self):
+        self.assertEqual(self.refusal(production_uploads_r2_bucket='', env__R2_BUCKET=None, staging_env__R2_BUCKET=None).returncode, 0)
+
+    def test_production_origin_on_staging_is_refused(self):
+        for origin in (None, 'https://shop.example.com'):
+            with self.subTest(origin=origin):
+                result = self.refusal(staging_env__APP_ORIGIN=origin)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('staging_env: {APP_ORIGIN:', result.stderr)
 
 
 if __name__ == '__main__':

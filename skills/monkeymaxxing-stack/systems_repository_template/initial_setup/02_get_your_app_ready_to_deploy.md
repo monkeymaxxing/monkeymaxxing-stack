@@ -88,6 +88,13 @@ the person's. Then you push the changes and watch the first build.
    - `asset_directory`, `database_name`, and `env`: the app's settings
      that are not secret, such as its public address, `APP_ORIGIN`, and
      its uploads bucket's name, `R2_BUCKET`;
+   - `staging_env`: the settings `staging01` takes in place of the same
+     names in `env`, so staging never uses production's public address or
+     uploads bucket. Give it its own `APP_ORIGIN` and, for an app that keeps
+     uploads, its own `R2_BUCKET`, as the example app does. Write `{}` for
+     none. When the team adds `staging01`, `every_server` refuses an app
+     whose `staging_env` would leave production's bucket or address in
+     place;
    - `secrets_from_vault`: each secret the app reads, and where its value
      comes from, from the app's code, as the template's example app does:
      - `where_the_value_comes_from: generated_by_the_setup` for a value

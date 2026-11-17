@@ -201,8 +201,30 @@ vars:
       # that is too low lets that sum pass while the database refuses
       # connections at the next deploy.
       # database_connections_per_worker_process: 10
-      env:                          # plain settings; secrets come from the vault
+      # The app's plain settings, written to every server that runs the
+      # app. Secrets come from the vault (secrets_from_vault below).
+      env:
         RAILS_ENV: production
+        APP_ORIGIN: https://shop.example.com
+        R2_BUCKET: example-shop-uploads
+      # staging01's plain settings: on staging01, each name here replaces the
+      # same name in env. Write {} for none; staging01 then gets env as it is.
+      # Reason: a setting that names a place production owns must not reach
+      # staging01. The two that do are APP_ORIGIN, the address in the links
+      # the app writes, and R2_BUCKET, the bucket its uploads go to: without
+      # its own R2_BUCKET, staging would write uploads into production's
+      # bucket. every_server refuses to configure staging01 when:
+      #   - the app keeps uploads (production_uploads_r2_bucket below is not
+      #     "") and staging_env has no R2_BUCKET of its own;
+      #   - staging_env's R2_BUCKET is production's bucket;
+      #   - env has an APP_ORIGIN and staging_env has none of its own, or the
+      #     same one.
+      # The refusal names the app and the line to add. Set R2_BUCKET to the
+      # same bucket as staging_uploads_r2_bucket below. A team without
+      # staging01 changes nothing: no server reads staging_env.
+      staging_env:
+        APP_ORIGIN: https://staging.shop.example.com
+        R2_BUCKET: example-shop-staging-uploads
       # Each environment variable the app reads from the vault, and where
       # its value comes from. set-up-outside-services go-live makes each one
       # with generated_by_the_setup without a question: a random value, or
