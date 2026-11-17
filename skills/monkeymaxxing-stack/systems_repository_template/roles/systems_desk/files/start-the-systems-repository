@@ -73,7 +73,7 @@ def key_line(desk, person):
     """This desk's production public key, as the settings record it."""
     parts = PUBLIC_KEY.read_text().split()
     if len(parts) < 2:
-        raise Stop('%s holds no public key. The desk role makes it; run the bootstrap again.' % PUBLIC_KEY)
+        raise Stop('%s holds no public key. The systems desk role makes it; run the bootstrap again.' % PUBLIC_KEY)
     return '%s %s %s on %s' % (parts[0], parts[1], person, desk)
 
 
@@ -95,7 +95,7 @@ def set_desk_production_key(text, line, desk):
     """Sets nodes.DESK.vars.production_ssh_public_key in the inventory."""
     node = re.search(r'(?m)^  %s:[ \t]*\n' % re.escape(desk), text)
     if not node:
-        raise Stop('inventories/servers.yml has no node %s. The laptop setup names this desk there.' % desk)
+        raise Stop('inventories/servers.yml has no node %s. The laptop setup names this systems desk there.' % desk)
     end = re.compile(r'(?m)^  \S').search(text, node.end())
     end = end.start() if end else len(text)
     field = re.compile(r'(?m)^(\s+production_ssh_public_key:)[ \t]*.*$').search(text, node.end(), end)
@@ -130,16 +130,16 @@ def main(arguments):
         raise Stop('Usage: start-the-systems-repository [--dryrun]')
     dryrun = arguments == ['--dryrun']
     if os.geteuid() != 0:
-        raise Stop('start-the-systems-repository runs as root, from the desk playbook.')
+        raise Stop('start-the-systems-repository runs as root, from the systems desk playbook.')
     desk, person = os.environ.get('DESK', ''), os.environ.get('PERSON', '')
     if not desk or not person:
-        raise Stop('DESK and PERSON must be set, as the desk playbook sets them.')
+        raise Stop('DESK and PERSON must be set, as the systems desk playbook sets them.')
     if not (REPOSITORY/'mmx_project_settings.yml').is_file():
-        raise Stop('%s holds no systems repository. The bootstrap copies it there from the laptop before the desk playbook runs.'
+        raise Stop('%s holds no systems repository. The bootstrap copies it there from the laptop before the systems desk playbook runs.'
                    % REPOSITORY)
     if started():
         if not VAULT_PASSPHRASE.exists():
-            raise Stop('%s has commits, but %s is missing. A desk that joins a team\'s repository gets the team\'s vault '
+            raise Stop('%s has commits, but %s is missing. A systems desk that joins a team\'s repository gets the team\'s vault '
                        'passphrase from the recovery bundle.' % (REPOSITORY, VAULT_PASSPHRASE))
         return 0
     if dryrun:
@@ -155,7 +155,7 @@ def main(arguments):
         text = path.read_text()
         if change(text) != text:
             path.write_text(change(text))
-            say('Wrote this desk\'s production key into %s.' % name)
+            say('Wrote this systems desk\'s production key into %s.' % name)
     written = yaml.safe_load((REPOSITORY/'inventories/servers.yml').read_text())['nodes'][desk]['vars']
     root_keys = yaml.safe_load((REPOSITORY/'mmx_project_settings.yml').read_text())['vars'].get('root_ssh_public_keys') or []
     if written.get('production_ssh_public_key') != line or line not in root_keys:

@@ -1,6 +1,6 @@
 # Chapter 5: Put your site behind Cloudflare and lock your private pages
 
-**When:** after chapter 4 (set up your accounts and lock your desk).
+**When:** after chapter 4 (set up your accounts and lock your systems desk).
 Complete steps 1 through 6 (host names, tunnels, DNS, Access, MMHotline's Access settings, and the Cache Rule) before chapter 7 (install everything on the production servers). The roles read the tunnel tokens, and MMHotline reads the
 Access settings.
 
@@ -73,7 +73,7 @@ first sign-in at the private pages comes in the alerts sitting, in
    chapter 5 (put your site behind Cloudflare and lock your private pages).
 
    `set-up-outside-services go-live`, in
-   [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
+   [chapter 4 (set up your accounts and lock your systems desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
    created each tunnel below through the API, with `"config_src": "local"`,
    and saved each tunnel's token in the vault. Find each tunnel's ID
    through the proxy, for the DNS records:
@@ -153,7 +153,7 @@ first sign-in at the private pages comes in the alerts sitting, in
    emails a code to the address. A new Zero Trust organization has only
    the Cloudflare identity provider, which signs in people who have a
    Cloudflare account, and One-time PIN isn't added automatically, so
-   `set-up-outside-services go-live` added it in chapter 4 (set up your accounts and lock your desk).
+   `set-up-outside-services go-live` added it in chapter 4 (set up your accounts and lock your systems desk).
    Read each `type` in
    `GET .../accounts/ACCOUNT_ID/access/identity_providers` to check that
    the login method exists.

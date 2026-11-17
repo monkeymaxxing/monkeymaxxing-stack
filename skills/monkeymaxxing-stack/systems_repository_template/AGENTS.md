@@ -343,7 +343,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   prompt of `set-up-outside-services` on the desk, never in the chat. In the
   first sitting, `ssh desk01-setup` asks for each key a website gives and makes
   every random key itself
-  ([chapter 4 (set up your accounts and lock your desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)).
+  ([chapter 4 (set up your accounts and lock your systems desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)).
   Later, give the person `ssh desk01-secrets`: it asks for each key the vault
   still lacks, at a hidden prompt, makes the random ones, and commits and
   pushes the vault. To enter one key again, such as for a rotation, give the

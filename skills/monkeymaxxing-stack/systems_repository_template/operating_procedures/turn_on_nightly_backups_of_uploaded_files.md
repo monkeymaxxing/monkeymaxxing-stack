@@ -53,7 +53,7 @@ For the first app that keeps uploads, prepare the bucket, keys, and settings in 
    **Check:** `ssh desk01-agent 'cd systems_repository && git log -1'`
    shows the settings' commit.
 2. **The person types `ssh -t desk01 set-up-outside-services backblaze`**
-   on the laptop, as [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#chapter-4-set-up-your-accounts-and-lock-your-desk)
+   on the laptop, as [chapter 4 (set up your accounts and lock your systems desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#chapter-4-set-up-your-accounts-and-lock-your-desk)
    describes. The command:
    - creates the uploads' bucket, locked for the lock length in
      `backups.lock_backups_against_deletion_for_days`, with the lifecycle

@@ -158,11 +158,11 @@ func installServerProviderToken(e *environment, settings systemSettings, listing
 	if signs {
 		noun = "credential"
 	}
-	e.say("Your server provider %s lets this desk create and list servers at the provider.", noun)
+	e.say("Your server provider %s lets this systems desk create and list servers at the provider.", noun)
 	if signs {
-		e.say("It goes into the desk's API proxy, which signs your coding agent's requests with it, so your coding agent uses it without reading it.")
+		e.say("It goes into the systems desk's API proxy, which signs your coding agent's requests with it, so your coding agent uses it without reading it.")
 	} else {
-		e.say("It goes into the desk's API proxy, which adds it to your coding agent's requests, so your coding agent uses it without reading it.")
+		e.say("It goes into the systems desk's API proxy, which adds it to your coding agent's requests, so your coding agent uses it without reading it.")
 	}
 	e.say("This command checks it at %s%s, your provider guide's address.", apiURL, listingPath)
 	var token string
@@ -405,7 +405,7 @@ func writeSigningCredential(credential signingCredential, checkPath string, out 
 func writeFileAndRestartProxy(path string, content []byte, checkAddress, noun string, out io.Writer) error {
 	unit, err := os.ReadFile(apiProxyUnitFile)
 	if err != nil {
-		return fmt.Errorf("%v. A desk review installs the proxy; run review-and-apply-the-systems-desk-settings first", err)
+		return fmt.Errorf("%v. A systems desk review installs the proxy; run review-and-apply-the-systems-desk-settings first", err)
 	}
 	old, readErr := os.ReadFile(path)
 	hadOld := readErr == nil
@@ -434,7 +434,7 @@ func writeFileAndRestartProxy(path string, content []byte, checkAddress, noun st
 	}
 	for _, step := range [][]string{{"systemctl", "enable", "--quiet", apiProxyService}, {"systemctl", "restart", apiProxyService}} {
 		if output, err := exec.Command(step[0], step[1:]...).CombinedOutput(); err != nil {
-			return restore(fmt.Errorf("%s failed: %s. A desk review installs the proxy; run review-and-apply-the-systems-desk-settings first", strings.Join(step, " "), firstLine(string(output), err)))
+			return restore(fmt.Errorf("%s failed: %s. A systems desk review installs the proxy; run review-and-apply-the-systems-desk-settings first", strings.Join(step, " "), firstLine(string(output), err)))
 		}
 	}
 	if err := checkThroughProxy(checkAddress, out, noun); err != nil {

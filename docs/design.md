@@ -412,7 +412,7 @@ comes. The six core ideas in
 [`SKILL.md`](../skills/monkeymaxxing-stack/SKILL.md#the-core-ideas) govern
 every operation.
 Chapter 3 (make your server account and your systems desk) introduces the laptop login, provider account, systems desk, repository, vault, and personal
-token file, which holds the person's own API tokens on the systems desk. Chapter 4 (set up your accounts and lock your desk)
+token file, which holds the person's own API tokens on the systems desk. Chapter 4 (set up your accounts and lock your systems desk)
 introduces the accounts at other companies and their APIs. Chapter 7 (install everything on the production servers)
 introduces how the coding agent runs MMX on `util01` after pushing. Each chapter introduces
 the checklist's results as its checks pass. Each exception stays with its
@@ -500,13 +500,13 @@ does, and no chapter needs a fact or an account from a later one.
 - Chapter 3 (make your server account and your systems desk) makes the systems repository's private backup at the
   Git host, and the desk's checkout becomes the team's main copy until chapter 7 moves it to `util01`
   ([The main copy of the systems repository](#the-main-copy-of-the-systems-repository)).
-- Chapter 2 (get your app ready to deploy) only names the app's R2 bucket. Chapter 4 (set up your accounts and lock your desk) creates the app's R2 bucket
+- Chapter 2 (get your app ready to deploy) only names the app's R2 bucket. Chapter 4 (set up your accounts and lock your systems desk) creates the app's R2 bucket
   as part of setting up the accounts at other companies. Chapter 4 also makes
   the status page's bucket and R2 key, so every key of the Cloudflare account
   is made in one chapter, and chapter 8 (check that alerts reach your phone and backups restore) only tests the status page.
   When the domain is still "Pending", Cloudflare cannot connect the status page's host
   name to its bucket, so that one step waits for chapter 8.
-- Chapter 4 (set up your accounts and lock your desk) chooses the server provider and its location before creating the
+- Chapter 4 (set up your accounts and lock your systems desk) chooses the server provider and its location before creating the
   Backblaze account. The order matters because Backblaze's region follows
   the servers' location and is set when the Backblaze account is made.
 - Chapter 6 (create your three production servers: app, database, and tools) gets the person's approval of the weekly restore drill's server

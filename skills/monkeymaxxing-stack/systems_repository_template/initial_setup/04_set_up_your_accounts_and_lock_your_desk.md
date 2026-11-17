@@ -1,4 +1,4 @@
-# Chapter 4: Set up your accounts and lock your desk
+# Chapter 4: Set up your accounts and lock your systems desk
 
 **When:** right after chapter 3 (make your server account and your
 systems desk).
@@ -87,14 +87,15 @@ domain at Cloudflare, its DNS records, and the lock.
    **Ask the person:**
 
    ```text
-   Your desk is ready.
+   Your systems desk, the small server that holds your keys, is ready.
 
    The window where you typed the Hetzner key goes on by itself now.
    It shows the next 3 accounts, one at a time.
    I carry on by myself when it is done.
    Ask me here at any time if a step is unclear.
 
-   If you closed that window, type this in a terminal instead:
+   If you closed that window, type this in a terminal instead.
+   It logs in to your systems desk:
 
      ssh desk01-setup
    ```
@@ -398,7 +399,7 @@ domain at Cloudflare, its DNS records, and the lock.
    Step 1 of 2: your recovery passphrase
 
    What this is for:
-     If you lose your desk, this one passphrase brings everything back.
+     If you lose your systems desk (the small server that holds your keys), this one passphrase brings everything back.
 
      SAVE IT NOW.  IT IS SHOWN ONLY ONCE.
 
@@ -417,7 +418,7 @@ domain at Cloudflare, its DNS records, and the lock.
    Step 2 of 2: your phone code
 
    What this is for:
-     From now on, your desk needs your laptop AND a code from your phone.
+     From now on, your systems desk (the small server that holds your keys) needs your laptop AND a code from your phone.
 
    Do this now:
      1. Open the authenticator app on your phone.
@@ -442,14 +443,14 @@ domain at Cloudflare, its DNS records, and the lock.
    Once a code matches, it clears the screen and says:
 
    ```text
-   Your phone code is ready. From now on each new login to this desk needs your laptop AND a code from your phone.
-   Each code works once. 5 wrong codes within ten minutes lock that laptop out of the desk for 5 minutes.
+   Your phone code is ready. From now on each new login to this systems desk needs your laptop AND a code from your phone.
+   Each code works once. 5 wrong codes within ten minutes lock that laptop out of the systems desk for 5 minutes.
    ```
 
    The command ends:
 
    ```text
-   Done.  Your phone code is ready.  Your coding agent locks your desk next.
+   Done.  Your phone code is ready.  Your coding agent locks your systems desk next.
 
    Go back to your coding agent.
    ```
@@ -529,7 +530,7 @@ domain at Cloudflare, its DNS records, and the lock.
    the person for one code:
 
    ```text
-   Your desk is locked.  I need one code to start the work.
+   Your systems desk, the small server that holds your keys, is locked.  I need one code to start the work.
 
    WAIT FOR A NEW CODE.  The code you just typed works only once.
 

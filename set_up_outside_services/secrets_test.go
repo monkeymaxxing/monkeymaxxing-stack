@@ -316,7 +316,7 @@ func TestCloudflareMakesStagingsServiceTokenOnceIntoTheTokenFile(t *testing.T) {
 	h.e.home = t.TempDir()
 	h.out.Reset()
 	if err := h.runCloudflare(); err != nil || len(h.cloudflare.ServiceTokens) != 1 || !strings.Contains(h.out.String(), "personal-token staging-access") {
-		t.Fatalf("another desk's run made a second token or did not say how to enter the saved one: %v\n%s", err, h.out)
+		t.Fatalf("another systems desk's run made a second token or did not say how to enter the saved one: %v\n%s", err, h.out)
 	}
 }
 

@@ -30,14 +30,14 @@ import (
 var version = "development"
 
 const usage = `set-up-outside-services sets up your system's accounts at Backblaze and
-Cloudflare, the vault's other secrets, your own tokens on this desk, and the
+Cloudflare, the vault's other secrets, your own tokens on this systems desk, and the
 recovery bundle. You start it from your laptop, plus a code from your phone:
 the first setup with ssh desk01-setup, new secrets with ssh desk01-secrets,
 and the other commands with ssh -t desk01, such as:
 
   ssh -t desk01 set-up-outside-services backblaze
 
-Every command works in the desk's checkout of the systems repository,
+Every command works in the systems desk's checkout of the systems repository,
 /home/coding-agent/systems_repository, from any folder.
 
 Commands:
@@ -61,7 +61,7 @@ Commands:
                                 after a break-in.
   cloudflare [--replace-key NAME]... [--replace-every-key] [--delete-the-old-keys-at-once]
                                 From one link token you make with the link it prints, make
-                                your desk's Cloudflare token (in the API proxy and your
+                                your systems desk's Cloudflare token (in the API proxy and your
                                 token file), the tunnels, the R2 buckets and keys, the
                                 MMHotline-down alarm's token, the status page and your own
                                 key for posting to it, and the One-time PIN login method; save
@@ -76,9 +76,9 @@ Commands:
                                 backblaze; --delete-the-old-keys-at-once deletes it at once.
   cloudflare --delete-tokens-of-person NAME
                                 Delete, by name, the Cloudflare tokens this command made for a
-                                person who leaves the team. NAME is their desk account name.
+                                person who leaves the team. NAME is their systems desk account name.
   personal-token server-provider --server-listing-path PATH [--token-header NAME]
-                                Replace your server provider token in the desk's API proxy,
+                                Replace your server provider token in the systems desk's API proxy,
                                 such as after a rotation. PATH is the provider guide's server
                                 listing, such as servers for Hetzner Cloud. NAME is the
                                 guide's header for a provider without Authorization: Bearer,
@@ -87,7 +87,7 @@ Commands:
                                 value the provider's page gives, or at Google Cloud for the
                                 service account's key file.
   personal-token staging-access Save staging's Access service token, from your password manager,
-                                in your token file, on a desk where cloudflare did not make it.
+                                in your token file, on a systems desk where cloudflare did not make it.
   secrets [--replace KEY]       Save every vault secret the servers read that the vault lacks:
                                 the ones only a website gives, at hidden prompts, with the page
                                 where you make each, the servers' console password, shown once
@@ -96,7 +96,7 @@ Commands:
                                 go-live, backblaze, cloudflare and secrets each commit and push
                                 the vault to the main copy on util01, and refuse a
                                 repository with other changes not pushed. Before util01
-                                exists, the desk's checkout is the main copy: they commit there.
+                                exists, the systems desk's checkout is the main copy: they commit there.
   version                       Print this program's version.
 `
 
@@ -257,7 +257,7 @@ func newEnvironment(out io.Writer) (*environment, error) {
 	}
 	for _, name := range accountsThatMayNotRun {
 		if current.Username == name {
-			return nil, fmt.Errorf("this command runs only in the person's own account, never as %s. The person runs it in their own desk terminal, where its prompts keep every key away from the coding agent", name)
+			return nil, fmt.Errorf("this command runs only in the person's own account, never as %s. The person runs it in their own systems desk terminal, where its prompts keep every key away from the coding agent", name)
 		}
 	}
 	e := &environment{

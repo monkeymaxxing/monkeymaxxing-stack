@@ -4,7 +4,7 @@ DigitalOcean calls a server a **Droplet** and a server type a **size**. Follow t
 [script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts),
 [enrollment contract](../server_management_scripts/README.md#enroll-a-server-before-the-first-mmx-run),
 and [initial setup](../initial_setup/): accounts in
-[chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
+[chapter 4 (set up your accounts and lock your systems desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
 servers in [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md).
 
 ## The provider's web console

@@ -164,9 +164,9 @@ func deskIsLockedAt(lockedFile, rootLoginBeforeTheLockFile string) bool {
 // the desk.
 func goLiveDoneMessage(e *environment) string {
 	if e.deskIsLocked() {
-		return "\nDone.  Your desk is locked.\n\nGo back to your coding agent."
+		return "\nDone.  Your systems desk is locked.\n\nGo back to your coding agent."
 	}
-	return "\nDone.  Your phone code is ready.  Your coding agent locks your desk next.\n\nGo back to your coding agent."
+	return "\nDone.  Your phone code is ready.  Your coding agent locks your systems desk next.\n\nGo back to your coding agent."
 }
 
 // prepare checks everything the screens need before the first one, so the
@@ -224,7 +224,7 @@ func (g *goLive) readProviderCredential() (string, error) {
 	}
 	content, err := g.e.readRootFile(path)
 	if err != nil {
-		return "", fmt.Errorf("this desk has no server provider key in its API proxy yet (%v). The desk's bootstrap puts it there; ask your coding agent", err)
+		return "", fmt.Errorf("this systems desk has no server provider key in its API proxy yet (%v). The systems desk's bootstrap puts it there; ask your coding agent", err)
 	}
 	if path == signingCredentialFile {
 		var credential signingCredential
@@ -340,7 +340,7 @@ func setUpThePhoneCodeWithSudo(emergencyCodesPath string) error {
 	command := exec.Command("sudo", "-n", "/usr/local/bin/set-up-the-phone-code", "--emergency-codes-to", emergencyCodesPath)
 	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := command.Run(); err != nil {
-		return fmt.Errorf("set-up-the-phone-code stopped (%v), so the desk is not locked yet", err)
+		return fmt.Errorf("set-up-the-phone-code stopped (%v), so the systems desk is not locked yet", err)
 	}
 	return nil
 }
@@ -576,7 +576,7 @@ func (g *goLive) registrar() (string, error) {
 		// A rerun: read the domain with the desk's own token, which can read
 		// every zone of the account.
 		desk := &cloudflareClient{baseURL: e.cloudflareAPIURL, token: tokenFileValue(e.tokenFilePath(g.settings), deskTokenVariable),
-			accountID: g.results.ForTheCodingAgent["cloudflare_account_id"], who: "your desk's Cloudflare token"}
+			accountID: g.results.ForTheCodingAgent["cloudflare_account_id"], who: "your systems desk's Cloudflare token"}
 		zone, err := desk.findZone(g.domain)
 		if err != nil {
 			return "", err
@@ -1294,7 +1294,7 @@ Last two steps.
 Step 1 of 2: your recovery passphrase
 
 What this is for:
-  If you lose your desk, this one passphrase brings everything back.
+  If you lose your systems desk, this one passphrase brings everything back.
 
   SAVE IT NOW.  IT IS SHOWN ONLY ONCE.
 
@@ -1329,7 +1329,7 @@ func (g *goLive) phoneCode() (string, error) {
 Step 2 of 2: your phone code
 
 What this is for:
-  From now on, your desk needs your laptop AND a code from your phone.
+  From now on, your systems desk needs your laptop AND a code from your phone.
 
 Do this now:
   1. Open the authenticator app on your phone.

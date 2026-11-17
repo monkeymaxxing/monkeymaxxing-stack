@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Check what the person's desk review compares and when it asks.
+"""Check what the person's systems desk review compares and when it asks.
 
-review-and-apply-the-systems-desk-settings runs the desk playbook as root only after the
-person reviews what changed since the last desk review. These tests
-build its view of the desk playbook from MMX's real explain output on a copy of
+review-and-apply-the-systems-desk-settings runs the systems desk playbook as root only after the
+person reviews what changed since the last systems desk review. These tests
+build its view of the systems desk playbook from MMX's real explain output on a copy of
 the template, change the copy the way a pushed commit would, and check
 which changes the person is shown.
 """
@@ -206,7 +206,7 @@ class Review(unittest.TestCase):
         agreed, output = self.review(view, 'no answer is read')
         self.assertTrue(agreed)
         self.assertEqual(len(self.questions), 1)
-        self.assertIn('same as at your last desk review (abc1234', output)
+        self.assertIn('same as at your last systems desk review (abc1234', output)
 
     def test_a_change_is_shown_and_runs_only_on_yes(self):
         old = ['Task a on desk01: shell, ready', '  shell.script: "true"']
@@ -222,7 +222,7 @@ class Review(unittest.TestCase):
 
 
     def test_the_keys_the_lock_out_button_lets_in_are_shown_and_recorded(self):
-        """The record is what the lock-out button compares with, so the desk review shows
+        """The record is what the lock-out button compares with, so the systems desk review shows
         a pushed key before recording it."""
         keys = ['ssh-ed25519 AAAAone alex on desk01', 'ssh-ed25519 AAAAtwo util01, the mmhotline user']
         settings = {'vars': {'root_ssh_public_keys': keys, 'triage_ssh_public_key': 'ssh-ed25519 AAAAthree triage'}}
@@ -242,7 +242,7 @@ class Review(unittest.TestCase):
 
 
 class FirstDeskReview(unittest.TestCase):
-    """The bootstrap records the first desk review without a question, from
+    """The bootstrap records the first systems desk review without a question, from
     a copy of the coding agent's checkout, with MMX's real explain output."""
 
     def setUp(self):
@@ -281,7 +281,7 @@ class FirstDeskReview(unittest.TestCase):
     def test_the_bootstrap_records_the_first_desk_review_and_the_next_review_asks_nothing(self):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(DESK_REVIEW.record_the_first_desk_review(), 2)
-            self.assertEqual(DESK_REVIEW.record_the_first_desk_review(), 0, 'a desk with a review records nothing new')
+            self.assertEqual(DESK_REVIEW.record_the_first_desk_review(), 0, 'a systems desk with a review records nothing new')
         # Before util01 exists, the coding agent's checkout is the main copy.
         heads = [subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=where, text=True, capture_output=True).stdout
                  for where in (self.desk_copy, self.checkout)]
@@ -294,7 +294,7 @@ class FirstDeskReview(unittest.TestCase):
         with patch.object(DESK_REVIEW, 'ask_the_person', side_effect=questions.append), contextlib.redirect_stdout(output):
             self.assertTrue(DESK_REVIEW.review(view, 'abc1234'))
         self.assertEqual(questions, [])
-        self.assertIn('same as at your last desk review', output.getvalue())
+        self.assertIn('same as at your last systems desk review', output.getvalue())
 
     def test_only_the_bootstrap_records_without_a_question(self):
         with patch.dict(os.environ, {'SUDO_USER': 'alex'}):
@@ -307,7 +307,7 @@ class StagesAndFailure(unittest.TestCase):
     def test_before_util01_exists_the_review_runs_the_desks_own_stages_and_says_so(self):
         only, line = DESK_REVIEW.stages_to_run([], util01_exists=False)
         self.assertEqual(only, ['--only-fleet-stages', 'systems_desk,lock'])
-        self.assertEqual(line, 'util01 does not exist yet, so this review skips joining the desk to monitoring. '
+        self.assertEqual(line, 'util01 does not exist yet, so this review skips joining the systems desk to monitoring. '
                                'The first review after util01 exists does it.')
 
     def test_once_util01_exists_the_review_runs_every_stage(self):

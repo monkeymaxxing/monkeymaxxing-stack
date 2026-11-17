@@ -444,7 +444,8 @@ may do alone, makes one key, and types it on the desk.
     Do this now:
       1. Open  https://console.anthropic.com/settings/keys
       2. Press  Create Key.  Name it  Example triage agent.
-      3. Type this in your terminal, plus a code from your phone:
+      3. Type this in your terminal, plus a code from your phone.
+         It logs in to your systems desk:
 
            ssh desk01-secrets
 

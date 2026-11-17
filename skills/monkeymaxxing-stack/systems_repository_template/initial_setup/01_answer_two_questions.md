@@ -157,14 +157,13 @@ Before I start: one approval, so I do not ask "allow?" at every step.
 
 I add one list to this folder, in  .claude/settings.local.json.
 It lets me do these without asking each time:
-  - run the setup's tools: mmx, doubleshell, git, ssh to your desk, curl, and a few more
+  - run the setup's tools: mmx, doubleshell, git, ssh to your systems desk (a small server of your own that holds your keys), curl, and a few more
   - change files in this app's folder, and in the systems folder I make,  ~/code/example_systems
-  - add your desk to your SSH settings,  ~/.ssh/config
+  - add your systems desk to your SSH settings,  ~/.ssh/config
 
 It also blocks two commands that change files out of your sight.  I change files with my editor, so you see each change.
 
-Your desk is a small server of your own that holds the keys to your servers.
-I work through it and never copy the keys.
+I work through your systems desk and never copy your keys.
 
 Anything else still asks you.  The list stays on this laptop.  It never goes into your app's code.
 
@@ -252,15 +251,15 @@ the rules with this team's folders.
    Here is what I will set up.
 
      Servers near:       Frankfurt          (from your laptop's time zone: change this if your users are somewhere else)
-     Size:               the smallest system (3 servers and 1 desk)
+     Size:               the smallest system (3 servers and 1 systems desk, the small server that holds your keys)
      Your app's address: example.com        (your domain itself: say if you want another, such as notes.example.com)
      Company name:       Example            (from your domain)
      Password manager:   1Password          (the one this laptop has)
-     Your name on the desk:  alex           (your laptop's user name)
+     Your name on the systems desk:  alex           (your laptop's user name)
      Sign-in email:      alex@gmail.com     (from your Git settings)
 
      Cost:               about €27 a month for the servers at Hetzner
-                         (one line per server with its real price: the desk, app001, db01, util01)
+                         (one line per server with its real price: the systems desk, app001, db01, util01)
                          Backups at Backblaze: a few cents a month at first
                          Later, phone alerts: Pushover, a one-time fee of about $5 for each phone
 

@@ -75,18 +75,18 @@ func TestCloudflareMakesEveryTokenFromOneLinkToken(t *testing.T) {
 	desk := h.onlyLiveToken(deskTokenNameForAlex)
 	for _, group := range append(append([]permissionGroup{}, deskAccountPermissions...), deskZonePermissions...) {
 		if !strings.Contains(strings.Join(desk.Permissions, "|"), group.Name) {
-			t.Fatalf("the desk's token lacks %s: %v", group.Name, desk.Permissions)
+			t.Fatalf("the systems desk's token lacks %s: %v", group.Name, desk.Permissions)
 		}
 	}
 	if len(desk.Permissions) != 9 || strings.Contains(strings.Join(desk.Permissions, "|"), "API Tokens") {
-		t.Fatalf("the desk's token must hold exactly the nine groups and never make tokens: %v", desk.Permissions)
+		t.Fatalf("the systems desk's token must hold exactly the nine groups and never make tokens: %v", desk.Permissions)
 	}
 	zonePolicy := string(desk.Policies[1])
 	if !strings.Contains(zonePolicy, `"com.cloudflare.api.account.zone.*":"*"`) || !strings.Contains(zonePolicy, groupID("Zone Read", scopeZone)) {
 		t.Fatalf("the zone permissions must apply to every zone, with the zone's Zone Read: %s", zonePolicy)
 	}
 	if h.proxy["cloudflare"] != desk.Value || tokenFileValue(h.tokenFile(), "CLOUDFLARE_API_TOKEN") != desk.Value || tokenFileValue(h.tokenFile(), "CLOUDFLARE_ACCOUNT_ID") != testAccountID {
-		t.Fatal("the desk's token must reach the proxy and the token file, with the account ID")
+		t.Fatal("the systems desk's token must reach the proxy and the token file, with the account ID")
 	}
 
 	for _, tunnel := range h.cloudflare.Tunnels {
@@ -231,7 +231,7 @@ func TestAFailedProxyWriteDeletesTheNewDeskToken(t *testing.T) {
 		t.Fatalf("want the proxy's failure and the new token deleted, got %v", err)
 	}
 	if len(h.cloudflare.LiveTokensNamed(deskTokenNameForAlex)) != 0 || tokenFileValue(h.tokenFile(), "CLOUDFLARE_API_TOKEN") != "" {
-		t.Fatal("nothing may be left of the new desk token")
+		t.Fatal("nothing may be left of the new systems desk token")
 	}
 	if len(h.cloudflare.LiveTokensNamed(linkTokenNameForAlex)) != 0 {
 		t.Fatal("a failed run deletes its link token too")
@@ -448,7 +448,7 @@ func TestReplaceKeyMakesNewKeysAndDeletesTheOldOnes(t *testing.T) {
 	}
 	desk := h.onlyLiveToken(deskTokenNameForAlex)
 	if desk.ID == oldDesk.ID || h.proxy["cloudflare"] != desk.Value || tokenFileValue(h.tokenFile(), "CLOUDFLARE_API_TOKEN") != desk.Value {
-		t.Fatal("the desk's token must be new, in the proxy and the token file, and the old one deleted")
+		t.Fatal("the systems desk's token must be new, in the proxy and the token file, and the old one deleted")
 	}
 	posting := h.onlyLiveToken(postingTokenNameForAlex)
 	if posting.ID == oldPosting.ID || tokenFileValue(h.tokenFile(), "MMHOTLINE_STATUS_PAGE_R2_ACCESS_KEY_ID") != posting.ID {

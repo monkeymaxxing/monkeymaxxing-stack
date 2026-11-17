@@ -117,7 +117,8 @@ the first five answers below on real servers:
   for 14 days by default. Every week, a restore drill restores the backups
   onto a temporary server and checks the data.
 - **Secured.** No server has an open web port. The servers accept SSH logins
-  only from your team's systems desks and from the utility server. An
+  only from your team's systems desks, small separate servers that hold your keys,
+  and from the utility server. An
   intruder in your app cannot delete or change the stored backups.
 - **Recorded.** Every change to the servers is a commit to your systems
   repository, a Git repository on your own utility server, with a backup
@@ -259,15 +260,15 @@ Kubernetes existed.
 4. **Systems desks.** Each person has a systems desk. A systems desk is a
    small server of the person's own that works as a locked key box: it
    holds the production key, the secrets, and the person's tokens. Your
-   coding agent stays on your laptop and uses them through the desk, with
-   one code from your phone, and can never copy them. Only the desks and
+   coding agent stays on your laptop and uses them through the systems desk, with
+   one code from your phone, and can never copy them. Only the systems desks and
    the utility server can log in to the production servers. Your laptop
    cannot.
    *Why:* most developers keep their production keys in their home
    directory. Any program that runs as them can copy those keys and send
    them away, and one poisoned package is enough. With the Stack, no
    production key is on your laptop, so there is nothing to copy. And your
-   agent's long jobs keep running on the desk when your laptop is closed.
+   agent's long jobs keep running on the systems desk when your laptop is closed.
 5. **Alerts.** MMWatchdog checks every server and sends each problem that
    needs a person to MMHotline. MMHotline runs the triage agent, which
    investigates the problem and proposes a fix. Then MMHotline alerts the
@@ -375,7 +376,7 @@ Stack is open source: you can copy it and change any part to fit your needs.
 | Monitoring | [MMWatchdog](https://github.com/monkeymaxxing/mmwatchdog) | One program on each server. Each check comes with the next action to take, and its settings are readable files that your coding agent writes and you can read. |
 | Alerting and on-call | [MMHotline](https://github.com/monkeymaxxing/mmhotline) | It runs in your own accounts, with no price for each person, and gives each alert to the triage agent first. |
 | Alerts to your phone | [Pushover](https://pushover.net/) | Easy to start with, cheap, and its emergency alert sounds through Do Not Disturb and repeats until someone acknowledges it. Each person can add or choose other contact methods, such as a phone call. |
-| Where your production keys live | A systems desk | The desk runs in a different location from production, so your tools stay available when production's location fails. No production key is on your laptop, where a poisoned program could copy it. Your agent's long jobs keep running when your laptop is closed. |
+| Where your production keys live | A systems desk | The systems desk runs in a different location from production, so your tools stay available when production's location fails. No production key is on your laptop, where a poisoned program could copy it. Your agent's long jobs keep running when your laptop is closed. |
 
 The [design](docs/design.md#why-these-tools) records each choice in full,
 with what it costs and what was considered instead.
@@ -392,24 +393,21 @@ risk.
 
 **What the Stack protects you from**
 
-- **A stolen or lost laptop.** A login to your desk needs a code from your
-  phone.
-- **Malware or a thief copying your laptop's files.** Your production keys
-  and passwords are never on your laptop. They live on your desk, so the
-  laptop holds nothing worth stealing.
+- **Malware or a thief copying your laptop's files.** Your production keys and passwords are never on your laptop. They live on your systems desk, a small separate server that only you can log in to, so the laptop holds nothing worth stealing.
+- **A stolen or lost laptop.** A login to your systems desk needs a code from your phone.
 - **Your secrets reaching your AI provider.** Your coding agent uses your
   keys without ever seeing them. You type each secret at a hidden prompt,
   never in the chat.
 - **Clumsy mistakes,** your own or your agent's. Risky changes show you what
   will change first, and you type `yes`.
 - **Attackers from outside.** Your servers talk over a private network, and
-  only your laptop can reach your desk.
+  only your laptop can reach your systems desk.
 
 **What it doesn't**
 
 - **An agent you don't trust.** Your agent has full control of your
   servers; that is how it runs them for you. Use only an agent you trust.
-- **Someone in control of your laptop while your desk login is open.**
+- **Someone in control of your laptop while your systems desk login is open.**
   Until the login closes, they can do what your agent can do. The login
   closes by itself after an hour without use, and after ten hours at most.
   You can shorten both.
@@ -520,7 +518,7 @@ in Codex.
 
   Your agent never asks you to paste a secret into the chat: you type each
   secret at a hidden prompt that checks it. When your agent needs your
-  desk, it asks for one code from your phone, in the chat.
+  systems desk, it asks for one code from your phone, in the chat.
 - **Later,** in the same agent on your laptop: "Review my system", "Deploy
   shop to production", "We have paying customers now: what should
   change?", or "app001 died. Replace it."

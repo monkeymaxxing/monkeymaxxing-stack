@@ -93,7 +93,7 @@ further when the person first needs it.
 > 1. Chapter 1: Answer two questions: your domain and your server provider.
 > 2. Chapter 2: Get your app ready to deploy. You approve my changes to your app once.
 > 3. Chapter 3: Make your server account and your systems desk.
-> 4. Chapter 4: Set up your accounts and lock your desk: Cloudflare, your domain's registrar, Backblaze, one GitHub token, one recovery passphrase, and one phone code.
+> 4. Chapter 4: Set up your accounts and lock your systems desk: Cloudflare, your domain's registrar, Backblaze, one GitHub token, one recovery passphrase, and one phone code.
 > 5. Chapter 5: Put your site behind Cloudflare and lock your private pages.
 > 6. Chapter 6: Create your three production servers.
 > 7. Chapter 7: Install everything on the production servers.

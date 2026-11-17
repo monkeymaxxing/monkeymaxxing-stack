@@ -49,7 +49,7 @@ func beginQuestion(fd uintptr) {
 	}
 }
 
-var errNoTerminal = errors.New("this command asks for keys at hidden prompts, so it needs your own terminal. Run it in your desk terminal, not through a pipe or your coding agent")
+var errNoTerminal = errors.New("this command asks for keys at hidden prompts, so it needs your own terminal. Run it in your systems desk terminal, not through a pipe or your coding agent")
 
 // errEmptyValue is Enter at a hidden prompt with nothing typed, which
 // go-live answers by asking again.

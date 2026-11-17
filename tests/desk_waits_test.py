@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """wait-for-a-desk-job and wait-for-the-setup: the coding agent's two waits on
-the desk, which replace its loops of sleeps.
+the systems desk, which replace its loops of sleeps.
 
   python3 tests/desk_waits_test.py
 
@@ -117,17 +117,17 @@ class WaitForADeskJob(unittest.TestCase):
                 self.assertEqual(result.returncode, int(code))
                 lines = printed_lines(result.stdout)
                 self.assertIn('line two', lines)
-                self.assertIn(f'The desk job job-{code} ended with exit code {code}.', lines[-1])
+                self.assertIn(f'The systems desk job job-{code} ended with exit code {code}.', lines[-1])
                 self.assertNotIn('@clock', result.stdout)
 
     def test_a_job_that_ended_without_an_exit_code_returns_its_own_code_and_shows_why(self):
         (self.runs/'long.log').write_text('working\n')
-        (self.runs/'long.exit').write_text('stopped: the desk ended the job (timeout, killed TERM). A job runs 10 hours at most.\n')
+        (self.runs/'long.exit').write_text('stopped: the systems desk ended the job (timeout, killed TERM). A job runs 10 hours at most.\n')
         result = self.clock.run('long')
         self.assertEqual(result.returncode, 125)
         last = printed_lines(result.stdout)[-1]
-        self.assertIn('The desk job long ended without an exit code', last)
-        self.assertIn('stopped: the desk ended the job', last)
+        self.assertIn('The systems desk job long ended without an exit code', last)
+        self.assertIn('stopped: the systems desk ended the job', last)
 
     def test_the_wait_ends_with_the_job_and_prints_at_least_once_a_minute(self):
         log = self.runs/'every-server-1.log'
@@ -182,7 +182,7 @@ class WaitForADeskJob(unittest.TestCase):
     def test_a_job_that_never_started_is_named(self):
         result = self.clock.run('never-started')
         self.assertEqual(result.returncode, 66)
-        self.assertIn('No desk job named never-started', result.stdout)
+        self.assertIn('No systems desk job named never-started', result.stdout)
 
     def test_a_job_whose_log_appears_late_is_waited_for(self):
         self.clock.at(10, 'write', self.runs/'new.log', 'starting\n')

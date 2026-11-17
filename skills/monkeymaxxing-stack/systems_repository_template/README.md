@@ -42,7 +42,7 @@ Code or Codex, that writes files and runs commands for you.
    no server.
 4. **Systems desks.** Each person has a systems desk. A systems desk is a
    small server of the person's own, where the person's coding agent does
-   the systems work. Your laptop reaches only your desk, and the desks reach
+   the systems work. Your laptop reaches only your systems desk, and the systems desks reach
    the production servers.
 5. **Alerts.** MMWatchdog checks every server and sends each problem that
    needs a person to MMHotline. MMHotline runs the triage agent, which
@@ -119,7 +119,7 @@ uploaded files for a number of days that a setting names, 14 days by
 default. The operating procedure "Respond to a
 break-in" starts with finding out how the intruder got in. For a break-in
 through the app, the procedure replaces the app's keys and puts the data
-back, while every desk and the triage agent keep working. The procedure covers every
+back, while every systems desk and the triage agent keep working. The procedure covers every
 other way in too, such as replacing the keys that the intruder reached.
 
 **What costs money?** Five companies charge for the system:
@@ -155,15 +155,15 @@ limits.
 2. **Your laptop holds no production key.** Most developers keep their
    production keys in their home directory, where any program that runs as
    them can copy the keys and send them away. One poisoned package is
-   enough. With the Stack, the production key stays on your desk, so your
-   laptop has nothing to copy. From your laptop, you log in to your desk
+   enough. With the Stack, the production key stays on your systems desk, so your
+   laptop has nothing to copy. From your laptop, you log in to your systems desk
    with an SSH key and a phone code. A phone code is a six-digit code from
    an authenticator app on your phone, so a copied login key alone opens
-   nothing. And only the desks and the utility server can log in to the
+   nothing. And only the systems desks and the utility server can log in to the
    production servers.
-3. **Two Unix accounts.** The desk has your account and the coding agent's
+3. **Two Unix accounts.** The systems desk has your account and the coding agent's
    account. Your production SSH key and your API tokens stay in your
-   account. When the coding agent connects to a server, the desk signs with
+   account. When the coding agent connects to a server, the systems desk signs with
    your key for the coding agent. So your coding agent can use the key and
    the tokens, but your coding agent cannot read the key or the tokens. A
    mistake then cannot copy your own secrets into the coding agent's
@@ -172,20 +172,20 @@ limits.
    `sudo lock-everyone-out`, for a few narrow break-in cases, such as a
    suspect utility server. For a break-in through the app, the lock-out
    button would cut off the helpers you need, so you do not use the button
-   there. You run the lock-out button on your desk. After the lock-out,
-   your desk is the only way into the servers. You and your coding agent keep working from your desk. Every
-   other desk loses access to the servers, and the triage agent stops. Your
+   there. You run the lock-out button on your systems desk. After the lock-out,
+   your systems desk is the only way into the servers. You and your coding agent keep working from your systems desk. Every
+   other systems desk loses access to the servers, and the triage agent stops. Your
    coding agent can give you the command, but only you run the lock-out
    button.
 
-The servers and the desks talk over WireGuard, an encrypted private
+The servers and the systems desks talk over WireGuard, an encrypted private
 network. WireGuard's port is the only port that a server opens to the
-internet. A lost laptop, a lost phone, and a lost desk each have an
+internet. A lost laptop, a lost phone, and a lost systems desk each have an
 operating procedure.
 
 Three coding agents have three jobs. The coding agent on your laptop, if you
 use a coding agent there, works on your app's code. The coding agent on your
-desk does the systems work. The triage agent is a separate coding agent that
+systems desk does the systems work. The triage agent is a separate coding agent that
 MMHotline runs on `util01` for each alert.
 
 ## How you hear about a problem
@@ -291,7 +291,7 @@ four new accounts and already has four accounts.
 - **Four accounts your team already has:** your domain's registrar, your
   team's password manager, your Git host, and your coding agent's provider.
   The password manager holds the logins and the recovery items for every
-  account and for your desk.
+  account and for your systems desk.
 - **Two more accounts only when needed:** email addresses at your company's
   domain, for the sign-in to MMHotline's dashboard, and an email sending
   service when your app sends email.
@@ -319,8 +319,8 @@ example:
 Your coding agent explains each action, checks the current state, and
 follows the operating procedure for the job. Never paste a secret into the
 conversation. Your coding agent tells you where to type each secret: a
-hidden prompt of a short command, such as `ssh desk01-secrets`. When your
-coding agent needs your desk, it asks for one code from your phone, in the
+hidden prompt of a short command, such as `ssh desk01-secrets`, which logs in to your systems desk. When your
+coding agent needs your systems desk, it asks for one code from your phone, in the
 chat.
 
 [`AGENTS.md`](AGENTS.md) holds your coding agent's rules and lists the
@@ -356,7 +356,7 @@ person's own contact methods on MMHotline's page.
 | Replace a failed server | "app001 stopped. Examine the effect on the site and prepare a replacement." | [Replace a server](operating_procedures/replace_a_server.md) |
 | Recover missing data | "A change removed database rows. Give the recovery procedure." | [Recover missing rows](operating_procedures/recover_rows_lost_to_a_bad_change.md) |
 | Review the system | "Do the weekly system review." | [Weekly review](operating_procedures/do_the_weekly_system_review.md) |
-| Respond to a break-in | "Someone broke in. Find out how, and give me the response." Type `ssh -t desk01 sudo lock-everyone-out` on your laptop only when your coding agent shows that the case is one the page names. | [Respond to a break-in](operating_procedures/respond_to_a_break_in.md) |
+| Respond to a break-in | "Someone broke in. Find out how, and give me the response." Type `ssh -t desk01 sudo lock-everyone-out` (it logs in to your systems desk) on your laptop only when your coding agent shows that the case is one the page names. | [Respond to a break-in](operating_procedures/respond_to_a_break_in.md) |
 
 To release to production without the question for your approval, set
 `production_releases_wait_for_a_persons_approval` to `false` in
@@ -437,23 +437,23 @@ whether a trigger arrived.
 
 ## Looking after your systems desk
 
-You manage your desk with `ssh desk01-review` on your laptop, plus a
-phone code. When the desk's settings changed since your last review, the
+You manage your systems desk with `ssh desk01-review` on your laptop, plus a
+phone code. When the systems desk's settings changed since your last review, the
 command shows each change and runs only after you type `yes`. Your coding
 agent explains each change first.
 
 Keep the recovery passphrase that
-[chapter 4 (set up your accounts and lock your desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#steps)
+[chapter 4 (set up your accounts and lock your systems desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#steps)
 showed you in the team's password manager. It opens the recovery bundle,
-which holds every item a lost desk needs. If you lose your phone, your laptop,
-or your desk, tell your coding agent. The operating procedures are
+which holds every item a lost systems desk needs. If you lose your phone, your laptop,
+or your systems desk, tell your coding agent. The operating procedures are
 [Recover from a lost phone](operating_procedures/recover_from_a_lost_phone.md),
 [Recover from a lost or stolen laptop](operating_procedures/recover_from_a_lost_or_stolen_laptop.md),
 and [Rebuild a systems desk](operating_procedures/rebuild_a_systems_desk.md).
 
 Your laptop still holds the credentials for your app's code, such as your
 Git login. If a program you do not trust ran on your laptop, follow the
-laptop procedure above: it replaces those credentials and your desk. The
+laptop procedure above: it replaces those credentials and your systems desk. The
 credential that publishes your app's image is not on the laptop: it is
 GitHub's own short-lived token inside your CI, or, for a team without CI,
 your own registry login, which the coding agent uses on your laptop only

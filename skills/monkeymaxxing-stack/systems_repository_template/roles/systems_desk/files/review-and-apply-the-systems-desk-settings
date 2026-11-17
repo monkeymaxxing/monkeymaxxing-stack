@@ -139,7 +139,7 @@ def inside(repository, path):
     could change after the review."""
     resolved = path.resolve()
     if resolved != repository and repository not in resolved.parents:
-        raise Stop('%s points outside the systems repository, to %s. The desk playbook reads only files inside '
+        raise Stop('%s points outside the systems repository, to %s. The systems desk playbook reads only files inside '
                    'the repository, so remove that link. Nothing ran.' % (path.relative_to(repository), resolved))
     return resolved
 
@@ -200,7 +200,7 @@ def refuse_ssh_settings_includes(repository, path):
     file itself, which the review shows."""
     for number, line in enumerate(inside(repository, path).read_text(errors='replace').split('\n'), 1):
         if re.match(r'\s*include(\s*=|\s)', line, re.IGNORECASE):
-            raise Stop('%s, line %d, has an Include line. The desk playbook takes its SSH settings only from that file, '
+            raise Stop('%s, line %d, has an Include line. The systems desk playbook takes its SSH settings only from that file, '
                        'so your review sees every setting: put the included settings into %s itself and remove the '
                        'Include line. Nothing ran.' % (shown_name(repository, path), number, shown_name(repository, path)))
 
@@ -355,8 +355,8 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY):
         if done.returncode:
             return False, 'git %s in %s did not work: %s' % (arguments[0], repository, visible(' '.join(done.stderr.split())[:400]))
     if has_origin:
-        return True, 'Pulled main from the main copy on util01: the desk\'s copy is at %s.' % current_commit(repository)
-    return True, ('Pulled main from the coding agent\'s checkout, the main copy until util01 exists: the desk\'s copy is at %s.'
+        return True, 'Pulled main from the main copy on util01: the systems desk\'s copy is at %s.' % current_commit(repository)
+    return True, ('Pulled main from the coding agent\'s checkout, the main copy until util01 exists: the systems desk\'s copy is at %s.'
                   % current_commit(repository))
 
 
@@ -390,7 +390,7 @@ def ask_the_person(question):
         # Unbuffered: a terminal cannot seek, which a buffered read-write file needs.
         terminal = open('/dev/tty', 'rb+', buffering=0)
     except OSError:
-        raise Stop('review-and-apply-the-systems-desk-settings asks you a question, so run it in your own desk terminal. Nothing ran.')
+        raise Stop('review-and-apply-the-systems-desk-settings asks you a question, so run it in your own systems desk terminal. Nothing ran.')
     with terminal:
         terminal.write(question.encode())
         return terminal.readline().decode(errors='replace').strip()
@@ -414,20 +414,20 @@ def review(view, commit):
     """True when the person agreed to run this view, or nothing changed."""
     old, old_commit = read_record()
     if old == view:
-        print('What the desk playbook does is the same as at your last desk review (%s). Running it now.' % old_commit, flush=True)
+        print('What the systems desk playbook does is the same as at your last systems desk review (%s). Running it now.' % old_commit, flush=True)
         return True
     if old is None:
-        print('This desk has no desk review yet, so there is nothing to compare with.')
-        print('This desk review records what the desk playbook does at %s as reviewed. Later desk reviews show only what changed.' % commit)
-        print('If this desk replaces another desk, check the recent commits on main with your team first.')
-        answer = ask_the_person('Type yes to run the desk playbook and record it as reviewed, or press Enter to stop: ')
+        print('This systems desk has no systems desk review yet, so there is nothing to compare with.')
+        print('This systems desk review records what the systems desk playbook does at %s as reviewed. Later systems desk reviews show only what changed.' % commit)
+        print('If this systems desk replaces another systems desk, check the recent commits on main with your team first.')
+        answer = ask_the_person('Type yes to run the systems desk playbook and record it as reviewed, or press Enter to stop: ')
         return answer.lower() == 'yes'
     diff = changes(old, view)
-    print('What the desk playbook does changed since your last desk review (%s).' % old_commit)
-    print('This desk review runs as root on this desk, where your production key, phone-code secret and tokens are.')
+    print('What the systems desk playbook does changed since your last systems desk review (%s).' % old_commit)
+    print('This systems desk review runs as root on this systems desk, where your production key, phone-code secret and tokens are.')
     print('Your coding agent, your teammates and util01 can push changes to it, so read each change before you agree;')
     print('your coding agent explains each change it pushed.')
-    print('Lines with - are what the desk playbook did at your last review; lines with + are what this run would do.')
+    print('Lines with - are what the systems desk playbook did at your last review; lines with + are what this run would do.')
     print('Each @@ line names the task or file the change is in.')
     print(flush=True)
     show(diff)
@@ -435,7 +435,7 @@ def review(view, commit):
     added = sum(1 for line in diff if line.startswith('+ '))
     print('%d lines removed and %d added. If a change is not one you expect, stop and ask your team' % (removed, added))
     print('or your coding agent what it is for, before you run it.')
-    answer = ask_the_person('Type yes to run the changed desk playbook as root, or press Enter to stop: ')
+    answer = ask_the_person('Type yes to run the changed systems desk playbook as root, or press Enter to stop: ')
     return answer.lower() == 'yes'
 
 
@@ -447,7 +447,7 @@ def what_the_desk_playbook_does(repository):
                                cwd=repository, text=True, capture_output=True,
                                env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8'})
     if explained.returncode:
-        raise Stop('mmx explain could not read the desk playbook:\n%s\nNothing ran.' % explained.stderr.strip())
+        raise Stop('mmx explain could not read the systems desk playbook:\n%s\nNothing ran.' % explained.stderr.strip())
     settings = yaml.safe_load((repository/'mmx_project_settings.yml').read_text()) or {}
     inventory_path = repository/'inventories'/(str(settings.get('default_inventory', '')) + '.yml')
     inventory = yaml.safe_load(inside(repository, inventory_path).read_text()) or {}
@@ -461,16 +461,16 @@ def record_the_first_desk_review():
     records what the desk playbook does there as reviewed. Returns 2 when
     it recorded, 0 when this desk has a desk review already."""
     if os.geteuid() != 0 or os.environ.get('SUDO_USER'):
-        raise Stop('--record-the-first-desk-review is the bootstrap\'s step, run by the desk playbook as root. Nothing ran.')
+        raise Stop('--record-the-first-desk-review is the bootstrap\'s step, run by the systems desk playbook as root. Nothing ran.')
     if read_record()[0] is not None:
         return 0
     DESK_COPY.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     pulled, reason = pull_main_into_the_desks_copy(DESK_COPY)
     if not pulled:
-        raise Stop('The desk copy could not be made from %s: %s' % (CODING_AGENT_CHECKOUT, reason))
+        raise Stop('The systems desk copy could not be made from %s: %s' % (CODING_AGENT_CHECKOUT, reason))
     view, keys_view = what_the_desk_playbook_does(DESK_COPY)
     write_record(view, '%s, recorded by the bootstrap' % current_commit(DESK_COPY), keys_view)
-    print('Recorded the first desk review at %s. Later desk reviews show only what changed since.' % current_commit(DESK_COPY))
+    print('Recorded the first systems desk review at %s. Later systems desk reviews show only what changed since.' % current_commit(DESK_COPY))
     return 2
 
 
@@ -521,7 +521,7 @@ def stages_to_run(only, util01_exists):
     if util01_exists or only:
         return only, None
     return ['--only-fleet-stages', 'systems_desk,lock'], (
-        'util01 does not exist yet, so this review skips joining the desk to monitoring. '
+        'util01 does not exist yet, so this review skips joining the systems desk to monitoring. '
         'The first review after util01 exists does it.')
 
 
@@ -544,8 +544,8 @@ def run_and_explain_a_failure(command, repository):
 
 
 FAILED_REVIEW_SENTENCE = (
-    'The desk review failed: one step of the desk playbook did not work, and nothing else was touched. '
-    'Your site and servers are not affected, and the desk keeps working with the settings it had. '
+    'The systems desk review failed: one step of the systems desk playbook did not work, and nothing else was touched. '
+    'Your site and servers are not affected, and the systems desk keeps working with the settings it had. '
     'Tell your coding agent: it reads the technical lines above, fixes the cause, and you run the review again.')
 
 
