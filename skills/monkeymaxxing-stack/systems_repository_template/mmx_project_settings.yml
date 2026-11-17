@@ -90,6 +90,13 @@ vars:
   # sets false, because the deploy's health check keeps users on the old
   # version when the new version fails.
   production_releases_wait_for_a_persons_approval: true
+  # The first release, at the end of the first sitting (chapter 9), asks for
+  # no approval while this is false. Reason: the person approved the app's
+  # changes in chapter 2, and the first release is that approved image.
+  # Setting it to true asks again, once, before the first release. Like the
+  # setting above, the coding agent follows it; no server reads it. Later
+  # releases follow production_releases_wait_for_a_persons_approval.
+  first_release_waits_for_a_persons_approval: false
   # The inventory overrides this only while a database moves in. Removing
   # the inventory block returns to this empty default.
   database_moving_in: {}
