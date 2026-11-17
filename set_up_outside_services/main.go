@@ -127,13 +127,29 @@ func run(arguments []string, out, errorOut io.Writer) int {
 		}
 	}
 	if err != nil {
-		fmt.Fprintf(errorOut, "Stopped: %v.\n", trimPeriod(err.Error()))
 		if errors.Is(err, errUsage) {
+			fmt.Fprintf(errorOut, "Stopped: %v.\n", trimPeriod(err.Error()))
 			return 4
 		}
+		// The plain sentence comes first, the technical line after it.
+		fmt.Fprintf(errorOut, "%s\n\nTechnical line for your coding agent:\n", failureInPlainWords(arguments[0]))
+		fmt.Fprintf(errorOut, "Stopped: %v.\n", trimPeriod(err.Error()))
 		return 1
 	}
 	return 0
+}
+
+// failureInPlainWords says, before any technical line: what failed, whether
+// anything is harmed, and what happens next. The reason it claims no
+// undo or rollback: the commands undo nothing they finished, and none of
+// them touches the person's site or servers when it stops.
+func failureInPlainWords(command string) string {
+	what := "The command " + command + " stopped before it finished."
+	if command == "go-live" {
+		what = "The first setup stopped before it finished."
+	}
+	return what + "  Nothing that it already finished is undone, and your site and servers are not affected.  " +
+		"Tell your coding agent: it reads the technical line below and tells you what to do next."
 }
 
 var errUsage = errors.New("see set-up-outside-services --help")
