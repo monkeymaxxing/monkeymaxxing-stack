@@ -130,9 +130,18 @@ vars:
       asset_directory: /app/assets
       database_name: customer_portal_go
       env:
+        APP_ORIGIN: https://go-portal.example.com
+        R2_BUCKET: example-customer-portal-go-production
         R2_ENDPOINT: https://example-account-id.r2.cloudflarestorage.com
-      secrets_from_vault: [APP_ORIGIN, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]
+      secrets_from_vault:
+        R2_ACCESS_KEY_ID:
+          where_the_value_comes_from: generated_by_the_setup
+        R2_SECRET_ACCESS_KEY:
+          where_the_value_comes_from: generated_by_the_setup
       production_uploads_r2_bucket: example-customer-portal-go-production
+      production_uploads_r2_key_variables:
+        access_key_id: R2_ACCESS_KEY_ID
+        secret_access_key: R2_SECRET_ACCESS_KEY
       restore_drill_check_queries:
         - name: the_migrations_came_back
           sql: select count(*) = 2 from schema_migrations where version in ('0001_portal.sql', '0002_record_descriptions.sql')
@@ -147,22 +156,18 @@ Set `vars.backups.uploads_backup_runs_on: [util_server]` once uploads backups ar
 The [uploads recovery procedure](../../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/restore_an_uploaded_file.md)
 explains how object versions are restored separately from Postgres.
 
-Add these vault keys through `mmx secrets`, following the systems repository's secret procedure:
+The setup (`set-up-outside-services`) makes these vault keys. Nobody adds them by hand:
 
 | Production key | Staging key | Content |
 | --- | --- | --- |
-| `customer_portal_go_database_password` | `staging_customer_portal_go_database_password` | Separate generated database passwords |
-| `customer_portal_go_APP_ORIGIN` | `staging_customer_portal_go_APP_ORIGIN` | `https://go-portal.example.com` / `https://staging.go-portal.example.com` |
-| `customer_portal_go_R2_BUCKET` | `staging_customer_portal_go_R2_BUCKET` | Separate private bucket names |
-| `customer_portal_go_R2_ACCESS_KEY_ID` | `staging_customer_portal_go_R2_ACCESS_KEY_ID` | Bucket-scoped access key IDs |
-| `customer_portal_go_R2_SECRET_ACCESS_KEY` | `staging_customer_portal_go_R2_SECRET_ACCESS_KEY` | Bucket-scoped secret keys |
+| `customer_portal_go_database_password` | `staging_customer_portal_go_database_password` | A generated database password for each environment |
+| `customer_portal_go_R2_ACCESS_KEY_ID` | `staging_customer_portal_go_R2_ACCESS_KEY_ID` | Access key ID of the bucket-scoped R2 key |
+| `customer_portal_go_R2_SECRET_ACCESS_KEY` | `staging_customer_portal_go_R2_SECRET_ACCESS_KEY` | Secret of the bucket-scoped R2 key |
 
 In `playbooks/every_server.yml`, extend production's `app_server` and `jobs_server` role inputs under `app_secrets`:
 
 ```yaml
 customer_portal_go_database_password: "{{ .secrets.customer_portal_go_database_password }}"
-customer_portal_go_APP_ORIGIN: "{{ .secrets.customer_portal_go_APP_ORIGIN }}"
-customer_portal_go_R2_BUCKET: "{{ .secrets.customer_portal_go_R2_BUCKET }}"
 customer_portal_go_R2_ACCESS_KEY_ID: "{{ .secrets.customer_portal_go_R2_ACCESS_KEY_ID }}"
 customer_portal_go_R2_SECRET_ACCESS_KEY: "{{ .secrets.customer_portal_go_R2_SECRET_ACCESS_KEY }}"
 ```
@@ -172,11 +177,11 @@ For example:
 
 ```yaml
 customer_portal_go_database_password: "{{ .secrets.staging_customer_portal_go_database_password }}"
-customer_portal_go_APP_ORIGIN: "{{ .secrets.staging_customer_portal_go_APP_ORIGIN }}"
-customer_portal_go_R2_BUCKET: "{{ .secrets.staging_customer_portal_go_R2_BUCKET }}"
 customer_portal_go_R2_ACCESS_KEY_ID: "{{ .secrets.staging_customer_portal_go_R2_ACCESS_KEY_ID }}"
 customer_portal_go_R2_SECRET_ACCESS_KEY: "{{ .secrets.staging_customer_portal_go_R2_SECRET_ACCESS_KEY }}"
 ```
+
+`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
 
 Also extend each `database_server` role's `database_passwords` mapping in `playbooks/every_server.yml`:
 

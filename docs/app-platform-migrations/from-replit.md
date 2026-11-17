@@ -137,7 +137,7 @@ Required destination settings:
 | `DATABASE_URL` | PostgreSQL URL, with every Stack database server and `target_session_attrs=read-write` |
 | `S3_ENDPOINT`, `S3_REGION` | S3 API endpoint and signing region; R2 uses region `auto` |
 | `S3_BUCKET` | Private destination bucket |
-| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Destination bucket credentials |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | The app's R2 key for the destination bucket, made by the setup |
 | `PORT`, `WEB_CONCURRENCY` | Web port and worker-process count |
 | `AUTH_ISSUER` | Issuer for new local password identities |
 | `APP_ENV` | `production`, or `staging` for invented test data |
@@ -246,8 +246,9 @@ Jobs also use transaction locks, so `jobs_connect_directly_to_postgres` is `fals
 Set `asset_directory` to `/app/assets`. The portal embeds CSS and JavaScript in its HTML and needs no separate static assets.
 
 Register the image, database name, two free web ports, commands, bucket, and S3 settings under `vars.apps.portal`.
-Add S3 credential names to `secrets_from_vault` and pass the corresponding secrets through your app-server role calls.
-Follow the existing app-secret mapping convention in the systems repository.
+Add `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` to `secrets_from_vault` as a mapping, each with `where_the_value_comes_from: generated_by_the_setup`.
+Name them in `production_uploads_r2_key_variables` as `access_key_id` and `secret_access_key`, because the uploads stay in R2 and the setup makes the app's R2 key for them.
+The setup (`set-up-outside-services`) makes the vault keys `<app>_<VARIABLE>`. Pass each one through `app_secrets` in `playbooks/every_server.yml`, as `<app>_<VARIABLE>: "{{ .secrets.<app>_<VARIABLE> }}"`.
 The Stack supplies `DATABASE_URL`, `PORT`, and the server's worker count.
 Set `production_uploads_r2_bucket` to the destination bucket, so the Stack includes file bytes in upload backups.
 

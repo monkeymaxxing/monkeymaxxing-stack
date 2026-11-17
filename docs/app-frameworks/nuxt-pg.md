@@ -193,13 +193,18 @@ nuxt_portal:
   asset_directory: /app/.output/public
   database_name: nuxt_portal
   env:
+    APP_ORIGIN: https://portal.example.com
+    R2_BUCKET: example-nuxt-portal-production
     R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
   secrets_from_vault:
-    - APP_ORIGIN
-    - R2_BUCKET
-    - R2_ACCESS_KEY_ID
-    - R2_SECRET_ACCESS_KEY
+    R2_ACCESS_KEY_ID:
+      where_the_value_comes_from: generated_by_the_setup
+    R2_SECRET_ACCESS_KEY:
+      where_the_value_comes_from: generated_by_the_setup
   production_uploads_r2_bucket: example-nuxt-portal-production
+  production_uploads_r2_key_variables:
+    access_key_id: R2_ACCESS_KEY_ID
+    secret_access_key: R2_SECRET_ACCESS_KEY
   restore_drill_check_queries:
     - name: the_migrations_came_back
       sql: SELECT count(*) = 2 FROM schema_migrations WHERE version IN ('0001_portal.sql', '0002_record_descriptions.sql')
@@ -210,11 +215,7 @@ Production's `R2_BUCKET` must equal `production_uploads_r2_bucket`.
 Extend the upload-backup reader's bucket scope and enable uploads backups when needed.
 A database backup does not include uploaded object bytes.
 
-Add vault keys `nuxt_portal_database_password`, `nuxt_portal_APP_ORIGIN`,
-`nuxt_portal_R2_BUCKET`, `nuxt_portal_R2_ACCESS_KEY_ID`,
-and `nuxt_portal_R2_SECRET_ACCESS_KEY`.
-Add separate staging keys prefixed `staging_nuxt_portal_`.
-Use your existing vault procedure. Keep secret values out of Git.
+The setup (`set-up-outside-services`) makes the vault keys `nuxt_portal_database_password` and `nuxt_portal_<VARIABLE>` for each name in `secrets_from_vault`, and with staging01 their `staging_` copies. Nobody adds them by hand. Keep secret values out of Git.
 
 Extend `database_passwords` in production's database role call in `playbooks/every_server.yml`:
 
@@ -234,16 +235,15 @@ Add these mappings to production's `app_secrets` for `app_server` and `jobs_serv
 
 ```yaml
 nuxt_portal_database_password: "{{ .secrets.nuxt_portal_database_password }}"
-nuxt_portal_APP_ORIGIN: "{{ .secrets.nuxt_portal_APP_ORIGIN }}"
-nuxt_portal_R2_BUCKET: "{{ .secrets.nuxt_portal_R2_BUCKET }}"
 nuxt_portal_R2_ACCESS_KEY_ID: "{{ .secrets.nuxt_portal_R2_ACCESS_KEY_ID }}"
 nuxt_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.nuxt_portal_R2_SECRET_ACCESS_KEY }}"
 ```
 
 For staging's `app_server` call, keep each left-hand name above.
 Use the corresponding `staging_nuxt_portal_` vault key on each right-hand side.
+`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
 Extend the app's mappings in `playbooks/end_connections_that_use_an_old_database_password.yml` using the existing app's pattern.
-The database password and all four app secrets need rotation mappings.
+The database password and both app secrets need rotation mappings.
 
 In `inventories/servers.yml`, extend `deployed_image_tags.staging`,
 `deployed_image_tags.production`, `public_host_names.staging`, and `public_host_names.production`.

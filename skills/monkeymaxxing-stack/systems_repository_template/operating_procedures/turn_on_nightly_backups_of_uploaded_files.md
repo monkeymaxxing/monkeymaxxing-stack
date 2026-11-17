@@ -31,8 +31,11 @@ For the first app that keeps uploads, prepare the bucket, keys, and settings in 
    committed and pushed, then pulled into the person's repository on the desk.
    - Under `vars.apps`, set the app's `production_uploads_r2_bucket` to the
      name of the app's production R2 bucket.
-   - Set the app's `production_uploads_r2_key_variables` to the two names
-     in its `secrets_from_vault` that hold its R2 key.
+   - Add the app's two R2 key variables to its `secrets_from_vault`, such
+     as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, each with
+     `where_the_value_comes_from: generated_by_the_setup`, and set the
+     app's `production_uploads_r2_key_variables` to those two names. The
+     setup makes the key at Cloudflare and saves it under them.
    - With `staging01`, also set the app's `staging_uploads_r2_bucket` to
      its own staging bucket. Add the two `staging_` keys to the staging
      `app_secrets` in `playbooks/every_server.yml`. Nothing copies the

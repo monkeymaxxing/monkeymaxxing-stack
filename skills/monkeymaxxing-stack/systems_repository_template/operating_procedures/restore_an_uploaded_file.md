@@ -111,9 +111,10 @@ For one file or a few named files.
      playbook commands.
    - Set `READ_BACKUP_AS_OF` to the restore time from step 2.
    - `util01`'s own R2 key can only read. To write the restored files, the
-     stage gives rclone the app's R2 key from the vault. Use the app's
-     `secrets_from_vault` names, in the example `shop_R2_ACCESS_KEY_ID`
-     and `shop_R2_SECRET_ACCESS_KEY`.
+     stage gives rclone the app's R2 key from the vault. Use the two
+     names the app's `production_uploads_r2_key_variables` gives, with
+     the app's name in front, in the example `shop_R2_ACCESS_KEY_ID` and
+     `shop_R2_SECRET_ACCESS_KEY`.
 
    ```yaml
    fleet_stages:

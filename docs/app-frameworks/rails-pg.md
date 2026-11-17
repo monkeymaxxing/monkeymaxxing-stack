@@ -167,14 +167,20 @@ rails_portal:
   database_name: rails_portal
   env:
     RAILS_ENV: production
+    APP_ORIGIN: https://portal.example.com
+    R2_BUCKET: example-rails-portal-production
     R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
   secrets_from_vault:
-    - APP_ORIGIN
-    - SECRET_KEY_BASE
-    - R2_BUCKET
-    - R2_ACCESS_KEY_ID
-    - R2_SECRET_ACCESS_KEY
+    SECRET_KEY_BASE:
+      where_the_value_comes_from: generated_by_the_setup
+    R2_ACCESS_KEY_ID:
+      where_the_value_comes_from: generated_by_the_setup
+    R2_SECRET_ACCESS_KEY:
+      where_the_value_comes_from: generated_by_the_setup
   production_uploads_r2_bucket: example-rails-portal-production
+  production_uploads_r2_key_variables:
+    access_key_id: R2_ACCESS_KEY_ID
+    secret_access_key: R2_SECRET_ACCESS_KEY
   restore_drill_check_queries:
     - name: the_migrations_came_back
       sql: SELECT count(*) = 2 FROM schema_migrations WHERE version IN ('20261104000100', '20261104000200')
@@ -185,11 +191,7 @@ Production's `R2_BUCKET` must equal `production_uploads_r2_bucket`.
 Extend the upload-backup reader's bucket scope and enable uploads backups when needed.
 A database backup does not include uploaded object bytes.
 
-Add vault keys `rails_portal_database_password`, `rails_portal_APP_ORIGIN`,
-`rails_portal_SECRET_KEY_BASE`, `rails_portal_R2_BUCKET`, `rails_portal_R2_ACCESS_KEY_ID`,
-and `rails_portal_R2_SECRET_ACCESS_KEY`.
-Add separate staging keys prefixed `staging_rails_portal_`.
-Use your existing vault procedure. Keep secret values out of Git.
+The setup (`set-up-outside-services`) makes the vault keys `rails_portal_database_password` and `rails_portal_<VARIABLE>` for each name in `secrets_from_vault`, and with staging01 their `staging_` copies. Nobody adds them by hand. Keep secret values out of Git.
 
 Extend `database_passwords` in production's database role call in `playbooks/every_server.yml`:
 
@@ -209,17 +211,16 @@ Add these mappings to production's `app_secrets` for `app_server` and `jobs_serv
 
 ```yaml
 rails_portal_database_password: "{{ .secrets.rails_portal_database_password }}"
-rails_portal_APP_ORIGIN: "{{ .secrets.rails_portal_APP_ORIGIN }}"
 rails_portal_SECRET_KEY_BASE: "{{ .secrets.rails_portal_SECRET_KEY_BASE }}"
-rails_portal_R2_BUCKET: "{{ .secrets.rails_portal_R2_BUCKET }}"
 rails_portal_R2_ACCESS_KEY_ID: "{{ .secrets.rails_portal_R2_ACCESS_KEY_ID }}"
 rails_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.rails_portal_R2_SECRET_ACCESS_KEY }}"
 ```
 
 For staging's `app_server` call, keep each left-hand name above.
 Use the corresponding `staging_rails_portal_` vault key on each right-hand side.
+`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
 Extend the app's mappings in `playbooks/end_connections_that_use_an_old_database_password.yml` using the existing app's pattern.
-The database password and all five app secrets need rotation mappings.
+The database password and all three app secrets need rotation mappings.
 
 In `inventories/servers.yml`, extend `deployed_image_tags.staging`,
 `deployed_image_tags.production`, `public_host_names.staging`, and `public_host_names.production`.

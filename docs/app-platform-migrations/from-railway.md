@@ -216,8 +216,15 @@ vars:
         S3_REGION: auto
         S3_BUCKET: example-portal-uploads
         S3_FORCE_PATH_STYLE: "false"
-      secrets_from_vault: [S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY]
+      secrets_from_vault:
+        S3_ACCESS_KEY_ID:
+          where_the_value_comes_from: generated_by_the_setup
+        S3_SECRET_ACCESS_KEY:
+          where_the_value_comes_from: generated_by_the_setup
       production_uploads_r2_bucket: example-portal-uploads
+      production_uploads_r2_key_variables:
+        access_key_id: S3_ACCESS_KEY_ID
+        secret_access_key: S3_SECRET_ACCESS_KEY
       restore_drill_check_queries:
         - name: the_migrations_came_back
           sql: select count(*) = 2 from schema_migrations
@@ -225,8 +232,8 @@ vars:
 
 The Stack supplies `DATABASE_URL`, `DATABASE_READ_URL`, `PORT`, and `WEB_CONCURRENCY`.
 The portal reads through the primary pool. `DATABASE_READ_URL` is available but unused.
-Store object credentials in the systems vault and pass the app's vault keys through the deployment playbook's `app_secrets`.
-Follow the installed Stack's secret-wiring instructions. Never retain Railway credentials in destination containers.
+The uploads stay in R2, so the two S3 key variables are the app's R2 key. The setup makes that key and its vault keys, and `production_uploads_r2_key_variables` names its two variables.
+Pass the app's vault keys through the deployment playbook's `app_secrets`. Never retain Railway credentials in destination containers.
 For the app named `railway_portal`, add the following entries to each production app-server and jobs-server `app_secrets` mapping:
 
 ```yaml
@@ -236,7 +243,7 @@ app_secrets:
   railway_portal_S3_SECRET_ACCESS_KEY: "{{ .secrets.railway_portal_S3_SECRET_ACCESS_KEY }}"
 ```
 
-Create the three matching vault keys before applying the configuration. Preserve existing apps' entries in each mapping.
+The setup (`set-up-outside-services`) makes the three matching vault keys. Nobody adds them by hand. Preserve existing apps' entries in each mapping.
 Staging uses the corresponding `staging_railway_portal_*` vault values with the unprefixed mapping keys shown above.
 For a laptop or staging, run `npm run seed-test-data` with its own `APP_URL` and runtime `FIXTURE_PASSWORD`.
 Do not import production accounts or documents into a developer's laptop database or staging test data.

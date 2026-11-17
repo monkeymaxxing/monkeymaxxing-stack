@@ -45,7 +45,7 @@ Do not commit real secrets.
 | --- | --- |
 | `DATABASE_URL` | Stack-generated multi-host writer URL, described below |
 | `APP_URL` | Public HTTPS origin, such as `https://portal.example.com` |
-| `APP_KEY` | Stable Laravel encryption key shared by every web and jobs container |
+| `APP_KEY` | Random value made by the setup, shared by every web and jobs container; `config/app.php` derives the Laravel encryption key from it |
 | `APP_ENV` | `production` normally, `staging` only for staging |
 | `PORT` | Web port selected by the Stack |
 | `WEB_CONCURRENCY` | PHP thread count selected by the Stack |
@@ -54,28 +54,14 @@ Do not commit real secrets.
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Credentials restricted to the selected bucket |
 | `FIXTURE_PASSWORD` | Runtime-only seed password, 12 to 72 bytes, needed only for staging seeds |
 
-Generate `APP_KEY` once in your secret-management process.
-The command below writes a protected user credential file and refuses to overwrite an existing file:
+The setup makes `APP_KEY` as 64 random letters and digits. Laravel's AES-256-CBC needs a 32-byte key, so the app's `config/app.php` derives the key from the setup's value:
 
-```sh
-python3 - <<'PYKEY'
-import base64, os, secrets
-from pathlib import Path
-path = Path.home() / '.config/laravel-portal/env'
-path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-with os.fdopen(fd, 'w') as stream:
-    stream.write('export APP_KEY=base64:' + base64.b64encode(secrets.token_bytes(32)).decode() + '\n')
-PYKEY
+```php
+'key' => 'base64:'.base64_encode(hash('sha256', env('APP_KEY'), true)),
 ```
 
-Import the generated `APP_KEY` into the Stack vault through your secret-management process, without displaying the key.
-For manual containers, copy the value into the protected app env file using your secret-management tool.
-Podman's app env file uses `APP_KEY=...`, without `export`.
-
-A Laravel key is `base64:` followed by the Base64 encoding of 32 random bytes.
-Store `APP_KEY` in the vault without printing the key or passing the key as a command argument.
-Every app server must receive the identical key. Changing `APP_KEY` invalidates existing cookies.
+The same value reaches every web and jobs container, so the derived key is stable.
+Changing `APP_KEY` invalidates existing cookies.
 
 Production cookies require HTTPS. The isolated test alone sets `SESSION_SECURE_COOKIE=false` for loopback HTTP.
 The app uses PostgreSQL sessions, so login survives requests to another app server.
@@ -200,15 +186,21 @@ vars:
       writable_temporary_directories: [/app/storage/framework/views, /config/caddy, /data/caddy]
       database_name: laravel_portal
       env:
+        APP_ENV: production
+        APP_URL: https://portal.example.com
+        R2_BUCKET: example-laravel-portal-production
         R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
       secrets_from_vault:
-        - APP_ENV
-        - APP_URL
-        - APP_KEY
-        - R2_BUCKET
-        - R2_ACCESS_KEY_ID
-        - R2_SECRET_ACCESS_KEY
+        APP_KEY:
+          where_the_value_comes_from: generated_by_the_setup
+        R2_ACCESS_KEY_ID:
+          where_the_value_comes_from: generated_by_the_setup
+        R2_SECRET_ACCESS_KEY:
+          where_the_value_comes_from: generated_by_the_setup
       production_uploads_r2_bucket: example-laravel-portal-production
+      production_uploads_r2_key_variables:
+        access_key_id: R2_ACCESS_KEY_ID
+        secret_access_key: R2_SECRET_ACCESS_KEY
       restore_drill_check_queries:
         - name: the_migrations_came_back
           sql: >-
@@ -216,21 +208,18 @@ vars:
             ('0001_01_01_000001_create_portal', '0001_01_01_000002_record_descriptions')
 ```
 
-Add the app-specific database password and app secrets to the vault.
+The setup (`set-up-outside-services`) makes the app's vault keys: the database password and `laravel_portal_<VARIABLE>` for each name in `secrets_from_vault`, and with staging01 their `staging_` copies. Nobody adds them by hand.
 Pass the following entries through `app_secrets` in the production `app_server` and `jobs_server` role calls:
 
 ```yaml
 laravel_portal_database_password: "{{ .secrets.laravel_portal_database_password }}"
-laravel_portal_APP_ENV: "{{ .secrets.laravel_portal_APP_ENV }}"
-laravel_portal_APP_URL: "{{ .secrets.laravel_portal_APP_URL }}"
 laravel_portal_APP_KEY: "{{ .secrets.laravel_portal_APP_KEY }}"
-laravel_portal_R2_BUCKET: "{{ .secrets.laravel_portal_R2_BUCKET }}"
 laravel_portal_R2_ACCESS_KEY_ID: "{{ .secrets.laravel_portal_R2_ACCESS_KEY_ID }}"
 laravel_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.laravel_portal_R2_SECRET_ACCESS_KEY }}"
 ```
 
 For staging, retain the left-hand names and use separate `staging_laravel_portal_...` vault keys on the right.
-Set the production APP_ENV vault value to `production` and staging's APP_ENV vault value to `staging`.
+`env:` gives every environment the same value, so with staging01 staging reads production's `APP_URL`, `APP_ENV`, and `R2_BUCKET`. Tell the person this before adding staging01.
 Staging's bucket and credentials must reach staging objects only.
 Pass the app password where the database roles receive app passwords, following the Stack's initial setup.
 Record the reviewed image tag under `deployed_image_tags` and the public hostname under `public_host_names` in `inventories/servers.yml`.

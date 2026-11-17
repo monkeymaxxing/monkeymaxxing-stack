@@ -68,7 +68,7 @@ the person's. Then you push the changes and watch the first build.
      `jobs_connect_directly_to_postgres`, from the app's job library.
      Follow the comment above `jobs_connect_directly_to_postgres` in
      `mmx_project_settings.yml`;
-   - the app's database pool size, set explicitly under `environment`
+   - the app's database pool size, set explicitly under `env`
      rather than left to the framework's default, so the app's Postgres
      connections are known. Each framework guide in the stack repository's
      `docs/app-frameworks/`, under "Set the database connection budget",
@@ -85,13 +85,28 @@ the person's. Then you push the changes and watch the first build.
      each directory. Each becomes a memory-backed directory, empty at every
      start, so list no directory that holds data that must last. Leave the
      key out when the app writes nowhere else;
-   - `asset_directory`, `database_name`, `environment` (the app's settings
-     that are not secret), and `secrets_from_vault` (the names of the
-     app's secrets);
+   - `asset_directory`, `database_name`, and `env`: the app's settings
+     that are not secret, such as its public address, `APP_ORIGIN`, and
+     its uploads bucket's name, `R2_BUCKET`;
+   - `secrets_from_vault`: each secret the app reads, and where its value
+     comes from, from the app's code, as the template's example app does:
+     - `where_the_value_comes_from: generated_by_the_setup` for a value
+       nobody needs to see, such as Rails' `SECRET_KEY_BASE`, and for the
+       two R2 key variables. The setup makes it without a question;
+     - `where_the_value_comes_from: an_outside_service` for a key another
+       company gives, such as Stripe's API key, with `what_it_is_for`, one
+       sentence the person reads, and `steps_to_get_it`, the steps on that
+       company's website, one per line. Add `checked_with: stripe` for a
+       Stripe key, and leave `checked_with` out for any other service. In
+       chapter 4 the setup shows each such key on its own screen and asks
+       the person for it;
    - `production_uploads_r2_bucket`: the name of the R2 bucket for the app's
      uploaded files in production, such as `example-shop-uploads`, which
-     creates once R2 is turned on, after the first sitting (see
-     [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#if-something-is-different)); `""` when the app keeps no uploaded files;
+     `go-live` makes in chapter 4, once the person turned R2 on there, and
+     `production_uploads_r2_key_variables`, the two names in
+     `secrets_from_vault` that hold the bucket's key; `""` and no
+     `production_uploads_r2_key_variables` when the app keeps no uploaded
+     files;
    - `restore_drill_check_queries`: queries for the app's own tables, each
      answering true on the restored copy, so a restore that brings back an
      empty or old database fails the drill. An old database fails only a
@@ -174,7 +189,7 @@ the person's. Then you push the changes and watch the first build.
      .NET's do, needs nothing.
 
      An app whose workers need more memory than a CPU's share sets
-     `WEB_CONCURRENCY` lower in the app's `environment`.
+     `WEB_CONCURRENCY` lower in the app's `env`.
      The configured worker count replaces the app server's CPU count;
    - a framework that defaults to SQLite, such as Rails 8, uses Postgres;
    - uploads go to R2 (or another S3-compatible store, which is a

@@ -97,7 +97,8 @@ proposal.
      so the output names the file, line and commit but never the secret.
      Exit 0 means no finding; exit 1 lists each finding. Check
      that no app's `env` in `mmx_project_settings.yml` holds a secret
-     value; secrets belong in `secrets_from_vault`. A secret in Git
+     value; secrets belong in `secrets_from_vault`, each with where its
+     value comes from. A secret in Git
      history has already reached everyone who can read the repository,
      including the triage agent's model provider. Replace the secret
      ([Rotate a secret](rotate_a_secret.md)) and tell the person.

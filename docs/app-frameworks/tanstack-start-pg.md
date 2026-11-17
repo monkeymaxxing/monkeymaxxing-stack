@@ -177,13 +177,18 @@ tanstack_portal:
   asset_directory: /app/.output/public
   database_name: tanstack_portal
   env:
+    APP_ORIGIN: https://portal.example.com
+    R2_BUCKET: example-tanstack-portal-production
     R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
   secrets_from_vault:
-    - APP_ORIGIN
-    - R2_BUCKET
-    - R2_ACCESS_KEY_ID
-    - R2_SECRET_ACCESS_KEY
+    R2_ACCESS_KEY_ID:
+      where_the_value_comes_from: generated_by_the_setup
+    R2_SECRET_ACCESS_KEY:
+      where_the_value_comes_from: generated_by_the_setup
   production_uploads_r2_bucket: example-tanstack-portal-production
+  production_uploads_r2_key_variables:
+    access_key_id: R2_ACCESS_KEY_ID
+    secret_access_key: R2_SECRET_ACCESS_KEY
   restore_drill_check_queries:
     - name: the_migrations_came_back
       sql: select count(*) = 2 from schema_migrations where version in ('0001_portal.sql', '0002_record_descriptions.sql')
@@ -203,12 +208,9 @@ All 3 old asset URLs returned HTTP 200 with exact SHA-256 matches and correct co
 The signed-in old page saved a record without reloading. An independent authenticated request read the saved record.
 The origin checks bypassed Cloudflare. Cached public responses alone do not prove that retained files are served.
 
-Provision private buckets and bucket-scoped keys through your existing account procedure.
-Add production vault entries named `tanstack_portal_database_password`,
-`tanstack_portal_APP_ORIGIN`, `tanstack_portal_R2_BUCKET`,
-`tanstack_portal_R2_ACCESS_KEY_ID`, and `tanstack_portal_R2_SECRET_ACCESS_KEY`.
-Add separate staging entries with the prefix `staging_tanstack_portal_`.
-Production's bucket value must match `production_uploads_r2_bucket`.
+Provision private buckets through your existing account procedure.
+The setup (`set-up-outside-services`) makes the vault keys `tanstack_portal_database_password` and `tanstack_portal_<VARIABLE>` for each name in `secrets_from_vault`, and with staging01 their `staging_` copies. Nobody adds them by hand. Keep secret values out of Git.
+Production's `R2_BUCKET` must equal `production_uploads_r2_bucket`.
 
 In `playbooks/every_server.yml`, preserve existing entries. Add the database
 password to production's database role input:
@@ -229,8 +231,6 @@ Extend `app_secrets` for production's `app_server` and `jobs_server` role calls:
 
 ```yaml
 tanstack_portal_database_password: "{{ .secrets.tanstack_portal_database_password }}"
-tanstack_portal_APP_ORIGIN: "{{ .secrets.tanstack_portal_APP_ORIGIN }}"
-tanstack_portal_R2_BUCKET: "{{ .secrets.tanstack_portal_R2_BUCKET }}"
 tanstack_portal_R2_ACCESS_KEY_ID: "{{ .secrets.tanstack_portal_R2_ACCESS_KEY_ID }}"
 tanstack_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.tanstack_portal_R2_SECRET_ACCESS_KEY }}"
 ```
@@ -239,11 +239,11 @@ For staging's `app_server`, retain the left names and use these staging values:
 
 ```yaml
 tanstack_portal_database_password: "{{ .secrets.staging_tanstack_portal_database_password }}"
-tanstack_portal_APP_ORIGIN: "{{ .secrets.staging_tanstack_portal_APP_ORIGIN }}"
-tanstack_portal_R2_BUCKET: "{{ .secrets.staging_tanstack_portal_R2_BUCKET }}"
 tanstack_portal_R2_ACCESS_KEY_ID: "{{ .secrets.staging_tanstack_portal_R2_ACCESS_KEY_ID }}"
 tanstack_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.staging_tanstack_portal_R2_SECRET_ACCESS_KEY }}"
 ```
+
+`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
 
 Extend `deployed_image_tags.staging`, `deployed_image_tags.production`,
 `public_host_names.staging`, and `public_host_names.production` in `inventories/servers.yml`.

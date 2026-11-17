@@ -278,11 +278,19 @@ vars:
         S3_REGION: auto
         S3_BUCKET: example-portal-uploads
         S3_FORCE_PATH_STYLE: "true"
-      secrets_from_vault: [S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY]
+      secrets_from_vault:
+        S3_ACCESS_KEY_ID:
+          where_the_value_comes_from: generated_by_the_setup
+        S3_SECRET_ACCESS_KEY:
+          where_the_value_comes_from: generated_by_the_setup
       production_uploads_r2_bucket: example-portal-uploads
+      production_uploads_r2_key_variables:
+        access_key_id: S3_ACCESS_KEY_ID
+        secret_access_key: S3_SECRET_ACCESS_KEY
 ```
 
-Use the selected destination's real S3 endpoint, region, addressing mode, and fresh bucket-scoped keys.
+Use the selected destination's real S3 endpoint, region, and addressing mode.
+The uploads stay in R2, so the two S3 key variables are the app's R2 key. The setup makes that key and names its two variables in `production_uploads_r2_key_variables`.
 The Stack supplies `DATABASE_URL`, `PORT`, and `WEB_CONCURRENCY` through its normal configuration.
 The copied Node helper finds a writable database server without replaying uncertain requests.
 The jobs use transaction-scoped row locks, so `jobs_connect_directly_to_postgres` is false.

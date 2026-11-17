@@ -287,13 +287,18 @@ vercel_portal:
   asset_directory: /app/.next/static
   database_name: vercel_portal
   env:
+    APP_ORIGIN: https://portal.example.com
+    R2_BUCKET: example-vercel-exit-production
     R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
   secrets_from_vault:
-    - APP_ORIGIN
-    - R2_BUCKET
-    - R2_ACCESS_KEY_ID
-    - R2_SECRET_ACCESS_KEY
+    R2_ACCESS_KEY_ID:
+      where_the_value_comes_from: generated_by_the_setup
+    R2_SECRET_ACCESS_KEY:
+      where_the_value_comes_from: generated_by_the_setup
   production_uploads_r2_bucket: example-vercel-exit-production
+  production_uploads_r2_key_variables:
+    access_key_id: R2_ACCESS_KEY_ID
+    secret_access_key: R2_SECRET_ACCESS_KEY
   restore_drill_check_queries:
     - name: the_migrations_came_back
       sql: select count(*) = 2 from schema_migrations where version in ('0001_portal.sql', '0002_record_descriptions.sql')
@@ -303,12 +308,9 @@ vercel_portal:
 previous release's assets at that path. An old browser page can still fetch its
 JavaScript after a release switch. Do not point the asset setting at an empty directory.
 
-Provision private buckets and bucket-scoped keys through your existing account procedure.
-Add production vault entries named `vercel_portal_database_password`,
-`vercel_portal_APP_ORIGIN`, `vercel_portal_R2_BUCKET`,
-`vercel_portal_R2_ACCESS_KEY_ID`, and `vercel_portal_R2_SECRET_ACCESS_KEY`.
-Add separate staging entries with the prefix `staging_vercel_portal_`.
-Production's bucket value must match `production_uploads_r2_bucket`.
+Provision private buckets through your existing account procedure.
+The setup (`set-up-outside-services`) makes the vault keys `vercel_portal_database_password` and `vercel_portal_<VARIABLE>` for each name in `secrets_from_vault`, and with staging01 their `staging_` copies. Nobody adds them by hand. Keep secret values out of Git.
+Production's `R2_BUCKET` must equal `production_uploads_r2_bucket`.
 
 In `playbooks/every_server.yml`, preserve existing entries. Add the database
 password to production's database role input:
@@ -329,8 +331,6 @@ Extend `app_secrets` for production's `app_server` and `jobs_server` role calls:
 
 ```yaml
 vercel_portal_database_password: "{{ .secrets.vercel_portal_database_password }}"
-vercel_portal_APP_ORIGIN: "{{ .secrets.vercel_portal_APP_ORIGIN }}"
-vercel_portal_R2_BUCKET: "{{ .secrets.vercel_portal_R2_BUCKET }}"
 vercel_portal_R2_ACCESS_KEY_ID: "{{ .secrets.vercel_portal_R2_ACCESS_KEY_ID }}"
 vercel_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.vercel_portal_R2_SECRET_ACCESS_KEY }}"
 ```
@@ -339,11 +339,11 @@ For staging's `app_server`, retain the left names and use these staging values:
 
 ```yaml
 vercel_portal_database_password: "{{ .secrets.staging_vercel_portal_database_password }}"
-vercel_portal_APP_ORIGIN: "{{ .secrets.staging_vercel_portal_APP_ORIGIN }}"
-vercel_portal_R2_BUCKET: "{{ .secrets.staging_vercel_portal_R2_BUCKET }}"
 vercel_portal_R2_ACCESS_KEY_ID: "{{ .secrets.staging_vercel_portal_R2_ACCESS_KEY_ID }}"
 vercel_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.staging_vercel_portal_R2_SECRET_ACCESS_KEY }}"
 ```
+
+`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
 
 Extend `deployed_image_tags.staging`, `deployed_image_tags.production`,
 `public_host_names.staging`, and `public_host_names.production` in `inventories/servers.yml`.
