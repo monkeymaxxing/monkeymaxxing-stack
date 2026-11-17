@@ -206,7 +206,7 @@ func newHarness(t *testing.T, staging, uploads bool) *harness {
 	}
 	// Every run that saves keys commits and pushes the vault itself, so
 	// each test's directory is a signed checkout with an origin.
-	h.signedSecretsRepository()
+	h.secretsRepository()
 	return h
 }
 

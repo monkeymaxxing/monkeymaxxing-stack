@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # Managed by MMX from roles/util_server. util01's scheduled jobs call this
 # script in /var/lib/mmhotline/systems_repository, MMHotline's copy of the
-# systems repository, before each job. A push alone must change no server:
-# no person asks a scheduled job to run, so the jobs run only a commit that
-# MMHotline trusts.
+# systems repository, before each job.
 #
-# MMHotline is the one place that decides which commit is trusted
-# (mmhotline_settings.yml, triage_agent). The script reads the commit that
-# main ends at in the main copy (origin, on util01 itself) and asks MMHotline to check every new commit
-# through that commit: mmhotline commit-reviews check. MMHotline fetches into
-# its copy, sends one alert for each commit that newly waits for review,
-# and moves the copy's checkout forward to the trusted commit, never past it.
-# The script prints the trusted commit, and the caller runs the job at the
-# commit the copy has checked out, which is the trusted commit or a newer
-# trusted commit. This script never moves the checkout.
+# MMHotline trusts every commit on origin (mmhotline_settings.yml,
+# triage_agent.trusted_commits: every_commit_on_origin), and origin is the
+# main copy, a bare repository on util01 that only the keys in
+# root_ssh_public_keys can push to. The script reads the commit that main
+# ends at in the main copy and asks MMHotline to check through that commit:
+# mmhotline commit-reviews check. MMHotline fetches into its copy and moves
+# the copy's checkout forward to that commit. The script prints the commit,
+# and the caller runs the job at the commit the copy has checked out. This
+# script never moves the checkout.
 #
 # Order, so no lock waits for another forever: call this script WITHOUT
 # holding /var/lib/mmhotline/systems_repository.lock, because the check
@@ -21,17 +19,14 @@
 # lock only after the script ends.
 #
 # Exit codes:
-# 0  the trusted commit is on standard output.
+# 0  the commit is on standard output.
 # 1  the main copy cannot be reached, or the copy is broken; nothing ran.
-# 2  MMHotline trusts no commit of main yet; nothing ran. MMHotline's own
-#    warning names each commit that waits for review, so the jobs end
-#    without failing their unit, which would send a second, bare warning.
 # When MMHotline does not answer, such as while MMHotline is stopped, the
 # script prints the commit the copy already has, with one line that says
 # so: the job runs nothing newer than what util01 ran before. During a
 # lock-out, MMHotline's settings have no triage_agent section, which holds
-# the keys it trusts (mmhotline_settings.yml), so MMHotline refuses the
-# check; the one line then says that, in place of MMHotline's own error.
+# trusted_commits (mmhotline_settings.yml), so MMHotline refuses the check;
+# the one line then says that, in place of MMHotline's own error.
 set -euo pipefail
 SETTINGS=/etc/mmhotline/mmhotline_settings.yml
 say() { printf 'find_the_trusted_commit_of_the_systems_repository: %s\n' "$*" >&2; }
@@ -47,20 +42,12 @@ status=0
 errors=$(mktemp)
 trap 'rm -f "$errors"' EXIT
 answer=$(sudo -n /usr/local/bin/mmhotline commit-reviews check --commit-id "$head" --json 2> "$errors") || status=$?
-if [ "$status" -le 1 ] && checked=$(jq -er '.commit_check.checked_commit_id' <<< "$answer" 2> /dev/null); then
-  trusted=$(jq -r '.commit_check.trusted_through_commit_id // ""' <<< "$answer")
-  waiting=$(jq -r '.commit_check.commits_waiting_for_review | length' <<< "$answer")
-  approvals=$(jq -r '(.web_url // "" | sub("/$"; "")) + "/approvals"' <<< "$answer")
-  if [ -z "$trusted" ]; then
-    say "MMHotline trusts no commit of main yet. Commits waiting for review: $waiting, at $approvals. Nothing ran"
-    exit 2
-  fi
-  [ "$waiting" -eq 0 ] || say "commits waiting for review: $waiting, at $approvals. This job runs at the trusted commit ${trusted:0:12}, not at main's ${checked:0:12}"
+if [ "$status" -le 1 ] && trusted=$(jq -er '.commit_check.trusted_through_commit_id | select(. != "")' <<< "$answer" 2> /dev/null); then
   printf '%s\n' "$trusted"
   exit 0
 fi
 if [ -r "$SETTINGS" ] && ! grep -q '^triage_agent:' "$SETTINGS"; then
-  say "MMHotline checks no commit during a lock-out, because its settings then hold no trusted keys; this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"
+  say "MMHotline checks no commit during a lock-out, because its settings then hold no trusted_commits; this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"
 else
   cat "$errors" >&2
   say "MMHotline did not answer the commit check (exit $status); this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"

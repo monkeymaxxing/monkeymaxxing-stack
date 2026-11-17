@@ -87,17 +87,6 @@ fleet_stages:
             Use a whole number of hours from 1 to 24, such as 6. restore01 is
             paid by the hour, and a drill must finish well before the next
             week's drill. Nothing changed.
-      - id: check_new_commits_on_main_every_minutes_is_from_1_to_59
-        assert:
-          that:
-            all:
-              - number_at_least: ["{{ .vars.check_new_commits_on_main_every_minutes }}", 1]
-              - number_at_most: ["{{ .vars.check_new_commits_on_main_every_minutes }}", 59]
-          message: >-
-            check_new_commits_on_main_every_minutes in mmx_project_settings.yml is "{{ .vars.check_new_commits_on_main_every_minutes }}".
-            Use a whole number of minutes from 1 to 59, such as 5. The job's
-            systemd schedule repeats within each hour, so 59 is the longest
-            gap it can express. Nothing changed.
       - id: weekly_work_day_is_a_weekday_name
         assert:
           that:
@@ -409,8 +398,6 @@ fleet_stages:
             INVENTORY_NODES: "{{ .inventory.nodes }}"
             INVENTORY_GROUPS: "{{ .inventory.groups }}"
           changed_when: false
-      # MMHotline trusts the commits that root_ssh_public_keys signed
-      # (mmhotline_settings.yml, triage_agent.trusted_commit_signing_public_keys).
       # The key part, without the comment, decides: the same key with
       # another comment is the same key.
       - id: count_the_root_ssh_public_keys_that_are_the_triage_key
@@ -433,11 +420,11 @@ fleet_stages:
           message: >-
             root_ssh_public_keys in mmx_project_settings.yml holds the triage
             agent's key, triage_ssh_public_key. Remove the key from
-            root_ssh_public_keys. MMHotline trusts every commit that a key in
-            root_ssh_public_keys signed, whatever the commit changes, so the
-            triage agent could change any file without a person's review,
-            and the key would also log in as root on every server. Nothing
-            changed.
+            root_ssh_public_keys. Every key in root_ssh_public_keys logs in
+            as root on every server and can push to the main copy of the
+            systems repository, but the triage agent logs in only as the
+            read-only triage user, and MMHotline pushes the agent's commits
+            itself. Nothing changed.
   # connections_between_server_pools and the server pools, checked before
   # any server changes: every server in exactly one pool, inside the pool's
   # address block, and every line naming pools, ports and a reason.
@@ -723,7 +710,6 @@ fleet_stages:
           backups: "{{ .vars.backups }}"
           nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
           weekly_work_day: "{{ .vars.weekly_work_day }}"
-          check_new_commits_on_main_every_minutes: "{{ .vars.check_new_commits_on_main_every_minutes }}"
           app_pool_load_settings:
             what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
             app_servers: "{{ .inventory.groups.app_servers }}"

@@ -497,10 +497,10 @@ class ScheduledServerSettingsComparison(unittest.TestCase):
         self.assertIn("the provider's list does not hold util01",result.stderr)
 
     def test_a_job_runs_nothing_without_a_trusted_commit(self):
-        for settings in ({'TRUSTED_COMMIT_EXIT':'1'},{'TRUSTED_COMMIT_EXIT':'2'},{'MERGE_BASE_EXIT':'1'}):
+        for settings in ({'TRUSTED_COMMIT_EXIT':'1'},{'MERGE_BASE_EXIT':'1'}):
             with self.subTest(settings=settings):
                 result,commands=self.run_job(**settings)
-                self.assertEqual(result.returncode,0 if settings.get('TRUSTED_COMMIT_EXIT')=='2' else 1,result.stderr)
+                self.assertEqual(result.returncode,1,result.stderr)
                 self.assertFalse(any(c[0]=='mmx' for c in commands))
                 # Without a trusted commit the job never takes the lock.
                 self.assertEqual(any(c[0]=='flock' and c[-1]=='9' for c in commands),'MERGE_BASE_EXIT' in settings)

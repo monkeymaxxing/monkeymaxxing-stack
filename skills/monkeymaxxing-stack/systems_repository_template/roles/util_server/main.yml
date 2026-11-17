@@ -139,9 +139,6 @@ inputs:
   weekly_work_day:                          # vars.weekly_work_day: the full backup, the restore drill, the image cleanup
     type: string
     required: true
-  check_new_commits_on_main_every_minutes:  # vars.check_new_commits_on_main_every_minutes
-    type: integer
-    required: true
   # The nightly copy of the apps' uploads runs in roles/uploads_backup; util01
   # gets its checks while backups.uploads_backup_runs_on names it.
   backups:                                  # vars.backups: uploads_backup_runs_on
@@ -227,9 +224,8 @@ node_tasks:
   # in mmx_project_settings.yml. The agent commits the triage agent's public
   # key as triage_ssh_public_key in mmx_project_settings.yml.
   #
-  # The mmhotline user's key logs in as root on every server, and signs its
-  # commits. The same key pulls and pushes the main copy of the systems
-  # repository, as root@127.0.0.1 on util01 itself. A separate key or
+  # The mmhotline user's key logs in as root on every server. The same key
+  # pulls and pushes the main copy of the systems repository, as root@127.0.0.1 on util01 itself. A separate key or
   # account for the main copy would protect nothing, because whoever
   # controls the mmhotline account already holds root on every server.
   - id: ssh_key_of_the_mmhotline_user
@@ -239,7 +235,7 @@ node_tasks:
       key_type: ed25519
       key_comment_when_created: util01, the mmhotline user
   # The triage agent's key logs in as the read-only triage user on every
-  # server and signs the agent's commits. The triage agent's key reaches
+  # server. The triage agent's key reaches
   # no copy of the repository: MMHotline pushes the agent's commits itself.
   - id: ssh_key_of_the_triage_agent
     ssh_key_pair:
@@ -263,9 +259,7 @@ node_tasks:
       owner: mmhotline
       group: mmhotline
       permissions_mode: "0644"
-  # Each user's ~/.gitconfig signs its commits with its SSH key. MMHotline
-  # also signs its merges of the agent's commits with the mmhotline user's
-  # SSH key.
+  # Each user's ~/.gitconfig names the user on its commits.
   - id: write_the_git_settings_of_the_mmhotline_user
     file:
       path: /var/lib/mmhotline/.gitconfig
@@ -471,30 +465,6 @@ node_tasks:
         true_exit_codes: [0]
         false_exit_codes: [2, 128]
 
-  # MMHotline notices a pushed commit within minutes, not only at its next
-  # run or the next nightly job: this job only asks MMHotline to check the
-  # new commits on main. MMHotline sends one alert for each commit that
-  # waits for review, and moves its checkout forward to the trusted commit.
-  # The job sends no alert of its own, runs no MMX and wakes no coding agent.
-  # It takes no lock, because MMHotline's check takes the lock itself and
-  # waits while an MMX run holds it. Every outcome ends the run without
-  # failing the unit, with one line in the journal when something stopped
-  # the check, because the next run comes in a few minutes.
-  # While another holder has the lock, the job asks nothing: MMHotline's
-  # check would wait for the lock, and its waiting marker would end a
-  # running restore drill for a check that runs nothing
-  # (playbooks/weekly_database_restore_drill.yml). MMHotline checks again
-  # before each of its own runs.
-  - id: check_new_commits_on_main_every_few_minutes
-    systemd_scheduled_job:
-      name: check_new_commits_on_main
-      systemd_calendar_schedule: "*-*-* *:00/{{ .inputs.check_new_commits_on_main_every_minutes }}:00 UTC"
-      run_as_user_account: mmhotline
-      run_from_directory: /var/lib/mmhotline/systems_repository
-      script: |
-        flock --nonblock /var/lib/mmhotline/systems_repository.lock true || exit 0
-        find_the_trusted_commit_of_the_systems_repository > /dev/null || true
-
   # Only dryrun exit 0 proves that the servers match the repository. Exit 2 means proposed changes;
   # exit 3 means incomplete; errors also fail the unit. MMWatchdog warns.
   # UTC: nightly_work_starts_at plus 3 hours 30 minutes, after the restore drill.
@@ -522,10 +492,8 @@ node_tasks:
         # that runs nothing (playbooks/weekly_database_restore_drill.yml).
         flock /var/lib/mmhotline/systems_repository.lock true
         # Ask MMHotline first, without the lock: MMHotline's check takes the
-        # lock itself. Exit 2: MMHotline trusts no commit of main yet, and
-        # MMHotline's warning names each commit that waits for review, so the
-        # job ends without failing its unit, which would send a second warning.
-        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 2 ] && exit 0; exit "$status"; }
+        # lock itself.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository)
         exec 9>> /var/lib/mmhotline/systems_repository.lock
         if ! flock --nonblock 9; then
           holder=$(cat /var/lib/mmhotline/systems_repository.lock)
@@ -536,8 +504,8 @@ node_tasks:
         changes=$(git status --porcelain)
         [ -z "$changes" ]
         [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
-        # Only MMHotline moves the checkout, and only forward to a trusted
-        # commit, so a checkout at or past the trusted commit is trusted.
+        # Only MMHotline moves the checkout, and only forward to a commit
+        # on main, so a checkout at or past the checked commit is current.
         git merge-base --is-ancestor "$trusted" HEAD || { printf "util01's copy is at %s, not at or past the trusted commit %s; nothing ran, and the next run tries again\n" "$(git rev-parse --short=12 HEAD)" "${trusted:0:12}" >&2; exit 1; }
         # During a lock-out util01 runs nothing: the servers refuse its key, and
         # every_server refuses to run on util01. MMX itself says whether
@@ -620,10 +588,8 @@ node_tasks:
         cd systems_repository
         export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
         # Ask MMHotline first, without the lock: MMHotline's check takes the
-        # lock itself. Exit 2: MMHotline trusts no commit of main yet, and
-        # MMHotline's warning names each commit that waits for review, so the
-        # job ends without failing its unit, which would send a second warning.
-        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 2 ] && exit 0; exit "$status"; }
+        # lock itself.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository)
         exec 9>> /var/lib/mmhotline/systems_repository.lock
         if ! flock --nonblock 9; then
           holder=$(cat /var/lib/mmhotline/systems_repository.lock)
@@ -634,8 +600,8 @@ node_tasks:
         changes=$(git status --porcelain)
         [ -z "$changes" ]
         [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
-        # Only MMHotline moves the checkout, and only forward to a trusted
-        # commit, so a checkout at or past the trusted commit is trusted.
+        # Only MMHotline moves the checkout, and only forward to a commit
+        # on main, so a checkout at or past the checked commit is current.
         git merge-base --is-ancestor "$trusted" HEAD || { printf "util01's copy is at %s, not at or past the trusted commit %s; nothing ran, and the next run tries again\n" "$(git rev-parse --short=12 HEAD)" "${trusted:0:12}" >&2; exit 1; }
         # MMX stop finishes the current node task, including the cleanup.
         # Keep the shared lock until the controller has finished.
@@ -723,10 +689,8 @@ node_tasks:
         # that runs nothing (playbooks/weekly_database_restore_drill.yml).
         flock /var/lib/mmhotline/systems_repository.lock true
         # Ask MMHotline first, without the lock: MMHotline's check takes the
-        # lock itself. Exit 2: MMHotline trusts no commit of main yet, and
-        # MMHotline's warning names each commit that waits for review, so the
-        # job ends without failing its unit, which would send a second warning.
-        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 2 ] && exit 0; exit "$status"; }
+        # lock itself.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository)
         exec 9>> /var/lib/mmhotline/systems_repository.lock
         if ! flock --nonblock 9; then
           holder=$(cat /var/lib/mmhotline/systems_repository.lock)
@@ -737,8 +701,8 @@ node_tasks:
         changes=$(git status --porcelain)
         [ -z "$changes" ]
         [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
-        # Only MMHotline moves the checkout, and only forward to a trusted
-        # commit, so a checkout at or past the trusted commit is trusted.
+        # Only MMHotline moves the checkout, and only forward to a commit
+        # on main, so a checkout at or past the checked commit is current.
         git merge-base --is-ancestor "$trusted" HEAD || { printf "util01's copy is at %s, not at or past the trusted commit %s; nothing ran, and the next run tries again\n" "$(git rev-parse --short=12 HEAD)" "${trusted:0:12}" >&2; exit 1; }
         servers=$(server_management_scripts/list_the_servers_at_the_provider)
         . server_management_scripts/steps_for_reading_the_providers_list.bash

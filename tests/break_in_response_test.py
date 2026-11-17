@@ -76,8 +76,37 @@ class RenderedFiles(unittest.TestCase):
         self.assertEqual(self.render(filename).splitlines(),['ssh-ed25519 KEY1','ssh-ed25519 KEY2','ssh-ed25519 UTILITY'])
         self.assertEqual(self.render('roles/everyone_locked_out/files/triage_authorized_keys',everyone_locked_out_except_desk='desk01').strip(),'')
         self.assertIn('TRIAGE',self.render('roles/everyone_locked_out/files/triage_authorized_keys'))
+        # MMHotline's check of the triage user passes only when every key line starts with restrict.
+        self.assertEqual(self.render('roles/everyone_locked_out/files/triage_authorized_keys').strip(),'restrict,from="10.20.0.1" ssh-ed25519 TRIAGE')
         self.assertIn('AllowUsers root@10.20.9.1',self.render('roles/everyone_locked_out/files/sshd_lockout.conf',everyone_locked_out_except_desk='desk01'))
         self.assertNotIn('AllowUsers',self.render('roles/everyone_locked_out/files/sshd_lockout.conf'))
+
+    def test_triage_cannot_rewrite_its_own_authorized_keys_or_replace_the_directory_that_holds_them(self):
+        role = (T/'roles/everyone_locked_out/main.yml').read_text()
+        for name, expected in [('make_the_triage_home_directory_root_owned', ['path: /home/triage,', 'owner: root', 'group: root', 'permissions_mode: "0755"']),
+                               ('create_the_triage_ssh_directory', ['path: /home/triage/.ssh,', 'owner: root', 'group: root', 'permissions_mode: "0755"']),
+                               ('install_exactly_the_admitted_triage_keys', ['path: /home/triage/.ssh/authorized_keys', 'owner: root', 'group: root', 'permissions_mode: "0644"'])]:
+            task = role.split('- id: %s\n' % name, 1)[1].split('\n  #', 1)[0].split('\n  - id: ', 1)[0]
+            for text in expected:
+                self.assertIn(text, task, name)
+            self.assertNotIn('triage', task.replace('/home/triage', '').replace('triage_authorized_keys', ''), name)
+        for path in T.rglob('*'):
+            if path.is_file() and '.mmx' not in path.parts and path.suffix in ('.yml', '.py', '') and path.name != 'main.yml':
+                self.assertNotIn('/home/triage/.ssh', path.read_text(errors='ignore'), '%s writes the triage key file' % path)
+
+    def test_the_triage_user_opens_no_new_outgoing_connection_on_any_server_but_util01(self):
+        role = (T/'roles/everyone_locked_out/main.yml').read_text()
+        self.assertIn('meta skuid "triage" oifname != "lo" ct state new drop', role)
+        self.assertNotIn('flush ruleset', role)  # only our own table is flushed, so ufw's rules stay
+        for name in ('write_the_triage_user_no_new_outgoing_connections_table', 'load_the_triage_user_table_at_every_boot',
+                     'run_the_triage_user_table'):
+            task = role.split('- id: %s\n' % name, 1)[1].split('\n  - id: ', 1)[0]
+            self.assertIn('{not: {equals: ["{{ .inputs.is_util_server }}", "true"]}}', task, name)
+        self.assertIn('is_util_server: "{{ .inputs.is_util_server }}"', (T/'roles/every_server/main.yml').read_text())
+        # Nothing may run as triage on a server and need the network: every sudo rule runs as root.
+        for rule in (T/'roles/every_server/files/sudoers_triage').read_text().splitlines():
+            if rule.startswith('triage '):
+                self.assertIn('ALL=(root)', rule)
 
     def test_invalid_desk_that_keeps_access_or_key_fails_before_rendering_an_access_file(self):
         for changes in [dict(everyone_locked_out_except_desk='missing'),dict(everyone_locked_out_except_desk='app001'),

@@ -33,18 +33,12 @@ const stripeSecret = `        STRIPE_API_KEY:
           checked_with: stripe
 `
 
-// signedSecretsRepository makes the harness's directory a Git checkout of a
-// bare origin, signing its commits with a test SSH key the way the desk's
-// repository signs with the production key, and returns git and origin.
-func (h *harness) signedSecretsRepository() (func(directory string, arguments ...string) string, string) {
+// secretsRepository makes the harness's directory a Git checkout of a
+// bare origin, the way the desk's repository is one, and returns git and origin.
+func (h *harness) secretsRepository() (func(directory string, arguments ...string) string, string) {
 	h.t.Helper()
 	if h.git != nil {
 		return h.git, h.origin
-	}
-	keyDirectory := h.t.TempDir()
-	key := filepath.Join(keyDirectory, "production_key")
-	if output, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key).CombinedOutput(); err != nil {
-		h.t.Fatalf("ssh-keygen: %v\n%s", err, output)
 	}
 	origin := filepath.Join(h.t.TempDir(), "origin.git")
 	run := func(directory string, arguments ...string) string {
@@ -60,8 +54,7 @@ func (h *harness) signedSecretsRepository() (func(directory string, arguments ..
 	directory := h.e.directory
 	run(h.t.TempDir(), "init", "--bare", "--quiet", origin)
 	run(directory, "init", "--quiet", "-b", "main")
-	for _, setting := range [][2]string{{"user.name", "Alex"}, {"user.email", "alex@example.org"}, {"gpg.format", "ssh"},
-		{"user.signingkey", key}, {"commit.gpgsign", "true"}} {
+	for _, setting := range [][2]string{{"user.name", "Alex"}, {"user.email", "alex@example.org"}} {
 		run(directory, "config", setting[0], setting[1])
 	}
 	h.vault.file = filepath.Join(directory, vaultFile)
@@ -106,7 +99,7 @@ func TestSecretsSkipsSavedKeysMakesRandomOnesAndPushesASignedCommit(t *testing.T
 	writeFile(t, settingsPath, strings.Replace(string(text), "      secrets_from_vault:\n", "      secrets_from_vault:\n"+stripeSecret, 1))
 	h.commitAll("Add the Stripe key")
 	h.vault.values["shared_root_console_password_hash"] = "$6$saved-before"
-	run, origin := h.signedSecretsRepository()
+	run, origin := h.secretsRepository()
 	asked := h.answerSecrets(
 		// util01's token, the group key, the triage key, the registry token,
 		// then the two Stripe keys.
@@ -158,10 +151,6 @@ func TestSecretsSkipsSavedKeysMakesRandomOnesAndPushesASignedCommit(t *testing.T
 	if !strings.Contains(h.out.String(), "a_key_of_the_teams_own") || !strings.Contains(h.out.String(), "shop_R2_ACCESS_KEY_ID (by set-up-outside-services cloudflare)") {
 		t.Errorf("the summary does not name the keys left to others:\n%s", h.out)
 	}
-	pushed := run(h.e.directory, "--git-dir", origin, "cat-file", "commit", "main")
-	if !strings.Contains(pushed, "\ngpgsig ") {
-		t.Fatalf("origin's main is not a signed commit:\n%s", pushed)
-	}
 	if files := strings.TrimSpace(run(h.e.directory, "--git-dir", origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != vaultFile {
 		t.Fatalf("the pushed commit changes %q, not only the vault", files)
 	}
@@ -181,7 +170,7 @@ func TestSecretsSkipsSavedKeysMakesRandomOnesAndPushesASignedCommit(t *testing.T
 func TestSecretsRefusesARepositoryWithOtherChangesBeforeAsking(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.vault.referenced = templateKeys
-	h.signedSecretsRepository()
+	h.secretsRepository()
 	writeFile(t, filepath.Join(h.e.directory, "inventories/servers.yml"), "groups: {}\n# an edit not committed\n")
 	asked := h.answerSecrets(nil, nil)
 	err := runSecrets(h.e, nil)
@@ -196,12 +185,12 @@ func TestSecretsRefusesARepositoryWithOtherChangesBeforeAsking(t *testing.T) {
 func TestSecretsPullsTheTeamsMainBeforeItCommits(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.vault.referenced = []string{"pg_auto_failover_replication_password"}
-	run, origin := h.signedSecretsRepository()
+	run, origin := h.secretsRepository()
 	other := filepath.Join(t.TempDir(), "other")
 	run(t.TempDir(), "clone", "--quiet", origin, other)
 	writeFile(t, filepath.Join(other, "README.md"), "a teammate's change\n")
 	run(other, "add", "README.md")
-	run(other, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "A teammate's change")
+	run(other, "commit", "--quiet", "-m", "A teammate's change")
 	run(other, "push", "--quiet")
 	h.answerSecrets(nil, nil)
 	if err := runSecrets(h.e, nil); err != nil {
@@ -215,7 +204,7 @@ func TestSecretsPullsTheTeamsMainBeforeItCommits(t *testing.T) {
 func TestSecretsPushesAVaultChangeAnEarlierRunLeftAndRefusesUnpushedCommits(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.vault.referenced = nil
-	run, origin := h.signedSecretsRepository()
+	run, origin := h.secretsRepository()
 	writeFile(t, h.vault.file, "vault\nchanged by an interrupted run\n")
 	h.answerSecrets(nil, nil)
 	if err := runSecrets(h.e, nil); err != nil {
@@ -238,7 +227,7 @@ func TestSecretsReplaceEntersOneSavedKeyAgain(t *testing.T) {
 	for _, key := range templateKeys {
 		h.vault.values[key] = "old-" + key
 	}
-	h.signedSecretsRepository()
+	h.secretsRepository()
 	asked := h.answerSecrets([]string{"new-pushover-token"}, nil)
 	if err := runSecrets(h.e, []string{"--replace", "pushover_application_token"}); err != nil {
 		t.Fatalf("secrets --replace: %v\n%s", err, h.out)
@@ -254,7 +243,7 @@ func TestSecretsReplaceEntersOneSavedKeyAgain(t *testing.T) {
 func TestSecretsLeavesATypedKeyForLaterOnEnter(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.vault.referenced = []string{"pushover_application_token"}
-	run, _ := h.signedSecretsRepository()
+	run, _ := h.secretsRepository()
 	before := run(h.e.directory, "rev-parse", "HEAD")
 	h.answerSecrets([]string{""}, nil)
 	if err := runSecrets(h.e, nil); err != nil {
@@ -265,17 +254,6 @@ func TestSecretsLeavesATypedKeyForLaterOnEnter(t *testing.T) {
 	}
 	if !strings.Contains(h.out.String(), "Left for later: pushover_application_token.") {
 		t.Fatalf("the summary does not list the key left for later:\n%s", h.out)
-	}
-}
-
-func TestSecretsNeedASigningRepository(t *testing.T) {
-	h := newHarness(t, false, false)
-	h.vault.referenced = templateKeys
-	run, _ := h.signedSecretsRepository()
-	run(h.e.directory, "config", "commit.gpgsign", "false")
-	h.answerSecrets(nil, nil)
-	if err := runSecrets(h.e, nil); err == nil || !strings.Contains(err.Error(), "does not sign its commits") {
-		t.Fatalf("want a refusal saying the repository does not sign its commits, got %v", err)
 	}
 }
 
@@ -408,8 +386,8 @@ func TestSecretsMakesTheConsolePasswordAndSavesOnlyItsHash(t *testing.T) {
 		t.Fatalf("the hash does not verify against the password: %v", err)
 	}
 	h.requireNoSecretInOutput()
-	if pushed := h.git(h.e.directory, "--git-dir", h.origin, "cat-file", "commit", "main"); !strings.Contains(pushed, "\ngpgsig ") {
-		t.Fatalf("the hash was not pushed in a signed commit")
+	if pushed := h.git(h.e.directory, "--git-dir", h.origin, "cat-file", "commit", "main"); !strings.Contains(pushed, "vault keys with set-up-outside-services") {
+		t.Fatalf("the hash was not pushed in a vault commit:\n%s", pushed)
 	}
 
 	// A rerun keeps the saved hash and asks nothing; --replace makes a new one.
@@ -434,7 +412,7 @@ func TestSecretsAsksWhichTriageCredentialTypeAndGivesEachTypesSource(t *testing.
 	} {
 		h := newHarness(t, false, false)
 		h.vault.referenced = []string{"mmhotline_triage_agent_credential"}
-		h.signedSecretsRepository()
+		h.secretsRepository()
 		h.answerSecrets([]string{"credential-value"}, []string{test.answer})
 		if err := runSecrets(h.e, nil); err != nil {
 			t.Fatalf("%s: %v\n%s", test.answer, err, h.out)
@@ -459,14 +437,14 @@ func TestSecretsAsksWhichTriageCredentialTypeAndGivesEachTypesSource(t *testing.
 func TestSecretsCommitsInTheCheckoutWhileItIsTheMainCopy(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.vault.referenced = []string{"pg_auto_failover_replication_password"}
-	run, _ := h.signedSecretsRepository()
+	run, _ := h.secretsRepository()
 	run(h.e.directory, "remote", "remove", "origin")
 	h.answerSecrets(nil, nil)
 	if err := runSecrets(h.e, nil); err != nil {
 		t.Fatalf("secrets: %v\n%s", err, h.out)
 	}
-	if commit := run(h.e.directory, "cat-file", "commit", "HEAD"); !strings.Contains(commit, "\ngpgsig ") || !strings.Contains(commit, "Add 1 vault keys with set-up-outside-services secrets") {
-		t.Fatalf("the checkout's main is not the signed vault commit:\n%s", commit)
+	if commit := run(h.e.directory, "cat-file", "commit", "HEAD"); !strings.Contains(commit, "Add 1 vault keys with set-up-outside-services secrets") {
+		t.Fatalf("the checkout's main is not the vault commit:\n%s", commit)
 	}
 	if !strings.Contains(h.out.String(), "the team's main copy until util01 exists") {
 		t.Fatalf("the output does not say where main is:\n%s", h.out)

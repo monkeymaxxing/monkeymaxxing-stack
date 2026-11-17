@@ -74,6 +74,30 @@ class TheMainCopy(unittest.TestCase):
     def test_the_main_copy_is_closed_to_other_users(self):
         self.assertEqual(self.main_copy.stat().st_mode & 0o777, 0o700)
 
+    def test_the_triage_agent_and_mmhotline_cannot_write_to_the_main_copy(self):
+        # With trusted_commits: every_commit_on_origin, MMHotline's push filter is
+        # the only check on the triage agent's commits, so the agent must have no
+        # way to push to the main copy itself. mmhotline reaches it only as root
+        # over SSH (root@127.0.0.1), which MMHotline controls.
+        # The 0700 top directory closes everything inside it.
+        self.assertEqual(self.main_copy.stat().st_mode & 0o077, 0, 'open to group or others')
+        create = self.tasks['create_the_main_copy_of_the_systems_repository']
+        main_copy_path = create['shell.env.MAIN_COPY']
+        self.assertEqual(os.path.dirname(main_copy_path), '/var/lib', 'under /var/lib, which the role leaves root-owned and 0755')
+        self.assertNotIn('shell.run_as_user_account', create, 'the main copy is made by root, so root owns it')
+        for name in ['create_the_triage_agent_user', 'create_the_mmhotline_user']:
+            if name in self.tasks:
+                user = {key: value for key, value in self.tasks[name].items() if key.startswith('user.')}
+                self.assertNotIn('user.supplementary_groups', user, name)
+        role = (TEMPLATE/'roles/util_server/main.yml').read_text()
+        self.assertNotRegex(role, r'(?m)^\s+path: /var/lib/?\s*$', 'no task changes /var/lib itself')
+        self.assertNotIn('setfacl', role)
+        for line in role.splitlines():
+            if 'main_copy_path_on_util01' in line and 'path' in line.split(':')[0]:
+                self.assertNotIn('permissions_mode', line)
+        self.assertEqual(self.tasks['clone_mmhotline_copy_of_the_systems_repository']['shell.env.SYSTEMS_REPOSITORY_SSH_URL'],
+                         'root@127.0.0.1:' + main_copy_path)
+
     def test_mmhotlines_clone_waits_for_the_first_push_and_reaches_the_main_copy_on_util01_itself(self):
         clone = self.tasks['clone_mmhotline_copy_of_the_systems_repository']
         self.assertEqual(clone['shell.env.SYSTEMS_REPOSITORY_SSH_URL'], 'root@127.0.0.1:' + self.tasks[

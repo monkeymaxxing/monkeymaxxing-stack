@@ -241,10 +241,6 @@ func gitAsTheCodingAgent(directory string) func(arguments ...string) (string, er
 // left-over change on top. So a key this vault lacks, the team's lacks too,
 // and issueAndSave may delete a same-name one at a provider as left over.
 func (e *environment) prepareVaultCommit() (leftover bool, err error) {
-	signing, _ := e.git("config", "--get", "commit.gpgsign")
-	if strings.TrimSpace(signing) != "true" {
-		return false, errors.New("this repository does not sign its commits yet, so this command cannot commit the vault. The desk's setup turns on signing with your production key")
-	}
 	status, err := e.git("status", "--porcelain")
 	if err != nil {
 		return false, err
@@ -312,7 +308,7 @@ func (e *environment) pushMain() (string, error) {
 	return "to the main copy on util01", err
 }
 
-// commitFiles commits files, signed, and returns the commit's short hash.
+// commitFiles commits files and returns the commit's short hash.
 func (e *environment) commitFiles(message string, files ...string) (string, error) {
 	if _, err := e.git(append([]string{"add", "--"}, files...)...); err != nil {
 		return "", err
@@ -320,18 +316,11 @@ func (e *environment) commitFiles(message string, files ...string) (string, erro
 	if _, err := e.git(append([]string{"commit", "--quiet", "-m", message, "--"}, files...)...); err != nil {
 		return "", err
 	}
-	object, err := e.git("cat-file", "commit", "HEAD")
-	if err != nil {
-		return "", err
-	}
-	if !strings.Contains(object, "\ngpgsig ") {
-		return "", errors.New("the commit is not signed. Check that the desk's production key agent runs: systemctl status desk-ssh-agent desk-ssh-agent-relay")
-	}
 	commit, err := e.git("rev-parse", "--short", "HEAD")
 	return strings.TrimSpace(commit), err
 }
 
-// finishVaultChange commits the keys this run saved, signed, pushes main to
+// finishVaultChange commits the keys this run saved, pushes main to
 // origin's main, and says so. command names the run, such as
 // "set-up-outside-services backblaze", for the commit message.
 func (e *environment) finishVaultChange(v *savedKeys, command string) error {

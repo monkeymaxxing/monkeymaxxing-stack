@@ -2,5 +2,3 @@
 # which sshd sets for its logins (sshd.conf). Installed by the systems_desk role.
 [core]
 	sshCommand = ssh -F /etc/systems-desk/ssh.conf
-[gpg "ssh"]
-	allowedSignersFile = /etc/systems-desk/allowed-signers

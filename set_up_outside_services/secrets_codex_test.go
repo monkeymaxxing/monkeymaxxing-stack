@@ -15,7 +15,7 @@ func codexHarness(t *testing.T) *harness {
 	h.setTriageAgentCodingAgent(t, "codex")
 	h.commitAll("Use Codex")
 	h.vault.referenced = []string{"mmhotline_triage_agent_credential"}
-	h.signedSecretsRepository()
+	h.secretsRepository()
 	return h
 }
 
@@ -107,7 +107,7 @@ func TestSecretsAsksWhichCodingAgentWhenTheSettingsDoNotSay(t *testing.T) {
 	h.setTriageAgentCodingAgent(t, "")
 	h.commitAll("Remove the coding agent setting")
 	h.vault.referenced = []string{"mmhotline_triage_agent_credential"}
-	h.signedSecretsRepository()
+	h.secretsRepository()
 	h.answerSecrets([]string{"openai-key-value"}, []string{"codex", "key"})
 	if err := runSecrets(h.e, nil); err != nil {
 		t.Fatal(err)

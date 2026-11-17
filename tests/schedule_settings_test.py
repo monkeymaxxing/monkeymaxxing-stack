@@ -73,11 +73,6 @@ class ScheduleSettings(unittest.TestCase):
         self.assertIn('from 00:00 to 20:14', playbook)
         self.assertIn('20:14', (T/'mmx_project_settings.yml').read_text())
 
-    def test_the_interval_of_the_check_of_new_commits_is_a_setting(self):
-        self.assertIn('systemd_calendar_schedule = "*-*-* *:00/5:00 UTC"', self.explain())
-        self.assertIn('systemd_calendar_schedule = "*-*-* *:00/15:00 UTC"', self.explain(**{
-            '\n  check_new_commits_on_main_every_minutes: 5': '\n  check_new_commits_on_main_every_minutes: 15'}))
-
     def uploads_copy_schedule(self, nightly_work_starts_at, every_hours):
         """Runs the role's schedule script with a stand-in for GNU date's arithmetic."""
         role = (T/'roles/uploads_backup/main.yml').read_text()

@@ -10,6 +10,9 @@ inputs:
   inventory_groups: {type: mapping, required: true}
   root_ssh_public_keys: {type: list, required: true}
   triage_ssh_public_key: {type: string, required: true}
+  # true on util01 only. The triage agent runs on util01 and needs its model
+  # provider there, so util01's triage user keeps its outgoing connections.
+  is_util_server: {type: boolean, default: false}
 node_tasks:
   - id: install_exactly_the_admitted_root_keys
     file:
@@ -58,15 +61,85 @@ node_tasks:
       shell: /usr/sbin/nologin
       create_home_directory: true
       password_locked: true
+  # Root owns triage's home, .ssh directory and authorized_keys, and triage
+  # cannot write any of them. The key's line carries restrict and from=:
+  # a triage login that could rewrite the file, or rename .ssh and make its
+  # own, would drop them. sshd's StrictModes accepts files owned by root.
+  - id: make_the_triage_home_directory_root_owned
+    directory: {path: /home/triage, owner: root, group: root, permissions_mode: "0755"}
   - id: create_the_triage_ssh_directory
-    directory: {path: /home/triage/.ssh, owner: triage, group: triage, permissions_mode: "0700"}
+    directory: {path: /home/triage/.ssh, owner: root, group: root, permissions_mode: "0755"}
   - id: install_exactly_the_admitted_triage_keys
     file:
       path: /home/triage/.ssh/authorized_keys
       template: files/triage_authorized_keys
-      owner: triage
-      group: triage
-      permissions_mode: "0600"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  # The triage user on every server except util01 opens no new outgoing
+  # connection, loopback aside. Reason: the key line's restrict blocks
+  # tunnels and terminals, not an ordinary ssh app001 'curl ...', so a misled
+  # triage agent could send data out from a server. Nothing runs as triage on
+  # a server and needs the network: every sudo rule runs as root, and Postgres
+  # is reached through the local socket. Replies on the triage user's own
+  # incoming SSH login are established connections, which the rule leaves alone.
+  - id: write_the_triage_user_no_new_outgoing_connections_table
+    when:
+      all:
+        - {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+        - {not: {equals: ["{{ .inputs.is_util_server }}", "true"]}}
+    file:
+      path: /etc/triage_user_no_new_outgoing_connections.nft
+      content: |
+        #!/usr/sbin/nft -f
+        # Managed by MMX from roles/everyone_locked_out. Replace only our table, so loading this file again is safe.
+        table inet stack_triage_user_no_new_outgoing_connections {}
+        flush table inet stack_triage_user_no_new_outgoing_connections
+        table inet stack_triage_user_no_new_outgoing_connections {
+            chain output {
+                type filter hook output priority filter; policy accept;
+                meta skuid "triage" oifname != "lo" ct state new drop
+            }
+        }
+      owner: root
+      group: root
+      permissions_mode: "0644"
+      check_new_file:
+        shell:
+          script: nft --check --file "$NEW_FILE"
+          dryrun: nft --check --file "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+  - id: load_the_triage_user_table_at_every_boot
+    when:
+      all:
+        - {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+        - {not: {equals: ["{{ .inputs.is_util_server }}", "true"]}}
+    systemd_unit:
+      name: triage-user-no-new-outgoing-connections.service
+      content: |
+        # Managed by MMX from roles/everyone_locked_out.
+        [Unit]
+        Description=Drop new outgoing connections of the triage user
+        After=network-pre.target
+        Before=network.target
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/sbin/nft -f /etc/triage_user_no_new_outgoing_connections.nft
+
+        [Install]
+        WantedBy=multi-user.target
+  - id: run_the_triage_user_table
+    when:
+      all:
+        - {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+        - {not: {equals: ["{{ .inputs.is_util_server }}", "true"]}}
+    systemd_service:
+      name: triage-user-no-new-outgoing-connections.service
+      state: running
+      start_at_boot: true
+      refresh: restart
   - id: restore_triage_read_only_commands
     when: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
     file:

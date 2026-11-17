@@ -7,8 +7,9 @@ team's provider scripts in the same directory.
 ## Run MMX on util01
 
 The helper works once a run has applied the triage agent's settings (chapter 8,
-part 1). Before that run, MMHotline has no commit signing keys and the helper
-refuses with "no commit signing keys are applied"; use the systems desk's
+part 1). Before that run, MMHotline has applied no `triage_agent` settings, so
+it trusts no commit and the helper refuses (MMHotline's own words: "no commit
+signing keys are applied"); use the systems desk's
 button, `sudo -n -u servers-mmx run-mmx-on-the-servers`, for those runs.
 
 From the systems repository, after committing and pushing `main`:
@@ -28,12 +29,12 @@ ran. On `util01`,
 as root, the helper first asks MMHotline to check the commit, without the
 lock:
 `mmhotline commit-reviews check --commit-id COMMIT --json`. MMHotline
-fetches, sends one alert for each commit that newly waits for review,
-and moves its checkout forward to the trusted commit. When a commit waits
-for review, or MMHotline does not answer, the helper names the reason and
-runs nothing. Then the helper takes the shared lock as `mmhotline`,
+trusts every commit on `origin` (`trusted_commits: every_commit_on_origin`
+in `mmhotline_settings.yml`), fetches, and moves its checkout forward to
+the commit. When MMHotline does not answer, the helper says so and runs
+nothing. Then the helper takes the shared lock as `mmhotline`,
 requires the copy's checkout at the systems desk commit, and runs MMX.
-The helper never moves the checkout and never marks a commit reviewed.
+The helper never moves the checkout.
 Output streams to the systems desk. The exit status comes from MMX. A
 refusal names the failed condition. The helper is a short Bash script;
 read it to see each step.
@@ -55,30 +56,12 @@ lock, and these commands change no setting.
 MMHotline also shows each run's output on the request's page after the
 run ends.
 
-MMHotline's commit reviews run as root on `util01`, with no lock and no
-clean, pushed systems desk copy:
-
-```sh
-./server_management_scripts/run_mmx_on_util01 commit-reviews list
-./server_management_scripts/run_mmx_on_util01 commit-reviews show --commit-id COMMIT
-./server_management_scripts/run_mmx_on_util01 commit-reviews mark-reviewed --commit-id COMMIT
-./server_management_scripts/run_mmx_on_util01 commit-reviews trust-through --commit-id COMMIT
-```
-
-Each runs `mmhotline commit-reviews` with the same arguments as root on
-`util01`. `list` and `show` change
-nothing. `mark-reviewed` is the same act as **Mark commit reviewed** on
-MMHotline's Approvals page: run `mark-reviewed` only after the person has
-decided ([AGENTS.md](../AGENTS.md#the-rules)). `trust-through` is for the
-one time a procedure names, such as
-[Rebuild the utility server util01](../operating_procedures/rebuild_the_utility_server_util01.md).
 MMHotline commits no output after an MMX run.
 
 MMHotline, the helper and all scheduled jobs share
 `/var/lib/mmhotline/systems_repository` and
 `/var/lib/mmhotline/systems_repository.lock`. Each takes `flock` before
-running MMX in the copy, never while asking MMHotline a `commit-reviews`
-question, and keeps the lock until its operation ends. After taking the
+running MMX in the copy, never while asking MMHotline the commit check, and keeps the lock until its operation ends. After taking the
 lock, each writes one line naming the holder into the lock file, which
 the helper shows while it waits. MMHotline leaves the file empty during
 short fetch, explain or push operations, so an empty line means an

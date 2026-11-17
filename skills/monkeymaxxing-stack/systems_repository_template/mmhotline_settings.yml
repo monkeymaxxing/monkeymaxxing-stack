@@ -219,84 +219,22 @@ sending_services:
 # copy, under /var/lib/mmhotline/systems_repository.lock, and commits no
 # run output.
 #
-# MMHotline is the one place that decides which commit of the systems
-# repository is trusted. Before every MMX run, every triage agent run, and
-# every scheduled job on util01 (roles/util_server), MMHotline checks each
-# new commit. A commit signed by a key in trusted_commit_signing_public_keys
-# passes. A commit signed by commit_signing_public_key, the triage agent's
-# key, passes when it changes only one_time_playbooks/ and
-# triage_agent_notes/. Every other commit waits for review, and MMHotline
-# runs nothing past it until the commit is approved.
-# commits_without_a_trusted_signature_are_approved_by and
-# paths_only_a_person_may_approve, below, say who approves.
+# MMHotline trusts every commit on origin, the main copy of the systems
+# repository: a bare repository on util01, owned by root, that only the
+# keys in root_ssh_public_keys (mmx_project_settings.yml) can push to.
+# Those keys already log in as root on every server, so a signature on a
+# commit would protect nothing more. Before every MMX run, every triage
+# agent run, and every scheduled job on util01 (roles/util_server),
+# MMHotline moves its copy of the systems repository to the tip of main
+# in the main copy. No commit waits for review.
+# Reason for every_commit_on_origin: MMHotline's other value checks
+# signatures and reviews because its origin may be a Git host on the
+# internet, where anyone who gets into the host could push. Never point the
+# main copy at a Git host with this value. During a lock-out this section is
+# left out, and MMHotline then trusts no commit.
 {{ if not .vars.everyone_locked_out_except_desk }}
 triage_agent:
-  commit_signing_public_key: "{{ .vars.triage_ssh_public_key }}"
-  # One list serves the servers' root logins and commit signing:
-  # root_ssh_public_keys in mmx_project_settings.yml. Each systems desk signs
-  # its commits with its production key, and util01's mmhotline user signs
-  # MMHotline's merges of the triage agent's commits, so util01's key is in
-  # the list too. The triage agent's key is never in the list
-  # (playbooks/every_server.yml refuses it), because a trusted key's commits
-  # pass whatever they change. MMHotline uses the keys of the settings it
-  # last applied, never the keys in the pushed repository: a pushed commit
-  # that adds a key trusts nobody until a run at a trusted commit applies
-  # this file, or until a person's own run from a systems desk applies it.
-  trusted_commit_signing_public_keys:
-{{- range .vars.root_ssh_public_keys }}
-    - {{ . | toJson }}
-{{- end }}
-  # Who approves a commit that no key in trusted_commit_signing_public_keys
-  # signed, such as an edit or a merge on the Git host's website:
-  # a_person_or_the_triage_agent or a_person.
-  # a_person_or_the_triage_agent by default: the triage agent reviews each
-  # such commit in a commit review run, approves an ordinary change with
-  # one info alert, and reports at SOS, with the commit's review link, a
-  # commit that changes who can get in or looks like nobody on the team
-  # made it (triage_agent_rules.md, "The commit review run"). Reason for
-  # the default: a legitimate unsigned commit must not stop fixes at night,
-  # and the triage agent still wakes a person for the commit that changes
-  # who can get in.
-  # a_person: every such commit waits until a person selects Mark commit
-  # reviewed on MMHotline's Approvals page, with one MMHotline warning for
-  # each commit.
-  # With either value, the triage agent never approves its own commit that
-  # changes files outside one_time_playbooks/ and triage_agent_notes/.
-  commits_without_a_trusted_signature_are_approved_by: a_person_or_the_triage_agent
-  # The paths in the systems repository that only a person may approve. A
-  # commit that changes one of them waits for a person as a whole, even when
-  # the commit changes other files too, and MMHotline sends one warning at
-  # once. An entry that ends in / is a whole directory. A rename counts the
-  # old and the new path.
-  # The list is short on purpose. The list protects only the files through
-  # which an approved commit could widen the triage agent's own powers or
-  # add a trusted key. The triage agent judges every other change, the
-  # playbooks, the roles and the inventory too, and reports at SOS a commit
-  # that changes who can get in. A longer list makes the team wait for a
-  # person over ordinary changes again.
-  # The cost, which is intended and no fault: an unsigned commit that
-  # changes any setting in mmx_project_settings.yml waits for a person,
-  # because the trusted keys are in mmx_project_settings.yml and MMHotline
-  # judges a commit by the paths that the commit changes, never by the
-  # lines.
-  # A team that adds a file that sets what the triage agent may do, or
-  # which keys MMHotline trusts, adds the file to this list in the same
-  # commit.
-  paths_only_a_person_may_approve:
-    # The rules for running the agent's playbooks, the triage agent's own
-    # settings, and these two settings.
-    - mmhotline_settings.yml
-    # root_ssh_public_keys, the source of the trusted signing keys, and
-    # triage_ssh_public_key, the triage agent's own key.
-    - mmx_project_settings.yml
-    # The triage agent's instructions. CLAUDE.md is the file Claude Code
-    # reads first; it brings in AGENTS.md.
-    - triage_agent_rules.md
-    - AGENTS.md
-    - CLAUDE.md
-    # What the triage user may run as root on the servers.
-    - roles/every_server/files/sudoers_triage
-    - roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings
+  trusted_commits: every_commit_on_origin
   coding_agent: {{ .vars.triage_agent_coding_agent }}
   credential_type: api_key
   credential: {{ .secrets.mmhotline_triage_agent_credential | toJson }}

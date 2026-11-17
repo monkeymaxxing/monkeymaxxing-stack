@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""The systems desk's SSH door, and the coding agent's sign-and-publish.
+"""The systems desk's SSH door, and the coding agent's publish-branch-to-main.
 
   MMX_BINARY=/path/to/mmx python3 tests/systems_desk_door_test.py
 
 The door: renders the desk role's sshd files with `mmx explain` on a copy
 of the template, and asks a real sshd (`sshd -T`) what each login from a
-laptop gets, before and after the lock. sign-and-publish: runs the command
-on real Git repositories, with a stand-in main copy on util01 (a bare repository) and
-a real SSH agent that holds a stand-in production key.
+laptop gets, before and after the lock. publish-branch-to-main: runs the command
+on real Git repositories, with a stand-in main copy on util01 (a bare repository).
 """
 import json
 import os
@@ -173,8 +172,8 @@ class TheDeskDoor(unittest.TestCase):
         self.assertEqual(lock[-1], 'restart_ssh_without_the_root_login')
 
 
-class SignAndPublish(unittest.TestCase):
-    """sign-and-publish with its desk paths pointed at temporary ones."""
+class PublishBranchToMain(unittest.TestCase):
+    """publish-branch-to-main with its desk paths pointed at temporary ones."""
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -183,75 +182,65 @@ class SignAndPublish(unittest.TestCase):
         self.root = root
         self.environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'HOME': str(root)}
         self.environment.pop('GIT_CONFIG_SYSTEM', None)
-        # The desk's production key, in an SSH agent, as the relay socket serves it.
-        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'alex on desk01', '-f', str(root/'production_key')],
-                       check=True)
-        self.socket = root/'agent.sock'
-        agent = subprocess.run(['ssh-agent', '-a', str(self.socket)], text=True, capture_output=True, check=True)
-        pid = [part.split('=')[1].rstrip(';') for part in agent.stdout.split() if part.startswith('SSH_AGENT_PID=')][0]
-        self.addCleanup(subprocess.run, ['kill', pid])
-        subprocess.run(['ssh-add', '-q', str(root/'production_key')], env={**self.environment, 'SSH_AUTH_SOCK': str(self.socket)},
-                       check=True, capture_output=True)
-        public = (root/'production_key.pub').read_text().split()
-        (root/'allowed-signers').write_text('root_ssh_public_keys %s %s\n' % (public[0], public[1]))
-        (root/'gitconfig').write_text('[gpg "ssh"]\n\tallowedSignersFile = %s\n' % (root/'allowed-signers'))
+        self.socket = root/'agent.sock'  # the command exports it for Git's SSH; no test Git command uses it
+        (root/'gitconfig').write_text('')
         # The main copy on util01, the desk checkout with util01 as origin, and the laptop.
         self.origin, self.desk, self.laptop = root/'origin.git', root/'systems_repository', root/'laptop'
         self.git(root, 'init', '--quiet', '--bare', '-b', 'main', str(self.origin))
         self.git(root, 'init', '--quiet', '-b', 'main', str(self.desk))
-        for key, value in [('gpg.format', 'ssh'), ('user.signingkey', str(root/'production_key.pub')),
-                           ('commit.gpgsign', 'true'), ('user.name', 'coding-agent on desk01'),
+        for key, value in [('user.name', 'coding-agent on desk01'),
                            ('user.email', 'coding-agent@desk01'), ('remote.origin.url', str(self.origin)),
                            ('remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*')]:
             self.git(self.desk, 'config', key, value)
         (self.desk/'inventory.yml').write_text('servers: one\n')
         (self.desk/'settings.yml').write_text('setting: one\n')
         self.git(self.desk, 'add', '.')
-        self.git(self.desk, 'commit', '--quiet', '-m', 'Start the systems repository on desk01', signed=True)
+        self.git(self.desk, 'commit', '--quiet', '-m', 'Start the systems repository on desk01')
         self.git(self.desk, 'push', '--quiet', '-u', 'origin', 'main')
         self.git(root, 'clone', '--quiet', str(self.desk), str(self.laptop))
         self.git(self.laptop, 'config', 'user.name', 'Alex Laptop')
         self.git(self.laptop, 'config', 'user.email', 'alex@example.com')
         # The command, with its desk paths and account pointed at this test's.
-        script = (FILES/'sign-and-publish').read_text()
+        script = (FILES/'publish-branch-to-main').read_text()
         for old, new in [('export SSH_AUTH_SOCK=/run/desk-ssh-agent/socket', 'export SSH_AUTH_SOCK=%s' % self.socket),
                          ('export GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig', 'export GIT_CONFIG_SYSTEM=%s' % (root/'gitconfig')),
                          ('repository=/home/coding-agent/systems_repository', 'repository=%s' % self.desk),
                          ('[ "$(id -un)" = coding-agent ]', '[ "$(id -un)" = "$(id -un)" ]')]:
             self.assertEqual(script.count(old), 1, old)
             script = script.replace(old, new)
-        self.command = root/'sign-and-publish'
+        self.command = root/'publish-branch-to-main'
         self.command.write_text(script)
 
-    def git(self, cwd, *arguments, signed=False):
+    def git(self, cwd, *arguments):
         environment = {**self.environment, 'SSH_AUTH_SOCK': str(self.socket), 'GIT_CONFIG_SYSTEM': str(self.root/'gitconfig')}
         result = subprocess.run(['git', *arguments], cwd=cwd, text=True, capture_output=True, env=environment)
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
 
     def laptop_commit(self, name, text, message, branch='work'):
-        """An unsigned commit on the laptop, pushed to a branch of the desk checkout."""
+        """A commit on the laptop, pushed to a branch of the desk checkout."""
         (self.laptop/name).write_text(text)
         self.git(self.laptop, 'add', name)
-        self.git(self.laptop, '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', message)
+        self.git(self.laptop, 'commit', '--quiet', '-m', message)
         self.git(self.laptop, 'push', '--quiet', 'origin', 'HEAD:refs/heads/%s' % branch)
 
-    def sign_and_publish(self, branch='work'):
+    def publish_branch_to_main(self, branch='work'):
         return subprocess.run(['bash', str(self.command), branch], text=True, capture_output=True, env=self.environment)
 
     def published(self):
-        return self.git(self.origin, 'log', '--format=%G? %an <%ae> / %cn: %s', 'main').splitlines()
+        return self.git(self.origin, 'log', '--format=%an <%ae> / %cn: %s', 'main').splitlines()
 
-    def test_laptop_commits_are_published_signed_with_the_laptops_author(self):
+    def test_laptop_commits_are_published_with_the_laptops_author_and_no_signature(self):
         self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
         self.laptop_commit('settings.yml', 'setting: two\n', 'Change a setting')
-        result = self.sign_and_publish()
+        result = self.publish_branch_to_main()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.published(), ['G Alex Laptop <alex@example.com> / coding-agent on desk01: Change a setting',
-                                            'G Alex Laptop <alex@example.com> / coding-agent on desk01: Add a server',
-                                            'G coding-agent on desk01 <coding-agent@desk01> / coding-agent on desk01: '
+        self.assertEqual(self.published(), ['Alex Laptop <alex@example.com> / Alex Laptop: Change a setting',
+                                            'Alex Laptop <alex@example.com> / Alex Laptop: Add a server',
+                                            'coding-agent on desk01 <coding-agent@desk01> / coding-agent on desk01: '
                                             'Start the systems repository on desk01'])
         self.assertIn('Published 2 commits on main', result.stdout)
+        self.assertNotIn('gpgsig', self.git(self.origin, 'cat-file', 'commit', 'main'))
         self.assertEqual(self.git(self.desk, 'branch', '--list', 'work'), '', 'the branch is deleted')
         self.assertEqual(self.git(self.desk, 'rev-parse', 'main'), self.git(self.origin, 'rev-parse', 'main'))
 
@@ -260,10 +249,10 @@ class SignAndPublish(unittest.TestCase):
         self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
         (other/'notes.md').write_text('a note\n')
         self.git(other, 'add', 'notes.md')
-        self.git(other, 'commit', '--quiet', '-m', 'A note from util01', signed=True)
+        self.git(other, 'commit', '--quiet', '-m', 'A note from util01')
         self.git(other, 'push', '--quiet', 'origin', 'main')
         self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
-        result = self.sign_and_publish()
+        result = self.publish_branch_to_main()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([line.rsplit(': ', 1)[1] for line in self.published()],
                          ['Add a server', 'A note from util01', 'Start the systems repository on desk01'])
@@ -272,12 +261,12 @@ class SignAndPublish(unittest.TestCase):
         other = self.root/'other'
         self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
         (other/'inventory.yml').write_text('servers: three\n')
-        self.git(other, 'commit', '--quiet', '-am', 'Another server', signed=True)
+        self.git(other, 'commit', '--quiet', '-am', 'Another server')
         self.git(other, 'push', '--quiet', 'origin', 'main')
         self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
         before = {name: self.git(repository, 'rev-parse', ref) for name, repository, ref in
                   [('desk main', self.desk, 'main'), ('branch', self.desk, 'work'), ('main copy', self.origin, 'main')]}
-        result = self.sign_and_publish()
+        result = self.publish_branch_to_main()
         self.assertEqual(result.returncode, 1)
         self.assertIn('stopped on a conflict in: inventory.yml', result.stderr)
         self.assertIn('Nothing changed', result.stderr)
@@ -290,16 +279,16 @@ class SignAndPublish(unittest.TestCase):
     def test_before_util01_exists_the_desks_main_is_the_main_copy_and_nothing_is_pushed(self):
         self.git(self.desk, 'remote', 'remove', 'origin')
         self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
-        result = self.sign_and_publish()
+        result = self.publish_branch_to_main()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('on this desk, the main copy until util01 exists', result.stdout)
-        self.assertEqual(self.git(self.desk, 'log', '--format=%G? %s', 'main').splitlines(),
-                         ['G Add a server', 'G Start the systems repository on desk01'])
+        self.assertEqual(self.git(self.desk, 'log', '--format=%s', 'main').splitlines(),
+                         ['Add a server', 'Start the systems repository on desk01'])
         self.assertEqual(len(self.published()), 1, 'nothing reached the bare repository')
 
     def test_a_branch_that_was_not_pushed_or_main_is_refused(self):
         for branch, said in [('nothing-pushed', 'The desk has no branch nothing-pushed'), ('main', 'not main')]:
-            result = self.sign_and_publish(branch)
+            result = self.publish_branch_to_main(branch)
             self.assertEqual(result.returncode, 1)
             self.assertIn(said, result.stderr)
         self.assertEqual(len(self.published()), 1)

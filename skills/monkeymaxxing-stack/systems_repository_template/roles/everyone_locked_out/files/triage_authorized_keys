@@ -1,3 +1,3 @@
 {{ if not .inputs.everyone_locked_out_except_desk -}}
-from="{{ .inputs.inventory_nodes.util01.vars.private_ip }}",restrict {{ .inputs.triage_ssh_public_key }}
+restrict,from="{{ .inputs.inventory_nodes.util01.vars.private_ip }}" {{ .inputs.triage_ssh_public_key }}
 {{ end -}}

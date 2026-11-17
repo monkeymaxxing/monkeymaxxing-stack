@@ -325,18 +325,13 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	if len(h.vault.values["shop_SECRET_KEY_BASE"]) < 64 || h.vault.values["shop_R2_ACCESS_KEY_ID"] == "" || !h.cloudflare.R2Buckets["acme-shop-uploads"] {
 		t.Error("the app's generated secret, its R2 key, or its uploads bucket is missing")
 	}
-	// The vault and the bundle are pushed, each in its own signed commit.
-	log := h.git(h.e.directory, "--git-dir", h.origin, "log", "--format=%s%n%G?", "-2", "main")
+	// The vault and the bundle are pushed, each in its own commit.
+	log := h.git(h.e.directory, "--git-dir", h.origin, "log", "--format=%s", "-2", "main")
 	if !strings.Contains(log, "Add the recovery bundle with set-up-outside-services go-live") || !strings.Contains(log, "vault keys with set-up-outside-services go-live") {
 		t.Fatalf("origin's main lacks the two commits:\n%s", log)
 	}
 	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile {
 		t.Fatalf("the bundle's commit changes %q", files)
-	}
-	for _, commit := range []string{"main", "main~1"} {
-		if !strings.Contains(h.git(h.e.directory, "--git-dir", h.origin, "cat-file", "commit", commit), "\ngpgsig ") {
-			t.Fatalf("%s is not signed", commit)
-		}
 	}
 	// The recovery passphrase opens the bundle, which holds every item.
 	keys := h.bundleKeys()

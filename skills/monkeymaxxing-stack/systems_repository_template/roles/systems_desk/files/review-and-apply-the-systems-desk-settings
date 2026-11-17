@@ -93,8 +93,7 @@ CONNECTION_FILE_FIELDS = ('ssh_config', 'ssh_known_hosts')
 FILES_NOT_SHOWN = {'ssh/known_hosts'}
 # The project settings that the lock-out button installs on every server as
 # SSH keys when everyone_locked_out_except_desk is removed, the undo: root's
-# authorized keys, and the triage user's key, which MMHotline also takes as
-# the triage agent's commit signing key. The lock-out press itself lets in
+# authorized keys, and the triage user's key. The lock-out press itself lets in
 # only the key of the desk that keeps access. The servers' keys and addresses
 # in the inventory the lock-out button shows at each press.
 SETTINGS_THE_BUTTON_LETS_IN = ('root_ssh_public_keys', 'triage_ssh_public_key')

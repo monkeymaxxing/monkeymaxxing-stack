@@ -1,20 +1,18 @@
 #!/bin/bash
-# Signs the coding agent's commits with this desk's production key and
-# publishes them on main. The coding agent edits the systems repository on
-# the laptop and pushes a branch to its checkout on this desk, then runs:
+# Publishes the coding agent's commits on main in the team's main copy.
+# The coding agent edits the systems repository on the laptop and pushes a
+# branch to its checkout on this desk, then runs:
 #     git push desk01-agent:systems_repository HEAD:refs/heads/BRANCH
-#     ssh desk01-agent sign-and-publish BRANCH
+#     ssh desk01-agent publish-branch-to-main BRANCH
 # It brings main up to main in the team's main copy, rebases BRANCH onto
-# main with every commit signed again here (git rebase --force-rebase
-# --gpg-sign), fast-forwards main, pushes main to the main copy, and
-# deletes BRANCH. The laptop's author stays on each commit; this desk is
-# the committer. The main copy is origin, the bare repository on util01.
+# main, fast-forwards main, pushes main to the main copy, and deletes
+# BRANCH. The main copy is origin, the bare repository on util01. Commits
+# are not signed: MMHotline trusts every commit on origin, and only the
+# keys in root_ssh_public_keys can push there.
 # Before util01 exists the checkout has no origin: this checkout is the
 # main copy then, and publishing ends at the fast-forward.
 # On a rebase conflict it names the files and changes nothing: BRANCH and
 # main stay as they were.
-# Reason: MMHotline and util01 trust only commits signed by a key in
-# root_ssh_public_keys, and the production key never leaves this desk.
 set -euo pipefail
 export SSH_AUTH_SOCK=/run/desk-ssh-agent/socket
 export GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig
@@ -23,10 +21,10 @@ stop() { printf '%s\n' "$1" >&2; exit 1; }
 # Hooks off: no file in the pushed branch runs here.
 git() { command git -c core.hooksPath=/dev/null "$@"; }
 
-[ "$(id -un)" = coding-agent ] || stop 'Run sign-and-publish as coding-agent: ssh desk01-agent sign-and-publish BRANCH. Nothing changed.'
-[ "$#" = 1 ] || stop 'Usage: sign-and-publish BRANCH, the branch you pushed to the desk. Nothing changed.'
+[ "$(id -un)" = coding-agent ] || stop 'Run publish-branch-to-main as coding-agent: ssh desk01-agent publish-branch-to-main BRANCH. Nothing changed.'
+[ "$#" = 1 ] || stop 'Usage: publish-branch-to-main BRANCH, the branch you pushed to the desk. Nothing changed.'
 branch=$1
-case "$branch" in main | -*) stop "sign-and-publish takes the branch you pushed, not $branch. Nothing changed." ;; esac
+case "$branch" in main | -*) stop "publish-branch-to-main takes the branch you pushed, not $branch. Nothing changed." ;; esac
 git check-ref-format --branch "$branch" > /dev/null 2>&1 || stop "$branch is not a branch name. Nothing changed."
 cd "$repository"
 [ "$(git symbolic-ref --quiet --short HEAD || true)" = main ] || stop "The desk's checkout, $repository, is not on main. Nothing changed."
@@ -55,7 +53,7 @@ put_main_back() { git checkout --quiet main; git reset --quiet --hard "$main_bef
 base=$(git rev-parse main)
 
 branch_before=$(git rev-parse "refs/heads/$branch")
-if ! git rebase --quiet --force-rebase --gpg-sign main "$branch" > /dev/null 2>&1; then
+if ! git rebase --quiet main "$branch" > /dev/null 2>&1; then
     conflicts=$(git diff --name-only --diff-filter=U | paste -sd , - | sed 's/,/, /g')
     git rebase --abort > /dev/null 2>&1 || true
     git update-ref "refs/heads/$branch" "$branch_before"
@@ -68,19 +66,11 @@ if [ "$count" = 0 ]; then
     git branch --quiet -D "$branch"
     stop "$branch adds nothing to main. Deleted $branch; nothing was published."
 fi
-# Every commit to publish must carry a good signature of a key in the
-# allowed signers file, which the desk review writes from
-# root_ssh_public_keys.
-if git log --format=%G? "main..$branch" | grep -qv '^G$'; then
-    git update-ref "refs/heads/$branch" "$branch_before"
-    put_main_back
-    stop "A rebased commit has no good signature of this desk's production key. Check that ssh-add -l lists it with SSH_AUTH_SOCK=$SSH_AUTH_SOCK, and that root_ssh_public_keys holds it. Nothing changed."
-fi
 git merge --quiet --ff-only "$branch"
 if "$has_origin"; then
     if ! git push --quiet origin main; then
         put_main_back
-        stop "The main copy on util01 refused the push: main there moved, or util01 does not let this desk in. main on this desk is as it was; $branch holds the signed commits. Run sign-and-publish $branch again."
+        stop "The main copy on util01 refused the push: main there moved, or util01 does not let this desk in. main on this desk is as it was; $branch holds the commits. Run publish-branch-to-main $branch again."
     fi
     git branch --quiet --set-upstream-to=origin/main main 2> /dev/null || true
     where='in the main copy on util01'
@@ -88,5 +78,5 @@ else
     where='on this desk, the main copy until util01 exists'
 fi
 git branch --quiet -d "$branch"
-printf 'Published %s commits on main, signed with this desk'"'"'s production key. main is at %s %s:\n' "$count" "$(git rev-parse --short HEAD)" "$where"
+printf 'Published %s commits on main. main is at %s %s:\n' "$count" "$(git rev-parse --short HEAD)" "$where"
 git log --format='  %h %s (%an)' "$base..main"
