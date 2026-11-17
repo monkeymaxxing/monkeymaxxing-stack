@@ -1,9 +1,64 @@
-# OVHcloud Public Cloud
+# OVHcloud
 
 OVHcloud calls a server an **instance** and a size a **flavor**. Follow the shared
 [script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts),
 [enrollment contract](../server_management_scripts/README.md#enroll-a-server-before-the-first-mmx-run),
 and [initial setup](../initial_setup/).
+
+## VPS or Public Cloud: by how long the server stays
+
+OVHcloud sells two kinds of server. Choose by how long the server will run:
+
+- **A server meant to stay is a VPS,** billed by the month: the first
+  servers (`app001`, `db01`, `util01`), a systems desk at OVHcloud, and any
+  later server the team keeps, such as a second app server.
+- **A server the Stack creates and removes again is a Public Cloud
+  instance,** billed by the hour: `restore01` for the restore drill and row
+  recovery, a replacement built during a repair, and app servers added for
+  the load.
+
+Prices in the US, month to month, read on 2026-11-17. A VPS includes the
+daily backup that OVHcloud requires with it:
+
+| Size | VPS | Public Cloud | A VPS is cheaper after |
+| --- | --- | --- | --- |
+| 2 vCPU, 4 GB | VPS-1, $5.85 a month | d2-4, $0.0256 an hour | about 9.5 days |
+| 4 vCPU, 8 GB, the app server | VPS-2, $10.60 a month | b2-15, $0.1663 an hour | about 2.7 days |
+
+Before you create a server, show the person both prices, and say which
+kind you chose and why.
+
+Two things to know about a VPS:
+
+- **It is billed by the month,** so a VPS for a server that lives for
+  minutes, such as `restore01`, costs a whole month.
+- **Only the person can end it.** Ending a VPS takes a token that OVHcloud
+  emails to the account's admin contact. Your destroy script requests the
+  termination (`POST /vps/NAME/terminate`) and tells the person to confirm
+  it from that email; it never reports the server as gone.
+
+How you make a VPS, through the API proxy with the person's credential and
+after the person approves the price:
+
+1. Order it with the order cart: `POST /order/cart`, then
+   `POST /order/cart/CART_ID/vps` with the plan, such as `vps-2027-model1`,
+   the cart's required configuration, the Standard automated-backup
+   option, then `POST /order/cart/CART_ID/checkout`. If checkout cannot pay
+   by API, the person places the same order in the console.
+2. Rebuild it with `POST /vps/NAME/rebuild`: the newest Debian 13
+   `imageId`, the desk's `publicSshKey`, `doNotSendPassword: true`, and the
+   server's first-boot data as `postInstallScript`.
+3. Check, on the first VPS, that the first-boot data closed public TCP 22
+   before SSH accepted a connection, as it does on a Public Cloud instance.
+   Then record the server in the inventory as usual.
+
+Your provider scripts keep creating Public Cloud instances, because the
+servers they create are temporary. When `create_a_server_at_the_provider`
+is given a VPS's server type, such as for the replacement of a failed VPS,
+it creates a Public Cloud flavor at least as large: `d2-4` for VPS-1,
+`b2-15` for VPS-2. After the repair, recommend moving the replacement back
+to a VPS with [Replace a server](../operating_procedures/replace_a_server.md):
+it is permanent now.
 
 ## The provider's web console
 

@@ -90,7 +90,9 @@ the shared root console password's hash is missing (step 6).
    the provider, through `http://127.0.0.1:8081/`. With the fuller system, the
    servers include `staging01` and `app002`. The
    [provider guide](../provider_guides/README.md) names the request that gives its prices, such as
-   OVHcloud's flavor plan codes and public catalog. At Hetzner Cloud, request
+   OVHcloud's flavor plan codes and public catalog. At OVHcloud these servers stay, so they are VPS
+   servers: follow [VPS or Public Cloud](../provider_guides/ovhcloud_public_cloud.md#vps-or-public-cloud-by-how-long-the-server-stays).
+   At Hetzner Cloud, request
    `GET http://127.0.0.1:8081/server_types`.
    From each selected type's `prices`, read the hourly and monthly prices
    for the chosen location. The server-type prices exclude the public
