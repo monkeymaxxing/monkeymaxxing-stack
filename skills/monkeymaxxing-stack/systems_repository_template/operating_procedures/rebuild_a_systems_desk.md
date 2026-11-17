@@ -156,10 +156,11 @@ inventory's real names and addresses, and the next unused desk name.
     different from production. Skip that step's key block: the first-boot
     file is ready. Clear the file at once, also after a refused request:
     `: > /tmp/desk02-first-boot.yml`.
-    Record the new public address as `desk02.vars.public_ipv4_address`,
-    and commit it on the branch.
-    **Check:** the provider lists `desk02`, and the first-boot file is
-    empty.
+    Record the new public address as `desk02.vars.public_ipv4_address`
+    and the returned `id` as `desk02.vars.provider_server_id`, and commit
+    them on the branch.
+    **Check:** the provider lists `desk02`, `desk02.vars.provider_server_id`
+    holds its ID, and the first-boot file is empty.
 11. **Write the laptop's way in,** as chapter 3's step 3 says, with
     `desk02` in place of `desk01` in every name: `desk02.conf`, the SSH
     entries `desk02`, `desk02-agent`, `desk02-setup`,
@@ -444,11 +445,12 @@ shows the new value.
 
 ## Find the old desk at the provider
 
-The inventory records no provider ID for a systems desk, so read the ID
-from the provider listing. The listing gives each server's `id`, `name`,
-`public_ipv4_address` and `power_state`. The old desk is the server with
-the lost desk's `public_ipv4_address`, which `inventories/servers.yml`
-held under `desk01` before this rebuild.
+The old desk's ID is the `provider_server_id` that `inventories/servers.yml`
+held under `desk01` before this rebuild. Check it against the provider
+listing, which gives each server's `id`, `name`, `public_ipv4_address` and
+`power_state`: the old desk is the server with the lost desk's
+`public_ipv4_address`. The new desk's API proxy refuses a request other than
+GET that names the new desk's own ID, never the old desk's.
 
 ## How the rebuild restores the desk
 

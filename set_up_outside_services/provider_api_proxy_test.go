@@ -420,3 +420,70 @@ func TestProxyRefusesAProviderAddressNoProviderGuideGives(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// The paths and bodies below are the shapes of each provider's delete and
+// rebuild requests (Hetzner, DigitalOcean, Vultr, Scaleway, OVHcloud, AWS
+// and Google Cloud), with the desk's own server ID at the provider.
+func TestProxyRefusesARequestThatWouldChangeTheDeskItself(t *testing.T) {
+	const deskID = "4242424242"
+	standIn, received := headerStandIn(t)
+	proxy := newHeaderTokenProxy(standIn.URL+"/v1/", headerTokenSigner{"Authorization", "Bearer token"}, standIn.Client())
+	proxy.deskServerID = deskID
+	server := httptest.NewServer(proxy)
+	defer server.Close()
+	send := func(method, path, body string) (int, string) {
+		request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		answer, _ := io.ReadAll(response.Body)
+		return response.StatusCode, string(answer)
+	}
+	refused := []struct{ name, method, path, body string }{
+		{"Hetzner delete", "DELETE", "/servers/" + deskID, ""},
+		{"Hetzner rebuild", "POST", "/servers/" + deskID + "/actions/rebuild", `{"image":"debian-13"}`},
+		{"DigitalOcean delete", "DELETE", "/droplets/" + deskID, ""},
+		{"DigitalOcean rebuild", "POST", "/droplets/" + deskID + "/actions", `{"type":"rebuild","image":"debian-13-x64"}`},
+		{"Vultr reinstall", "POST", "/instances/" + deskID + "/reinstall", ""},
+		{"Scaleway action", "POST", "/servers/" + deskID + "/action", `{"action":"terminate"}`},
+		{"OVHcloud delete", "DELETE", "/cloud/project/PROJECT/instance/" + deskID, ""},
+		{"OVHcloud reinstall", "POST", "/cloud/project/PROJECT/instance/" + deskID + "/reinstall", `{"imageId":"x"}`},
+		{"a JSON body that names it", "POST", "/servers/bulk", `{"servers":["1","` + deskID + `"]}`},
+		{"a JSON number that names it", "POST", "/servers/bulk", `{"server_id":` + deskID + `}`},
+		{"AWS terminate", "POST", "/", "Action=TerminateInstances&InstanceId.1=" + deskID},
+		{"Google delete", "DELETE", "/projects/P/zones/Z/instances/" + deskID, ""},
+	}
+	for _, c := range refused {
+		before := len(*received)
+		status, answer := send(c.method, c.path, c.body)
+		if status != http.StatusForbidden || !strings.Contains(answer, "this would change your desk itself; the desk is managed by its own guide") || len(*received) != before {
+			t.Errorf("%s: want a refusal and nothing sent on, got HTTP %d %q after %d requests", c.name, status, answer, len(*received)-before)
+		}
+	}
+	passed := []struct{ name, method, path, body string }{
+		{"a GET of the desk", "GET", "/servers/" + deskID, ""},
+		{"a GET of the listing", "GET", "/servers?per_page=50", ""},
+		{"a delete of another server", "DELETE", "/servers/4242424243", ""},
+		{"a delete of a server whose ID only starts like the desk's", "DELETE", "/servers/" + deskID + "9", ""},
+		{"a create", "POST", "/servers", `{"name":"app002","size":42424242420}`},
+	}
+	for _, c := range passed {
+		before := len(*received)
+		status, answer := send(c.method, c.path, c.body)
+		if status != http.StatusOK || len(*received) != before+1 {
+			t.Errorf("%s: want it passed on, got HTTP %d %q", c.name, status, answer)
+		}
+	}
+}
+
+func TestProxyNeedsTheDesksServerID(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("CREDENTIALS_DIRECTORY", directory)
+	os.WriteFile(filepath.Join(directory, "provider-api-token"), []byte(`proxy_set_header Authorization "Bearer t";`+"\n"), 0o600)
+	err := runProviderAPIProxy([]string{"--provider-api-url", providerGuideAPIAddresses[0]})
+	if err == nil || !strings.Contains(err.Error(), "desk's own server ID") {
+		t.Fatalf("got %v", err)
+	}
+}

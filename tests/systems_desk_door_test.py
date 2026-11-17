@@ -173,6 +173,14 @@ class TheDeskDoor(unittest.TestCase):
             if path.is_file() and 'systems_desk_self_management_key' in path.read_text(errors='replace'):
                 self.assertNotIn('ssh-add', path.read_text(errors='replace'), path)
 
+    def test_the_desks_own_server_id_is_root_owned_and_reaches_the_api_proxy(self):
+        # The API proxy refuses a request other than GET that names this ID.
+        task = [task for _, task in self.tasks if task['path'].endswith('/write_the_desks_own_server_id_for_the_api_proxy')][0]
+        fields = {argument['field']: argument['value'] for argument in task['arguments']}
+        self.assertEqual((fields['file.content'], fields['file.owner'], fields['file.group'], fields['file.path']),
+                         ('4242424242\n', 'root', 'root', '/etc/systems-desk/desk-server-id'))
+        self.assertIn('LoadCredential=desk-server-id:/etc/systems-desk/desk-server-id', (T/'roles/systems_desk/files/provider-api-proxy.service').read_text())
+
     def test_the_coding_agent_gets_the_socket_and_its_git_settings_and_no_forwarding(self):
         login = self.login(self.locked(), 'coding-agent', LAPTOP)
         self.assertEqual(login['setenv'], ['SSH_AUTH_SOCK=/run/desk-ssh-agent/socket',

@@ -80,6 +80,7 @@ fleet_stages:
           allowed_laptops: "{{ .vars.allowed_laptops }}"
           systems_desk_laptop_addresses: "{{ .vars.private_ip_ranges.systems_desk_laptops }}"
           provider_api_url: "{{ .vars.systems_desk_provider_api_url }}"
+          provider_server_id: "{{ .vars.provider_server_id }}"
           provider_api_authentication: "{{ .vars.systems_desk_provider_api_authentication }}"
           mmx_release: "{{ .vars.stack_software.mmx }}"
           mmhotline_release: "{{ .vars.stack_software.mmhotline }}"

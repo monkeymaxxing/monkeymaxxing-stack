@@ -46,6 +46,10 @@ const (
 	apiProxyUnitFile              = "/etc/systemd/system/provider-api-proxy.service"
 	providerTokenCredentialName   = "provider-api-token"
 	cloudflareTokenCredentialName = "cloudflare-api-token"
+	// The desk's own server ID at the provider, a root-owned file that
+	// systemd's LoadCredential gives the proxy under this name.
+	deskServerIDFile           = "/etc/systems-desk/desk-server-id"
+	deskServerIDCredentialName = "desk-server-id"
 	// The credential file, root:root 0600. systemd's LoadCredential gives the
 	// service a copy under this name that only the service's account reads.
 	signingCredentialFile = "/etc/systems-desk/provider-api-signing-credential.json"
@@ -273,6 +277,11 @@ func runProviderAPIProxy(arguments []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "Signing requests to %s on %s.\n", credential.APIAddress, providerAPIProxyAddress)
 	}
+	idText, err := os.ReadFile(filepath.Join(directory, deskServerIDCredentialName))
+	if err != nil || strings.TrimSpace(string(idText)) == "" {
+		return fmt.Errorf("%s must hold the desk's own server ID at the provider; record it as provider_server_id in the desk's entry of inventories/servers.yml", deskServerIDFile)
+	}
+	providerProxy.deskServerID = strings.TrimSpace(string(idText))
 	cloudflareSigner, err := readHeaderTokenSigner(filepath.Join(directory, cloudflareTokenCredentialName))
 	if err != nil {
 		return err
@@ -305,6 +314,25 @@ type apiProxy struct {
 	otherAPIs  map[string]string
 	signer     requestSigner
 	client     *http.Client
+	// deskServerID is the desk's own server ID at the provider; empty on the
+	// Cloudflare proxy, whose API has no servers.
+	deskServerID string
+}
+
+// changesTheDeskItself reports whether a request other than GET names the
+// desk's own server ID: as a path segment, or in the query or body (a JSON
+// body that names it, or any body that has it as a whole word). Reason: a
+// cleanup must never delete or rebuild the desk by mistake; the desk is
+// managed by its own guide.
+func (p *apiProxy) changesTheDeskItself(r *http.Request, body []byte) bool {
+	if p.deskServerID == "" || r.Method == http.MethodGet {
+		return false
+	}
+	if slices.Contains(strings.Split(r.URL.Path, "/"), p.deskServerID) {
+		return true
+	}
+	whole := regexp.MustCompile(`(^|[^A-Za-z0-9_.-])` + regexp.QuoteMeta(p.deskServerID) + `($|[^A-Za-z0-9_.-])`)
+	return whole.MatchString(r.URL.RawQuery) || whole.Match(body)
 }
 
 func newAPIProxy(credential signingCredential, addresses map[string]*regexp.Regexp, client *http.Client) (*apiProxy, error) {
@@ -375,6 +403,10 @@ func (p *apiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		refuse(w, http.StatusBadRequest, "the request's body could not be read: %v", err)
+		return
+	}
+	if p.changesTheDeskItself(r, body) {
+		refuse(w, http.StatusForbidden, "this would change your desk itself; the desk is managed by its own guide")
 		return
 	}
 	target := p.target(r.URL.EscapedPath())

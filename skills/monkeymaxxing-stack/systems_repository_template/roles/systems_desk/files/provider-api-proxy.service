@@ -17,6 +17,7 @@ LoadCredential=provider-api-token:/etc/systems-desk/provider-api-token.conf
 ExecStart=/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outside_services_release.version }}/set-up-outside-services run-the-provider-api-proxy
 LoadCredential=provider-api-signing-credential:/etc/systems-desk/provider-api-signing-credential.json
 {{- end }}
+LoadCredential=desk-server-id:/etc/systems-desk/desk-server-id
 LoadCredential=cloudflare-api-token:/etc/systems-desk/cloudflare-api-token.conf
 DynamicUser=yes
 Restart=on-failure

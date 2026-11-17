@@ -240,7 +240,8 @@ repository's name, including paths inside quoted SSH commands.
    `~/example-setup/provider-key` in the same command, and
    `/tmp/desk01-first-boot.yml` as first-boot data. Public SSH stays
    closed from first boot. Record the returned public address as
-   `desk01.vars.public_ipv4_address`. Clear the private first-boot file at
+   `desk01.vars.public_ipv4_address` and the returned `id` as
+   `desk01.vars.provider_server_id`. Clear the private first-boot file at
    once after the provider accepts or refuses the request:
 
    ```sh
@@ -256,7 +257,7 @@ repository's name, including paths inside quoted SSH commands.
    ```
 
    **Check:** the provider lists `desk01`, `desk01.vars.public_ipv4_address`
-   holds its address, and `/tmp/desk01-first-boot.yml` is empty.
+   holds its address, `desk01.vars.provider_server_id` holds its ID, and `/tmp/desk01-first-boot.yml` is empty.
 
 3. **The laptop's way in.** Write `~/.config/doubleshell/desk01.conf`
    with the following block. The file holds no secret: it has no
