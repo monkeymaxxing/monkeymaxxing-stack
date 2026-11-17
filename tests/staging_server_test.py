@@ -152,9 +152,9 @@ class StagingSettingsStayOffProduction(unittest.TestCase):
     every_server refuses to configure staging01 when that would reach
     production's bucket or address."""
 
-    SHOP = {'env': {'RAILS_ENV': 'production', 'APP_ORIGIN': 'https://shop.example.com', 'R2_BUCKET': 'shop-uploads'},
-            'staging_env': {'APP_ORIGIN': 'https://staging.shop.example.com', 'R2_BUCKET': 'shop-staging-uploads'},
-            'production_uploads_r2_bucket': 'shop-uploads'}
+    SHOP = {'env': {'RAILS_ENV': 'production', 'APP_ORIGIN': 'https://shop.example.com'},
+            'staging_env': {'APP_ORIGIN': 'https://staging.shop.example.com'},
+            'production_uploads_r2_bucket': 'shop-uploads', 'staging_uploads_r2_bucket': 'shop-staging-uploads'}
 
     @classmethod
     def setUpClass(cls):
@@ -197,8 +197,13 @@ class StagingSettingsStayOffProduction(unittest.TestCase):
         self.assertNotIn('R2_BUCKET=shop-staging-uploads', production)
 
     def test_an_app_without_staging_env_gets_its_env_on_staging01(self):
-        app = {'env': {'RAILS_ENV': 'production'}}
+        app = {'env': {'RAILS_ENV': 'production'}, 'production_uploads_r2_bucket': ''}
         self.assertEqual(self.lines(self.render_settings_file(True, app)), {'RAILS_ENV=production'})
+
+    def test_an_app_without_uploads_gets_no_bucket_on_staging01_or_production(self):
+        app = dict(self.SHOP, production_uploads_r2_bucket='', staging_uploads_r2_bucket='')
+        for is_staging_server in (True, False):
+            self.assertFalse([line for line in self.lines(self.render_settings_file(is_staging_server, app)) if line.startswith('R2_BUCKET')])
 
     def refusal(self, **changes):
         self.assertIsNotNone(self.script, 'every_server has no refuse_staging_settings_that_reach_production task')
@@ -219,19 +224,24 @@ class StagingSettingsStayOffProduction(unittest.TestCase):
         self.assertEqual(self.refusal().returncode, 0)
 
     def test_staging_uploads_without_their_own_bucket_are_refused_naming_the_app_and_the_line(self):
-        result = self.refusal(staging_env__R2_BUCKET=None)
+        result = self.refusal(staging_uploads_r2_bucket='')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('apps.shop', result.stderr)
-        self.assertIn('staging_env: {R2_BUCKET:', result.stderr)
+        self.assertIn('staging_uploads_r2_bucket: <', result.stderr)
 
-    def test_production_buckets_in_staging_env_are_refused(self):
-        for bucket in ('shop-uploads',):
-            self.assertNotEqual(self.refusal(staging_env__R2_BUCKET=bucket).returncode, 0)
-        self.assertNotEqual(self.refusal(production_uploads_r2_bucket='', env__R2_BUCKET='shop-uploads',
-                                         staging_env__R2_BUCKET='shop-uploads').returncode, 0)
+    def test_production_bucket_as_the_staging_bucket_is_refused(self):
+        self.assertNotEqual(self.refusal(staging_uploads_r2_bucket='shop-uploads').returncode, 0)
+
+    def test_an_app_naming_r2_bucket_itself_is_refused_with_the_setting_to_use(self):
+        for where in ('env', 'staging_env'):
+            with self.subTest(where=where):
+                result = self.refusal(**{where+'__R2_BUCKET': 'shop-uploads'})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f'apps.shop.{where} names R2_BUCKET', result.stderr)
+                self.assertIn('production_uploads_r2_bucket', result.stderr)
 
     def test_an_app_without_uploads_needs_no_bucket(self):
-        self.assertEqual(self.refusal(production_uploads_r2_bucket='', env__R2_BUCKET=None, staging_env__R2_BUCKET=None).returncode, 0)
+        self.assertEqual(self.refusal(production_uploads_r2_bucket='', staging_uploads_r2_bucket='').returncode, 0)
 
     def test_production_origin_on_staging_is_refused(self):
         for origin in (None, 'https://shop.example.com'):

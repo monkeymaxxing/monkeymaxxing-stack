@@ -86,15 +86,17 @@ the person's. Then you push the changes and watch the first build.
      start, so list no directory that holds data that must last. Leave the
      key out when the app writes nowhere else;
    - `asset_directory`, `database_name`, and `env`: the app's settings
-     that are not secret, such as its public address, `APP_ORIGIN`, and
-     its uploads bucket's name, `R2_BUCKET`;
+     that are not secret, such as its public address, `APP_ORIGIN`. Leave
+     the uploads bucket's name, `R2_BUCKET`, out of `env`: the Stack writes
+     it from `production_uploads_r2_bucket`, so the app and the nightly
+     copy of its uploads use the same bucket;
    - `staging_env`: the settings `staging01` takes in place of the same
-     names in `env`, so staging never uses production's public address or
-     uploads bucket. Give it its own `APP_ORIGIN` and, for an app that keeps
-     uploads, its own `R2_BUCKET`, as the example app does. Write `{}` for
-     none. When the team adds `staging01`, `every_server` refuses an app
-     whose `staging_env` would leave production's bucket or address in
-     place;
+     names in `env`, so staging never uses production's public address. Give
+     it its own `APP_ORIGIN`, as the example app does. Write `{}` for none.
+     The staging uploads bucket is `staging_uploads_r2_bucket`, which
+     `staging01` gets as `R2_BUCKET`. When the team adds `staging01`,
+     `every_server` refuses an app that would leave production's bucket or
+     address in place;
    - `secrets_from_vault`: each secret the app reads, and where its value
      comes from, from the app's code, as the template's example app does:
      - `where_the_value_comes_from: generated_by_the_setup` for a value

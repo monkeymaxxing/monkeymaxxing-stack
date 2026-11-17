@@ -202,29 +202,25 @@ vars:
       # connections at the next deploy.
       # database_connections_per_worker_process: 10
       # The app's plain settings, written to every server that runs the
-      # app. Secrets come from the vault (secrets_from_vault below).
+      # app. Secrets come from the vault (secrets_from_vault below). Leave
+      # R2_BUCKET out: the Stack writes it from production_uploads_r2_bucket
+      # below, and on staging01 from staging_uploads_r2_bucket. Reason: the
+      # nightly copy of the uploads reads the same setting, so the app and
+      # the copy cannot name different buckets. every_server refuses an app
+      # whose env or staging_env names R2_BUCKET.
       env:
         RAILS_ENV: production
         APP_ORIGIN: https://shop.example.com
-        R2_BUCKET: example-shop-uploads
       # staging01's plain settings: on staging01, each name here replaces the
       # same name in env. Write {} for none; staging01 then gets env as it is.
       # Reason: a setting that names a place production owns must not reach
-      # staging01. The two that do are APP_ORIGIN, the address in the links
-      # the app writes, and R2_BUCKET, the bucket its uploads go to: without
-      # its own R2_BUCKET, staging would write uploads into production's
-      # bucket. every_server refuses to configure staging01 when:
-      #   - the app keeps uploads (production_uploads_r2_bucket below is not
-      #     "") and staging_env has no R2_BUCKET of its own;
-      #   - staging_env's R2_BUCKET is production's bucket;
-      #   - env has an APP_ORIGIN and staging_env has none of its own, or the
-      #     same one.
-      # The refusal names the app and the line to add. Set R2_BUCKET to the
-      # same bucket as staging_uploads_r2_bucket below. A team without
-      # staging01 changes nothing: no server reads staging_env.
+      # staging01. APP_ORIGIN, the address in the links the app writes, is
+      # one. every_server refuses to configure staging01 when env has an
+      # APP_ORIGIN and staging_env has none of its own, or the same one. The
+      # refusal names the app and the line to add. A team without staging01
+      # changes nothing: no server reads staging_env.
       staging_env:
         APP_ORIGIN: https://staging.shop.example.com
-        R2_BUCKET: example-shop-staging-uploads
       # Each environment variable the app reads from the vault, and where
       # its value comes from. set-up-outside-services go-live makes each one
       # with generated_by_the_setup without a question: a random value, or
@@ -274,8 +270,10 @@ vars:
       # from production's, so staging never reaches production's uploads.
       # operating_procedures/add_staging01.md sets it, such as
       # example-shop-staging-uploads, for an app with
-      # production_uploads_r2_bucket; "" without staging01. Nothing copies it
-      # to B2: staging holds seed data only.
+      # production_uploads_r2_bucket; "" without staging01. staging01 gets it
+      # as R2_BUCKET. every_server refuses to configure staging01 for an
+      # app with a production bucket when this is "" or production's.
+      # Nothing copies it to B2: staging holds seed data only.
       staging_uploads_r2_bucket: ""
       # The two names in secrets_from_vault that hold the app's R2 key for
       # production_uploads_r2_bucket. set-up-outside-services cloudflare
