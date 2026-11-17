@@ -65,7 +65,7 @@ the person-only commands in the person's own desk terminal.
    `mmx`, `mmwatchdog`, `mmhotline`, and `set_up_outside_services`, which the desk's first run downloads.
    Never fill a pin by hand.
    Verify the archive against `SHA256SUMS` and keep the complete archive layout in `~/.cache/monkeymaxxing-stack/desk-bootstrap-tools/` and add that directory to the bootstrap shell's `PATH`.
-   Install doubleshell following [doubleshell installation](https://github.com/monkeymaxxing/doubleshell/blob/main/README.md).
+   Install doubleshell's newest release following [doubleshell installation](https://github.com/monkeymaxxing/doubleshell#install): download the archive, check it against `SHA256SUMS`, and copy the binary to `~/.local/bin`.
    The laptop also needs Git 2.34 or later, OpenSSH, Bash, jq, curl, and OpenSSL.
    Windows commands run inside WSL, with temporary files in the Linux home directory.
 
@@ -82,7 +82,7 @@ the person-only commands in the person's own desk terminal.
    **Tell the person after:** no message, because step 3 starts the
    systems repository with the tools.
 
-   **Check:** `mmx version`, `git --version`, `bash --version`, and `jq --version`.
+   **Check:** `mmx version`, `doubleshell version`, `git --version`, `bash --version`, and `jq --version`.
 
 3. **Copy the template.** `TEMPLATE_DIRECTORY` is `systems_repository_template/` beside the installed skill's `SKILL.md`.
 
