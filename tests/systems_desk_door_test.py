@@ -126,6 +126,57 @@ class TheDeskDoor(unittest.TestCase):
             self.assertEqual(self.login(self.before_the_lock(), user, LAPTOP)['authenticationmethods'],
                              ['publickey,keyboard-interactive'])
 
+    def test_no_desk_login_accepts_a_key_that_the_mmx_buttons_runs_can_use(self):
+        # A pushed inventory can name this desk under any address. The
+        # button's MMX runs as servers-mmx with the production key in the
+        # agent socket; no account on the desk may accept that key.
+        desk = '10.20.9.1'   # desk01's own WireGuard address
+        for name, files in (('locked', self.locked()), ('before the lock', self.before_the_lock())):
+            for address in ('127.0.0.1', '::1', desk, SERVER, LAPTOP):
+                with self.subTest(files=name, address=address):
+                    self.assertNotIn('servers-mmx', self.login(files, 'servers-mmx', address)['allowusers'])
+                    root = self.login(files, 'root', address)
+                    if address in ('127.0.0.1', '::1'):
+                        self.assertEqual(root['allowusers'], ['root'])
+                    elif not (name == 'before the lock' and address == LAPTOP):
+                        self.assertNotIn('root', root['allowusers'])
+                    for user in ('alex', 'coding-agent'):
+                        login = self.login(files, user, address)
+                        if address in ('127.0.0.1', '::1'):
+                            self.assertNotIn(user, login['allowusers'])
+                        else:
+                            self.assertEqual(login['authenticationmethods'], ['publickey,keyboard-interactive'])
+        # Root's keys: only the root-owned self-management key, every time.
+        root_keys = [task for _, task in self.tasks if task['action'] == 'authorized_keys']
+        self.assertEqual(len(root_keys), 3)
+        for task in root_keys:
+            fields = {argument['field']: argument for argument in task['arguments']}
+            self.assertEqual(fields['authorized_keys.for_user_account'].get('value') or
+                             fields['authorized_keys.for_user_account'].get('reference'), 'root')
+            keys = [argument.get('reference') or argument.get('value') for field, argument in fields.items()
+                    if field.startswith('authorized_keys.keys[')]
+            self.assertEqual(len(keys), 1)
+            self.assertRegex(keys[0], r'^\{\{ \.node_tasks\.(create|read)_the_root_owned_self_management_key\.public_key \}\}$')
+        # The person's and coding-agent's keys: the allowed laptops' keys only.
+        inventory = (T/'inventories/servers.yml').read_text()
+        production_key = inventory.split('production_ssh_public_key: ', 1)[1].split('\n', 1)[0].split()[1]
+        for name in ('allow_exactly_the_allowed_laptops_ssh_keys', 'allow_the_allowed_laptops_ssh_keys_for_the_coding_agent'):
+            with self.subTest(task=name):
+                lines = [line for line in rendered(self.tasks, name).splitlines() if line]
+                self.assertEqual(lines, ['ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIORZZg3NlYdxJ28janK/DsJ1O0O2YgF7KN2aiEPskegs alex@work-laptop'])
+                self.assertNotIn(production_key, rendered(self.tasks, name))
+        # The agent socket holds the production key alone; the self-management key never enters it.
+        agent = rendered(self.tasks, 'install_the_persistent_ssh_agent')
+        self.assertEqual([line for line in agent.splitlines() if 'ssh-add' in line and not line.startswith('#')],
+                         ['ExecStartPost=/usr/bin/ssh-add /home/alex/.ssh/production_key'])
+        for path in T.rglob('*'):
+            if path.is_file() and 'systems_desk_self_management_key' in path.read_text(errors='replace'):
+                self.assertNotIn('ssh-add', path.read_text(errors='replace'), path)
+        # Second layer: the desk's firewall refuses servers-mmx's connections
+        # to its own SSH on any of its addresses, which all leave through lo.
+        self.assertIn('oifname "lo" meta skuid "servers-mmx" tcp dport 22 reject with tcp reset',
+                      rendered(self.tasks, 'write_the_desk_firewall'))
+
     def test_the_coding_agent_gets_the_socket_and_its_git_settings_and_no_forwarding(self):
         login = self.login(self.locked(), 'coding-agent', LAPTOP)
         self.assertEqual(login['setenv'], ['SSH_AUTH_SOCK=/run/desk-ssh-agent/socket',
