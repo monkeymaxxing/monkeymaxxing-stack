@@ -303,26 +303,24 @@ Kubernetes existed.
 ## What it costs
 
 You pay the companies whose services you use, at their own prices. This
-example is the smallest system, at two server providers, with the server
-types each provider's guide creates. Hetzner's prices are from its pricing
-page, read on 2026-11-15; OVHcloud's from its US public catalog, read on
-2026-11-17.
+example is the smallest system, at two server providers. Hetzner's prices
+are from its pricing page, read on 2026-11-15; OVHcloud's from its US
+catalog, read on 2026-11-17, month to month.
 
-| Machine | Size | Hetzner Cloud (Europe) | OVHcloud Public Cloud (US) |
+| Machine | Size | Hetzner Cloud (Europe) | OVHcloud VPS (US) |
 | --- | --- | --- | --- |
-| App server `app001` | 4 vCPU, 8 GB of memory or more | €8.99 (CX33) | $121.40 (b2-15, 15 GB) |
-| Database server `db01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $18.69 (d2-4) |
-| Utility server `util01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $18.69 (d2-4) |
-| One systems desk | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $18.69 (d2-4) |
-| **Total each month** | | **€26.96** | **$177.47** |
+| App server `app001` | 4 vCPU, 8 GB of memory | €8.99 (CX33) | $10.00 (VPS-2) |
+| Database server `db01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.35 (VPS-1) |
+| Utility server `util01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.35 (VPS-1) |
+| One systems desk | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.35 (VPS-1) |
+| **Total each month** | | **€26.96** | **$26.05** |
 
 Hetzner's prices are without VAT and include each server's public address
-and 20 TB of traffic. OVHcloud Public Cloud costs about six times as much:
-its servers are billed by the hour, so a replaced server or a restore
-server costs only the minutes it runs, and the monthly figure is the hourly
-price times 730 hours. OVHcloud's smallest server type with the app
-server's disk has 15 GB of memory. Your coding agent shows you each
-server's price before it creates one.
+and 20 TB of traffic. OVHcloud's VPS prices include unlimited traffic. At
+OVHcloud, the servers the Stack creates and removes by itself, such as the
+weekly restore drill's server, are Public Cloud servers billed by the hour,
+so a drill costs a few cents. Your coding agent shows you each server's
+price before it creates one.
 
 The other costs:
 
