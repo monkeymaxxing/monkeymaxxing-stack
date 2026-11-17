@@ -317,8 +317,16 @@ TEST_DATABASE_URL=postgresql://localhost/reference_app_tests go test ./...
 
 - [`main.go`](main.go): the subcommands, the settings, and the database
   connection.
-- [`web.go`](web.go) and [`pages.html`](pages.html): the web server and its
-  pages.
+- [`web.go`](web.go) and [`pages.templ`](pages.templ): the web server and its
+  pages. The pages are [templ](https://templ.guide) templates, which the Go
+  compiler checks: a wrong field name fails the build, not a request.
+  [`pages_templ.go`](pages_templ.go) is generated from `pages.templ` and
+  committed, so a build and CI need no templ. After you change
+  `pages.templ`, run `go generate` in this directory (it runs the templ
+  version pinned in `go.mod`) and commit the new `pages_templ.go`.
+  [`testdata/`](testdata) holds each page as it should render, which
+  `pages_golden_test.go` compares; after a wanted change to a page, run
+  `go test -run RenderedPages -update-golden` and read the diff.
 - [`migrate.go`](migrate.go) and [`migrations/`](migrations): the
   migrations.
 - [`jobs.go`](jobs.go): the job worker.

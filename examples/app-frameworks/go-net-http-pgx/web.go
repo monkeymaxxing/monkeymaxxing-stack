@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
-	"html/template"
 	"io"
 	"mime"
 	"net/http"
@@ -20,9 +18,7 @@ import (
 	"time"
 )
 
-//go:embed pages.html
-var pageFiles embed.FS
-var pages = template.Must(template.ParseFS(pageFiles, "pages.html"))
+//go:generate go tool templ generate
 
 const sessionCookie = "__Host-portal_session"
 
@@ -108,7 +104,7 @@ func (a *app) health(w http.ResponseWriter, r *http.Request) {
 func (a *app) home(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(sessionCookie)
 	if err != nil || cookie.Value == "" {
-		pages.ExecuteTemplate(w, "landing", nil)
+		landingPage().Render(r.Context(), w)
 		return
 	}
 	owner, ok := a.owner(w, r)
@@ -176,7 +172,7 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) {
 		fail(w)
 		return
 	}
-	pages.ExecuteTemplate(w, "portal", data)
+	portalPage(data).Render(r.Context(), w)
 }
 func credentialsForm(r *http.Request) (string, string, error) {
 	if err := r.ParseForm(); err != nil {

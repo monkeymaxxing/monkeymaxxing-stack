@@ -8,6 +8,13 @@ Copy this directory whole into your app repository. Each example has its own
 migrations, templates, dependencies, container recipe, and HTTP check.
 Use a separate database and bucket for every app and environment.
 
+The pages are [templ](https://templ.guide) templates in `pages.templ`.
+`pages_templ.go` is generated from them and committed, so a build needs no
+templ. After you change `pages.templ`, run `go generate` in this directory
+and commit the new `pages_templ.go`. `testdata/` holds each page as it
+should render; `go test -run RenderedPages -update-golden` rewrites it after a
+wanted change.
+
 Follow the [Stack guide](https://github.com/monkeymaxxing/monkeymaxxing-stack/blob/main/docs/app-frameworks/go-net-http-pgx.md) for checks,
 settings, image builds, and deployment preparation. The
 [test record](test-record.md) separates verified results from remaining checks.

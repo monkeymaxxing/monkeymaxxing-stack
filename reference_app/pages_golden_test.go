@@ -13,11 +13,12 @@ import (
 var updateGoldenFiles = flag.Bool("update-golden", false, "rewrite the files in testdata/ from the rendered pages")
 
 // normalizeHTML makes two renderings of the same page comparable when they
-// differ only in whitespace between tags or in the quoting of attributes:
-// a template engine may write either.
+// differ only in whitespace or in the quoting of attributes: a template
+// engine may write either. A browser shows runs of whitespace as one space,
+// and these pages have no pre or textarea, where that would not hold.
 func normalizeHTML(page string) string {
-	whitespaceBetweenTags := regexp.MustCompile(`>\s+<`)
-	page = whitespaceBetweenTags.ReplaceAllString(page, "><")
+	page = regexp.MustCompile(`\s+`).ReplaceAllString(page, " ")
+	page = strings.ReplaceAll(page, "> <", "><")
 	page = strings.ReplaceAll(page, "&#34;", "&quot;")
 	page = strings.ReplaceAll(page, "&#39;", "&apos;")
 	return strings.TrimSpace(page)

@@ -1,0 +1,83 @@
+package main
+
+import "strconv"
+
+// The pages are templ templates: `go generate` turns this file into
+// pages_templ.go, which is committed so that a build needs no templ.
+
+templ homePageHTML(page homePage) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>Who answered this page</title>
+			<link rel="stylesheet" href={ page.StylesheetPath }/>
+		</head>
+		<body>
+			<h1>Who answered this page</h1>
+			<dl>
+				<dt>App server</dt>
+				<dd>{ page.AppServerHostName }</dd>
+				<dt>The request arrived on</dt>
+				<dd>{ page.RequestArrivedOn }</dd>
+				<dt>Release</dt>
+				<dd>{ page.Release }</dd>
+				if page.DatabaseProblem == "" {
+					<dt>Database server</dt>
+					<dd>{ page.DatabaseServer }, the primary: the app connects only to the one that accepts writes</dd>
+					<dt>Page views so far</dt>
+					<dd>{ strconv.FormatInt(page.PageViewCount, 10) }, counted on { page.CountedOn }</dd>
+				}
+			</dl>
+			if page.DatabaseProblem != "" {
+				<p class="problem">The database didn't answer: { page.DatabaseProblem }</p>
+			}
+			<h2>Newest jobs</h2>
+			<form method="post" action="/jobs"><button>Add a job</button></form>
+			<table>
+				<tr><th>Job</th><th>Added</th><th>Finished</th></tr>
+				for _, job := range page.Jobs {
+					<tr><td>{ strconv.FormatInt(job.ID, 10) }</td><td>{ job.Added }</td><td>{ job.Finished }</td></tr>
+				}
+			</table>
+			<h2>Newest page views</h2>
+			<table>
+				<tr><th>Viewed</th><th>App server</th><th>Database server</th></tr>
+				for _, view := range page.PageViews {
+					<tr><td>{ view.ViewedAt }</td><td>{ view.AppServerHostName }</td><td>{ view.DatabaseServer }</td></tr>
+				}
+			</table>
+			<p><a href="/cached">A page that Cloudflare may cache</a></p>
+		</body>
+	</html>
+}
+
+templ cachedPageHTML(page cachedPage) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>A page that Cloudflare may cache</title>
+			<link rel="stylesheet" href={ page.StylesheetPath }/>
+		</head>
+		<body>
+			<h1>A page that Cloudflare may cache</h1>
+			<p>
+				This page answers with <code>Cache-Control: public, max-age=60</code>, so
+				Cloudflare may keep a copy for 60 seconds and answer from it. While the copy
+				lasts, every reload shows the same time and app server.
+			</p>
+			<dl>
+				<dt>Rendered at</dt>
+				<dd>{ page.RenderedAt }</dd>
+				<dt>App server</dt>
+				<dd>{ page.AppServerHostName }</dd>
+				<dt>Release</dt>
+				<dd>{ page.Release }</dd>
+			</dl>
+			<p><a href="/">The home page</a> is never cached.</p>
+		</body>
+	</html>
+}

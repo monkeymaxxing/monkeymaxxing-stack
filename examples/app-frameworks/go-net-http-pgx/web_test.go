@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -63,7 +64,7 @@ func TestCredentialAndRecordValidation(t *testing.T) {
 }
 func TestTemplateEscapesCustomerInput(t *testing.T) {
 	var output bytes.Buffer
-	err := pages.ExecuteTemplate(&output, "portal", pageData{Records: []record{{ID: 1, Title: "<script>alert(1)</script>", Description: "</textarea><script>"}}})
+	err := portalPage(pageData{Records: []record{{ID: 1, Title: "<script>alert(1)</script>", Description: "</textarea><script>"}}}).Render(context.Background(), &output)
 	if err != nil {
 		t.Fatal(err)
 	}
