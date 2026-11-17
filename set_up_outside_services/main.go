@@ -37,8 +37,9 @@ after loading your token file:
 
 Commands:
   go-live                       The first setup, one screen at a time: Cloudflare, your
-                                domain's registrar, Backblaze, the registry's token, every
-                                other vault secret without a question, then the lock: your
+                                domain's registrar, Backblaze, the registry's token, your apps'
+                                keys from outside services, every other vault secret without
+                                a question, then the lock: your
                                 recovery passphrase and your phone code. It saves the
                                 recovery bundle, recovery_bundle.age, commits and pushes it
                                 with the vault, signed, and copies it into the locked backup
@@ -195,6 +196,7 @@ type environment struct {
 	rdapBootstrapURL     string
 	githubAPIURL         string
 	containerRegistryURL string
+	stripeAPIURL         string
 	// readRootFile reads a file of the desk that only root reads, through
 	// sudo; setUpThePhoneCode runs the desk's phone-code setup as root.
 	readRootFile      func(path string) ([]byte, error)
@@ -258,6 +260,7 @@ func newEnvironment(out io.Writer) (*environment, error) {
 		rdapBootstrapURL:            "https://data.iana.org/rdap/dns.json",
 		githubAPIURL:                "https://api.github.com",
 		containerRegistryURL:        "https://ghcr.io",
+		stripeAPIURL:                "https://api.stripe.com",
 		readRootFile:                readRootFileWithSudo,
 		setUpThePhoneCode:           setUpThePhoneCodeWithSudo,
 		resultsFile:                 setupResultsFile,

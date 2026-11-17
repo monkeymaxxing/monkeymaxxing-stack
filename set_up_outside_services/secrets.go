@@ -31,10 +31,6 @@ type secretKind int
 const (
 	// typedSecret: the person makes it on a website and pastes it.
 	typedSecret secretKind = iota
-	// appSecret: one of an app's secrets_from_vault. It is random, such as
-	// SECRET_KEY_BASE, or comes from an outside service, such as a Stripe
-	// key; only the person knows which, so the step asks.
-	appSecret
 	// randomSecret: nobody needs to see it. hexLength > 0 makes it as that
 	// many hexadecimal characters, for a reader that needs hex.
 	randomSecret
@@ -52,6 +48,12 @@ type secretPlan struct {
 	Where     string // where the person makes it: a page link and the clicks
 	Length    int    // randomSecret: mmx secrets add-random --length
 	HexLength int
+	// App and Variable name an app's secret from an outside service, which
+	// go-live asks on its own screen with its Steps and CheckedWith.
+	App, Variable string
+	Staging       bool
+	Steps         []string
+	CheckedWith   string
 }
 
 const triageCredentialKey = "mmhotline_triage_agent_credential"
@@ -283,10 +285,13 @@ func secretsPlan(s systemSettings) []secretPlan {
 	if s.hasStagingServer {
 		environments = append(environments, "staging_")
 	}
+	// The apps' secrets: the ones from outside services after the typed
+	// keys, the ones the setup makes with the random keys.
+	var appSecrets []secretPlan
 	for _, environment := range environments {
 		for _, name := range apps {
 			app := s.Vars.Apps[name]
-			for _, variable := range app.SecretsFromVault {
+			for _, variable := range app.SecretsFromVault.names() {
 				if variable == app.ProductionUploadsR2KeyVariables.AccessKeyID || variable == app.ProductionUploadsR2KeyVariables.SecretAccessKey {
 					continue
 				}
@@ -294,8 +299,24 @@ func secretsPlan(s systemSettings) []secretPlan {
 				if environment != "" {
 					what = name + "'s " + variable + " on staging01"
 				}
-				plan = append(plan, secretPlan{Key: environment + name + "_" + variable, Kind: appSecret, What: what, Length: 64})
+				secret := app.SecretsFromVault[variable]
+				item := secretPlan{Key: environment + name + "_" + variable, Kind: randomSecret, What: what, Length: 64}
+				if secret.WhereTheValueComesFrom == secretFromAnOutsideService {
+					item = secretPlan{Key: item.Key, Kind: typedSecret, What: what, Why: secret.WhatItIsFor, Where: strings.Join(secret.StepsToGetIt, " "),
+						App: name, Variable: variable, Staging: environment != "", Steps: secret.StepsToGetIt, CheckedWith: secret.CheckedWith}
+				}
+				appSecrets = append(appSecrets, item)
 			}
+		}
+	}
+	for _, item := range appSecrets {
+		if item.Kind == typedSecret {
+			plan = append(plan, item)
+		}
+	}
+	for _, item := range appSecrets {
+		if item.Kind == randomSecret {
+			plan = append(plan, item)
 		}
 	}
 	random := []secretPlan{
@@ -330,6 +351,9 @@ func runSecrets(e *environment, arguments []string) error {
 	}
 	settings, err := readSystemSettings(e.directory)
 	if err != nil {
+		return err
+	}
+	if err := settings.checkAppSecrets(); err != nil {
 		return err
 	}
 	plan := secretsPlan(settings)
@@ -429,22 +453,6 @@ func runSecrets(e *environment, arguments []string) error {
 				}
 				triageChoices = append(triageChoices, choice)
 			}
-		case appSecret:
-			e.say("")
-			e.say("%s, saved as %s.", capitalize(item.What), item.Key)
-			answer, askErr := e.confirm("  Type random if nobody needs to see it, such as a secret key base, or press Enter to paste the value an outside service gave, such as an API key: ")
-			if askErr != nil {
-				return askErr
-			}
-			if strings.EqualFold(strings.TrimSpace(answer), "random") {
-				if err := saved.addRandom(item.Key, item.Length); err != nil {
-					return err
-				}
-				e.say("  Made a random value and saved it as %s.", item.Key)
-				made = append(made, item.Key)
-				continue
-			}
-			value, err = e.prompt("  Paste it from the service's own page, such as its API keys page (hidden), or press Enter to leave it for later: ")
 		case randomSecret:
 			if err := saveRandom(saved, item.Key, item.Length, item.HexLength); err != nil {
 				return err

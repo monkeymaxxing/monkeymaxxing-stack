@@ -18,6 +18,7 @@ const (
 	expiringRegistryToken = "ghp_registrytokenvalue0000000000000002"
 	vaultPassphrase       = "vault-passphrase-value"
 	emergencyCodes        = "11111111\n22222222\n33333333"
+	stripeKey             = "sk_live_stripekeyvalue000000000001"
 )
 
 // github stands in for GitHub's API and ghcr.io: each token's scopes, end
@@ -61,6 +62,18 @@ func (g *github) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprint(w, `{"errors": [{"code": "DENIED", "message": "denied"}]}`)
+	}
+}
+
+// stripe stands in for Stripe's balance call, which any working key reads.
+func stripe(keys ...string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/balance" && contains(keys, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
+			fmt.Fprint(w, `{"object": "balance"}`)
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"error": {"message": "Invalid API Key provided: sk_live_****wxyz"}}`)
 	}
 }
 
@@ -110,6 +123,9 @@ func newGoLiveHarness(t *testing.T, dnssec bool) *goLiveHarness {
 	rdapServer := httptest.NewServer(rdap(dnssec))
 	t.Cleanup(rdapServer.Close)
 	h.e.githubAPIURL, h.e.containerRegistryURL, h.e.rdapBootstrapURL = githubServer.URL, githubServer.URL, rdapServer.URL+"/dns.json"
+	stripeServer := httptest.NewServer(stripe(stripeKey))
+	t.Cleanup(stripeServer.Close)
+	h.e.stripeAPIURL = stripeServer.URL
 	rootFiles := map[string]string{
 		"/etc/systems-desk/provider-api-token.conf":    `proxy_set_header Authorization "Bearer ` + providerToken + `";` + "\n",
 		os.Getenv("MMX_VAULT_PASSWORD_FILE"):           vaultPassphrase + "\n",
@@ -196,9 +212,18 @@ func (h *goLiveHarness) bundleKeys() map[string]bool {
 // that checks one.
 func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	h := newGoLiveHarness(t, true)
-	h.hidden = append(typed("not-the-token-it-made", h.addLinkToken(), "wrong-application-key", masterKey, expiringRegistryToken, registryToken, "maple orbit candle river stone pilot"),
-		h.theShownPassphrase)
-	h.visible = typed("", masterKeyID, masterKeyID)
+	// An app that keeps uploads, in an account without R2 yet, and has a
+	// Stripe key.
+	path := filepath.Join(h.e.directory, projectSettingsFile)
+	text, _ := os.ReadFile(path)
+	text = []byte(strings.Replace(string(text), `production_uploads_r2_bucket: ""`, "production_uploads_r2_bucket: acme-shop-uploads", 1))
+	writeFile(t, path, strings.Replace(string(text), "      secrets_from_vault:\n", "      secrets_from_vault:\n"+stripeSecret, 1))
+	h.commitAll("An app with uploads and a Stripe key")
+	h.cloudflare.R2Off = true
+	turnOnR2 := func() string { h.cloudflare.Lock(); h.cloudflare.R2Off = false; h.cloudflare.Unlock(); return "" }
+	h.hidden = append(typed("not-the-token-it-made", h.addLinkToken(), "wrong-application-key", masterKey, expiringRegistryToken, registryToken,
+		"sk_live_notthekey", stripeKey, "maple orbit candle river stone pilot"), h.theShownPassphrase)
+	h.visible = append([]func() string{turnOnR2}, typed("", masterKeyID, masterKeyID)...)
 	err := runGoLive(h.e)
 	t.Logf("The person's terminal:\n%s", h.transcript)
 	if err != nil {
@@ -207,10 +232,12 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	output := h.transcript.String()
 
 	// Each screen in the design's order, with its four parts.
-	order := []string{"Account 2 of 4: Cloudflare (your web address and protection)", "Cloudflare accepted the token.",
+	order := []string{"Account 2 of 4: Cloudflare (your web address and protection)", "4. Turn on R2", "It costs nothing up to 10 GB of files a month.",
+		"5. Open this link.", "Cloudflare accepted the token.", "R2 is not on yet",
 		"Account 3 of 4: your domain's registrar (Namecheap, Inc.)", "TURN OFF DNSSEC FIRST.", "Account 4 of 4: Backblaze (your backups)",
 		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "One more key: so your servers can download your app.",
-		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Step 1 of 2: your recovery passphrase", "SAVE IT NOW.",
+		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Key for shop: STRIPE_API_KEY",
+		"Stripe takes your customers' card payments with it.", "1. Open  https://dashboard.stripe.com/apikeys", "Stripe accepted the key.", "Step 1 of 2: your recovery passphrase", "SAVE IT NOW.",
 		"[the screen is cleared]", "Step 2 of 2: your phone code", "Done.  Your desk is locked."}
 	at := 0
 	for _, line := range order {
@@ -230,7 +257,7 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	// Each refused value was asked again, with the service's reason.
 	for _, reason := range []string{"Cloudflare did not accept the token.  It said: Invalid request headers.",
 		"Backblaze did not accept the key.  It said: The applicationKeyId and/or the applicationKey are wrong.", "This token stops working on 2026-12-17 09:00:00 UTC",
-		"That is not the passphrase above."} {
+		"Stripe did not accept the key.  It said: Invalid API Key provided: sk_live_****wxyz.", "That is not the passphrase above."} {
 		if !strings.Contains(output, reason) {
 			t.Errorf("the output lacks the refusal %q", reason)
 		}
@@ -260,8 +287,13 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 			t.Errorf("the vault lacks %s", key)
 		}
 	}
-	if h.vault.values["util01_provider_api_token"] != providerToken || h.vault.values["container_registry_read_only_token"] != registryToken {
-		t.Error("util01's provider credential or the registry token is not the one entered")
+	if h.vault.values["util01_provider_api_token"] != providerToken || h.vault.values["container_registry_read_only_token"] != registryToken ||
+		h.vault.values["shop_STRIPE_API_KEY"] != stripeKey {
+		t.Error("util01's provider credential, the registry token or the Stripe key is not the one entered")
+	}
+	// The app's secret the setup generates, and its R2 key, made in the same run.
+	if len(h.vault.values["shop_SECRET_KEY_BASE"]) < 64 || h.vault.values["shop_R2_ACCESS_KEY_ID"] == "" || !h.cloudflare.R2Buckets["acme-shop-uploads"] {
+		t.Error("the app's generated secret, its R2 key, or its uploads bucket is missing")
 	}
 	// The vault and the bundle are pushed, each in its own signed commit.
 	log := h.git(h.e.directory, "--git-dir", h.origin, "log", "--format=%s%n%G?", "-2", "main")
@@ -326,7 +358,7 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 			t.Error("the results file holds a secret")
 		}
 	}
-	h.requireNoSecretInOutput(providerToken, masterKey, registryToken, vaultPassphrase, "11111111")
+	h.requireNoSecretInOutput(providerToken, masterKey, registryToken, vaultPassphrase, "11111111", stripeKey)
 	// The passphrase showed once: the screen was cleared after it.
 	if strings.Count(output, h.passphrase) != 1 && strings.Count(output, strings.ReplaceAll(h.passphrase, " ", "  ")) != 1 {
 		t.Error("the recovery passphrase shows more than once")
@@ -359,7 +391,7 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 		t.Fatalf("the results do not say where the run stopped: %+v", stopped)
 	}
 	for _, step := range stopped.Steps {
-		want := map[string]string{"registrar": stepNotNeeded, "phone_code": stepInProgress, "recovery_bundle": stepNotStarted}[step.Name]
+		want := map[string]string{"registrar": stepNotNeeded, "app_keys_from_outside_services": stepNotNeeded, "phone_code": stepInProgress, "recovery_bundle": stepNotStarted}[step.Name]
 		if want == "" {
 			want = stepDone
 		}
@@ -392,25 +424,26 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 	}
 }
 
-// An account without R2 still goes live: the upload buckets, their keys and
-// the status page wait, and the results say so.
-func TestGoLiveLeavesR2ForLaterWhenItIsOff(t *testing.T) {
+// When Cloudflare does not list the token's account, the person copies its
+// ID from the dashboard, and a malformed ID is asked again.
+func TestTheAccountIDScreenWhenCloudflareDoesNotListTheAccount(t *testing.T) {
 	h := newGoLiveHarness(t, false)
-	path := filepath.Join(h.e.directory, projectSettingsFile)
-	text, _ := os.ReadFile(path)
-	writeFile(t, path, strings.Replace(string(text), `production_uploads_r2_bucket: ""`, "production_uploads_r2_bucket: acme-shop-uploads", 1))
-	h.commitAll("An app with uploads")
-	h.cloudflare.R2Off = true
-	h.hidden = append(typed(h.addLinkToken(), masterKey, registryToken), h.theShownPassphrase)
-	h.visible = typed("", masterKeyID)
-	if err := runGoLive(h.e); err != nil {
-		t.Fatalf("go-live: %v\n%s", err, h.transcript)
+	h.cloudflare.RefuseAccountsList = true
+	settings, err := readSystemSettings(h.e.directory)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(h.last().ForTheCodingAgent["cloudflare_r2"], "not turned on yet") {
-		t.Fatal("the results do not say R2 waits")
+	g := &goLive{e: h.e, settings: settings, tokenStep: 4}
+	h.visible = typed("dash.cloudflare.com/abc", testAccountID)
+	link, _, err := g.checkTheLinkToken(h.addLinkToken())
+	t.Logf("The person's terminal:\n%s", h.transcript)
+	if err != nil || link.accountID != testAccountID {
+		t.Fatalf("want the token accepted in the typed account, got %v", err)
 	}
-	if h.vault.values["shop_R2_ACCESS_KEY_ID"] != "" || h.vault.values["mmhotline_down_alarm_cloudflare_api_token"] == "" {
-		t.Fatal("want the R2 keys left for later and the other tokens made")
+	for _, line := range []string{"Type  Copy account ID  and press Enter.", "An account ID is 32 letters and digits."} {
+		if !strings.Contains(h.transcript.String(), line) {
+			t.Errorf("the screen lacks %q", line)
+		}
 	}
 }
 

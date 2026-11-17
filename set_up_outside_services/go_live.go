@@ -21,8 +21,8 @@ import (
 // go-live is sitting 1's whole part on the desk. The person runs it with
 // ssh desk01-setup, whose SSH entry runs it as the person. It walks the
 // outside accounts one screen at a time (Cloudflare, the domain's registrar,
-// Backblaze, the registry's token), makes every other vault secret without a
-// question, and ends with the lock: the recovery passphrase and the phone
+// Backblaze, the registry's token, the apps' keys from outside services),
+// makes every other vault secret without a question, and ends with the lock: the recovery passphrase and the phone
 // code. Each value is checked with its service at once; a refused value is
 // asked again with the service's reason. The results file tells the coding
 // agent which steps are done, so the person relays nothing. A rerun skips
@@ -85,6 +85,9 @@ type goLive struct {
 	results            setupResults
 	// zone is the domain at Cloudflare, once this run read it.
 	zone *cloudflareZone
+	// tokenStep is the number of the Cloudflare screen's step that makes the
+	// token, which a refusal names.
+	tokenStep int
 	// b2 is the Backblaze sign-in of this run, which the bundle's copy
 	// needs at the end. The master key is never saved anywhere.
 	b2 *b2Client
@@ -96,6 +99,7 @@ func (g *goLive) steps() []goLiveStep {
 		{"registrar", g.registrar},
 		{"backblaze", g.backblaze},
 		{"container_registry_token", g.containerRegistryToken},
+		{"app_keys_from_outside_services", g.appKeysFromOutsideServices},
 		{"random_vault_secrets", g.randomVaultSecrets},
 		{"recovery_passphrase", g.recoveryPassphrase},
 		{"phone_code", g.phoneCode},
@@ -151,6 +155,9 @@ func (g *goLive) prepare() error {
 		return err
 	}
 	if _, err := backblazePlan(settings); err != nil {
+		return err
+	}
+	if err := settings.checkAppSecrets(); err != nil {
 		return err
 	}
 	// The plan's checks do not depend on the account, which Cloudflare names
@@ -366,25 +373,45 @@ func (g *goLive) refused(service, item string, err error, advice string) {
 
 // Account 2 of 4: Cloudflare.
 
+// r2OverviewLink opens the account's R2 page, where Cloudflare's checkout
+// turns R2 on.
+const r2OverviewLink = "https://dash.cloudflare.com/?to=/:account/r2/overview"
+
+// r2CostLines states R2's price for a person who approves it, from
+// Cloudflare's R2 pricing page (https://developers.cloudflare.com/r2/pricing/,
+// read 2026-11-17, Standard storage): free up to 10 GB-month, 1 million
+// Class A and 10 million Class B requests a month; then $0.015 per
+// GB-month, $4.50 per million Class A (writes) and $0.36 per million Class B
+// (reads); no egress fee. Check it again when Cloudflare changes its prices.
+const r2CostLines = `     It costs nothing up to 10 GB of files a month.
+     Above that:  $0.015 for each GB a month,
+                  $4.50 for each million file writes after the first million,
+                  $0.36 for each million file reads after the first 10 million.
+     Downloads to your users cost nothing.`
+
 func (g *goLive) cloudflare() (string, error) {
 	e := g.e
-	e.show(fmt.Sprintf(`
-Account 2 of 4: Cloudflare (your web address and protection)
-
-What this is for:
-  Cloudflare puts your site on the internet and keeps your private pages private.
-
-Do this now:
-  1. Open  https://dash.cloudflare.com/sign-up  and make an account.
-  2. Save the login in %s.
-  3. Turn on two-step sign-in:  https://dash.cloudflare.com/profile/authentication
-  4. Open this link.  It fills in the key for you:
-       %s
-     Press  Continue to summary,  then  Create Token.
-
-Then paste the token here.
-
-`, g.passwordManager(), tokenMakingLink(g.settings, e.person)))
+	steps := []string{
+		"Open  https://dash.cloudflare.com/sign-up  and make an account.",
+		"Save the login in " + g.passwordManager() + ".",
+		"Turn on two-step sign-in:  https://dash.cloudflare.com/profile/authentication",
+	}
+	needsR2 := len(g.settings.appsWithUploads()) > 0
+	if needsR2 {
+		steps = append(steps, "Turn on R2, where your app keeps its uploaded files:\n       "+r2OverviewLink+
+			"\n     Finish the checkout there.  It asks for a card.\n"+r2CostLines)
+	}
+	g.tokenStep = len(steps) + 1
+	steps = append(steps, "Open this link.  It fills in the key for you:\n       "+tokenMakingLink(g.settings, e.person)+
+		"\n     Press  Continue to summary,  then  Create Token.")
+	var screen strings.Builder
+	screen.WriteString("\nAccount 2 of 4: Cloudflare (your web address and protection)\n\nWhat this is for:\n" +
+		"  Cloudflare puts your site on the internet and keeps your private pages private.\n\nDo this now:\n")
+	for i, step := range steps {
+		fmt.Fprintf(&screen, "  %d. %s\n", i+1, step)
+	}
+	screen.WriteString("\nThen paste the token here.\n\n")
+	e.show(screen.String())
 	var link *cloudflareClient
 	for link == nil {
 		value, err := g.askHidden("  Cloudflare token (hidden): ")
@@ -402,25 +429,37 @@ Then paste the token here.
 	}
 	e.say("Cloudflare accepted the token.")
 	g.note("cloudflare_account_id", link.accountID)
+	defer e.quietly(func() error { e.deleteTheLinkToken(link); return nil })
 	err := e.quietly(func() error {
-		defer e.deleteTheLinkToken(link)
 		zone, err := e.addTheDomain(link, g.settings, g.domain)
-		if err != nil {
-			return err
-		}
 		g.zone = &zone
-		plan, err := cloudflareAccountTokenPlan(g.settings, link.accountID)
-		if err != nil {
-			return err
-		}
-		done, err := e.setUpCloudflare(link, g.settings, link.accountID, plan, g.saved, g.oldKeys)
-		if done.r2IsOff {
-			g.note("cloudflare_r2", "not turned on yet: the apps' upload buckets, their keys and the status page wait for set-up-outside-services cloudflare")
-		}
 		return err
 	})
 	if err != nil {
 		return "", err
+	}
+	plan, err := cloudflareAccountTokenPlan(g.settings, link.accountID)
+	if err != nil {
+		return "", err
+	}
+	for {
+		var done cloudflareSetUp
+		err := e.quietly(func() error {
+			var err error
+			done, err = e.setUpCloudflare(link, g.settings, link.accountID, plan, g.saved, g.oldKeys)
+			return err
+		})
+		if err != nil {
+			return "", err
+		}
+		if !done.r2IsOff {
+			break
+		}
+		// The upload buckets and their keys need R2, so the run waits for it.
+		e.show(fmt.Sprintf("\nR2 is not on yet, and your app needs it for its uploaded files.\nFinish the checkout from step %d:\n  %s\n\n", g.tokenStep-1, r2OverviewLink))
+		if _, err := e.confirm("Press Enter when the page shows R2's overview.  "); err != nil {
+			return "", err
+		}
 	}
 	g.note("cloudflare_nameservers", strings.Join(g.zone.NameServers, " "))
 	return stepDone, nil
@@ -430,7 +469,7 @@ Then paste the token here.
 // advice is set when Cloudflare refused the token, so the person may paste
 // another; other errors stop the run.
 func (g *goLive) checkTheLinkToken(value string) (*cloudflareClient, string, error) {
-	const pasteAgain = "Copy the whole token, then paste it again.\nIf Cloudflare no longer shows it, make a new one with the link in step 4."
+	pasteAgain := fmt.Sprintf("Copy the whole token, then paste it again.\nIf Cloudflare no longer shows it, make a new one with the link in step %d.", g.tokenStep)
 	if err := checkTokenValue("token", value); err != nil {
 		return nil, pasteAgain, errors.New("that is not a whole Cloudflare token: it has a space or another character a token never has")
 	}
@@ -444,12 +483,13 @@ func (g *goLive) checkTheLinkToken(value string) (*cloudflareClient, string, err
 		return nil, "", err
 	}
 	if len(accounts) == 0 {
-		// Cloudflare did not list the token's account, so the person names it.
-		id, err := g.askVisible("  Your Cloudflare account ID, the 32 letters and digits after  dash.cloudflare.com/  in your browser: ")
+		// Cloudflare did not list the token's account, so the person copies
+		// its ID from the dashboard.
+		id, err := g.askForTheAccountID()
 		if err != nil {
 			return nil, "", err
 		}
-		accounts = []string{strings.ToLower(id)}
+		accounts = []string{id}
 	}
 	for _, accountID := range accounts {
 		link.accountID = accountID
@@ -462,11 +502,37 @@ func (g *goLive) checkTheLinkToken(value string) (*cloudflareClient, string, err
 		}
 		err = g.e.quietly(func() error { return g.e.acceptLinkToken(g.settings, link, id) })
 		if errors.Is(err, errLinkTokenCannotMakeTokens) {
-			return nil, "Make the token with the link in step 4, and keep the settings the link fills in.", errors.New("this token cannot make keys")
+			return nil, fmt.Sprintf("Make the token with the link in step %d, and keep the settings the link fills in.", g.tokenStep), errors.New("this token cannot make keys")
 		}
 		return link, "", err
 	}
 	return nil, pasteAgain, errors.New("Cloudflare does not know this token")
+}
+
+// askForTheAccountID asks for the account's ID where Cloudflare's dashboard
+// shows it: its search finds "Copy account ID" on any page
+// (https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/).
+func (g *goLive) askForTheAccountID() (string, error) {
+	g.e.show(`
+Cloudflare did not tell me your account ID.  Copy it from Cloudflare's page:
+  1. On any page of  https://dash.cloudflare.com  press  Search  at the top.
+  2. Type  Copy account ID  and press Enter.  Cloudflare copies the ID.
+  3. Paste it here.
+
+`)
+	for {
+		id, err := g.askVisible("  Account ID: ")
+		if err != nil {
+			return "", err
+		}
+		id = strings.ToLower(id)
+		if cloudflareAccountIDPattern.MatchString(id) {
+			return id, nil
+		}
+		g.e.say("")
+		g.e.say("An account ID is 32 letters and digits.  Copy it again with step 2, then paste it.")
+		g.e.say("")
+	}
 }
 
 // Account 3 of 4: the domain's registrar.
@@ -879,6 +945,96 @@ func registryCall(request *http.Request, result any) error {
 	}
 	if result != nil && json.Unmarshal(body, result) != nil {
 		return fmt.Errorf("the registry answered %s with something this command cannot read", call)
+	}
+	return nil
+}
+
+// The apps' keys from outside services, each on its own screen.
+
+func (g *goLive) appKeysFromOutsideServices() (string, error) {
+	e := g.e
+	state := stepNotNeeded
+	for _, item := range secretsPlan(g.settings) {
+		if item.App == "" {
+			continue
+		}
+		state = stepDone
+		if g.saved.hasAll(item.Key) {
+			continue
+		}
+		title := "Key for " + item.App + ": " + item.Variable
+		if item.Staging {
+			title = "Key for " + item.App + " on staging01: " + item.Variable
+		}
+		var screen strings.Builder
+		fmt.Fprintf(&screen, "\n%s\n\nWhat this is for:\n  %s\n\nDo this now:\n", title, screenText(item.Why))
+		for i, step := range item.Steps {
+			fmt.Fprintf(&screen, "  %d. %s\n", i+1, screenText(step))
+		}
+		screen.WriteString("\nThen paste it here.\n\n")
+		e.show(screen.String())
+		for {
+			value, err := g.askHidden("  " + item.Variable + " (hidden): ")
+			if err != nil {
+				return "", err
+			}
+			if item.CheckedWith == "stripe" {
+				if err := checkStripeKey(e.stripeAPIURL, value); err != nil {
+					var refusal *apiError
+					if !errors.As(err, &refusal) {
+						return "", err
+					}
+					g.refused("Stripe", "key", err, "Copy the whole key from the steps above, then paste it again.")
+					continue
+				}
+				e.say("Stripe accepted the key.")
+			}
+			if err := g.saved.save(item.Key, value); err != nil {
+				return "", err
+			}
+			if item.CheckedWith == "" {
+				e.say("Saved the key.")
+			}
+			break
+		}
+	}
+	return state, nil
+}
+
+// screenText keeps a line from the settings to printable text, so it cannot
+// move the cursor or clear the screen.
+func screenText(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r < ' ' || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, strings.TrimSpace(text))
+}
+
+// checkStripeKey reads the account's balance with a secret or restricted
+// key, which any working key may do.
+// https://docs.stripe.com/api/balance/balance_retrieve
+func checkStripeKey(stripeAPIURL, key string) error {
+	var refusal struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	request, err := http.NewRequest(http.MethodGet, stripeAPIURL+"/v1/balance", nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+key)
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return &networkError{Provider: "Stripe", Call: "GET /v1/balance", Err: stripURLFromError(err)}
+	}
+	defer response.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if response.StatusCode != http.StatusOK {
+		_ = json.Unmarshal(body, &refusal)
+		return &apiError{Provider: "Stripe", Call: "GET /v1/balance", Status: response.StatusCode, Message: refusal.Error.Message}
 	}
 	return nil
 }

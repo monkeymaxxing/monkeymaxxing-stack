@@ -30,7 +30,10 @@ vars:
   apps:
     shop:
       image: ghcr.io/acme/shop
-      secrets_from_vault: [SECRET_KEY_BASE, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]
+      secrets_from_vault:
+        SECRET_KEY_BASE: {where_the_value_comes_from: generated_by_the_setup}
+        R2_ACCESS_KEY_ID: {where_the_value_comes_from: generated_by_the_setup}
+        R2_SECRET_ACCESS_KEY: {where_the_value_comes_from: generated_by_the_setup}
       production_uploads_r2_bucket: UPLOADS_R2_BUCKET
       staging_uploads_r2_bucket: acme-shop-staging-uploads
       production_uploads_r2_key_variables:

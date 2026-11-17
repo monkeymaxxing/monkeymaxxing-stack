@@ -134,9 +134,12 @@ type Cloudflare struct {
 	WorkersSubdomain string
 	TakenSubdomains  map[string]bool
 	// R2Off makes every R2 call fail as in an account that never turned R2 on.
-	R2Off         bool
-	Tokens        []*CloudflareToken
-	ServiceTokens []*AccessServiceToken
+	R2Off bool
+	// RefuseAccountsList makes GET /accounts refuse, as Cloudflare may for an
+	// account-owned token.
+	RefuseAccountsList bool
+	Tokens             []*CloudflareToken
+	ServiceTokens      []*AccessServiceToken
 	// IdentityProviders are Access's login methods. The stand-in answers
 	// 409 to a second One-time PIN. OneTimePINConflictsUnlisted makes it
 	// answer 409 although the list shows none, as a real Cloudflare account
@@ -315,6 +318,9 @@ func (c *Cloudflare) route(token *CloudflareToken, r *http.Request) (any, *cfRef
 	}
 	// https://developers.cloudflare.com/api/resources/accounts/methods/list/
 	if path == "/client/v4/accounts" && r.Method == http.MethodGet {
+		if c.RefuseAccountsList {
+			return nil, &cfRefusal{403, 9109, "Unauthorized to access requested resource"}
+		}
 		return []any{map[string]any{"id": c.AccountID, "name": "Stand-in account"}}, nil
 	}
 	if match := zonePath.FindStringSubmatch(path); match != nil {

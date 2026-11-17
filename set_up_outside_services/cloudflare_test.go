@@ -160,7 +160,7 @@ func TestCloudflareRerunCreatesNothingAndAddsANewAppsBucketToTheReader(t *testin
 	path := filepath.Join(h.e.directory, projectSettingsFile)
 	text, _ := os.ReadFile(path)
 	writeFile(t, path, strings.Replace(string(text), "  backups:", `    blog:
-      secrets_from_vault: [R2_KEY, R2_SECRET]
+      secrets_from_vault: {R2_KEY: {where_the_value_comes_from: generated_by_the_setup}, R2_SECRET: {where_the_value_comes_from: generated_by_the_setup}}
       production_uploads_r2_bucket: acme-blog-uploads
       production_uploads_r2_key_variables: {access_key_id: R2_KEY, secret_access_key: R2_SECRET}
   backups:`, 1))

@@ -189,7 +189,27 @@ vars:
       # database_connections_per_worker_process: 10
       env:                          # plain settings; secrets come from the vault
         RAILS_ENV: production
-      secrets_from_vault: [SECRET_KEY_BASE, STRIPE_API_KEY, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]
+      # Each environment variable the app reads from the vault, and where
+      # its value comes from. set-up-outside-services go-live makes each one
+      # with generated_by_the_setup without a question: a random value, or
+      # for the two R2 key variables below, the key it makes at Cloudflare.
+      # It asks for each one from an_outside_service on its own screen, with
+      # what_it_is_for and steps_to_get_it, and checks it when checked_with
+      # names a service it knows (stripe).
+      secrets_from_vault:
+        SECRET_KEY_BASE:
+          where_the_value_comes_from: generated_by_the_setup
+        STRIPE_API_KEY:
+          where_the_value_comes_from: an_outside_service
+          what_it_is_for: Stripe takes your customers' card payments with it.
+          steps_to_get_it:
+            - Open  https://dashboard.stripe.com/apikeys
+            - Press  Reveal live key,  then copy it.
+          checked_with: stripe
+        R2_ACCESS_KEY_ID:
+          where_the_value_comes_from: generated_by_the_setup
+        R2_SECRET_ACCESS_KEY:
+          where_the_value_comes_from: generated_by_the_setup
       # jobs_connect_directly_to_postgres is read only for an app with a
       # jobs_command; an app with "" can leave it false.
       # Set jobs_connect_directly_to_postgres to true when the app's job
