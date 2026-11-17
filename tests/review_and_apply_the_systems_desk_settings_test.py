@@ -268,6 +268,7 @@ class FirstDeskReview(unittest.TestCase):
         for target, name, value in [(DESK_REVIEW, 'RECORD_DIRECTORY', root/'record'), (DESK_REVIEW, 'DESK_COPY', self.desk_copy),
                                     (DESK_REVIEW, 'CODING_AGENT_CHECKOUT', checkout), (DESK_REVIEW, 'MMX', self.mmx),
                                     (DESK_REVIEW, 'CODING_AGENT_GIT', ['git']), (DESK_REVIEW, 'CODING_AGENT_GIT_ENVIRONMENT', environment), (DESK_REVIEW, 'GIT', 'git'),
+                                    (DESK_REVIEW, 'FETCH_PUSHED_MAIN', str(T/'roles/systems_desk/files/fetch-pushed-main-from-the-coding-agents-checkout')),
                                     (DESK_REVIEW, 'GIT_ENVIRONMENT', environment), (os, 'geteuid', lambda: 0), (os, 'chown', lambda *a: None),
                                     (DESK_REVIEW.socket, 'gethostname', lambda: 'desk01')]:
             patcher = patch.object(target, name, value)

@@ -100,6 +100,8 @@ WG = '/usr/bin/wg'
 NFT = '/usr/sbin/nft'
 NOTRACK_TABLE = ['inet', 'stack_wireguard_notrack', 'server_and_desk_public_addresses']
 GIT = '/usr/bin/git'
+# Reads pushed main without running Git in the coding agent's checkout.
+FETCH_PUSHED_MAIN = '/usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout'
 NODE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,62}')
 # The desk playbook's form: write SERVER_PEERS only, before the desk review
 # writes wg0. Root only: the coding agent's sudo rule allows no argument.
@@ -117,25 +119,23 @@ class FetchFailed(Stop):
 def as_the_fetch_account(arguments):
     account = pwd.getpwnam(FETCH_ACCOUNT)
     result = subprocess.run([SETPRIV, '--reuid=%d' % account.pw_uid, '--regid=%d' % account.pw_gid, '--init-groups', '--',
-                             GIT, '-c', 'core.hooksPath=/dev/null', '-c', 'safe.directory=' + DESK_CHECKOUT, *arguments],
-                            text=True, capture_output=True, cwd=account.pw_dir,
+                             *arguments], text=True, capture_output=True, cwd=account.pw_dir,
                             env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': account.pw_dir, 'LANG': 'C.UTF-8'})
     if result.returncode:
-        raise FetchFailed('git %s failed: %s. Nothing changed.' % (arguments[0], ' '.join(result.stderr.split())[:400]))
+        said = ' '.join(result.stderr.split())
+        # The fetch command's own message is whole and ends "Nothing changed."
+        raise FetchFailed(said if said.endswith('Nothing changed.') else '%s failed: %s. Nothing changed.' % (arguments[0], said[:400]))
     return result.stdout
 
 
 def fetch_the_pushed_inventory():
+    """Pushed main's inventory, which servers-mmx reads from the coding
+    agent's checkout as data only (FETCH_PUSHED_MAIN says how)."""
     if not Path(FETCH_REPOSITORY, 'HEAD').exists():
-        as_the_fetch_account(['init', '--quiet', '--bare', FETCH_REPOSITORY])
-    try:
-        as_the_fetch_account(['ls-remote', '--exit-code', '--', DESK_CHECKOUT, 'refs/remotes/origin/main'])
-        pushed = 'refs/remotes/origin/main'
-    except FetchFailed:
-        pushed = 'refs/heads/main'
-    as_the_fetch_account(['-C', FETCH_REPOSITORY, 'fetch', '--quiet', '--no-tags', '--', DESK_CHECKOUT, pushed])
-    commit = as_the_fetch_account(['-C', FETCH_REPOSITORY, 'rev-parse', '--verify', 'FETCH_HEAD^{commit}']).strip()
-    return commit, as_the_fetch_account(['-C', FETCH_REPOSITORY, 'show', '%s:%s' % (commit, INVENTORY)])
+        as_the_fetch_account([GIT, '-c', 'core.hooksPath=/dev/null', 'init', '--quiet', '--bare', FETCH_REPOSITORY])
+    commit = as_the_fetch_account([FETCH_PUSHED_MAIN, DESK_CHECKOUT, FETCH_REPOSITORY]).strip()
+    return commit, as_the_fetch_account([GIT, '-c', 'core.hooksPath=/dev/null', '-C', FETCH_REPOSITORY, 'show',
+                                         '%s:%s' % (commit, INVENTORY)])
 
 
 def canonical_key(value):

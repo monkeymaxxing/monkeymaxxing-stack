@@ -41,6 +41,7 @@ def load(name, path):
 SETUP = load('start_the_systems_repository', T/'roles/systems_desk/files/start-the-systems-repository')
 BUTTON = load('lock_everyone_out', T/'roles/systems_desk/files/lock-everyone-out')
 DESK_REVIEW = load('review_and_apply_the_systems_desk_settings', T/'roles/systems_desk/files/review-and-apply-the-systems-desk-settings')
+FETCH_PUSHED_MAIN = T/'roles/systems_desk/files/fetch-pushed-main-from-the-coding-agents-checkout'
 KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGfakefakefakefakefakefakefakefakefakefakefake alex on desk01'
 
 
@@ -466,7 +467,7 @@ class PullIntoTheDesksCopy(unittest.TestCase):
         self.run_git('clone', '--quiet', str(self.origin), str(self.checkout), cwd=root)
         self.commit('two\n', 'second')
         environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull}
-        for name, value in [('GIT', 'git'), ('CODING_AGENT_CHECKOUT', self.checkout),
+        for name, value in [('GIT', 'git'), ('CODING_AGENT_CHECKOUT', self.checkout), ('FETCH_PUSHED_MAIN', str(FETCH_PUSHED_MAIN)),
                             ('CODING_AGENT_GIT', ['git', '-c', 'core.hooksPath=/dev/null']),
                             ('CODING_AGENT_GIT_ENVIRONMENT', environment), ('GIT_ENVIRONMENT', environment)]:
             patcher = patch.object(DESK_REVIEW, name, value)
@@ -534,6 +535,47 @@ class PullIntoTheDesksCopy(unittest.TestCase):
         self.assertTrue(pulled, said)
         self.assertEqual((missing/'inventory.yml').read_text(), 'two\n')
         self.assertEqual(missing.stat().st_mode & 0o777, 0o700)
+
+    def test_the_pull_runs_no_command_that_the_checkouts_git_settings_name(self):
+        """coding-agent writes the checkout's .git/config, hooks and alternates;
+        the pull reads only its objects and refs."""
+        # Without an origin the pull runs no Git of the coding agent's own,
+        # which may run what the coding agent's settings name.
+        self.run_git('remote', 'remove', 'origin', cwd=self.checkout)
+        ran = Path(self.directory.name)/'ran'
+        trap = Path(self.directory.name)/'trap'
+        trap.write_text('#!/bin/sh\necho "$0 $*" >> %s\n' % ran)
+        trap.chmod(0o755)
+        hooks = self.checkout/'.git/trap-hooks'
+        hooks.mkdir()
+        for hook in ('pre-upload-pack', 'post-checkout', 'reference-transaction', 'pre-auto-gc'):
+            (hooks/hook).symlink_to(trap)
+        for key in ('core.fsmonitor', 'core.alternateRefsCommand', 'uploadpack.packObjectsHook', 'core.sshCommand'):
+            self.run_git('config', key, str(trap), cwd=self.checkout)
+        self.run_git('config', 'core.hooksPath', str(hooks), cwd=self.checkout)
+        elsewhere = Path(self.directory.name)/'elsewhere.git'
+        self.run_git('init', '--quiet', '--bare', str(elsewhere), cwd=self.directory.name)
+        (self.checkout/'.git/objects/info/alternates').write_text(str(elsewhere/'objects') + '\n')
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'one\n')
+        self.assertFalse(ran.exists(), ran.read_text() if ran.exists() else '')
+        self.assertEqual([p.name for p in Path(self.directory.name).iterdir() if p.name.startswith('.pushed-main-')], [])
+
+    def test_a_missing_object_stops_the_pull_and_changes_nothing(self):
+        self.run_git('remote', 'remove', 'origin', cwd=self.checkout)
+        (self.checkout/'inventory.yml').write_text('only on the desk\n')
+        self.run_git('commit', '--quiet', '-am', 'the desk is the main copy', cwd=self.checkout)
+        tree = subprocess.run(['git', 'rev-parse', 'HEAD^{tree}'], cwd=self.checkout, text=True, capture_output=True,
+                              check=True).stdout.strip()
+        (self.checkout/'.git/objects'/tree[:2]/tree[2:]).unlink()
+        before = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=self.repository, text=True, capture_output=True).stdout
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertFalse(pulled)
+        self.assertTrue(said.startswith("Pushed main could not be read from the coding agent's checkout"), said)
+        self.assertTrue(said.endswith('Nothing changed.'), said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'one\n')
+        self.assertEqual(subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=self.repository, text=True, capture_output=True).stdout, before)
 
 
 def public_key_line(seed, comment):

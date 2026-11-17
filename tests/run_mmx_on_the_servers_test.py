@@ -9,6 +9,7 @@ import unittest
 
 TEMPLATE = Path(__file__).resolve().parents[1] / 'skills/monkeymaxxing-stack/systems_repository_template'
 BUTTON = TEMPLATE / 'roles/systems_desk/files/run-mmx-on-the-servers'
+FETCH_PUSHED_MAIN = TEMPLATE / 'roles/systems_desk/files/fetch-pushed-main-from-the-coding-agents-checkout'
 
 
 class ServersMmxTests(unittest.TestCase):
@@ -22,13 +23,15 @@ class ServersMmxTests(unittest.TestCase):
         (binary / 'git').write_text('#!/bin/sh\ncase "$*" in *rev-parse*) echo 0123456789abcdef;; esac\n')
         (binary / 'mmx').write_text('#!/usr/bin/env python3\nimport json,os,sys\nprint(json.dumps({"args":sys.argv[1:],"vault_file":os.environ.get("MMX_VAULT_PASSWORD_FILE"),"vault_password":os.environ.get("MMX_VAULT_PASSWORD")}))\n')
         (binary / 'flock').write_text('#!/bin/sh\nexit 0\n')
-        for name in ['git', 'mmx', 'flock']:
+        (binary / 'fetch-pushed-main').write_text('#!/bin/sh\necho 0123456789abcdef\n')
+        for name in ['git', 'mmx', 'flock', 'fetch-pushed-main']:
             (binary / name).chmod(0o755)
         self.button = self.root / 'run-mmx-on-the-servers'
         self.button.write_text(BUTTON.read_text()
             .replace('/var/lib/servers-mmx', str(self.root))
             .replace('/etc/systems-desk/everyone-locked-out', str(self.root / 'everyone-locked-out'))
             .replace('export PATH=/usr/local/bin:/usr/bin:/bin', f'export PATH={binary}:/usr/bin:/bin')
+            .replace('/usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout', str(binary / 'fetch-pushed-main'))
             .replace('/usr/local/bin/mmx', str(binary / 'mmx')))
 
     def invoke(self, *arguments):
@@ -138,6 +141,7 @@ class PushedMainFromTheDeskCheckout(unittest.TestCase):
             .replace('/home/coding-agent/systems_repository', str(self.checkout))
             .replace('/etc/systems-desk/everyone-locked-out', str(self.root / 'everyone-locked-out'))
             .replace('export PATH=/usr/local/bin:/usr/bin:/bin', f'export PATH={binary}:/usr/bin:/bin:/usr/local/bin')
+            .replace('/usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout', str(FETCH_PUSHED_MAIN))
             .replace('/usr/local/bin/mmx', str(binary / 'mmx')))
 
     def git(self, cwd, *arguments):

@@ -36,19 +36,14 @@ flock -n 9 || refuse 'Another run-mmx-on-the-servers command is running. Wait fo
 # origin, and before util01 exists the checkout's own main, because the
 # checkout is the main copy then. Read locally, so the button works while
 # util01 is lost or before it exists (operating_procedures/rebuild_the_utility_server_util01.md).
-desk_checkout=/home/coding-agent/systems_repository
-git_from_the_desk_checkout() { git -c core.hooksPath=/dev/null -c "safe.directory=$desk_checkout" "$@"; }
-pushed=refs/heads/main
-if git_from_the_desk_checkout ls-remote --exit-code -- "$desk_checkout" refs/remotes/origin/main > /dev/null; then
-    pushed=refs/remotes/origin/main
-fi
+# Read as data only: servers-mmx never runs Git in the coding agent's
+# checkout (files/fetch-pushed-main-from-the-coding-agents-checkout says why).
 checkout=/var/lib/servers-mmx/systems_repository
 if [ ! -d "$checkout/.git" ]; then
     git -c core.hooksPath=/dev/null init --quiet -b main -- "$checkout"
 fi
 cd "$checkout"
-git_from_the_desk_checkout fetch --quiet --no-tags -- "$desk_checkout" "$pushed"
-commit=$(git rev-parse FETCH_HEAD)
+commit=$(/usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout /home/coding-agent/systems_repository "$checkout")
 printf 'Using pushed main commit %s\n' "$commit"
 # Only the button's execution copy is disposable. Keep MMX history.
 git -c core.hooksPath=/dev/null reset --hard "$commit"

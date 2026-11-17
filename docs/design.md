@@ -681,7 +681,13 @@ and makes it `origin` (chapter 7). The desk's own readers, the button, the WireG
 and the lock-out button, read pushed `main` from the coding agent's checkout, `origin/main` when it has an origin
 and its own `main` before, so they work before `util01` exists and while it is lost; the desk review and the
 lock-out button first fetch `origin` into the checkout as the coding agent. The WireGuard peers command must read
-the checkout, not `util01`: a rebuilt `util01`'s new WireGuard key is what lets the desk reach it.
+the checkout, not `util01`: a rebuilt `util01`'s new WireGuard key is what lets the desk reach it. All four read the
+checkout as data, through `fetch-pushed-main-from-the-coding-agents-checkout`: it copies the checkout's objects and
+refs into a new bare repository of the reader's own account, fetches the one ref from that copy, and deletes it.
+Reason: Git in a repository runs commands that the repository's own settings name, such as `core.fsmonitor`, and
+`coding-agent` writes those settings, so root and `servers-mmx` never run Git in the checkout or with it as the
+remote. Git also refuses another account's repository as "dubious ownership", and no `safe.directory` value reaches
+the `git-upload-pack` that a local fetch starts.
 
 The Git host keeps a private backup, `systems_repository.backup_url_at_the_git_host`, which the laptop's coding
 agent pushes with the person's own login. Nothing reads from it, so a break-in at the Git host reaches no server.
