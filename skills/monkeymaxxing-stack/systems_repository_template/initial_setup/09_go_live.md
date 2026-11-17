@@ -1,6 +1,6 @@
 # Chapter 9: Go live
 
-**When:** after chapter 8's part 4 (read the backup results), once its
+**When:** after chapter 8's part 1 (read the backup results), once its
 checks passed and Cloudflare shows the domain as "Active". Chapter 9 ends
 the first sitting.
 
@@ -182,4 +182,4 @@ order from the last two days, also fails when a restore brings back an
 old database.
 
 Next, in a later sitting: [Chapter 10: Write down how to run your system](10_write_down_how_to_run_your_system.md).
-The alerts sitting comes first: [chapter 8, parts 1 to 3](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-1-add-mmhotlines-alerting-settings).
+The alerts sitting comes first: [chapter 8, part 2](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-phone-alerts).

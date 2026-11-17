@@ -283,10 +283,10 @@ nothing, unless the prices rose since chapter 1 (step 2).
    says. The person reads the password from the recovery bundle on the day
    the person needs it.
 
-   **Ask the person,** only when the hash is not defined:
-
-   > Your vault has no hash of the shared root console password yet.
-   > Please type `ssh desk01-secrets` in your terminal, and a code from your phone. The command makes the password by itself.
+   When the hash is not defined, `go-live` did not finish: read
+   `stopped_with` in `/var/lib/monkeymaxxing-stack/setup_results.json` on
+   the desk, and give the person `ssh desk01-setup` again, which continues
+   where it stopped.
 
    **Tell the person:** no message.
 

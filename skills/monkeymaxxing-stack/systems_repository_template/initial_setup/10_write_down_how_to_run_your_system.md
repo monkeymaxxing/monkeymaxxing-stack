@@ -1,7 +1,9 @@
 # Chapter 10: Write down how to run your system
 
-**When:** in a later sitting, after chapter 9 (go live) and the alerts
-sitting.
+**When:** in the last sitting, after chapter 9 (go live) and the alerts
+sitting, when the person asks for it. The person's part is two answers:
+correcting the break-in response page, and saying who does each next
+action and when.
 
 **What this chapter does:** the break-in response page is prepared, the
 checklist is reviewed, and the operating guide is saved in the systems
@@ -188,7 +190,8 @@ and when.
    > Want extra confidence? Ask me to check your system's protections. The check tests the protections on your own servers, some checks wait for a quiet time, and the Stack's own tests already proved how the software behaves.
 
    Mark `operating_handover_saved` only after its verification passes.
-   Commit and push the README and checklist together. Then run
+   Commit the README and checklist together, and publish them with the
+   [Making a change](../AGENTS.md#making-a-change) steps. Then run
    `./server_management_scripts/run_mmx_on_util01 validate`, so MMHotline's
    dashboard shows the final checklist
    ([AGENTS.md, "Making a change"](../AGENTS.md#making-a-change), step 7).

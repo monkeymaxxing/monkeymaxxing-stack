@@ -12,7 +12,7 @@ marks as cacheable.
 **Who acts:** you, the coding agent, do every step through Cloudflare's
 API, from the desk's API proxy. The person does nothing. The person's
 first sign-in at the private pages comes in the alerts sitting, in
-[chapter 8](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-each-person-on-call-signs-in-and-adds-a-phone).
+[chapter 8](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-phone-alerts).
 
 **Tell the person when the chapter starts:**
 
@@ -94,9 +94,12 @@ first sign-in at the private pages comes in the alerts sitting, in
 
    **Ask the person,** only when a tunnel or its token is missing:
 
-   > Cloudflare has no tunnel `example_systems-util01`, or your vault has no token for the tunnel.
-   > Please type `ssh desk01-setup` in your terminal again, and type a code from your phone.
-   > The command shows only the Cloudflare screen again, and makes only what is missing.
+   > Cloudflare has no tunnel `example_systems-util01`, or your vault has no token for it. One command makes only what is missing.
+   > Please type this in your terminal, plus a code from your phone:
+   >
+   > `ssh -t desk01 set-up-outside-services cloudflare`
+   >
+   > It shows a link that makes a short-lived Cloudflare key. Paste that key at its prompt. Then come back here.
 
    **Tell the person after:**
 
@@ -114,7 +117,7 @@ first sign-in at the private pages comes in the alerts sitting, in
    Never create the status page's DNS
    record yourself: the status page's own sitting creates the record,
    through `mmhotline status-page set-up`, as
-   [chapter 8, part 5](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-5-the-status-page)
+   [chapter 8, part 4](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-4-the-status-page)
    says.
 
    **Tell the person first:**

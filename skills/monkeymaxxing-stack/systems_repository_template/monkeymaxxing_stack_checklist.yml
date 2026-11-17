@@ -686,9 +686,9 @@ items:
     protects_against: an SOS that reaches nobody, and an operations page anyone could open
     verification: >-
       each person's own Pushover contact method in MMHotline shows its test
-      as delivered; a test SOS from MMWatchdog's fleet hub sounded on the
-      phone of the person on call, who claimed it in MMHotline and then
-      resolved it;
+      as accepted, and the person saw it on the phone; `sudo mmhotline
+      incidents send-test-sos` exited 0: the person on call acknowledged the
+      test SOS on the phone, and MMHotline closed the test;
       https://ops.example.com shows Cloudflare Access's sign-in first and
       admits a company address with its emailed code, and the coding agent
       read the application's Access policy through Cloudflare's API: each
@@ -709,8 +709,9 @@ items:
       MMHotline-down alarm, in the team's Cloudflare account, accepted MMHotline's first
       check-in; `mmhotline down-alarm show` names the person on call's
       Pushover notification after `mmhotline_down_alarm.wake_the_person_on_call_after_minutes_without_a_check_in`; and `mmhotline down-alarm
-      send-test` sounded the MMHotline-down alarm's test notification on the person on
-      call's phone, which the person acknowledged in Pushover. The outage test
+      send-test` exited 0: Pushover accepted the MMHotline-down alarm's test
+      notification for each held message, with its receipt, and MMHotline
+      cancelled its repeats. The outage test
       with MMHotline stopped is in the optional check of the system's
       protections.
     waits_for: the initial setup

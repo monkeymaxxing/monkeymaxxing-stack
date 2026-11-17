@@ -36,7 +36,7 @@ chapter.
 - **Every MMX run in this chapter uses the systems desk's button,**
   `sudo -n -u servers-mmx run-mmx-on-the-servers`, until the triage
   agent's sitting applies the triage agent's settings
-  ([chapter 8, part 1](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-1-add-mmhotlines-alerting-settings)). After that, run MMX on `util01` through the
+  ([chapter 8, part 3](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-3-the-triage-agent)). After that, run MMX on `util01` through the
   `./server_management_scripts/run_mmx_on_util01` helper
   ([the helper guide](../server_management_scripts/README.md#run-mmx-on-util01)).
   Use the systems desk for `util01`'s own
