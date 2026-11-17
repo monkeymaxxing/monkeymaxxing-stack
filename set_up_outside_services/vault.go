@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // vault is the systems repository's MMX vault. This command only lists its
@@ -211,19 +212,27 @@ const vaultFile = "secrets_vault.age"
 // is committed by the next run; any other change stops the run.
 var filesThisCommandCommits = []string{vaultFile, recoveryBundleFile}
 
+// sudoProgram is sudo; a test replaces it with a stand-in.
+var sudoProgram = "sudo"
+
 // gitAsTheCodingAgent runs git as coding-agent in its checkout on the desk,
 // as the coding agent's own logins run it (roles/systems_desk/files/sshd.conf):
-// the production key's relay socket signs each commit, and the coding
+// the production key's relay socket reaches the main copy, and the coding
 // agent's Git settings name the Git host's verified keys. So every file
 // stays coding-agent's own, and no value passes through. Hooks are off: no
 // file of the checkout runs here.
 func gitAsTheCodingAgent(directory string) func(arguments ...string) (string, error) {
 	return func(arguments ...string) (string, error) {
-		command := exec.Command("sudo", append([]string{"-n", "-u", "coding-agent", "env", "-C", directory,
+		command := exec.Command(sudoProgram, append([]string{"-n", "-u", "coding-agent", "env", "-C", directory,
 			"HOME=/home/coding-agent", "SSH_AUTH_SOCK=/run/desk-ssh-agent/socket",
 			"GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig", "git", "-c", "core.hooksPath=/dev/null"}, arguments...)...)
 		var output, errorOutput bytes.Buffer
+		// No terminal: standard input stays /dev/null, output and errors go
+		// to buffers, and a session of its own has no controlling terminal.
+		// Reason: coding-agent's own Git settings run its programs, and one
+		// that held the person's terminal could read the secrets typed there.
 		command.Stdout, command.Stderr = &output, &errorOutput
+		command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if err := command.Run(); err != nil {
 			return output.String(), fmt.Errorf("git %s failed: %s", strings.Join(arguments, " "), firstLine(errorOutput.String(), err))
 		}

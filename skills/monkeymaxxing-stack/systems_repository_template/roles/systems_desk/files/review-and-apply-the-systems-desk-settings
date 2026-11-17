@@ -305,9 +305,15 @@ PULL_TIME_LIMIT_SECONDS = 30
 
 
 def as_the_coding_agent(*arguments):
+    """Git as coding-agent, with no terminal: standard input is /dev/null,
+    output and errors go to pipes, and a new session has no controlling
+    terminal, so /dev/tty does not open either. Reason: coding-agent's own
+    Git settings run its programs (core.sshCommand), and one that held the
+    person's terminal could repaint the diff or type the answer."""
     return subprocess.run(['timeout', '--kill-after=5', str(PULL_TIME_LIMIT_SECONDS), *CODING_AGENT_GIT,
                            '-C', str(CODING_AGENT_CHECKOUT), *arguments],
-                          text=True, capture_output=True, env=CODING_AGENT_GIT_ENVIRONMENT)
+                          text=True, capture_output=True, stdin=subprocess.DEVNULL, start_new_session=True,
+                          env=CODING_AGENT_GIT_ENVIRONMENT)
 
 
 def pull_main_into_the_desks_copy(repository=DESK_COPY):

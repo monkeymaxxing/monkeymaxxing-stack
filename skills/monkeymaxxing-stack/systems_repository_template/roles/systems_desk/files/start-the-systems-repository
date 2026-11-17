@@ -47,6 +47,7 @@ VAULT = 'secrets_vault.age'
 CODING_AGENT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/home/coding-agent', 'LANG': 'C.UTF-8',
                             'SSH_AUTH_SOCK': '/run/desk-ssh-agent/socket',
                             'GIT_CONFIG_SYSTEM': '/etc/systems-desk/coding-agent-gitconfig'}
+CODING_AGENT_GIT = ['/usr/sbin/runuser', '-u', 'coding-agent', '--', 'git', '-c', 'core.hooksPath=/dev/null']
 
 
 class Stop(Exception):
@@ -58,9 +59,11 @@ def say(text=''):
 
 
 def git(*arguments, check=True):
-    """Git as coding-agent in its checkout, with hooks off."""
-    result = subprocess.run(['/usr/sbin/runuser', '-u', 'coding-agent', '--', 'git', '-c', 'core.hooksPath=/dev/null', *arguments],
-                            cwd=REPOSITORY, text=True, capture_output=True, env=CODING_AGENT_ENVIRONMENT)
+    """Git as coding-agent in its checkout, with hooks off and no terminal:
+    standard input is /dev/null, and a new session has no controlling
+    terminal, as in the desk review's as_the_coding_agent, which says why."""
+    result = subprocess.run([*CODING_AGENT_GIT, *arguments], cwd=REPOSITORY, text=True, capture_output=True,
+                            stdin=subprocess.DEVNULL, start_new_session=True, env=CODING_AGENT_ENVIRONMENT)
     if check and result.returncode:
         raise Stop('git %s failed: %s' % (' '.join(arguments), (result.stderr or result.stdout).strip()))
     return result
