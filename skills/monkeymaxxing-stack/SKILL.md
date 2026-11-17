@@ -106,6 +106,16 @@ In every reply:
   cannot understand. Reason: the person is not the debugger.
 - Before any wait over about a minute, say what you are doing and about how
   long it takes. Reason: a silent wait looks like a hang.
+- Say "I carry on meanwhile" only while a job of yours really runs, and
+  name the job, such as "I am creating your systems desk meanwhile." When
+  nothing runs until the person acts, say that you wait for the person.
+  Reason: a promise of work that does not happen reads as a hang.
+- When the person says a value cannot be pasted into the chat, never ask
+  for it in the chat again. The first time, write a short command in the
+  setup folder, as the laptop key command is written, that asks for the
+  value at a terminal prompt and saves it where you read it, and give the
+  person that command. Reason: asking again for what the person cannot do
+  wastes the person's time and trust.
 - Answer every question the person asks in your next reply, before
   anything else. Whenever you choose between options, say which one you
   took. Reason: the person cannot see your choices.
@@ -128,6 +138,21 @@ Share detail from a step's instructions only when the person needs the
 detail for an action or asks for detail. The reasons a person may ask
 about are in **Why the chapter works this way**.
 Keep every required check and safety condition.
+
+## One plain command per tool call
+
+On the laptop, run one plain command per tool call, from the setup's
+first command on: no `&&`, `||`, `;` or `|` chains, no `cd` before
+another command, no shell variables, loops or heredoc scripts, and your
+own read, edit and search tools in place of `cat`, `sed`, `awk` or
+`python`. Read the whole rule, with what to do when a step needs a pipe
+or a script, in the template's
+[`AGENTS.md`, "One plain command per tool call"](systems_repository_template/AGENTS.md#one-plain-command-per-tool-call)
+before chapter 1's first command. Reason: Claude Code asks the person
+again for each part of a chained or scripted command that it cannot
+match, so one plain command keeps the person's questions to what
+[chapter 1's one approval](systems_repository_template/initial_setup/01_answer_two_questions.md#first-one-approval-for-the-setups-commands)
+lists.
 
 ## What the stack is
 

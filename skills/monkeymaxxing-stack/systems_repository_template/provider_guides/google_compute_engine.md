@@ -601,6 +601,12 @@ a shared core. ARM families need ARM images and programs, so use x86 E2. Check
 [quotas](https://docs.cloud.google.com/compute/resource-usage) for regional E2 CPUs, instances, disks, external
 addresses and a new account's `CPUs (All Regions)`, and leave room for `restore01` and a replacement.
 
+**Stock:** no public route; Compute Engine shows it only with the key, and for certain only at the create.
+With the key, before any order, `GET projects/PROJECT/zones/ZONE/machineTypes` lists the machine types a zone
+offers: on the laptop in chapter 3 with the guide's token request and the key file, and through
+`http://127.0.0.1:8081/` on the desk. Chapter 1's price screen says "price from Google's list; stock checked before ordering", as its
+[stock line](../initial_setup/01_answer_two_questions.md#steps) says.
+
 The project's `default` network has [auto-mode subnets](https://docs.cloud.google.com/vpc/docs/subnets#ip-ranges)
 in `10.128.0.0/9`, which do not overlap `10.20.0.0/16`. Compute Engine's
 [VPC firewall](https://docs.cloud.google.com/firewall/docs/firewalls) filters before the server's own firewall,

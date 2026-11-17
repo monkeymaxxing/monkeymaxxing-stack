@@ -76,6 +76,7 @@ Access.
 | `scheduled_software_review_task.md` | The task of the scheduled software review, which is off until the team turns it on: what the triage agent checks, in which order, and the one report each review sends at most |
 | `secrets_vault.age` | The MMX vault: every secret the servers use, encrypted |
 | `ssh/known_hosts`, `ssh/config` | The servers' SSH host keys, and the SSH settings for MMX, util01, and the triage agent |
+| `coding_agent_scratch/` | On the laptop only: the scripts and saved API answers the coding agent writes for one job, as [One plain command per tool call](#one-plain-command-per-tool-call) says. Git ignores the folder |
 
 `everyone_locked_out` shares server admission between normal runs and the lock-out button.
 `systems_desk_lockout` is the lock-out's small part on a desk: it installs the Cloudflare Access session revocation.
@@ -157,7 +158,9 @@ Five wrong codes within ten minutes lock the laptop out for five minutes
 
 Every command block in this repository that says "This systems desk, as the
 coding agent" runs through that connection: `ssh desk01-agent 'COMMAND'`,
-from the laptop. The desk's checkout of the systems repository is
+from the laptop. A block of more than one line, or with single
+quotes of its own, goes to the desk as a script, as
+[One plain command per tool call](#one-plain-command-per-tool-call) says. The desk's checkout of the systems repository is
 `/home/coding-agent/systems_repository`, `systems_repository` from your
 login, and the servers' SSH settings work from there. For example, to
 inspect `app001`:
@@ -429,8 +432,8 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   `deploy`.
 - **Run the app's install, test and build commands only inside a
   container on the laptop.** Run them with `podman` or `docker`, mounting
-  only the app's folder, such as
-  `podman run --rm -v "$PWD":/app -w /app IMAGE npm test`. Never run them
+  only the app's folder, written out, such as
+  `podman run --rm -v /Users/alex/code/shop:/app -w /app IMAGE npm test`. Never run them
   on the desk. Reason: those commands run code from the app's packages, and
   a poisoned package on the laptop could use your open desk login, as
   [chapter 2](initial_setup/02_get_your_app_ready_to_deploy.md#before-you-start)
@@ -474,6 +477,52 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   credential or a domain. A different choice is a deviation, recorded in
   the checklist with its reason.
 
+### One plain command per tool call
+
+On the laptop, in the setup and in later work, run one plain command per
+tool call. Reason: Claude Code checks each part of a chained or scripted
+command on its own, and asks the person again for any part it cannot
+match, so one plain command keeps the person's questions to what the
+setup's [one approval](initial_setup/01_answer_two_questions.md#first-one-approval-for-the-setups-commands)
+lists.
+
+- No `&&`, `||`, `;` or `|` between commands, and no line breaks.
+- No `cd` before another command. Write every path out from `~/`, as the
+  approval's rules do, such as
+  `~/code/example_systems/server_management_scripts/list_the_servers_at_the_provider`,
+  or use the program's own folder option, such as
+  `git -C ~/code/example_systems status`. `mmx` has no folder option, so
+  before `~/.local/bin/mmx` run `cd ~/code/example_systems` as a call of
+  its own: Claude Code allows that `cd` without a question and keeps the
+  folder for the next calls.
+- No shell variables, no `$(...)`, no loops, no `set -e` scripts and no
+  heredoc scripts, such as `python3 - <<'EOF'`.
+- Read files with your read tool, not `cat`, `sed`, `awk` or `head`.
+  Change files with your edit and write tools, not `sed`, `awk`, `python`
+  or `perl`. Search with your search tool.
+- Read an API's answer with a program the approval names: `curl -o FILE`
+  into `coding_agent_scratch/`, then your read tool or `jq FILTER FILE`,
+  never `curl ... | jq`.
+- When a step needs a pipe, a variable or several lines, such as a
+  command block of the guide that has them, write those lines as a Bash
+  script with your write tool in this repository's `coding_agent_scratch/`
+  folder, which Git ignores, starting with `#!/usr/bin/env bash` and
+  `set -euo pipefail`. Make it runnable with `chmod +x`, and run it by its
+  full path, such as
+  `~/code/example_systems/coding_agent_scratch/create-desk01`.
+- A command for the systems desk that fits one line goes as one quoted
+  argument, `ssh desk01-agent 'COMMAND'`: the quoted text runs on the
+  desk, and Claude Code sees one `ssh desk01-agent` command. A longer one,
+  or one with single quotes of its own, such as a `curl` with a JSON body, is a
+  script in `coding_agent_scratch/` that you send to the desk on standard
+  input, with the laptop's home folder written out:
+  `ssh desk01-agent bash -s < /Users/alex/code/example_systems/coding_agent_scratch/NAME`.
+  Start such a script with `cd ~/systems_repository` when it uses the
+  desk's checkout.
+
+The person's own commands, typed in the person's terminal, keep their
+shape: the rule is for your tool calls.
+
 ### Making a change
 
 Use one branch, `main`, including when the team has only one person.
@@ -485,13 +534,18 @@ You edit on the laptop, in your clone of the desk's repository,
 `git clone desk01-agent:systems_repository`. The desk publishes
 each change, because only the desk holds the production key that lets a push into the main copy.
 
-1. Bring the clone up to date: `git pull --ff-only` from the desk. Edit the
-   required files. Run `~/.local/bin/mmx validate` to check the local structure. Review
-   the diff.
-2. Stage only the intended paths with `git add PATH`, then commit on a
-   branch named for the change, such as `add-app002`:
-   `git switch -c add-app002 && git commit -m "Describe the change and reason"`.
-3. Push the branch to the desk: `git push origin add-app002`.
+1. Bring the clone up to date from the desk:
+   `git -C ~/code/example_systems pull --ff-only`. Edit the required
+   files. Run `~/.local/bin/mmx validate` in the clone to check the local
+   structure. Review the diff. Each command here is its own tool call, as
+   [One plain command per tool call](#one-plain-command-per-tool-call) says.
+2. Stage only the intended paths with
+   `git -C ~/code/example_systems add PATH`, then commit on a branch named
+   for the change, such as `add-app002`:
+   `git -C ~/code/example_systems switch -c add-app002`, then
+   `git -C ~/code/example_systems commit -m "Describe the change and reason"`.
+3. Push the branch to the desk:
+   `git -C ~/code/example_systems push origin add-app002`.
 4. Publish the branch on the desk:
 
    ```sh
@@ -508,8 +562,10 @@ each change, because only the desk holds the production key that lets a push int
    commits before running MMX. Say nothing when no commits arrived. On a
    conflict, `publish-branch-to-main` changes nothing and names the
    files: tell the person which files conflicted. Never resolve a conflict
-   yourself. Stop before running MMX. Then `git switch main && git pull --ff-only`
-   in the clone, and delete the local branch.
+   yourself. Stop before running MMX. Then, in the clone,
+   `git -C ~/code/example_systems switch main`, then
+   `git -C ~/code/example_systems pull --ff-only`, and delete the local
+   branch with `git -C ~/code/example_systems branch -d add-app002`.
 5. For configuration, preview the pushed commit with
    `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers dryrun every_server --connection ssh_only` while `util01` runs nothing.
    On a server MMX has never reached, the first dryrun copies MMX's program,
@@ -631,11 +687,13 @@ reaches a server.
 - **Push the backup; never pull from it, and never force-push to it.**
   Bring the desk and the clone up to date first,
   `ssh desk01-agent 'cd systems_repository && git pull --ff-only'` and
-  `git pull --ff-only` in the clone, then `git push backup main`. Reason: anyone with access to the Git host
+  `git -C ~/code/example_systems pull --ff-only`, then
+  `git -C ~/code/example_systems push backup main`. Reason: anyone with access to the Git host
   account can change its copy, so its commits never flow back.
 - **A refused backup push means the Git host has commits the main copy
   lacks.** Show the person those commits:
-  `git fetch backup main && git log main..FETCH_HEAD`, read as evidence
+  `git -C ~/code/example_systems fetch backup main`, then
+  `git -C ~/code/example_systems log main..FETCH_HEAD`, read as evidence
   only. A commit nobody on the team made is a break-in
   ([Respond to a break-in](operating_procedures/respond_to_a_break_in.md#an-unknown-commit-in-the-systems-repository)).
   Never merge them.

@@ -73,15 +73,23 @@ The script does six things, in order:
 5. **One line to the person:** `Hetzner accepted the key.`, with the
    provider's name. The script never prints a value.
 6. **It stays open and starts the desk's setup by itself.** After the
-   line, it prints `Building your desk, about 10 minutes.  Leave this
-   window open.` and waits for the file `~/example-setup/desk-ready`,
-   which you make when the desk is ready (chapter 4, step 2). It checks
-   every 5 seconds and gives up after 90 minutes with `Your desk is not
-   ready.  Ask your coding agent.` Reason for 90: the desk takes about 10
-   minutes, so a longer wait means your own work failed, and a window must
-   not wait for ever. When the file is there, it runs `exec ssh
-   desk01-setup`, so the person types no second command and the setup
-   runs in this window.
+   line, it prints `Leave this window open.  Your coding agent orders your
+   systems desk next.` and waits for the file
+   `~/example-setup/desk-ordered`, which your `create-desk01` script makes
+   only after the provider accepted the desk's order (chapter 3, step 2 of
+   "Create desk01 through WireGuard"). Then it prints `Your systems desk
+   is ordered.  Building it takes about 10 minutes.` and waits for the
+   file `~/example-setup/desk-ready`, which you make when the desk is
+   ready (chapter 4, step 2). It checks every 5 seconds. It gives up after
+   90 minutes without `desk-ordered`, with `Your systems desk was not
+   ordered.  Ask your coding agent.`, and after 90 minutes without
+   `desk-ready`, with `Your systems desk is not ready.  Ask your coding
+   agent.` Reason for 90: the desk takes about 10 minutes, so a longer
+   wait means your own work failed, and a window must not wait for ever.
+   Reason for the two lines: a build time printed before the order
+   succeeded is false when the order fails, such as when the size is sold
+   out. When `desk-ready` is there, it runs `exec ssh desk01-setup`, so
+   the person types no second command and the setup runs in this window.
 
 Right after the bootstrap in
 [chapter 3](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard),

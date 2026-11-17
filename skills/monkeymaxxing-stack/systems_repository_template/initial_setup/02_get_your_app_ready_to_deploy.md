@@ -27,8 +27,8 @@ the person's. Then you push the changes and watch the first build.
   still cannot copy the production key, the vault, or the person's
   tokens, which stay on the desk. So run every install, test and build
   command of the app only inside a container on the laptop, with
-  `podman` or `docker`, with only the app's folder mounted:
-  `podman run --rm -v "$PWD":/app -w /app IMAGE npm test`. CI runs the
+  `podman` or `docker`, with only the app's folder mounted, written out:
+  `podman run --rm -v /Users/alex/code/shop:/app -w /app IMAGE npm test`. CI runs the
   real tests and builds on a clean machine. This risk is accepted when
   the team chooses one agent on the laptop. The guide states this risk
   here only.
@@ -408,9 +408,10 @@ the person's. Then you push the changes and watch the first build.
   with what it means for the person's data. Such a change can take days.
   The setup then waits, and the day's plan moves with it.
 - **The person names "no CI"** (step 6): test and build in a container
-  on the laptop, with `podman build --platform linux/amd64 --build-arg RELEASE="$image_tag" --tag "$IMAGE_NAME:$image_tag" .`
+  on the laptop, with `podman build --platform linux/amd64 --build-arg RELEASE=IMAGE_TAG --tag IMAGE_NAME:IMAGE_TAG /Users/alex/code/shop`
   (or `docker build` with the same options, whichever the laptop has for
-  the tests above) from a clean checkout, with `image_tag=$(git rev-parse HEAD)`. Push with
+  the tests above) from a clean checkout, with the commit that
+  `git rev-parse HEAD` prints written out as `IMAGE_TAG`. Push with
   the person's own registry login on the laptop. The servers still use
   only the read-only token of chapter 4.
 - **Another CI service** (step 6): it follows the same six steps. Only the

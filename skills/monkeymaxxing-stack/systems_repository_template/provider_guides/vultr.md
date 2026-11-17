@@ -375,9 +375,13 @@ answer is lost and a listing of more than one page.
 For the [server setup in chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md),
 the smallest matching regular plans are `vc2-4c-8gb` for `app001` and `vc2-2c-4gb` for `db01`, `util01` and
 `staging01`: 4 vCPUs/8 GB/160 GB and 2 vCPUs/4 GB/80 GB. The cheapest 1 GB and 2 GB plans fall below the
-Stack's starting requirements. Use x64 plans, because the template's downloads are AMD64. Read
-`GET http://127.0.0.1:8081/regions` and `GET http://127.0.0.1:8081/regions/REGION/availability?type=vc2`
-before creation; Amsterdam is `ams`. Catalog presence does not reserve capacity.
+Stack's starting requirements. Use x64 plans, because the template's downloads are AMD64. Amsterdam is `ams`.
+
+**Stock:** the public `GET https://api.vultr.com/v2/regions/REGION/availability?type=vc2` answers without
+a key (checked 2026-11-18) and lists in `available_plans` the plans the region can create now. Chapter 1
+reads it before the price screen, as its [stock line](../initial_setup/01_answer_two_questions.md#steps)
+says. Before creation, read it again through `http://127.0.0.1:8081/` on the desk. A listed plan is not a
+reserved one.
 
 **Prices.** `curl -sS 'http://127.0.0.1:8081/plans?type=vc2&per_page=500' | jq '.plans[] | select(.id == "vc2-2c-4gb") | {id, monthly_cost, hourly_cost, disk, locations}'`
 gives the plan's `monthly_cost` and `hourly_cost` in US dollars (on 2026-11-12, `5` and `0.007` for

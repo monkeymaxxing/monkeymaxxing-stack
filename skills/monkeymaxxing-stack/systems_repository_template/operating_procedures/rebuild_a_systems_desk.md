@@ -94,11 +94,14 @@ inventory's real names and addresses, and the next unused desk name.
 6. **Rename the SSH settings and drop the old host-key lines:**
 
    ```sh
-   # On the laptop, in ~/code/example_systems:
-   git mv ssh/desk01 ssh/desk02
-   sed -i.old 's/HostKeyAlias desk01/HostKeyAlias desk02/; s/belongs to desk01/belongs to desk02/' ssh/desk02 && rm ssh/desk02.old
-   grep -v -e '^desk01 ' -e '^10\.20\.9\.1 ' ssh/known_hosts > ssh/known_hosts.new && mv ssh/known_hosts.new ssh/known_hosts
+   # On the laptop:
+   git -C ~/code/example_systems mv ssh/desk01 ssh/desk02
    ```
+
+   Then, with your edit tool, change `HostKeyAlias desk01` to
+   `HostKeyAlias desk02` and `belongs to desk01` to `belongs to desk02` in
+   `ssh/desk02`, and delete the lines of `ssh/known_hosts` that start with
+   `desk01 ` or `10.20.9.1 `.
 
    Reason for a new name: the new desk makes new SSH host keys. Under a
    new name they get their own entries, and a host-key warning for
@@ -153,9 +156,13 @@ inventory's real names and addresses, and the next unused desk name.
 10. **Create the new desk,** as
     [chapter 3's "Create desk01 through WireGuard"](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard)
     step 2 says, from `/tmp/desk02-first-boot.yml`, in a location
-    different from production. Skip that step's key block: the first-boot
-    file is ready. Clear the file at once, also after a refused request:
-    `: > /tmp/desk02-first-boot.yml`.
+    different from production. The first-boot file is ready, so the
+    step's `create-desk01` script becomes `create-desk02` without the key
+    and render lines: `first_boot=/tmp/desk02-first-boot.yml`, the `trap`
+    line, which clears the file also after a refused request, the create
+    command with `--server-name desk02` and the lost desk's
+    `wireguard_public_key`, and the last line, which makes
+    `~/example-setup/desk-ordered`.
     Record the new public address as `desk02.vars.public_ipv4_address`
     and the returned `id` as `desk02.vars.provider_server_id` (at OVHcloud
     and Google Cloud, also the receipt's service or instance name as

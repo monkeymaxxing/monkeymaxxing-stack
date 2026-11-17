@@ -75,14 +75,9 @@ domain at Cloudflare, its DNS records, and the lock.
 
 2. **The desk's setup command.** The laptop key command from chapter 3
    is still open in the person's terminal, waiting for
-   `~/example-setup/desk-ready`. Make that file now, and the key command
-   runs `ssh desk01-setup` by itself in the same window, so the person
-   types nothing:
-
-   ```sh
-   # On the laptop:
-   touch ~/example-setup/desk-ready
-   ```
+   `~/example-setup/desk-ready`. Make that file now, empty, with your
+   write tool, and the key command runs `ssh desk01-setup` by itself in
+   the same window, so the person types nothing.
 
    **Ask the person:**
 
@@ -503,13 +498,17 @@ domain at Cloudflare, its DNS records, and the lock.
    the person and you, each with the laptop key and a phone code. Your
    shared login, opened in step 1, stays open.
 
+   Run it after `cd ~/example-setup/desk_bootstrap_copy` as a call of its
+   own:
+
    ```sh
    # On the laptop, in ~/example-setup/desk_bootstrap_copy:
    ~/.local/bin/mmx run systems_desk --var desk_name=desk01 --only-fleet-stages lock --connection ssh_only
    ```
 
-   Then remove the laptop's setup folder, which holds the bootstrap copy
-   and the key command, and no secret any more:
+   Then run `cd ~/code/example_systems` as a call of its own, and remove
+   the laptop's setup folder, which holds the bootstrap copy and the key
+   command, and no secret any more:
 
    ```sh
    # On the laptop:

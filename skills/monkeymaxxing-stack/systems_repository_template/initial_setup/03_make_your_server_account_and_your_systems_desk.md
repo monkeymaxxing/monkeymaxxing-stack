@@ -76,18 +76,31 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
-   Then leave that window open. It shows when your systems desk, a small server of your own that
-   holds your keys, is ready, about 10 minutes later, and goes on to the next questions by itself.
-   I carry on by myself meanwhile.
+   Then leave that window open.  It says when I have ordered your systems desk, a small server
+   of your own that holds your keys, and goes on to the next questions by itself when the systems desk is ready.
+   I wait here until the key is in.
    ```
 
-   Then, in the same turn, wait for the key file. Give the command the
-   longest time your agent allows a command, 10 minutes in Claude Code:
+   Then, in the same turn, wait for the key file. Write the wait before
+   the screen, when you write the key command, as the script
+   `~/code/example_systems/coding_agent_scratch/wait-for-the-provider-key`,
+   as
+   [`AGENTS.md`, "One plain command per tool call"](../AGENTS.md#one-plain-command-per-tool-call)
+   says, and make it runnable:
 
    ```sh
-   # On the laptop. Waits up to 9 minutes for the key file.
+   #!/usr/bin/env bash
+   # Waits up to 9 minutes for the key file, then shows it.
    for i in $(seq 108); do [ -f ~/example-setup/provider-key ] && break; sleep 5; done
    ls -l ~/example-setup/provider-key
+   ```
+
+   Run it by its full path, and give the command the longest time your
+   agent allows a command, 10 minutes in Claude Code:
+
+   ```sh
+   # On the laptop:
+   ~/code/example_systems/coding_agent_scratch/wait-for-the-provider-key
    ```
 
    Reason for 9 minutes: the loop ends by itself before Claude Code's
@@ -147,15 +160,33 @@ account screen of step 1 is the opening.
    and the
    [provider script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts).
    The scripts call the provider's API with `curl` and `jq`, so install
-   no provider program on the laptop. Check the key with the list script,
-   which reads it from the environment only:
+   no provider program on the laptop. The scripts read the key from the
+   environment only, so write one script that hands them the key file,
+   `~/code/example_systems/coding_agent_scratch/with-the-provider-key`,
+   and make it runnable:
 
    ```sh
-   # On the laptop, in ~/code/example_systems:
-   SERVER_PROVIDER_API_TOKEN="$(cat ~/example-setup/provider-key)" ./server_management_scripts/list_the_servers_at_the_provider
+   #!/usr/bin/env bash
+   # Runs the command it is given with the provider key in SERVER_PROVIDER_API_TOKEN.
+   SERVER_PROVIDER_API_TOKEN="$(cat ~/example-setup/provider-key)" exec "$@"
+   ```
+
+   Check the key with the list script:
+
+   ```sh
+   # On the laptop:
+   ~/code/example_systems/coding_agent_scratch/with-the-provider-key ~/code/example_systems/server_management_scripts/list_the_servers_at_the_provider
    ```
 
    A new account answers `{"servers": []}`.
+   When the provider guide's "Stock" line names no public route, check
+   the stock now, with the key and before any order, as chapter 1's
+   [stock line](01_answer_two_questions.md#steps) says: `desk01`'s size in
+   its location, and each production size in production's location. Use
+   the guide's stock request, in a script in `coding_agent_scratch/` that
+   reads the key file. When a size is sold out, show the person the
+   choices that chapter 1's stock line names, with their prices, before
+   any order.
    Choose `desk01`'s location: the provider location chapter 1 picked for
    the desk, different from production's. Use Debian 13 on x86-64, by
    default with 2 vCPUs and 4 GB of memory. Check the provider's attached
@@ -216,43 +247,58 @@ repository's name, including paths inside quoted SSH commands.
    `~/.config/doubleshell/wireguard_private_key` exist, and
    `desk01.vars.allowed_laptops` holds the laptop.
 
-2. **Create the desk.** Run the following block once, as one command:
-   your shell keeps no variables from one command to the next. The block
-   creates the desk's WireGuard pair in shell memory with
+2. **Create the desk.** First register `~/.ssh/desk01.pub` with the
+   provider, as the provider guide says, through `with-the-provider-key`.
+   Then write the script below as
+   `~/code/example_systems/coding_agent_scratch/create-desk01`, make it
+   runnable, and run it once by its full path. The script must be one
+   program because the desk's private key lives only in its memory. It
+   creates the desk's WireGuard pair with
    `doubleshell create-server-wireguard-key`, renders the first-boot data
    through `server_management_scripts/render_server_first_boot`, prints
-   the desk's public key, and never prints the private key.
-   Save the printed public key in `desk01.vars.wireguard_public_key`:
+   the desk's public key and never the private key, creates the desk with
+   the provider guide's create command, and clears the private first-boot
+   file whether the provider accepts or refuses the request. Only after
+   the provider accepted the request does it make
+   `~/example-setup/desk-ordered`, which tells the waiting key command
+   that the desk is ordered.
 
    ```sh
-   # On the laptop, in ~/code/example_systems.
+   #!/usr/bin/env bash
+   # Creates desk01 at the provider, once. Run it by its full path.
+   set -euo pipefail
    set +x
    umask 077
+   cd ~/code/example_systems
+   first_boot=~/example-setup/desk01-first-boot.yml
+   trap ': > "$first_boot"' EXIT
    desk_keys=$(~/.local/bin/doubleshell create-server-wireguard-key)
    # LAPTOP_WIREGUARD_PUBLIC_KEY: the public key that create-wireguard-key printed in step 1.
    laptop_public_key='LAPTOP_WIREGUARD_PUBLIC_KEY'
    printf '%s' "$desk_keys" | jq --arg laptop_public_key "$laptop_public_key" \
      '{private_key, private_ip:"10.20.9.1", peers:[{public_key:$laptop_public_key, allowed_ips:["10.20.10.1/32"]}]}' |
-     ./server_management_scripts/render_server_first_boot > /tmp/desk01-first-boot.yml
-   printf 'desk01 WireGuard public key: %s\n' "$(printf '%s' "$desk_keys" | jq -r .public_key)"
+     ./server_management_scripts/render_server_first_boot > "$first_boot"
+   desk_public_key=$(printf '%s' "$desk_keys" | jq -r .public_key)
+   unset desk_keys
+   printf 'desk01 WireGuard public key: %s\n' "$desk_public_key"
+   # The provider guide's create command for desk01: desk01's size and location, the guide's Debian 13 image,
+   # and the name under which ~/.ssh/desk01.pub is registered.
+   SERVER_PROVIDER_API_TOKEN="$(cat ~/example-setup/provider-key)" ./server_management_scripts/create_a_server_at_the_provider \
+     --server-name desk01 --server-type SERVER_TYPE --location LOCATION --image IMAGE --ssh-key-name SSH_KEY_NAME \
+     --first-boot-data "$first_boot" --wireguard-public-key "$desk_public_key" --wireguard-private-ip 10.20.9.1
+   : > ~/example-setup/desk-ordered
    ```
 
    The desk's only first-boot peer is the laptop, without an endpoint.
-   Register `~/.ssh/desk01.pub` with the provider and include the
-   registered key on the create request. Use the provider guide's create
-   command, with `SERVER_PROVIDER_API_TOKEN` read from
-   `~/example-setup/provider-key` in the same command, and
-   `/tmp/desk01-first-boot.yml` as first-boot data. Public SSH stays
-   closed from first boot. Record the returned public address as
+   Public SSH stays closed from first boot. Save the printed public key in
+   `desk01.vars.wireguard_public_key`. Record the returned public address as
    `desk01.vars.public_ipv4_address` and the returned `id` as
    `desk01.vars.provider_server_id`; at OVHcloud (a VPS) and Google Cloud,
    also the order or create receipt's service or instance name as
-   `desk01.vars.provider_server_name`. Clear the private first-boot file at
-   once after the provider accepts or refuses the request:
-
-   ```sh
-   : > /tmp/desk01-first-boot.yml
-   ```
+   `desk01.vars.provider_server_name`. When the provider refuses the
+   request, such as for no stock, the script stops before
+   `desk-ordered`: tell the person in one line, and offer the choices of
+   chapter 1's [stock line](01_answer_two_questions.md#steps).
 
    **Tell the person,** once the provider accepted the request:
 
@@ -264,21 +310,25 @@ repository's name, including paths inside quoted SSH commands.
    ```
 
    **Check:** the provider lists `desk01`, `desk01.vars.public_ipv4_address`
-   holds its address, `desk01.vars.provider_server_id` holds its ID, and `/tmp/desk01-first-boot.yml` is empty.
+   holds its address, `desk01.vars.provider_server_id` holds its ID,
+   `~/example-setup/desk01-first-boot.yml` is empty, and
+   `~/example-setup/desk-ordered` exists.
 
 3. **The laptop's way in.** Write `~/.config/doubleshell/desk01.conf`
-   with the following block. The file holds no secret: it has no
-   `PrivateKey` line, so doubleshell reads the laptop's private key from
-   `~/.config/doubleshell/wireguard_private_key`. Replace the desk's
-   public key and the documentation public address with the actual
+   with your write tool, as the following block. The file holds no secret:
+   it has no `PrivateKey` line, so doubleshell reads the laptop's private
+   key from `~/.config/doubleshell/wireguard_private_key`. Replace the
+   desk's public key and the documentation public address with the actual
    values:
 
-   ```sh
-   # On the laptop:
-   desk_public_key='DESK_WIREGUARD_PUBLIC_KEY'
-   desk_public_address='203.0.113.91'
-   printf '[Interface]\nAddress = 10.20.10.1/32\n\n[Peer]\nPublicKey = %s\nEndpoint = %s:443\nAllowedIPs = 10.20.9.1/32\n' \
-     "$desk_public_key" "$desk_public_address" > ~/.config/doubleshell/desk01.conf
+   ```ini
+   [Interface]
+   Address = 10.20.10.1/32
+
+   [Peer]
+   PublicKey = DESK_WIREGUARD_PUBLIC_KEY
+   Endpoint = 203.0.113.91:443
+   AllowedIPs = 10.20.9.1/32
    ```
 
    doubleshell reads the wg-quick format. No laptop VPN interface or
@@ -342,10 +392,14 @@ repository's name, including paths inside quoted SSH commands.
    `ssh-keygen -F`:
 
    ```sh
-   # On the laptop, in ~/code/example_systems:
-   ssh-keygen -F 10.20.9.1 -f ~/.ssh/desk01_known_hosts |
-     awk '!/^#/ { print "desk01", $2, $3; print "10.20.9.1", $2, $3 }' >> ssh/known_hosts
+   # On the laptop:
+   ssh-keygen -F 10.20.9.1 -f ~/.ssh/desk01_known_hosts
    ```
+
+   The answer's line that does not start with `#` holds the host name,
+   the key type and the key. Add two lines to `ssh/known_hosts` with your
+   edit tool, each with the key type and the key: one starting `desk01`,
+   one starting `10.20.9.1`.
 
    **Tell the person:** no message, because the person does nothing.
 
@@ -370,11 +424,18 @@ repository's name, including paths inside quoted SSH commands.
    desk's history with its own first commit, and stops on a copy that has
    commits already.
 
+   Write the copy as the script
+   `~/code/example_systems/coding_agent_scratch/copy-the-repository-to-desk01`,
+   make it runnable, and run it by its full path:
+
    ```sh
-   # On the laptop, in ~/code/example_systems:
+   #!/usr/bin/env bash
+   # Copies the laptop's systems repository to desk01, without Git's history and your own scratch files.
+   set -euo pipefail
+   cd ~/code/example_systems
    # COPYFILE_DISABLE=1 stops a Mac's tar from adding ._ metadata files; Linux ignores it.
    # --warning=no-unknown-keyword keeps the desk's tar quiet about a Mac's file labels, which it skips anyway.
-   COPYFILE_DISABLE=1 tar --exclude=./.git --exclude=./.mmx -cf - . |
+   COPYFILE_DISABLE=1 tar --exclude=./.git --exclude=./.mmx --exclude=./coding_agent_scratch -cf - . |
      ssh root@desk01 'mkdir -p /home/coding-agent/systems_repository && tar --warning=no-unknown-keyword -C /home/coding-agent/systems_repository -xf -'
    ```
 
@@ -384,7 +445,8 @@ repository's name, including paths inside quoted SSH commands.
    `desk01.ssh_identity_file` to the laptop key's absolute path; in
    `ssh/desk01`, keep `HostKeyAlias desk01`, replace `IdentityFile` with
    that absolute path, and add the desk-only `ProxyCommand` from the
-   laptop's SSH entry. Then run:
+   laptop's SSH entry. Then run, after `cd ~/code/example_systems` as a
+   call of its own:
 
    ```sh
    # On the laptop, in ~/code/example_systems:
@@ -400,13 +462,19 @@ repository's name, including paths inside quoted SSH commands.
    over the same root login, on standard input, and delete the laptop
    file. MMX keeps every laptop file a run reads in the run's history, so
    the bootstrap cannot do this itself. The person does nothing. Use the
-   provider guide's server listing path, here Hetzner Cloud's `servers`:
+   provider guide's server listing path, here Hetzner Cloud's `servers`.
+   Write the move as the script
+   `~/code/example_systems/coding_agent_scratch/move-the-provider-key-to-desk01`,
+   make it runnable, and run it by its full path:
 
    ```sh
-   # On the laptop, in ~/code/example_systems:
+   #!/usr/bin/env bash
+   # Moves the provider key to desk01's API proxy, then deletes the laptop's copy.
+   set -euo pipefail
+   cd ~/code/example_systems
    ssh -F ssh/desk01 root@10.20.9.1 set-up-outside-services write-api-token-proxy-file \
-     --api server-provider --server-listing-path servers < ~/example-setup/provider-key \
-     && rm ~/example-setup/provider-key
+     --api server-provider --server-listing-path servers < ~/example-setup/provider-key
+   rm ~/example-setup/provider-key
    ```
 
    At Scaleway, add `--token-header X-Auth-Token`. At a provider whose
@@ -484,8 +552,11 @@ after a reboot.
    search in the laptop's clone of the systems repository:
 
    ```sh
-   grep -rnE 'example|203\.0\.113\.|0{40}' --exclude-dir=.git --exclude-dir=.mmx --exclude=AGENTS.md --exclude=triage_agent_rules.md --exclude=talking_with_the_team.md --exclude-dir=initial_setup --exclude-dir=operating_procedures .
+   # On the laptop:
+   grep -rnE 'example|203\.0\.113\.|0{40}' --exclude-dir=.git --exclude-dir=.mmx --exclude-dir=coding_agent_scratch --exclude=AGENTS.md --exclude=triage_agent_rules.md --exclude=talking_with_the_team.md --exclude-dir=initial_setup --exclude-dir=operating_procedures ~/code/example_systems
    ```
+
+   Or search with your search tool, with the same pattern and exclusions.
 
    Replace `example_systems`, the app name `shop`, and `example.com` in
    the copied guide with the team's names. Keep documentation-only public

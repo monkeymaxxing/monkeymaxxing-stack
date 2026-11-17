@@ -349,8 +349,12 @@ Select the official [`debian-13-x64` image](https://docs.digitalocean.com/produc
 Debian 13 image includes cloud-init and installs the selected SSH keys for `root`. Use x86-64 sizes,
 because the Stack's server binaries and container images are x86-64, also with an ARM systems desk.
 
-Check `GET http://127.0.0.1:8081/sizes` and `GET http://127.0.0.1:8081/regions` for availability in the
-chosen region, and use the full region slug, such as `ams3`. Basic `s-4vcpu-8gb` for `app001` and
+**Stock:** no public route; DigitalOcean's API needs the key. With the key, before any order,
+`GET sizes?per_page=200` gives each size's `available` and the `regions` that sell it now, and
+`GET regions` each region's `available`: on the laptop with the key file in chapter 3, and through
+`http://127.0.0.1:8081/` on the desk. Chapter 1's price screen says "price from DigitalOcean's list; stock
+checked before ordering", as its [stock line](../initial_setup/01_answer_two_questions.md#steps) says.
+Use the full region slug, such as `ams3`. Basic `s-4vcpu-8gb` for `app001` and
 `s-2vcpu-4gb` for the remaining ordinary roles meet the shared setup's minimums.
 
 **Prices.** `curl -sS 'http://127.0.0.1:8081/sizes?per_page=200' | jq '.sizes[] | select(.slug == "s-2vcpu-4gb") | {slug, price_monthly, price_hourly, disk, regions}'`

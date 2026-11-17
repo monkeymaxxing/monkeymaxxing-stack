@@ -95,6 +95,14 @@ before writing the team's scripts. The provider script contract is in the
    monthly price in the location to the public IPv4 address's monthly
    charge there, and returns the sum as `monthly_price` with the currency
    the answer names.
+8. Stock: no public route; Hetzner's API needs the key. With the key,
+   before any order, `GET /datacenters` lists each datacenter's
+   `server_types.available`: a type missing there cannot be ordered there
+   now. Run it on the laptop with the key file in chapter 3, and through
+   `http://127.0.0.1:8081/datacenters` on the desk. Chapter 1's price
+   screen says "price from Hetzner's list; stock checked before ordering",
+   as its [stock line](../initial_setup/01_answer_two_questions.md#steps)
+   says.
 
 Reason: `curl` calls the one API the same way in all three places, so the scripts run unchanged on the laptop,
 the desk and `util01` without a program to install, and `curl` never repeats a create whose answer was lost

@@ -266,14 +266,14 @@ You do the rest. It takes about 15 minutes.
    `mmhotline_down_alarm` parts applied.
 
 9. **Add each phone to MMHotline.** For each person on call, add a
-   Pushover contact method with their own user key. The key goes on standard
-   input, never on the command line. Add `--pushover-device-name NAME`
+   Pushover contact method with their own user key. The key reaches
+   `mmhotline` on `util01` on standard input, never on its command line. Add `--pushover-device-name NAME`
    only for a person who named one device; leave it out to send to every
    device on the person's account:
 
    ```sh
    # On the laptop. USER_KEY: the person's own Pushover user key, never the group's key. EMAIL: the person's sign-in address in people.
-   printf '%s\n' USER_KEY | ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 "mmhotline contact-methods add --sign-in-email-address EMAIL --contact-method-type pushover_notification --pushover-user-key-file -"'
+   ssh desk01-agent 'cd systems_repository && printf "%s\n" USER_KEY | ssh -F ssh/config root@10.20.0.1 "mmhotline contact-methods add --sign-in-email-address EMAIL --contact-method-type pushover_notification --pushover-user-key-file -"'
    # With one device (up to 25 letters, digits, _ and -), add to the end of the mmhotline command: --pushover-device-name NAME
    ```
 

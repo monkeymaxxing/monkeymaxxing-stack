@@ -38,7 +38,9 @@ holds the map of the whole system, for when the person asks.
   time, such as "I am adding your domain at Cloudflare." Explain more
   only when the person asks.
 - **Command blocks.** Every command block in the initial setup files
-  starts with a comment that says where it runs.
+  starts with a comment that says where it runs. Run each line of a block
+  as its own tool call, and a block that is a script as [`AGENTS.md`, "One plain command per tool call"](../AGENTS.md#one-plain-command-per-tool-call)
+  says.
 - **Commits.** Commit each chapter's changes to the systems repository as
   you go, with a message that says what changed and why. Before the desk
   exists, the commits stay in the laptop's copy. From chapter 4 on, follow
@@ -73,7 +75,8 @@ company name, as step 3 and step 5 say. Replace in the example:
 
 When the person changes the company name at "go", write the file again
 with the new folders; Claude Code asks once more. Read web pages, such as
-the provider's price page, with `curl`.
+the provider's price page, with `curl --create-dirs -o ~/example-setup/NAME URL`,
+then your read tool.
 
 ```json
 {
@@ -91,12 +94,15 @@ the provider's price page, with `curl`.
       "Bash(ssh desk01-agent *)",
       "Bash(ssh root@desk01 *)",
       "Bash(ssh -o StrictHostKeyChecking=accept-new root@desk01 *)",
-      "Bash(ssh -F ssh/desk01 *)",
       "Bash(~/code/example_systems/ssh/open-the-desk-login *)",
+      "Bash(~/code/example_systems/server_management_scripts/*)",
+      "Bash(~/code/example_systems/coding_agent_scratch/*)",
       "Bash(ssh-keygen *)",
       "Bash(curl *)",
       "Bash(jq *)",
       "Bash(dig *)",
+      "Bash(readlink /etc/localtime)",
+      "Bash(timedatectl show *)",
       "Bash(tar *)",
       "Bash(shasum *)",
       "Bash(sha256sum *)",
@@ -105,12 +111,12 @@ the provider's price page, with `curl`.
       "Bash(podman build *)",
       "Bash(docker run *)",
       "Bash(docker build *)",
-      "Bash(./server_management_scripts/*)",
       "Bash(mkdir *)",
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(ln *)",
-      "Bash(chmod *)",
+      "Bash(chmod +x ~/example-setup/*)",
+      "Bash(chmod +x ~/code/example_systems/coding_agent_scratch/*)",
       "Edit(./**)",
       "Edit(~/code/example_systems/**)",
       "Edit(~/example-setup/**)",
@@ -127,16 +133,21 @@ the provider's price page, with `curl`.
 
 `additionalDirectories` lets you read the systems repository, the setup
 folder and the skill without a question. `Edit` rules cover every tool
-that writes a file. A compound command runs without a question only when
-each part matches a rule, and a command that starts with a variable, such
-as `COPYFILE_DISABLE=1 tar` or `export PATH=...`, asks. So run `mmx` and
-`doubleshell` by their full paths, `~/.local/bin/mmx`, and the desk login
-by its full path, as [`AGENTS.md`](../AGENTS.md#your-login-on-the-desk)
-says. A few commands still ask, and `rm` always asks: the person approves
-each one as it comes. Never add `Bash(*)`, a rule for `rm`, or a folder
-outside the three above, and never turn off the questions with a mode that
-skips them all. Reason: a wildcard in an `rm` rule also matches a second
-path, such as `~/`.
+that writes a file, in the app's folder, the systems repository with its
+`coding_agent_scratch/` folder for your own scripts, and the setup folder.
+A rule matches the command as you write it, so write each command as the
+rules name it: `~/.local/bin/mmx`, never `mmx`; a script by its full path
+from `~/`; and one plain command per tool call, as
+[`AGENTS.md`, "One plain command per tool call"](../AGENTS.md#one-plain-command-per-tool-call)
+says. A command that starts with a variable, such as `COPYFILE_DISABLE=1 tar`
+or `export PATH=...`, asks, and so does any part of a chain that no rule
+matches. A few commands still ask, and `rm` always asks: the person approves
+each one as it comes. Never add `Bash(*)`, a rule for `rm`, `python3`,
+`bash`, `sh`, `sed`, `awk`, `perl`, `env` or a loop, or a folder outside
+the three above, and never turn off the questions with a mode that skips
+them all. Reason: a wildcard in an `rm` rule also matches a second path,
+such as `~/`, and a rule for a program that runs any script allows every
+command.
 
 The two `deny` rules refuse `sed -i` and `perl -i` without a question,
 also inside a longer command: change files with your Edit and Write tools
@@ -165,7 +176,9 @@ It also blocks two commands that change files out of your sight.  I change files
 
 I work through your systems desk and never copy your keys.
 
-Anything else still asks you.  The list stays on this laptop.  It never goes into your app's code.
+Until now, Claude Code may have asked you a few times already, such as to read this setup's instructions.
+It asks once more now, to write the list.  After that, only a few commands still ask, such as deleting a file.
+The list stays on this laptop.  It never goes into your app's code.
 
 Claude Code now asks you once.  Choose  Yes.
 ```
@@ -235,6 +248,23 @@ the rules with this team's folders.
    - **Sign-in email:** the address from `git config user.email`. When it
      is empty, ask for one. Reason: the sign-in link for the private pages
      goes to this address, and the domain has no mailbox yet.
+   - **Stock, before the cost:** check that the provider sells each
+     recommended size in the chosen location now: the desk's size in the
+     desk's location, and the servers' sizes in production's. Use the
+     public route that the provider guide's "Stock" line names; it needs
+     no key. Show only what can be ordered now, at its real price. When a
+     recommended size is sold out there, offer the nearest location that
+     has it before any dearer size or product. Never offer a kind of
+     product the person did not ask about, such as a provider's hourly
+     cloud servers in place of its monthly ones, without saying plainly
+     why and what it costs a month against the plan on this screen. When
+     the guide names no public route, the check happens with the key,
+     before any order, in
+     [chapter 3](03_make_your_server_account_and_your_systems_desk.md#the-provider-account)
+     step 3, and the screen's cost line ends with
+     `(price from Hetzner's list; stock checked before ordering)`.
+     Reason: a price for a server that cannot be ordered is a promise that
+     breaks after the person has made the account.
    - **Cost:** the real price of the desk and each of the three servers,
      each with its public address, from the provider's prices, as the
      provider guide says. Before the provider credential exists, read the
@@ -258,7 +288,7 @@ the rules with this team's folders.
      Your name on the systems desk:  alex           (your laptop's user name)
      Sign-in email:      alex@gmail.com     (from your Git settings)
 
-     Cost:               about €27 a month for the servers at Hetzner
+     Cost:               about €27 a month for the servers at Hetzner  (price from Hetzner's list; stock checked before ordering)
                          (one line per server with its real price: the systems desk, app001, db01, util01)
                          Backups at Backblaze: a few cents a month at first
                          Later, phone alerts: Pushover, a one-time fee of about $5 for each phone
@@ -278,7 +308,8 @@ the rules with this team's folders.
    a later price approval. Reason: the chapters make none, and a promise
    the agent invents is a promise that breaks. When the price or the
    server type at creation differs from this screen (no stock, a changed
-   price, a different size), stop and ask again with the new number.
+   price, a different size), stop and ask again with the new number,
+   with the choices that the stock line above names.
    When the person asks what one line means, answer in one or two
    sentences, then show the screen again.
 
@@ -326,10 +357,10 @@ the rules with this team's folders.
    `example_systems`.
 
    ```sh
-   # On the laptop. Replace TEMPLATE_DIRECTORY with the directory's path:
+   # On the laptop, one command per tool call. Replace TEMPLATE_DIRECTORY with the directory's path:
    mkdir -p ~/code
    cp -R TEMPLATE_DIRECTORY ~/code/example_systems
-   cd ~/code/example_systems && git init -b main
+   git init -b main ~/code/example_systems
    ```
 
    Write the answers into the copy:

@@ -608,6 +608,12 @@ count vCPUs, and a new account can start at five. The sizes above need twelve wi
 room for a replacement: ask for more under **Service Quotas** before provisioning. A quota does not guarantee
 stock in an Availability Zone.
 
+**Stock:** no public route; AWS shows it only with the credential, and for certain only at the create. With the
+credential, before any order, `Action=DescribeInstanceTypeOfferings&LocationType=availability-zone` lists the
+Availability Zones that offer a type: on the laptop in chapter 3 with the guide's signed request and the key file,
+and through `http://127.0.0.1:8081/` on the desk. Chapter 1's price screen says "price from AWS's list; stock
+checked before ordering", as its [stock line](../initial_setup/01_answer_two_questions.md#steps) says.
+
 ## Keys, first boot and the network
 
 Every server needs a VPC subnet. AWS's [default VPC](https://docs.aws.amazon.com/vpc/latest/userguide/default-vpc-components.html),

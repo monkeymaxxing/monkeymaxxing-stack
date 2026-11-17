@@ -37,13 +37,17 @@ Two things to know about a VPS:
   termination (`POST /vps/NAME/terminate`) and tells the person to confirm
   it from that email; it never reports the server as gone.
 
+**Stock:** the public, credential-free
+`GET https://api.us.ovhcloud.com/1.0/vps/order/rule/datacenter?ovhSubsidiary=US&planCode=PLAN`
+lists each datacenter as available or out of stock for a VPS plan; the US
+has two, `US-EAST-VA` and `US-WEST-OR`. Chapter 1 reads it before the
+price screen, as its [stock line](../initial_setup/01_answer_two_questions.md#steps)
+says, and shows only the VPS plans that a datacenter can sell now.
+
 How you make a VPS, through the API proxy with the person's credential and
 after the person approves the price:
 
-1. Pick a datacenter with stock. The public, credential-free
-   `GET /vps/order/rule/datacenter?ovhSubsidiary=US&planCode=PLAN` lists
-   each datacenter as available or out of stock; the US has two,
-   `US-EAST-VA` and `US-WEST-OR`.
+1. Pick a datacenter with stock, from the same stock request.
    Order it with the order cart: `POST /order/cart`, then
    `POST /order/cart/CART_ID/vps` with the plan, such as `vps-2027-model1`,
    the cart's required configuration, and the plan's required options:
@@ -68,9 +72,11 @@ after the person approves the price:
    the inventory as usual.
 
 **The desk stays outside production's location,** so a production
-outage leaves the team's tools working. When that location has no VPS in
-stock, make the desk a Public Cloud `d2-4` there, billed by the hour, and
-move it to a VPS with
+outage leaves the team's tools working. When the desk's location has no
+VPS in stock, offer the nearest other datacenter with VPS stock that is
+not production's. Only when none has, offer a Public Cloud `d2-4` there,
+billed by the hour, and say plainly why and what it costs a month against
+the VPS price on chapter 1's screen; move it to a VPS with
 [Rebuild a systems desk](../operating_procedures/rebuild_a_systems_desk.md)
 once stock returns. Never put the desk in production's location to save
 money.
@@ -121,7 +127,8 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
    their own credential in it, named after them.
 2. The person creates the Public Cloud project: in OVHcloud's Control Panel, **Public Cloud**, then
    **Create a project**. The coding agent asks the person for the project's ID, the 32 letters and digits
-   under the project's name. The ID is not a secret. The coding agent writes it at the top of each
+   under the project's name. The ID is not a secret. When the person cannot paste it into the chat, give the
+   person a terminal prompt for it, as the skill's reply rules say. The coding agent writes it at the top of each
    provider script as `ovhcloud_project_id`.
 3. The coding agent gives the person the link below, with the site's page from the table and the
    project's ID in place of `PROJECT_ID`. The link fills in the access rules: everything inside the one
@@ -541,9 +548,9 @@ Then the public catalog, straight from the API address, with `ovhSubsidiary=US` 
 account's country, such as `FR`, `DE`, `GB` or `CA`, for the others:
 
 ```sh
-curl -sS 'https://api.us.ovhcloud.com/1.0/order/catalog/public/cloud?ovhSubsidiary=US' |
-  jq --arg plan HOURLY_PLAN_CODE '.addons[] | select(.planCode == $plan) |
-    {planCode, invoiceName, pricings: [.pricings[] | {price, intervalUnit, capacities, description}]}'
+# On the laptop, one command per tool call; after the setup, save into coding_agent_scratch/ instead:
+curl -sS --create-dirs -o ~/example-setup/ovhcloud-cloud-catalog.json 'https://api.us.ovhcloud.com/1.0/order/catalog/public/cloud?ovhSubsidiary=US'
+jq --arg plan HOURLY_PLAN_CODE '.addons[] | select(.planCode == $plan) | {planCode, invoiceName, pricings: [.pricings[] | {price, intervalUnit, capacities, description}]}' ~/example-setup/ovhcloud-cloud-catalog.json
 ```
 
 `price` is in micro-cents of the account's currency (100000000 is one unit, such as one dollar), and

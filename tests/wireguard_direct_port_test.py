@@ -177,9 +177,9 @@ class DirectPort(unittest.TestCase):
         # "unsupported setting"), so the laptop's file must not carry it until
         # doubleshell supports it.
         text = (T/'initial_setup/03_make_your_server_account_and_your_systems_desk.md').read_text()
-        line = next(l for l in text.splitlines() if "printf '[Interface]" in l)
-        self.assertIn('Endpoint = %s:443', line)
-        self.assertNotIn('PersistentKeepalive', line)
+        block = next(b for b in re.findall(r'```ini\n(.*?)```', text, re.S) if '[Interface]' in b)
+        self.assertRegex(block, r"\n *Endpoint = [0-9.]+:443\n")
+        self.assertNotIn('PersistentKeepalive', block)
 
 
 if __name__ == '__main__':

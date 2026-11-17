@@ -434,15 +434,22 @@ and turns the hourly price into a monthly estimate with the hours of an average 
 Use x86_64 types with a local disk, because the create makes the root disk on the type's local disk:
 `DEV1-M` (3 vCPUs, 4 GB RAM, 40 GB) for the ordinary roles and `DEV1-L` (4 vCPUs, 8 GB, 80 GB) for
 `app001`, as [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md)
-asks. `DEV1-S`'s 2 GB of RAM and 20 GB of disk are too small. Check stock with
-`GET http://127.0.0.1:8081/instance/v1/zones/fr-par-1/products/servers/availability`, in `nl-ams-1`,
-`fr-par-1` or `pl-waw-1`. ARM types need different images, tools and containers.
+asks. `DEV1-S`'s 2 GB of RAM and 20 GB of disk are too small. ARM types need different images, tools and
+containers.
+
+**Stock:** the public
+`GET https://api.scaleway.com/instance/v1/zones/ZONE/products/servers/availability`, in `nl-ams-1`,
+`fr-par-1` or `pl-waw-1`, answers without a key (checked 2026-11-18) and gives each type's `availability`,
+such as `available` or `shortage`. Chapter 1 reads it before the price screen, as its
+[stock line](../initial_setup/01_answer_two_questions.md#steps) says. Before creation, read it again through
+`http://127.0.0.1:8081/` on the desk.
 
 **Prices.** Scaleway's public product catalog gives each type's price per hour, and needs no credential:
 
 ```sh
-curl -sS 'https://api.scaleway.com/product-catalog/v2alpha1/public-catalog/products?product_types=instance&zone=fr-par-1&page_size=100&page=1' |
-  jq '.products[] | select(.product == "DEV1-M") | {product, description, price: .price.retail_price, unit_of_measure}'
+# On the laptop, one command per tool call; after the setup, save into coding_agent_scratch/ instead:
+curl -sS --create-dirs -o ~/example-setup/scaleway-catalog-page-1.json 'https://api.scaleway.com/product-catalog/v2alpha1/public-catalog/products?product_types=instance&zone=fr-par-1&page_size=100&page=1'
+jq '.products[] | select(.product == "DEV1-M") | {product, description, price: .price.retail_price, unit_of_measure}' ~/example-setup/scaleway-catalog-page-1.json
 ```
 
 Read `page=2` too when the type is not on the first page. `retail_price` is `units` plus `nanos`
