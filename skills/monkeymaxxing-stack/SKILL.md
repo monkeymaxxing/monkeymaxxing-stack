@@ -115,6 +115,11 @@ In every reply:
   conversation or a command's output shows it.** Reason: "the price I
   showed you" with no price shown, or "building your systems desk"
   before an order, makes the person doubt every other line.
+- **Before you change or push anything in the person's own app
+  repository, in any chapter, say what changes and why in the person's
+  words, and wait for their yes.** Never report an app change only in a
+  summary. Reason: the app is the person's own work; a change they find
+  later, already pushed, costs their trust in every other change.
 - Confirm each answer the person gives in your next reply, one line each,
   and use it from then on.
 - Ask before choosing a name the person will see, such as the app's
