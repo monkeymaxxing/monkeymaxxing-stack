@@ -1,0 +1,106 @@
+#!/usr/bin/python3
+"""Check the SSH settings files of pushed main before the MMX button runs.
+
+    check-the-pushed-ssh-settings CHECKOUT
+
+run-mmx-on-the-servers runs it, as servers-mmx, in its execution checkout
+of pushed main, before MMX. MMX hands each node's ssh_config to ssh with
+-F, and ssh runs commands that such a file names (ProxyCommand,
+LocalCommand, KnownHostsCommand, Match exec) and loads code it names
+(PKCS11Provider, SecurityKeyProvider), as servers-mmx, which reads the
+vault passphrase file. So a pushed SSH settings file could print the vault
+passphrase. Reason for an allow-list: OpenSSH gains keywords, and a
+keyword this list does not know is refused until someone reads what it
+does.
+
+It checks ssh/config and the file that each node's ssh_config names in
+inventories/servers.yml. Each must be a relative path inside the checkout,
+a regular file and no link, and each line must be blank, a comment, or a
+keyword of ALLOWED_KEYWORDS: the ones the systems repository's own SSH
+files use. Include and Match are refused, because they bring in more
+settings or run a command. It prints nothing and exits 0 when every file
+passes, or prints one plain sentence naming the file and line and exits 64.
+"""
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+
+INVENTORY = 'inventories/servers.yml'
+# The keywords of ssh/config and ssh/desk01 in the systems repository
+# template, plus HostName and Port, which name where a server is. None of
+# them runs a program or loads code.
+ALLOWED_KEYWORDS = {keyword.lower(): keyword for keyword in (
+    'Host', 'HostName', 'Port', 'User', 'HostKeyAlias', 'IdentityFile', 'IdentityAgent', 'IdentitiesOnly',
+    'ForwardAgent', 'UserKnownHostsFile', 'StrictHostKeyChecking', 'HashKnownHosts')}
+KEYWORD = re.compile(r'\s*([A-Za-z0-9]+)\s*(?:=|\s|$)')
+
+
+class Stop(Exception):
+    """A reason to refuse the run."""
+
+
+def check_settings_file(checkout, name):
+    """Stops on a path outside the checkout, a link, or a line whose keyword
+    is not allowed."""
+    if not isinstance(name, str) or not name or name.startswith(('/', '~')) or \
+            not os.path.normpath(os.path.join(str(checkout), name)).startswith(str(checkout) + os.sep):
+        raise Stop('An SSH settings file is named %r, a path outside the systems repository. Name a file in ssh/ '
+                   'of the repository.' % (name,))
+    path = checkout/name
+    try:
+        mode = os.lstat(path).st_mode
+    except FileNotFoundError:
+        return  # MMX refuses a missing file itself, and runs nothing
+    if not stat.S_ISREG(mode):
+        raise Stop('%s is not a regular file of the repository, such as a link. Make it a plain file.' % name)
+    for number, line in enumerate(path.read_text(errors='replace').split('\n'), 1):
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        found = KEYWORD.match(line)
+        keyword = found.group(1) if found else line.strip()[:40]
+        if not found or keyword.lower() not in ALLOWED_KEYWORDS:
+            raise Stop('%s, line %d, uses %s, which the MMX button does not allow in SSH settings. It allows only %s. '
+                       'Reason: ssh runs programs that some settings name, as the button\'s account, which reads the '
+                       'vault passphrase.' % (name, number, ascii(keyword), ', '.join(sorted(ALLOWED_KEYWORDS.values()))))
+
+
+def settings_files(inventory):
+    """ssh/config and each node's ssh_config, in the order checked."""
+    names = ['ssh/config']
+    nodes = inventory.get('nodes') if isinstance(inventory, dict) and isinstance(inventory.get('nodes'), dict) else {}
+    for node in sorted(nodes, key=str):
+        value = nodes[node].get('ssh_config') if isinstance(nodes[node], dict) else None
+        if value is not None and value not in names:
+            names.append(value)
+    return names
+
+
+def check(checkout):
+    checkout = Path(os.path.realpath(checkout))
+    inventory = {}
+    if (checkout/INVENTORY).is_file():
+        import yaml  # python3-yaml, which the desk role installs
+        try:
+            inventory = yaml.safe_load((checkout/INVENTORY).read_text())
+        except yaml.YAMLError as error:
+            raise Stop('%s is not YAML: %s' % (INVENTORY, ' '.join(str(error).split())))
+    for name in settings_files(inventory):
+        check_settings_file(checkout, name)
+
+
+def main(arguments):
+    if len(arguments) != 1:
+        print('Usage: check-the-pushed-ssh-settings CHECKOUT', file=sys.stderr)
+        return 64
+    try:
+        check(arguments[0])
+    except Stop as stop:
+        print('run-mmx-on-the-servers stopped before MMX ran: %s Nothing ran.' % stop, file=sys.stderr)
+        return 64
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

@@ -50,6 +50,10 @@ printf 'Using pushed main commit %s\n' "$commit"
 # Only the button's execution copy is disposable. Keep MMX history.
 git -c core.hooksPath=/dev/null reset --hard "$commit"
 git -c core.hooksPath=/dev/null clean -fdx -e .mmx
+# MMX hands each node's ssh_config to ssh with -F, and ssh runs programs
+# that such a file names, as servers-mmx, which reads the vault passphrase:
+# only SSH settings files with known-safe keywords reach MMX (exit 64).
+/usr/local/bin/check-the-pushed-ssh-settings "$checkout"
 # Settings, apps, vault and inventory come from this pushed commit unchanged.
 # every_server excludes systems_desks in each stage; it reaches production and
 # staging only. An arbitrary committed playbook retains production root power.

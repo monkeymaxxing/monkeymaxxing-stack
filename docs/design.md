@@ -5898,6 +5898,11 @@ The button runs only an allow-list of MMX commands and options. Of the `secrets`
 `list-keys`, `diff-keys` and `usage`, and refuses `--vault` and `--new-vault-password-file`. Reason: `secrets edit`
 opens an editor on the decrypted vault and `describe-module` a pager, and either one's shell escape runs as
 `servers-mmx`, which reads the vault passphrase file.
+Before MMX runs, the button checks `ssh/config` and every node's `ssh_config` in pushed `main`
+(`check-the-pushed-ssh-settings`): each is a plain file inside the repository, and each line uses only the keywords the
+template's own SSH files use, plus `HostName` and `Port`. `Include`, `Match` and every other keyword are refused.
+Reason: MMX hands the file to ssh with `-F`, and ssh runs the programs some keywords name (`ProxyCommand`,
+`LocalCommand`, `KnownHostsCommand`, `PKCS11Provider` and more) as `servers-mmx`.
 No account on the desk accepts the production key that the button's runs offer: sshd admits only root from
 loopback, with the root-owned self-management key alone, and the person and `coding-agent` from elsewhere, with a
 laptop key and the phone code. The desk firewall also refuses `servers-mmx`'s connections to the desk's own SSH.
