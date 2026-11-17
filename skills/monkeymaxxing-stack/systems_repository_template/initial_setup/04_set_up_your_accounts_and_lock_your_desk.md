@@ -73,20 +73,30 @@ domain at Cloudflare, its DNS records, and the lock.
    running, and `~/code/example_systems` is a clone of the desk's
    repository.
 
-2. **The desk's setup command.**
+2. **The desk's setup command.** The laptop key command from chapter 3
+   is still open in the person's terminal, waiting for
+   `~/example-setup/desk-ready`. Make that file now, and the key command
+   runs `ssh desk01-setup` by itself in the same window, so the person
+   types nothing:
+
+   ```sh
+   # On the laptop:
+   touch ~/example-setup/desk-ready
+   ```
 
    **Ask the person:**
 
    ```text
    Your desk is ready.
 
-   Type this in your terminal:
-
-     ssh desk01-setup
-
+   The window where you typed the Hetzner key goes on by itself now.
    It shows the next 3 accounts, one at a time.
    I carry on by myself when it is done.
    Ask me here at any time if a step is unclear.
+
+   If you closed that window, type this in a terminal instead:
+
+     ssh desk01-setup
    ```
 
    Put the screen first and whole in your reply's text. Then, in the same

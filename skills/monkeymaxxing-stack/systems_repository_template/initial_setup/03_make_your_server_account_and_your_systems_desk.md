@@ -76,7 +76,9 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
-   I carry on by myself when it is done.
+   Then leave that window open. It shows when your desk is ready, about
+   10 minutes later, and goes on to the next questions by itself.
+   I carry on by myself meanwhile.
    ```
 
    Then, in the same turn, wait for the key file. Give the command the
@@ -98,6 +100,8 @@ account screen of step 1 is the opening.
    when it is not there yet. Never print the file. An agent that does
    not show its text before a command ends its reply with the screen and
    "When it says  Hetzner accepted the key,  tell me "done" here."
+   The key command stays open after that on purpose: chapter 4 step 2
+   tells it when the desk is ready.
 
    **Check:** `~/example-setup/provider-key` exists, mode `0600`.
 
