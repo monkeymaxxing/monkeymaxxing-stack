@@ -5887,13 +5887,13 @@ The button uses the actual committed production inventory and settings, with des
 Reason: running MMX as the person would let a committed absolute `file.source` read personal keys from the controller.
 The button's vault passphrase is `/etc/systems-desk/vault-passphrase`, root:servers-mmx, mode `0640`.
 The button runs only an allow-list of MMX commands and options. Of the `secrets` commands it runs `set`, `add-random`,
-`list-keys`, `diff-keys` and `usage`, and refuses `--vault` and `--new-vault-password-file`. Reason: `secrets edit`
-opens an editor on the decrypted vault and `describe-module` a pager, and either one's shell escape runs as
-`servers-mmx`, which reads the vault passphrase file.
+`list-keys`, `diff-keys` and `usage`, and refuses `--vault`, `--vault-password-file` and `--new-vault-password-file`.
+Reason: `secrets edit` opens an editor on the decrypted vault and `describe-module` a pager, which put vault secrets on the
+coding agent's screen, and a run must not point at another vault by mistake.
 No account on the desk accepts the production key that the button's runs offer: sshd admits only root from
 loopback, with the root-owned self-management key alone, and the person and `coding-agent` from elsewhere, with a
-laptop key and the phone code. The desk firewall also refuses `servers-mmx`'s connections to the desk's own SSH.
-Reason: a pushed inventory or `ssh_config` can name the desk under any address or `HostName`.
+laptop key and the phone code. Reason: a pushed inventory or `ssh_config` can name the desk under any address or `HostName`,
+and a run of the button must not log in to the desk by mistake.
 
 The API proxy supplies provider and Cloudflare authentication through loopback ports 8081 and 8082, from root-only token files. It is the desk's one program for this job. Reason: nginx, the alternative for the providers that take a token in a header, needs `proxy_http_version 1.1` and a deep enough `proxy_ssl_verify_depth` to reach Hetzner, Scaleway or Vultr, and one program already signs requests for the others. Go's HTTP client speaks HTTP/1.1 or later and verifies with the system's certificate store, and one program means one set of behavior for every provider.
 `systems_desk_provider_api_url` selects the provider's HTTPS base URL, including a trailing slash.

@@ -172,10 +172,6 @@ class TheDeskDoor(unittest.TestCase):
         for path in T.rglob('*'):
             if path.is_file() and 'systems_desk_self_management_key' in path.read_text(errors='replace'):
                 self.assertNotIn('ssh-add', path.read_text(errors='replace'), path)
-        # Second layer: the desk's firewall refuses servers-mmx's connections
-        # to its own SSH on any of its addresses, which all leave through lo.
-        self.assertIn('oifname "lo" meta skuid "servers-mmx" tcp dport 22 reject with tcp reset',
-                      rendered(self.tasks, 'write_the_desk_firewall'))
 
     def test_the_coding_agent_gets_the_socket_and_its_git_settings_and_no_forwarding(self):
         login = self.login(self.locked(), 'coding-agent', LAPTOP)

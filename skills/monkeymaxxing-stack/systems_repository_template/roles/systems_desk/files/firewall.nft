@@ -23,15 +23,4 @@ table inet systems_desk {
     chain forward {
         type filter hook forward priority 0; policy drop;
     }
-    # servers-mmx, the account of the MMX button (run-mmx-on-the-servers),
-    # never reaches this desk's own SSH. A connection to any address of this
-    # desk, loopback, wg0 or public, leaves through lo. Reason: a pushed
-    # inventory or ssh_config can name this desk under any address or
-    # HostName, and the button's runs offer the production key. sshd
-    # accepts that key for no account here; this rule keeps the desk closed
-    # to the button even if an authorized_keys file ever changes.
-    chain output {
-        type filter hook output priority 0; policy accept;
-        oifname "lo" meta skuid "servers-mmx" tcp dport 22 reject with tcp reset
-    }
 }
