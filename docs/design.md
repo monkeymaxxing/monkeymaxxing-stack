@@ -4747,11 +4747,13 @@ where a service offers no other way. One Stack command does the rest of the
 account and secret work: `set-up-outside-services`, a Go program in the
 Stack repository's `set_up_outside_services/`. The desk role installs it on
 every systems desk from its pin, `stack_software.set_up_outside_services`.
-The person runs it in their own desk terminal, in their own systems
-repository, after loading their token file:
+The person runs it in their own desk terminal: `go-live` through the laptop's
+`ssh desk01-setup` entry, the others in their own systems repository, after
+loading their token file:
 
 | Command | What it does |
 | --- | --- |
+| `set-up-outside-services go-live` | Sitting 1's part on the desk, one screen at a time in the four-part form: Cloudflare (the link token; it finds the account, adds the domain, has Cloudflare copy the DNS records from the current nameservers, gives the account its workers.dev address, then does `cloudflare`'s work), the domain's registrar (the two nameservers; the registrar's name and DNSSEC state from the registry's RDAP service; it waits for Enter), Backblaze (the master key; then `backblaze`'s work), the registry's read-only token at ghcr.io (checked to never end, to hold only `read:packages`, and to read the app's image), every other vault secret without a question, then the lock: the recovery passphrase, shown once and typed back, and the phone code through `sudo -n set-up-the-phone-code --emergency-codes-to PATH`. Each value is checked with its service at once; a refused value is asked again with the service's reason. It commits and pushes the vault, then the recovery bundle, each signed, and copies the bundle into the locked backup bucket. `/var/lib/monkeymaxxing-stack/setup_results.json` (0644) names each step's state and the values the coding agent needs that are not secrets; a rerun continues where a run stopped |
 | `set-up-outside-services backblaze`, with `--replace-key VAULT_KEY` for a rotation and `--delete-the-old-keys-at-once` after a break-in, as for `cloudflare` | Takes the B2 account's master key at two hidden prompts. Creates every bucket the system uses, sets each bucket's Object Lock and lifecycle rule, checks each lock with a test file, makes each server's key with exactly the capabilities below, and saves each key into the vault |
 | `set-up-outside-services cloudflare` | Takes the link token, the one token the person makes by hand from a prepared link, at a hidden prompt. With it, makes the person's desk token and writes it into the API proxy and the token file; with the desk token, creates the tunnels, the apps' R2 buckets (with `staging01`, each app's staging bucket too), and, through `mmhotline status-page set-up`, the status page's bucket, host name, and rule; with the link token, makes the servers' account-owned tokens and R2 keys below and saves them into the vault, and makes the person's own posting key for the status page and writes it into the token file; with a short-lived token it deletes at once, adds the One-time PIN login method when missing and, with `staging01`, makes staging's Access service token, whose two values go into the token file. Before it makes anything, it sets the link token to end by itself after 24 hours, and it deletes the link token when it ends, after a failure too. While the status page's domain is not Active at Cloudflare, it skips the status page and its two keys, says so, and finishes the rest; a rerun adds them |
 | `set-up-outside-services cloudflare --replace-key NAME` (repeatable) or `--replace-every-key`, with `--delete-the-old-keys-at-once` after a break-in | Makes a new key for each named one and saves it where the old one was (the vault, the API proxy, or the token file). A key the servers use keeps its old key until the servers' run passed and the person presses Enter; the at-once flag deletes it without waiting. A tunnel gets a new secret; staging's service token gets a new secret with the same ID |
@@ -4759,7 +4761,27 @@ repository, after loading their token file:
 | `set-up-outside-services secrets`, with `--replace KEY` to enter one again | Saves every vault key the playbooks read (`mmx secrets usage`) that the vault lacks and no other command makes: the keys only a website gives, each with its page, at hidden prompts; each app's `secrets_from_vault`, asking whether a value is random or from an outside service; the servers' shared root console password, shown once for the password manager and typed back, saved only as its hash `shared_root_console_password_hash`; and the random keys, made inside MMX or, for the fleet hub's signing secret, as 64 hexadecimal characters handed to `mmx secrets set` on standard input. It skips saved keys, refuses a repository with uncommitted changes other than the vault or with commits not pushed yet, pulls `main`, and ends by committing the vault, checking the commit is signed, and pushing it |
 | `set-up-outside-services personal-token staging-access` | Takes staging's Access service token from the password manager at two hidden prompts, on a desk whose token file lacks it, and writes it into the token file |
 | `set-up-outside-services personal-token server-provider --server-listing-path PATH` | Takes the person's server provider token at a hidden prompt, checks it at the provider, only at a provider guide's own API address, named before the prompt, then writes it into both the person's token file and the API proxy's file, restarts the proxy, and checks a request through it. For a provider whose API signs each request (`systems_desk_provider_api_authentication: ovhcloud_signed_requests`), it takes each of the credential's values at its own prompt, checks them with a signed listing, writes the API proxy's credential file, restarts that proxy, and checks the listing through it |
-| `set-up-outside-services show-recovery-items` | Shows each recovery item for the password manager in the person's terminal, one at a time, with the entry's name, and clears the screen and its scrollback after each, on every way out, Ctrl-C included. At the end it tells the person to check the laptop's terminal or Rex for Mac for a copy in the scrollback, which no command on the desk can clear |
+
+**Why go-live works the way it does.** The screens are the product: the
+person reads only what to do, so each provider's step-by-step lines run
+quietly and an error stops the run with its reason. The recovery bundle,
+`recovery_bundle.age`, is an MMX vault file of its own, made with
+`mmx secrets set --vault`, encrypted with six words from the BIP39 list (66
+bits; age's scrypt makes guessing a copy at the Git host or Backblaze too
+costly). It holds the vault passphrase, the production private key, the
+desk's WireGuard private key, the console password, the phone code's
+emergency codes, the server provider credential, the desk's Cloudflare
+token, the restore drill's read-only Backblaze key, the backups' passphrase
+(no backup can be read without it), and staging's Access service token with
+`staging01`. The Backblaze master key is never stored, the bundle included.
+The passphrase is made at the run's start and kept in a 0600 file in the
+person's home until the bundle is pushed, so a secret that exists nowhere
+else, such as the console password, goes into the bundle when it is made and
+a rerun loses nothing. util01 gets the desk's own provider credential,
+because providers such as Hetzner make tokens only on their website. When R2
+is not turned on, the apps' upload buckets, their keys and the status page
+wait for `set-up-outside-services cloudflare`, since turning R2 on asks for a
+payment method on the website.
 
 **Why one Stack command.** Two designs were weighed. Playbooks in the template would need new MMX
 features: a hidden prompt inside a run, and a task that writes the

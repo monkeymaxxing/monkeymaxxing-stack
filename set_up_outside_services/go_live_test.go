@@ -1,0 +1,461 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+const (
+	registryToken         = "ghp_registrytokenvalue0000000000000001"
+	expiringRegistryToken = "ghp_registrytokenvalue0000000000000002"
+	vaultPassphrase       = "vault-passphrase-value"
+	emergencyCodes        = "11111111\n22222222\n33333333"
+)
+
+// github stands in for GitHub's API and ghcr.io: each token's scopes, end
+// date, and whether the image is built.
+type github struct {
+	scopes     map[string]string
+	ends       map[string]string
+	imageBuilt bool
+}
+
+func (g *github) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case r.URL.Path == "/user":
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		scopes, known := g.scopes[token]
+		if !known {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"message": "Bad credentials"}`)
+			return
+		}
+		w.Header().Set("X-OAuth-Scopes", scopes)
+		if ends := g.ends[token]; ends != "" {
+			w.Header().Set("GitHub-Authentication-Token-Expiration", ends)
+		}
+		fmt.Fprint(w, `{"login": "alex-acme"}`)
+	case r.URL.Path == "/token":
+		login, token, _ := r.BasicAuth()
+		if login != "alex-acme" || g.scopes[token] == "" || r.URL.Query().Get("scope") != "repository:acme/shop:pull" {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"errors": [{"code": "UNAUTHORIZED", "message": "authentication required"}]}`)
+			return
+		}
+		fmt.Fprintf(w, `{"token": "pull-%s"}`, token)
+	case r.URL.Path == "/v2/acme/shop/tags/list" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer pull-"):
+		if !g.imageBuilt {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"errors": [{"code": "NAME_UNKNOWN", "message": "repository name not known to registry"}]}`)
+			return
+		}
+		fmt.Fprint(w, `{"name": "acme/shop", "tags": ["main"]}`)
+	default:
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"errors": [{"code": "DENIED", "message": "denied"}]}`)
+	}
+}
+
+// rdap stands in for IANA's bootstrap file and the registry of .org.
+func rdap(dnssec bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/dns.json":
+			fmt.Fprintf(w, `{"services": [[["com", "net"], ["https://rdap.example.net/com/"]], [["org"], ["http://%s/org/"]]]}`, r.Host)
+		case "/org/domain/example.org":
+			fmt.Fprintf(w, `{"secureDNS": {"delegationSigned": %t}, "entities": [{"roles": ["registrar"],
+				"vcardArray": ["vcard", [["version", {}, "text", "4.0"], ["fn", {}, "text", "Namecheap, Inc."]]]}]}`, dnssec)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}
+}
+
+// goLiveHarness runs go-live as the person does, with stand-ins for every
+// service, the desk's root files, and the phone-code setup. transcript is
+// what the person's terminal shows, prompts and typing included.
+type goLiveHarness struct {
+	*harness
+	github     *github
+	transcript *strings.Builder
+	// hidden and visible answer the hidden and visible prompts in turn. A
+	// function answers with what the screen showed, such as the passphrase.
+	hidden, visible []func() string
+	results         []setupResults
+	// passphrase is the recovery passphrase the screen showed.
+	passphrase string
+	phoneCode  func(path string) error
+}
+
+func newGoLiveHarness(t *testing.T, dnssec bool) *goLiveHarness {
+	t.Helper()
+	if _, err := exec.LookPath("mmx"); err != nil {
+		t.Skip("go-live's tests keep the recovery bundle in a real MMX vault, so they need mmx on PATH")
+	}
+	h := &goLiveHarness{harness: newHarness(t, false, false), github: &github{scopes: map[string]string{
+		registryToken: "read:packages", expiringRegistryToken: "read:packages"}, ends: map[string]string{expiringRegistryToken: "2026-12-17 09:00:00 UTC"}}}
+	h.transcript = &strings.Builder{}
+	h.e.out = h.transcript
+	h.cloudflare.ZoneStatus = ""
+	githubServer := httptest.NewServer(h.github)
+	t.Cleanup(githubServer.Close)
+	rdapServer := httptest.NewServer(rdap(dnssec))
+	t.Cleanup(rdapServer.Close)
+	h.e.githubAPIURL, h.e.containerRegistryURL, h.e.rdapBootstrapURL = githubServer.URL, githubServer.URL, rdapServer.URL+"/dns.json"
+	rootFiles := map[string]string{
+		"/etc/systems-desk/provider-api-token.conf":    `proxy_set_header Authorization "Bearer ` + providerToken + `";` + "\n",
+		os.Getenv("MMX_VAULT_PASSWORD_FILE"):           vaultPassphrase + "\n",
+		filepath.Join(h.e.home, ".ssh/production_key"): "-----BEGIN OPENSSH PRIVATE KEY-----\nproduction\n-----END OPENSSH PRIVATE KEY-----\n",
+		deskWireGuardPrivateKeyFile:                    "wireguardprivatekeyvalue=\n",
+	}
+	h.e.readRootFile = func(path string) ([]byte, error) {
+		if content, ok := rootFiles[path]; ok {
+			return []byte(content), nil
+		}
+		return os.ReadFile(path)
+	}
+	// The desk's set-up-the-phone-code, which shows the QR code and asks for
+	// one code, then writes the emergency codes.
+	h.phoneCode = func(path string) error {
+		fmt.Fprint(h.transcript, "\n  [QR code]\n\n  3. Type the 6 digits your phone shows.\n\n  Code: 123456\n")
+		return os.WriteFile(path, []byte(emergencyCodes+"\n"), 0o600)
+	}
+	h.e.setUpThePhoneCode = func(path string) error { return h.phoneCode(path) }
+	h.e.resultsFile = filepath.Join(t.TempDir(), "setup_results.json")
+	h.e.writeResultsFile = func(content []byte) error {
+		var results setupResults
+		if err := json.Unmarshal(content, &results); err != nil {
+			t.Fatalf("the results file is not JSON: %v", err)
+		}
+		h.results = append(h.results, results)
+		return os.WriteFile(h.e.resultsFile, content, 0o644)
+	}
+	h.e.clearScreen = func() { fmt.Fprint(h.transcript, "\n[the screen is cleared]\n") }
+	answer := func(queue *[]func() string, label, kind string) (string, error) {
+		if len(*queue) == 0 {
+			return "", errors.New("unexpected " + kind + " prompt " + label)
+		}
+		value := (*queue)[0]()
+		*queue = (*queue)[1:]
+		shown := value
+		if kind == "hidden" {
+			shown = "(typed, not shown)"
+		}
+		fmt.Fprintf(h.transcript, "%s%s\n", label, shown)
+		return value, nil
+	}
+	h.e.prompt = func(label string) (string, error) { return answer(&h.hidden, label, "hidden") }
+	h.e.confirm = func(label string) (string, error) { return answer(&h.visible, label, "visible") }
+	return h
+}
+
+func typed(values ...string) []func() string {
+	var answers []func() string
+	for _, value := range values {
+		answers = append(answers, func() string { return value })
+	}
+	return answers
+}
+
+// theShownPassphrase types the passphrase the screen showed, as the person
+// does from the password manager.
+func (h *goLiveHarness) theShownPassphrase() string {
+	text := h.transcript.String()
+	after := text[strings.LastIndex(text, "IT IS SHOWN ONLY ONCE.")+len("IT IS SHOWN ONLY ONCE."):]
+	h.passphrase = strings.Join(strings.Fields(strings.SplitN(strings.TrimLeft(after, "\n"), "\n", 2)[0]), " ")
+	return h.passphrase
+}
+
+func (h *goLiveHarness) last() setupResults {
+	return h.results[len(h.results)-1]
+}
+
+func (h *goLiveHarness) bundleKeys() map[string]bool {
+	h.t.Helper()
+	passwordFile := filepath.Join(h.t.TempDir(), "passphrase")
+	writeFile(h.t, passwordFile, h.passphrase+"\n")
+	if err := os.Chmod(passwordFile, 0o600); err != nil {
+		h.t.Fatal(err)
+	}
+	keys, err := mmxVault{directory: h.t.TempDir(), file: filepath.Join(h.e.directory, recoveryBundleFile), passwordFile: passwordFile}.keys()
+	if err != nil {
+		h.t.Fatalf("the recovery passphrase does not open the bundle: %v", err)
+	}
+	return keys
+}
+
+// The whole of sitting 1 on the desk, with one refused value on each screen
+// that checks one.
+func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
+	h := newGoLiveHarness(t, true)
+	h.hidden = append(typed("not-the-token-it-made", h.addLinkToken(), "wrong-application-key", masterKey, expiringRegistryToken, registryToken, "maple orbit candle river stone pilot"),
+		h.theShownPassphrase)
+	h.visible = typed("", masterKeyID, masterKeyID)
+	err := runGoLive(h.e)
+	t.Logf("The person's terminal:\n%s", h.transcript)
+	if err != nil {
+		t.Fatalf("go-live: %v", err)
+	}
+	output := h.transcript.String()
+
+	// Each screen in the design's order, with its four parts.
+	order := []string{"Account 2 of 4: Cloudflare (your web address and protection)", "Cloudflare accepted the token.",
+		"Account 3 of 4: your domain's registrar (Namecheap, Inc.)", "TURN OFF DNSSEC FIRST.", "Account 4 of 4: Backblaze (your backups)",
+		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "One more key: so your servers can download your app.",
+		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Step 1 of 2: your recovery passphrase", "SAVE IT NOW.",
+		"[the screen is cleared]", "Step 2 of 2: your phone code", "Done.  Your desk is locked."}
+	at := 0
+	for _, line := range order {
+		next := strings.Index(output[at:], line)
+		if next < 0 {
+			t.Fatalf("the screens lack %q after position %d", line, at)
+		}
+		at += next
+	}
+	// Each loud line is in capitals on its own line, with a blank line above and below.
+	for _, loud := range []string{"TURN OFF DNSSEC FIRST.  YOUR SITE WILL NOT WORK WITH IT ON.", "THE REGION CANNOT BE CHANGED LATER.",
+		`SET EXPIRATION TO "NO EXPIRATION".  OTHERWISE YOUR DEPLOYS STOP IN 30 DAYS.`, "SAVE IT NOW.  IT IS SHOWN ONLY ONCE."} {
+		if !strings.Contains(output, "\n\n"+loud+"\n\n") && !strings.Contains(output, "\n\n  "+loud+"\n\n") {
+			t.Errorf("the loud line %q is not on its own line between blank lines", loud)
+		}
+	}
+	// Each refused value was asked again, with the service's reason.
+	for _, reason := range []string{"Cloudflare did not accept the token.  It said: Invalid request headers.",
+		"Backblaze did not accept the key.  It said: The applicationKeyId and/or the applicationKey are wrong.", "This token stops working on 2026-12-17 09:00:00 UTC",
+		"That is not the passphrase above."} {
+		if !strings.Contains(output, reason) {
+			t.Errorf("the output lacks the refusal %q", reason)
+		}
+	}
+	if strings.Contains(output, "Made ") || strings.Contains(output, "Bucket ") || strings.Contains(output, "Tunnel") {
+		t.Error("the screens show the work's step-by-step lines")
+	}
+
+	// Cloudflare: the domain added and its records copied, the workers.dev
+	// address made, the servers' tokens saved, and no token that can make
+	// tokens or zones left.
+	if h.cloudflare.ZoneStatus != "pending" || h.cloudflare.DNSScans != 1 || h.cloudflare.WorkersSubdomain != "acme-systems" {
+		t.Fatalf("zone %q, %d scans, workers.dev %q", h.cloudflare.ZoneStatus, h.cloudflare.DNSScans, h.cloudflare.WorkersSubdomain)
+	}
+	for _, name := range []string{"acme_systems: alex makes tokens with set-up-outside-services, deleted after the run",
+		"acme_systems: set-up-outside-services adds the domain, deleted after the run"} {
+		if len(h.cloudflare.LiveTokensNamed(name)) != 0 {
+			t.Errorf("the token %q is left", name)
+		}
+	}
+	// The vault: every key go-live makes, and util01's provider credential
+	// is the desk's.
+	for _, key := range []string{"apps_cloudflare_tunnel_token", "mmhotline_down_alarm_cloudflare_api_token", "pgbackrest_b2_write_key_id",
+		"pgbackrest_b2_read_only_application_key", "container_registry_read_only_token", "pg_auto_failover_replication_password",
+		"pgbackrest_repository_cipher_passphrase", "mmhotline_signing_secret_of_the_fleet_hub", "shop_database_password", "shared_root_console_password_hash"} {
+		if h.vault.values[key] == "" {
+			t.Errorf("the vault lacks %s", key)
+		}
+	}
+	if h.vault.values["util01_provider_api_token"] != providerToken || h.vault.values["container_registry_read_only_token"] != registryToken {
+		t.Error("util01's provider credential or the registry token is not the one entered")
+	}
+	// The vault and the bundle are pushed, each in its own signed commit.
+	log := h.git(h.e.directory, "--git-dir", h.origin, "log", "--format=%s%n%G?", "-2", "main")
+	if !strings.Contains(log, "Add the recovery bundle with set-up-outside-services go-live") || !strings.Contains(log, "vault keys with set-up-outside-services go-live") {
+		t.Fatalf("origin's main lacks the two commits:\n%s", log)
+	}
+	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile {
+		t.Fatalf("the bundle's commit changes %q", files)
+	}
+	for _, commit := range []string{"main", "main~1"} {
+		if !strings.Contains(h.git(h.e.directory, "--git-dir", h.origin, "cat-file", "commit", commit), "\ngpgsig ") {
+			t.Fatalf("%s is not signed", commit)
+		}
+	}
+	// The recovery passphrase opens the bundle, which holds every item.
+	keys := h.bundleKeys()
+	for _, key := range []string{bundleVaultPassphrase, bundleProductionKey, bundleWireGuardKey, bundleProviderCredential, bundleCloudflareDeskToken,
+		bundleConsolePassword, bundlePhoneCodeEmergencyCode, "pgbackrest_repository_cipher_passphrase", "pgbackrest_b2_read_only_key_id", "pgbackrest_b2_read_only_application_key"} {
+		if !keys[key] {
+			t.Errorf("the bundle lacks %s", key)
+		}
+	}
+	// A copy is in the locked backup bucket.
+	copies := 0
+	for _, file := range h.b2.Files {
+		if strings.HasPrefix(file.Name, "recovery_bundle/") && file.BucketID == bucketNamed(h.b2, "acme-systems-backups").ID && file.Mode == "compliance" {
+			copies++
+		}
+	}
+	if copies != 1 {
+		t.Fatalf("want one locked copy of the bundle at Backblaze, got %d", copies)
+	}
+	if _, err := os.Stat(filepath.Join(h.e.home, ".config/monkeymaxxing-stack/acme_systems_recovery_passphrase_until_the_bundle_is_saved")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("the recovery passphrase's file stays after the bundle is saved")
+	}
+
+	// The results file: every step done, the values the coding agent needs,
+	// and never a secret.
+	results := h.last()
+	if !results.Finished || results.StoppedWith != "" {
+		t.Fatalf("the results are not finished: %+v", results)
+	}
+	for _, step := range results.Steps {
+		if step.State != stepDone {
+			t.Errorf("step %s is %s", step.Name, step.State)
+		}
+	}
+	for name, want := range map[string]string{"cloudflare_account_id": testAccountID, "cloudflare_nameservers": "ada.ns.cloudflare.com bob.ns.cloudflare.com",
+		"container_registry_read_only_username": "alex-acme", "container_image_found": "no, not built yet", "registrar": "Namecheap, Inc."} {
+		if results.ForTheCodingAgent[name] != want {
+			t.Errorf("for_the_coding_agent.%s = %q, want %q", name, results.ForTheCodingAgent[name], want)
+		}
+	}
+	file, _ := os.ReadFile(h.e.resultsFile)
+	for key, value := range h.vault.values {
+		if strings.Contains(string(file), value) && !strings.HasSuffix(key, "_key_id") {
+			t.Errorf("the results file holds the value of %s", key)
+		}
+	}
+	for _, secret := range []string{providerToken, masterKey, registryToken, h.passphrase, vaultPassphrase} {
+		if strings.Contains(string(file), secret) {
+			t.Error("the results file holds a secret")
+		}
+	}
+	h.requireNoSecretInOutput(providerToken, masterKey, registryToken, vaultPassphrase, "11111111")
+	// The passphrase showed once: the screen was cleared after it.
+	if strings.Count(output, h.passphrase) != 1 && strings.Count(output, strings.ReplaceAll(h.passphrase, " ", "  ")) != 1 {
+		t.Error("the recovery passphrase shows more than once")
+	}
+
+	// A rerun after the end asks nothing.
+	h.transcript.Reset()
+	if err := runGoLive(h.e); err != nil || !strings.Contains(h.transcript.String(), "Everything here is done already.") {
+		t.Fatalf("a rerun of a finished setup: %v\n%s", err, h.transcript)
+	}
+}
+
+// A run stopped at the phone code continues there: no earlier screen comes
+// back except Backblaze's, whose key the bundle's copy needs, and the bundle
+// keeps what the first run put in it.
+func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
+	h := newGoLiveHarness(t, false)
+	h.cloudflare.ZoneStatus = "active"
+	h.hidden = append(typed(h.addLinkToken(), masterKey, registryToken), h.theShownPassphrase)
+	h.visible = typed(masterKeyID)
+	h.phoneCode = func(string) error {
+		return errors.New("set-up-the-phone-code stopped (exit status 1), so the desk is not locked yet")
+	}
+	err := runGoLive(h.e)
+	if err == nil || !strings.Contains(err.Error(), "Go back to your coding agent") {
+		t.Fatalf("want the stop at the phone code, got %v", err)
+	}
+	stopped := h.last()
+	if stopped.StoppedWith == "" || stopped.Finished {
+		t.Fatalf("the results do not say where the run stopped: %+v", stopped)
+	}
+	for _, step := range stopped.Steps {
+		want := map[string]string{"registrar": stepNotNeeded, "phone_code": stepInProgress, "recovery_bundle": stepNotStarted}[step.Name]
+		if want == "" {
+			want = stepDone
+		}
+		if step.State != want {
+			t.Errorf("after the stop, step %s is %s, want %s", step.Name, step.State, want)
+		}
+	}
+
+	h.transcript.Reset()
+	h.phoneCode = func(path string) error { return os.WriteFile(path, []byte(emergencyCodes), 0o600) }
+	h.hidden, h.visible = typed(masterKey), typed(masterKeyID)
+	if err := runGoLive(h.e); err != nil {
+		t.Fatalf("rerun: %v\n%s", err, h.transcript)
+	}
+	output := h.transcript.String()
+	for _, screen := range []string{"Account 2 of 4", "Account 3 of 4", "One more key", "Step 1 of 2"} {
+		if strings.Contains(output, screen) {
+			t.Errorf("the rerun showed %q again", screen)
+		}
+	}
+	if !strings.Contains(output, "Step 2 of 2: your phone code") || !strings.Contains(output, "Account 4 of 4: Backblaze") {
+		t.Fatalf("the rerun did not ask for the phone code and the Backblaze key:\n%s", output)
+	}
+	keys := h.bundleKeys()
+	if !keys[bundleConsolePassword] || !keys[bundlePhoneCodeEmergencyCode] || !keys["pgbackrest_repository_cipher_passphrase"] {
+		t.Fatalf("the bundle lost what the first run put in it: %v", keys)
+	}
+	if !h.last().Finished {
+		t.Fatal("the rerun did not finish")
+	}
+}
+
+// An account without R2 still goes live: the upload buckets, their keys and
+// the status page wait, and the results say so.
+func TestGoLiveLeavesR2ForLaterWhenItIsOff(t *testing.T) {
+	h := newGoLiveHarness(t, false)
+	path := filepath.Join(h.e.directory, projectSettingsFile)
+	text, _ := os.ReadFile(path)
+	writeFile(t, path, strings.Replace(string(text), `production_uploads_r2_bucket: ""`, "production_uploads_r2_bucket: acme-shop-uploads", 1))
+	h.commitAll("An app with uploads")
+	h.cloudflare.R2Off = true
+	h.hidden = append(typed(h.addLinkToken(), masterKey, registryToken), h.theShownPassphrase)
+	h.visible = typed("", masterKeyID)
+	if err := runGoLive(h.e); err != nil {
+		t.Fatalf("go-live: %v\n%s", err, h.transcript)
+	}
+	if !strings.Contains(h.last().ForTheCodingAgent["cloudflare_r2"], "not turned on yet") {
+		t.Fatal("the results do not say R2 waits")
+	}
+	if h.vault.values["shop_R2_ACCESS_KEY_ID"] != "" || h.vault.values["mmhotline_down_alarm_cloudflare_api_token"] == "" {
+		t.Fatal("want the R2 keys left for later and the other tokens made")
+	}
+}
+
+func TestTheRegistryTokenIsCheckedAsTheServersUseIt(t *testing.T) {
+	h := newGoLiveHarness(t, false)
+	h.github.scopes["ghp_broad"] = "read:packages, repo"
+	h.github.scopes["ghp_narrow"] = "read:user"
+	g := &goLive{e: h.e}
+	for token, want := range map[string]string{
+		"ghp_unknown":         "Bad credentials",
+		expiringRegistryToken: "stops working on 2026-12-17",
+		"ghp_broad":           "can also use repo",
+		"ghp_narrow":          "cannot download packages",
+	} {
+		_, advice, err := g.checkTheRegistryToken(token, "acme/shop")
+		if err == nil || advice == "" || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: want a refusal with advice containing %q, got %v (advice %q)", token, want, err, advice)
+		}
+	}
+	if _, advice, err := g.checkTheRegistryToken(registryToken, "acme/other"); err == nil || advice == "" || !strings.Contains(err.Error(), "cannot read your app's image") {
+		t.Errorf("an image the token cannot read: got %v", err)
+	}
+	h.github.imageBuilt = true
+	check, _, err := g.checkTheRegistryToken(registryToken, "acme/shop")
+	if err != nil || !check.imageFound || check.login != "alex-acme" {
+		t.Errorf("a good token: %+v, %v", check, err)
+	}
+}
+
+func TestGoLiveRefusesTheButtonAndAgentAccountsAndNeedsATerminal(t *testing.T) {
+	if !strings.Contains(strings.Join(accountsThatMayNotRun, " "), "coding-agent servers-mmx root") {
+		t.Fatal("go-live must refuse the coding agent, the button account and root")
+	}
+	if stdinIsTerminal() {
+		t.Skip("standard input is a terminal here")
+	}
+	if err := (&environment{}).dispatch([]string{"go-live"}); !errors.Is(err, errNoTerminal) {
+		t.Fatalf("want errNoTerminal, got %v", err)
+	}
+}
+
+func TestTheRegionNameOnBackblazesSignUpPage(t *testing.T) {
+	for endpoint, want := range map[string]string{"s3.eu-central-003.backblazeb2.com": "EU Central", "s3.us-west-004.backblazeb2.com": "US West", "": ""} {
+		if got := backblazeRegionName(endpoint); got != want {
+			t.Errorf("%q: got %q, want %q", endpoint, got, want)
+		}
+	}
+}

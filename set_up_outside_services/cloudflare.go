@@ -521,107 +521,15 @@ func runCloudflare(e *environment, arguments []string) error {
 			e.deleteTheLinkToken(link)
 		}
 	}()
-
-	groups := append(append(append([]permissionGroup{}, deskAccountPermissions...), deskZonePermissions...), accessSetUpPermissions...)
-	groups = append(groups, permissionR2BucketItemWrite)
-	for _, credential := range plan {
-		for _, policy := range credential.Policies {
-			groups = append(groups, policy.Groups...)
-		}
-	}
-	ids, err := link.permissionGroupIDs(groups)
+	done, err := e.setUpCloudflare(link, settings, accountID, plan, saved, oldKeys)
 	if err != nil {
 		return err
 	}
-
-	e.say("")
-	e.say("Your systems desk's Cloudflare token: your coding agent sets up tunnels, DNS, Access, the cache rule, and R2 with it,")
-	e.say("through the API proxy, without reading it. It cannot make tokens. It is yours, named after you, and deleted when you leave.")
-	desk, err := e.ensureDeskToken(link, settings, accountID, ids)
-	if err != nil {
-		return err
-	}
-
-	e.say("")
-	e.say("Tunnels: your servers open these connections out to Cloudflare, so no server needs an open web port.")
-	for _, tunnel := range tunnelsPlan(settings) {
-		if err := e.stopIfInterrupted(); err != nil {
-			return err
-		}
-		if err := e.ensureTunnelToken(desk, tunnel, saved); err != nil {
-			return err
-		}
-	}
-
-	if apps := settings.appsWithUploads(); len(apps) > 0 {
+	statusPage := done.statusPage
+	if done.r2IsOff {
 		e.say("")
-		e.say("R2 buckets: your apps keep their uploaded files in R2, outside the app servers.")
-		for _, name := range apps {
-			buckets := [][2]string{{"uploads bucket", settings.Vars.Apps[name].ProductionUploadsR2Bucket}}
-			if settings.hasStagingServer {
-				// Staging holds seed data, so nothing copies this bucket to B2.
-				buckets = append(buckets, [2]string{"staging uploads bucket", settings.Vars.Apps[name].StagingUploadsR2Bucket})
-			}
-			for _, bucket := range buckets {
-				created, err := desk.ensureR2Bucket(bucket[1])
-				if err != nil {
-					return err
-				}
-				if created {
-					e.say("  Created %s's %s %s.", name, bucket[0], bucket[1])
-				} else {
-					e.say("  %s's %s %s exists already. Unchanged.", capitalize(name), bucket[0], bucket[1])
-				}
-			}
-		}
-	}
-
-	e.say("")
-	e.say("The status page at %s tells your customers about a problem, even while your servers are down.", settings.Vars.StatusPageHostName)
-	// Cloudflare connects the page's host name to its bucket only in a zone
-	// that is Active, so a Pending domain leaves the page for a rerun.
-	zone, zoneStatus, err := desk.zoneOf(settings.Vars.StatusPageHostName)
-	if err != nil {
-		return err
-	}
-	var statusPage statusPageSetUp
-	if zoneStatus != "active" {
-		e.say("  The status page waits until your domain %s is Active at Cloudflare; Cloudflare shows it as %s now.", zone, zoneStatus)
-		e.say("  Run this command again then: it makes only what is missing. See the domain's status: https://dash.cloudflare.com/%s/%s", accountID, zone)
-	} else {
-		statusPage, err = e.runMMHotlineStatusPageSetUp(accountID, settings.Vars.StatusPageHostName, desk.token)
-		if err != nil {
-			return err
-		}
-		e.say("  MMHotline set up the page's bucket %s, its host name, and the rule that serves the page.", statusPage.BucketName)
-		plan = append(plan, statusPageCredentialPlan(settings, accountID, statusPage.BucketName))
-		if err := updateTokenFile(e.tokenFilePath(settings), map[string]string{statusPageBucketURLVariable: statusPage.R2BucketURL}); err != nil {
-			return err
-		}
-		e.say("  Wrote the page's bucket address, which is not a secret, into your token file as %s.", statusPageBucketURLVariable)
-	}
-
-	e.say("")
-	e.say("The servers' tokens: each belongs to the Cloudflare account, not to you, so it keeps working when a person leaves.")
-	for _, credential := range plan {
-		if err := e.stopIfInterrupted(); err != nil {
-			return err
-		}
-		if err := e.ensureCloudflareCredential(link, credential, ids, saved, oldKeys); err != nil {
-			return err
-		}
-	}
-
-	if statusPage.BucketName != "" {
-		e.say("")
-		e.say("Your own key for posting to the status page from this desk while util01 is down.")
-		if err := e.ensureStatusPagePostingKey(link, settings, accountID, statusPage.BucketName, ids); err != nil {
-			return err
-		}
-	}
-
-	if err := e.ensureAccess(link, desk, settings, accountID, ids); err != nil {
-		return err
+		e.say("R2 is not turned on in this Cloudflare account yet, so your apps' upload buckets and their keys wait.")
+		e.say("Turn R2 on once at https://dash.cloudflare.com/%s/r2/overview, then run this command again: it makes only what is missing.", accountID)
 	}
 
 	e.say("")
@@ -662,6 +570,143 @@ func runCloudflare(e *environment, arguments []string) error {
 	return nil
 }
 
+// cloudflareSetUp is what setUpCloudflare leaves for its caller to say.
+type cloudflareSetUp struct {
+	statusPage statusPageSetUp
+	// r2IsOff says R2 is not turned on in the account yet, so the apps'
+	// upload buckets, their keys, and the status page wait for a rerun.
+	r2IsOff bool
+}
+
+// setUpCloudflare makes, with the link token, everything both cloudflare and
+// go-live make: the person's desk token, the tunnels, the R2 buckets, the
+// status page once the domain is Active, the servers' tokens, the posting
+// key, and Access's login method. Each part keeps what exists already.
+func (e *environment) setUpCloudflare(link *cloudflareClient, settings systemSettings, accountID string, plan []cloudflareCredentialPlan,
+	saved *savedKeys, oldKeys string) (cloudflareSetUp, error) {
+	groups := append(append(append([]permissionGroup{}, deskAccountPermissions...), deskZonePermissions...), accessSetUpPermissions...)
+	groups = append(groups, permissionR2BucketItemWrite)
+	for _, credential := range plan {
+		for _, policy := range credential.Policies {
+			groups = append(groups, policy.Groups...)
+		}
+	}
+	ids, err := link.permissionGroupIDs(groups)
+	if err != nil {
+		return cloudflareSetUp{}, err
+	}
+
+	e.say("")
+	e.say("Your systems desk's Cloudflare token: your coding agent sets up tunnels, DNS, Access, the cache rule, and R2 with it,")
+	e.say("through the API proxy, without reading it. It cannot make tokens. It is yours, named after you, and deleted when you leave.")
+	desk, err := e.ensureDeskToken(link, settings, accountID, ids)
+	if err != nil {
+		return cloudflareSetUp{}, err
+	}
+
+	e.say("")
+	e.say("Tunnels: your servers open these connections out to Cloudflare, so no server needs an open web port.")
+	for _, tunnel := range tunnelsPlan(settings) {
+		if err := e.stopIfInterrupted(); err != nil {
+			return cloudflareSetUp{}, err
+		}
+		if err := e.ensureTunnelToken(desk, tunnel, saved); err != nil {
+			return cloudflareSetUp{}, err
+		}
+	}
+
+	r2IsOff := false
+	if apps := settings.appsWithUploads(); len(apps) > 0 {
+		e.say("")
+		e.say("R2 buckets: your apps keep their uploaded files in R2, outside the app servers.")
+	buckets:
+		for _, name := range apps {
+			buckets := [][2]string{{"uploads bucket", settings.Vars.Apps[name].ProductionUploadsR2Bucket}}
+			if settings.hasStagingServer {
+				// Staging holds seed data, so nothing copies this bucket to B2.
+				buckets = append(buckets, [2]string{"staging uploads bucket", settings.Vars.Apps[name].StagingUploadsR2Bucket})
+			}
+			for _, bucket := range buckets {
+				created, err := desk.ensureR2Bucket(bucket[1])
+				if r2IsTurnedOff(err) {
+					r2IsOff = true
+					e.say("  R2 is not turned on in this account yet, so the buckets and their keys wait.")
+					break buckets
+				}
+				if err != nil {
+					return cloudflareSetUp{}, err
+				}
+				if created {
+					e.say("  Created %s's %s %s.", name, bucket[0], bucket[1])
+				} else {
+					e.say("  %s's %s %s exists already. Unchanged.", capitalize(name), bucket[0], bucket[1])
+				}
+			}
+		}
+	}
+
+	e.say("")
+	e.say("The status page at %s tells your customers about a problem, even while your servers are down.", settings.Vars.StatusPageHostName)
+	// Cloudflare connects the page's host name to its bucket only in a zone
+	// that is Active, so a Pending domain leaves the page for a rerun.
+	zone, zoneStatus, err := desk.zoneOf(settings.Vars.StatusPageHostName)
+	if err != nil {
+		return cloudflareSetUp{}, err
+	}
+	var statusPage statusPageSetUp
+	if zoneStatus != "active" || r2IsOff {
+		e.say("  The status page waits until your domain %s is Active at Cloudflare and R2 is on; Cloudflare shows the domain as %s now.", zone, zoneStatus)
+		e.say("  Run set-up-outside-services cloudflare again then: it makes only what is missing. See the domain's status: https://dash.cloudflare.com/%s/%s", accountID, zone)
+	} else {
+		statusPage, err = e.runMMHotlineStatusPageSetUp(accountID, settings.Vars.StatusPageHostName, desk.token)
+		if err != nil {
+			return cloudflareSetUp{}, err
+		}
+		e.say("  MMHotline set up the page's bucket %s, its host name, and the rule that serves the page.", statusPage.BucketName)
+		plan = append(plan, statusPageCredentialPlan(settings, accountID, statusPage.BucketName))
+		if err := updateTokenFile(e.tokenFilePath(settings), map[string]string{statusPageBucketURLVariable: statusPage.R2BucketURL}); err != nil {
+			return cloudflareSetUp{}, err
+		}
+		e.say("  Wrote the page's bucket address, which is not a secret, into your token file as %s.", statusPageBucketURLVariable)
+	}
+
+	e.say("")
+	e.say("The servers' tokens: each belongs to the Cloudflare account, not to you, so it keeps working when a person leaves.")
+	for _, credential := range plan {
+		if err := e.stopIfInterrupted(); err != nil {
+			return cloudflareSetUp{}, err
+		}
+		if r2IsOff && credential.Form == r2KeyForm {
+			continue
+		}
+		if err := e.ensureCloudflareCredential(link, credential, ids, saved, oldKeys); err != nil {
+			return cloudflareSetUp{}, err
+		}
+	}
+
+	if statusPage.BucketName != "" {
+		e.say("")
+		e.say("Your own key for posting to the status page from this desk while util01 is down.")
+		if err := e.ensureStatusPagePostingKey(link, settings, accountID, statusPage.BucketName, ids); err != nil {
+			return cloudflareSetUp{}, err
+		}
+	}
+
+	if err := e.ensureAccess(link, desk, settings, accountID, ids); err != nil {
+		return cloudflareSetUp{}, err
+	}
+	return cloudflareSetUp{statusPage: statusPage, r2IsOff: r2IsOff}, nil
+}
+
+// r2IsTurnedOff says Cloudflare refused an R2 call because the account has
+// not turned R2 on: Cloudflare's error 10042, "Please enable R2 through the
+// Cloudflare Dashboard". Turning R2 on asks for a payment method on the
+// website, so it waits for the person.
+func r2IsTurnedOff(err error) bool {
+	var refusal *apiError
+	return errors.As(err, &refusal) && refusal.Code == "10042"
+}
+
 func sortedNames(set map[string]bool) []string {
 	var names []string
 	for name := range set {
@@ -698,16 +743,34 @@ func (e *environment) askForTheLinkToken(settings systemSettings, accountID stri
 			"Make the link token with the link above, in account %s, copy all of it, and run this command again", err, accountID, accountID)
 	}
 	e.say("The link token works in account %s.", accountID)
+	if err := e.acceptLinkToken(settings, link, id); err != nil {
+		return nil, err
+	}
+	return link, nil
+}
+
+// errLinkTokenCannotMakeTokens says the token passed its check but lacks
+// Account API Tokens Edit, so it was not made with the prepared link.
+var errLinkTokenCannotMakeTokens = errors.New("the link token needs Account API Tokens Edit: make it with the link above")
+
+// acceptLinkToken takes a link token that passed its check in its account,
+// with id its token ID: it deletes any earlier link token of the same name
+// that a stopped run left, and makes this one end by itself within
+// linkTokenLifetime.
+func (e *environment) acceptLinkToken(settings systemSettings, link *cloudflareClient, id string) error {
 	earlier, err := link.accountTokensNamed(linkTokenName(settings, e.person))
 	if err != nil {
-		return nil, fmt.Errorf("%v. The link token needs Account API Tokens Edit: make it with the link above", err)
+		if refusedWith(err, http.StatusForbidden) {
+			return errLinkTokenCannotMakeTokens
+		}
+		return err
 	}
 	for _, token := range earlier {
 		if token.ID == id {
 			continue
 		}
 		if err := link.deleteAccountToken(token.ID); err != nil {
-			return nil, err
+			return err
 		}
 		e.say("Deleted an earlier link token (ID %s), left by a run that stopped.", token.ID)
 	}
@@ -718,7 +781,7 @@ func (e *environment) askForTheLinkToken(settings systemSettings, accountID stri
 	ends, changed, err := link.endAccountTokenBy(id, e.now().Add(linkTokenLifetime))
 	if err != nil {
 		e.deleteTheLinkToken(link)
-		return nil, fmt.Errorf("%v. Cloudflare did not let the link token set its own end, so this run stopped before making anything. "+
+		return fmt.Errorf("%v. Cloudflare did not let the link token set its own end, so this run stopped before making anything. "+
 			"Make a new link token with the link above and run this command again. If this happens again, "+
 			"give the link token an end date on Cloudflare's form, under TTL, before you select Continue to summary", err)
 	}
@@ -727,7 +790,7 @@ func (e *environment) askForTheLinkToken(settings systemSettings, accountID stri
 	} else {
 		e.say("The link token ends by itself at %s UTC already, sooner than 24 hours from now. Unchanged. The run deletes it at its end.", ends.UTC().Format("2006-01-02 15:04"))
 	}
-	return link, nil
+	return nil
 }
 
 func (e *environment) deleteTheLinkToken(link *cloudflareClient) {
@@ -1019,6 +1082,12 @@ func describePolicies(policies []tokenPolicyPlan) string {
 	return strings.Join(parts, "; ")
 }
 
+// accessServiceToken is an Access service token as Cloudflare lists it.
+type accessServiceToken struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // ensureAccess adds Access's One-time PIN login method and staging's Access
 // service token when either is missing, and renews the service token's
 // secret on --replace-key STAGING_ACCESS_CLIENT_SECRET. The desk's token
@@ -1039,18 +1108,11 @@ func (e *environment) ensureAccess(link, desk *cloudflareClient, settings system
 	for _, provider := range providers {
 		hasOneTimePIN = hasOneTimePIN || provider.Type == "onetimepin"
 	}
-	var stagingToken *struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
+	var stagingToken *accessServiceToken
 	stagingName := settings.ProjectName + ": staging tests"
-	path := e.tokenFilePath(settings)
 	stagingNeedsWrite := false
 	if settings.hasStagingServer {
-		var existing []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		}
+		var existing []accessServiceToken
 		if err := desk.call(http.MethodGet, desk.account("/access/service_tokens?name="+url.QueryEscape(stagingName)), nil, &existing); err != nil {
 			return err
 		}
@@ -1066,7 +1128,15 @@ func (e *environment) ensureAccess(link, desk *cloudflareClient, settings system
 		return e.sayStagingServiceTokenState(settings, stagingToken != nil, stagingName)
 	}
 
-	plan := accessSetUpTokenPlan(settings, accountID)
+	return e.withShortLivedToken(link, accessSetUpTokenPlan(settings, accountID), ids, "the short-lived Access token", func(access *cloudflareClient) error {
+		return e.addAccessLoginMethodAndStagingToken(access, settings, hasOneTimePIN, stagingNeedsWrite, stagingToken, stagingName)
+	})
+}
+
+// withShortLivedToken makes a token for one job, runs the job with it, and
+// deletes it, so no token with these permissions stays behind. A token of
+// the same name that a stopped run left is deleted first.
+func (e *environment) withShortLivedToken(link *cloudflareClient, plan cloudflareCredentialPlan, ids map[permissionGroup]string, who string, job func(*cloudflareClient) error) error {
 	leftover, err := link.accountTokensNamed(plan.TokenName)
 	if err != nil {
 		return err
@@ -1081,16 +1151,22 @@ func (e *environment) ensureAccess(link, desk *cloudflareClient, settings system
 	if err != nil {
 		return err
 	}
-	access := &cloudflareClient{baseURL: e.cloudflareAPIURL, token: short.Value, accountID: accountID, who: "the short-lived Access token"}
 	defer func() {
 		if err := link.deleteAccountToken(short.ID); err != nil {
-			e.say("  Deleting the token %q (ID %s) failed (%v). A rerun deletes it, or delete it by hand: https://dash.cloudflare.com/%s/api-tokens", plan.TokenName, short.ID, err, accountID)
+			e.say("  Deleting the token %q (ID %s) failed (%v). A rerun deletes it, or delete it by hand: https://dash.cloudflare.com/%s/api-tokens", plan.TokenName, short.ID, err, link.accountID)
 			return
 		}
 		e.say("  Deleted the short-lived token %q at Cloudflare.", plan.TokenName)
 	}()
 	e.say("  Made the short-lived token %q (ID %s): %s.", plan.TokenName, short.ID, describePolicies(plan.Policies))
+	return job(&cloudflareClient{baseURL: e.cloudflareAPIURL, token: short.Value, accountID: link.accountID, who: who})
+}
 
+// addAccessLoginMethodAndStagingToken is ensureAccess's work with the
+// short-lived Access token.
+func (e *environment) addAccessLoginMethodAndStagingToken(access *cloudflareClient, settings systemSettings, hasOneTimePIN, stagingNeedsWrite bool,
+	stagingToken *accessServiceToken, stagingName string) error {
+	path := e.tokenFilePath(settings)
 	if !hasOneTimePIN {
 		// https://developers.cloudflare.com/api/resources/zero_trust/subresources/identity_providers/methods/create/
 		err := access.call(http.MethodPost, access.account("/access/identity_providers"), map[string]any{"name": "One-time PIN", "type": "onetimepin", "config": map[string]any{}}, nil)
@@ -1148,7 +1224,7 @@ func (e *environment) ensureAccess(link, desk *cloudflareClient, settings system
 		e.say("  Gave the service token %q (ID %s) a new secret; the old one stopped working. Wrote it into your token file as %s.", stagingName, values.ID, stagingAccessClientSecretVariable)
 		e.say("  Each team member enters it from the password manager with set-up-outside-services personal-token staging-access; replace CI's two secrets too.")
 	}
-	e.say("  Save both in your password manager with set-up-outside-services show-recovery-items, and in CI's secrets when CI tests staging.")
+	e.say("  Save both in your password manager, and in CI's secrets when CI tests staging. go-live keeps both in the recovery bundle.")
 	return nil
 }
 
@@ -1199,4 +1275,140 @@ func (e *environment) deleteTheTokensOfALeavingPerson(settings systemSettings, a
 	}
 	e.say("See the account's tokens: https://dash.cloudflare.com/%s/api-tokens", accountID)
 	return nil
+}
+
+// accountIDs lists the IDs of the accounts a token reaches.
+// https://developers.cloudflare.com/api/resources/accounts/methods/list/
+func (c *cloudflareClient) accountIDs() ([]string, error) {
+	var accounts []struct {
+		ID string `json:"id"`
+	}
+	if err := c.call(http.MethodGet, "/accounts", nil, &accounts); err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, account := range accounts {
+		if cloudflareAccountIDPattern.MatchString(account.ID) {
+			ids = append(ids, account.ID)
+		}
+	}
+	return ids, nil
+}
+
+// cloudflareZone is a domain at Cloudflare, with the two nameservers
+// Cloudflare gave it, which the domain's registrar must point at.
+type cloudflareZone struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Status      string   `json:"status"`
+	NameServers []string `json:"name_servers"`
+}
+
+// findZone finds the account's zone of exactly this name, or nil.
+// https://developers.cloudflare.com/api/resources/zones/methods/list/
+func (c *cloudflareClient) findZone(name string) (*cloudflareZone, error) {
+	var zones []cloudflareZone
+	if err := c.call(http.MethodGet, "/zones?name="+url.QueryEscape(name)+"&account.id="+c.accountID, nil, &zones); err != nil {
+		return nil, err
+	}
+	for i := range zones {
+		if zones[i].Name == name {
+			return &zones[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// The short-lived token that adds the domain, copies its DNS records, and
+// gives the account its workers.dev address. Zone Write can also delete a
+// zone, so neither the desk's token nor any other token that stays holds it.
+var domainSetUpPermissions = []permissionGroup{{"Zone Write", scopeZone}, {"Zone Read", scopeZone}, {"DNS Write", scopeZone}}
+
+func domainSetUpTokenPlan(s systemSettings, accountID string) cloudflareCredentialPlan {
+	return cloudflareCredentialPlan{
+		Purpose:   "a short-lived token that adds your domain",
+		TokenName: s.ProjectName + ": set-up-outside-services adds the domain, deleted after the run",
+		Policies:  []tokenPolicyPlan{onEveryZone(accountID, domainSetUpPermissions...), onAccount(accountID, permissionWorkersScripts)},
+		Form:      apiTokenForm,
+	}
+}
+
+// addTheDomain adds the domain to the Cloudflare account when it is not
+// there yet, copies the DNS records Cloudflare finds at the domain's current
+// nameservers, and gives the account its workers.dev address, where the
+// MMHotline-down alarm answers. It returns the zone with its nameservers.
+func (e *environment) addTheDomain(link *cloudflareClient, settings systemSettings, domain string) (cloudflareZone, error) {
+	plan := domainSetUpTokenPlan(settings, link.accountID)
+	ids, err := link.permissionGroupIDs(append(append([]permissionGroup{}, domainSetUpPermissions...), permissionWorkersScripts))
+	if err != nil {
+		return cloudflareZone{}, err
+	}
+	var zone cloudflareZone
+	err = e.withShortLivedToken(link, plan, ids, "the short-lived domain token", func(client *cloudflareClient) error {
+		found, err := client.findZone(domain)
+		if err != nil {
+			return err
+		}
+		if found != nil {
+			zone = *found
+			e.say("  The domain %s is in the Cloudflare account already, %s. Unchanged.", domain, zone.Status)
+		} else {
+			// https://developers.cloudflare.com/api/resources/zones/methods/create/
+			body := map[string]any{"name": domain, "account": map[string]string{"id": link.accountID}, "type": "full"}
+			if err := client.call(http.MethodPost, "/zones", body, &zone); err != nil {
+				return err
+			}
+			e.say("  Added the domain %s to Cloudflare.", domain)
+			// Cloudflare reads the records at the domain's current
+			// nameservers, so the site keeps working when the domain moves.
+			// https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/scan/
+			var scan struct {
+				RecordsAdded int `json:"recs_added"`
+			}
+			if err := client.call(http.MethodPost, "/zones/"+zone.ID+"/dns_records/scan", nil, &scan); err != nil {
+				return err
+			}
+			e.say("  Copied %d DNS records from the domain's current nameservers.", scan.RecordsAdded)
+		}
+		return e.ensureWorkersSubdomain(client, settings)
+	})
+	if err == nil && len(zone.NameServers) == 0 {
+		err = fmt.Errorf("Cloudflare gave the domain %s no nameservers", domain)
+	}
+	return zone, err
+}
+
+// ensureWorkersSubdomain gives the account its workers.dev address when it
+// has none: the project's name, or the name with a random ending when another
+// account has it.
+// https://developers.cloudflare.com/api/resources/workers/subresources/subdomains/
+func (e *environment) ensureWorkersSubdomain(client *cloudflareClient, settings systemSettings) error {
+	var current struct {
+		Subdomain string `json:"subdomain"`
+	}
+	err := client.call(http.MethodGet, client.account("/workers/subdomain"), nil, &current)
+	var refusal *apiError
+	if err != nil && !errors.As(err, &refusal) {
+		return err
+	}
+	if err == nil && current.Subdomain != "" {
+		e.say("  The account's workers.dev address is %s.workers.dev already. Unchanged.", current.Subdomain)
+		return nil
+	}
+	random := make([]byte, 3)
+	if _, err := rand.Read(random); err != nil {
+		return err
+	}
+	name := settings.keyNamePrefix()
+	for _, candidate := range []string{name, name + "-" + hex.EncodeToString(random)} {
+		err = client.call(http.MethodPut, client.account("/workers/subdomain"), map[string]string{"subdomain": candidate}, nil)
+		if err == nil {
+			e.say("  Gave the account the workers.dev address %s.workers.dev.", candidate)
+			return nil
+		}
+		if !errors.As(err, &refusal) {
+			return err
+		}
+	}
+	return err
 }

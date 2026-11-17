@@ -23,14 +23,18 @@ type projectSettings struct {
 		StatusPageHostName        string `yaml:"status_page_host_name"`
 		SystemsDeskProviderAPIURL string `yaml:"systems_desk_provider_api_url"`
 		// token_in_a_header, or a signing method in requestSigningMethods.
-		SystemsDeskProviderAPIAuthentication string                 `yaml:"systems_desk_provider_api_authentication"`
-		TriageAgentCodingAgent               string                 `yaml:"triage_agent_coding_agent"`
-		Apps                                 map[string]appSettings `yaml:"apps"`
-		Backups                              backupSettings         `yaml:"backups"`
+		SystemsDeskProviderAPIAuthentication string `yaml:"systems_desk_provider_api_authentication"`
+		TriageAgentCodingAgent               string `yaml:"triage_agent_coding_agent"`
+		// PasswordManager names the team's password manager on go-live's
+		// screens, such as 1Password. Without it they say "your password manager".
+		PasswordManager string                 `yaml:"password_manager"`
+		Apps            map[string]appSettings `yaml:"apps"`
+		Backups         backupSettings         `yaml:"backups"`
 	} `yaml:"vars"`
 }
 
 type appSettings struct {
+	Image                           string `yaml:"image"`
 	ProductionUploadsR2Bucket       string `yaml:"production_uploads_r2_bucket"`
 	StagingUploadsR2Bucket          string `yaml:"staging_uploads_r2_bucket"`
 	ProductionUploadsR2KeyVariables struct {
@@ -536,4 +540,19 @@ func contains(list []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// domain is the domain the system runs on: status_page_host_name without its
+// first label, such as example.com for status.example.com. The status page
+// sits right under the domain, as the template has it.
+func (s systemSettings) domain() (string, error) {
+	host := s.Vars.StatusPageHostName
+	if err := plainSetting("vars.status_page_host_name", host); err != nil {
+		return "", err
+	}
+	_, domain, _ := strings.Cut(host, ".")
+	if !strings.Contains(domain, ".") {
+		return "", fmt.Errorf("vars.status_page_host_name in %s is %s. Set it to a name right under your domain, such as status.example.com", projectSettingsFile, host)
+	}
+	return domain, nil
 }

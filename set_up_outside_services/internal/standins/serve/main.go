@@ -28,7 +28,7 @@ func main() {
 	masterKeyID, masterKey := os.Getenv("STANDIN_B2_MASTER_KEY_ID"), os.Getenv("STANDIN_B2_MASTER_KEY")
 	accountID := flag.String("cloudflare-account-id", "", "")
 	zone := flag.String("cloudflare-zone", "example.org", "")
-	zoneStatus := flag.String("cloudflare-zone-status", "active", "active, or pending before the domain moved")
+	zoneStatus := flag.String("cloudflare-zone-status", "active", "active, pending before the domain moved, or absent before go-live adds it")
 	providerToken := os.Getenv("STANDIN_PROVIDER_TOKEN")
 	flag.Parse()
 
@@ -36,7 +36,7 @@ func main() {
 	b2.BaseURL = "https://api.backblazeb2.com"
 	cloudflare := standins.NewCloudflare(*accountID)
 	cloudflare.ZoneName = *zone
-	cloudflare.ZoneStatus = *zoneStatus
+	cloudflare.ZoneStatus = strings.TrimPrefix(*zoneStatus, "absent")
 	var providerTokens = map[string]bool{providerToken: true}
 	// The provider's registered SSH keys, as Hetzner Cloud's API lists them.
 	var providerSSHKeys []map[string]any

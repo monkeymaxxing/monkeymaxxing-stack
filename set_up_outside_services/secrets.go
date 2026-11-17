@@ -302,7 +302,7 @@ func secretsPlan(s systemSettings) []secretPlan {
 		{Key: "pg_auto_failover_autoctl_node_password", What: "the failover monitor's login"},
 		{Key: "pg_auto_failover_replication_password", What: "the database replicas' login"},
 		{Key: "pgbackrest_repository_cipher_passphrase", What: "production's backup passphrase",
-			Why: "pgBackRest encrypts every backup with it. set-up-outside-services show-recovery-items shows it to you once, for your password manager."},
+			Why: "pgBackRest encrypts every backup with it. go-live keeps a copy in the recovery bundle."},
 		{Key: "mmhotline_signing_secret_of_the_fleet_hub", What: "the fleet hub's signing secret",
 			Why: "The fleet hub signs MMWatchdog's alerts with it, so MMHotline takes alerts only from your servers.", HexLength: 64},
 	}
@@ -539,7 +539,8 @@ func saveRandom(saved *savedKeys, key string, length, hexLength int) error {
 }
 
 // consolePasswordItem is the password manager item that keeps the servers'
-// shared root console password. show-recovery-items names the same item.
+// shared root console password, when the secrets step makes it. go-live
+// keeps it in the recovery bundle instead.
 const consolePasswordItem = "Shared root console password"
 
 // consolePasswordLetters are lowercase letters that sit in the same place on
@@ -570,7 +571,7 @@ func newConsolePassword() (string, error) {
 // saveConsolePassword makes the servers' shared root console password,
 // shows it once for the team's password manager, has the person type it
 // back from there, and saves only its hash. Every way out clears the
-// screen, as show-recovery-items does.
+// screen.
 func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan) error {
 	password, err := newConsolePassword()
 	if err != nil {
@@ -655,7 +656,7 @@ func (v mmxVault) addRandom(key string, length int, replace bool) error {
 	if replace {
 		arguments = append(arguments, "--replace")
 	}
-	command := exec.Command("mmx", arguments...)
+	command := exec.Command("mmx", v.arguments(arguments...)...)
 	command.Dir = v.directory
 	var errorOutput bytes.Buffer
 	command.Stdout, command.Stderr = &errorOutput, &errorOutput

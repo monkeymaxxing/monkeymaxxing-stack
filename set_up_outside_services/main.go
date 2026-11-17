@@ -1,12 +1,12 @@
 // set-up-outside-services does the account and secret work of the
 // Monkeymaxxing Stack's setup on a systems desk: the buckets and keys at
 // Backblaze, the tokens and R2 keys at Cloudflare, the vault's other
-// secrets, the person's own tokens on the desk, and the recovery items for the password manager. The person
-// runs it in their own desk terminal. It asks for each master credential at
-// a hidden prompt, keeps it in memory only, and saves each new key straight
-// into the systems repository's vault with `mmx secrets set`. It says what
-// it does, why, and where to see the result. docs/design.md, "Account and
-// secret setup from the systems desk", records the design.
+// secrets, the person's own tokens on the desk, and the recovery bundle. The
+// person runs it in their own desk terminal. It asks for each master
+// credential at a hidden prompt, keeps it in memory only, and saves each new
+// key straight into the systems repository's vault with `mmx secrets set`.
+// docs/design.md, "Account and secret setup from the systems desk", records
+// the design.
 package main
 
 import (
@@ -16,7 +16,9 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -26,13 +28,23 @@ import (
 var version = "development"
 
 const usage = `set-up-outside-services sets up your system's accounts at Backblaze and
-Cloudflare, the vault's other secrets, your own tokens on this desk, and your
-password manager's recovery items. Run it in your own desk terminal, in your systems repository,
+Cloudflare, the vault's other secrets, your own tokens on this desk, and the
+recovery bundle. Run it in your own desk terminal. The first setup runs go-live
+through ssh desk01-setup. The other commands run in your systems repository,
 after loading your token file:
 
   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services backblaze
 
 Commands:
+  go-live                       The first setup, one screen at a time: Cloudflare, your
+                                domain's registrar, Backblaze, the registry's token, every
+                                other vault secret without a question, then the lock: your
+                                recovery passphrase and your phone code. It saves the
+                                recovery bundle, recovery_bundle.age, commits and pushes it
+                                with the vault, signed, and copies it into the locked backup
+                                bucket. It writes which steps are done, never a secret, to
+                                /var/lib/monkeymaxxing-stack/setup_results.json. A rerun
+                                continues where a run stopped.
   backblaze [--replace-key VAULT_KEY]... [--delete-the-old-keys-at-once]
                                 Create every B2 bucket with its lock and lifecycle rule,
                                 check each lock, and save each server's key in the vault.
@@ -76,10 +88,9 @@ Commands:
                                 where you make each, the servers' console password, shown once
                                 for your password manager, and random ones nobody needs to see.
                                 --replace KEY enters one again.
-                                backblaze, cloudflare and secrets each commit and push the vault,
-                                signed, and refuse a repository with other changes not pushed.
-  show-recovery-items           Show each recovery item for your password manager, one at a
-                                time, in this terminal only.
+                                go-live, backblaze, cloudflare and secrets each commit and push
+                                the vault, signed, and refuse a repository with other changes
+                                not pushed.
   version                       Print this program's version.
 `
 
@@ -134,12 +145,15 @@ func (e *environment) dispatch(arguments []string) error {
 			return errNoTerminal
 		}
 		return runSecrets(e, arguments[1:])
-	case "show-recovery-items":
-		// The values show only in a terminal the person watches.
+	case "go-live":
+		// The recovery passphrase shows only in a terminal the person watches.
 		if !stdinIsTerminal() {
 			return errNoTerminal
 		}
-		return e.withNoMoreArguments(arguments, runRecoveryItems)
+		if err := e.useTheSystemsRepository(); err != nil {
+			return err
+		}
+		return e.withNoMoreArguments(arguments, runGoLive)
 	}
 	return fmt.Errorf("unknown command %q: %w", arguments[0], errUsage)
 }
@@ -175,8 +189,19 @@ type environment struct {
 	runMMHotlineStatusPageSetUp func(accountID, hostName, token string) (statusPageSetUp, error)
 	// writeProxyFile installs a token in the desk's API proxy, as root.
 	writeProxyFile func(request proxyFileRequest) error
-	showFile       func(path string, asRoot bool) error
 	clearScreen    func()
+	// go-live's outside addresses: IANA's RDAP bootstrap file, GitHub's API,
+	// and the registry the apps' images come from.
+	rdapBootstrapURL     string
+	githubAPIURL         string
+	containerRegistryURL string
+	// readRootFile reads a file of the desk that only root reads, through
+	// sudo; setUpThePhoneCode runs the desk's phone-code setup as root.
+	readRootFile      func(path string) ([]byte, error)
+	setUpThePhoneCode func(emergencyCodesPath string) error
+	// resultsFile is go-live's results file; writeResultsFile writes it.
+	resultsFile      string
+	writeResultsFile func(content []byte) error
 	// replaceKeys names the keys a rotation replaces: B2 key pairs by their
 	// key ID's vault name, Cloudflare's by --replace-key's names.
 	replaceKeys map[string]bool
@@ -190,8 +215,8 @@ type environment struct {
 	interruptMutex    sync.Mutex
 	inCriticalSection bool
 	interrupted       bool
-	// valueOnScreen is true while show-recovery-items shows a value, so Ctrl-C
-	// clears the screen before it stops.
+	// valueOnScreen is true while a secret shows on the screen, such as the
+	// recovery passphrase, so Ctrl-C clears the screen before it stops.
 	valueOnScreen bool
 }
 
@@ -228,9 +253,15 @@ func newEnvironment(out io.Writer) (*environment, error) {
 		now:                         time.Now,
 		runMMHotlineStatusPageSetUp: runMMHotlineStatusPageSetUp,
 		writeProxyFile:              writeProxyFileWithSudo,
-		showFile:                    showFileInTerminal,
 		clearScreen:                 clearTerminal,
 		git:                         gitInRepository(directory),
+		rdapBootstrapURL:            "https://data.iana.org/rdap/dns.json",
+		githubAPIURL:                "https://api.github.com",
+		containerRegistryURL:        "https://ghcr.io",
+		readRootFile:                readRootFileWithSudo,
+		setUpThePhoneCode:           setUpThePhoneCodeWithSudo,
+		resultsFile:                 setupResultsFile,
+		writeResultsFile:            writeResultsFileWithSudo,
 	}
 	e.handleInterrupts()
 	return e, nil
@@ -240,12 +271,49 @@ func (e *environment) say(format string, values ...any) {
 	fmt.Fprintf(e.out, format+"\n", values...)
 }
 
+// show prints a screen's text as it is, ending its last line.
+func (e *environment) show(text string) {
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	fmt.Fprint(e.out, text)
+}
+
+// quietly runs work without its step-by-step lines, which go-live's screens
+// leave out: the person reads only what to do, and errors still stop the run.
+func (e *environment) quietly(work func() error) error {
+	out := e.out
+	e.out = io.Discard
+	defer func() { e.out = out }()
+	return work()
+}
+
+// useTheSystemsRepository finds the person's systems repository when the
+// command runs outside it, as ssh desk01-setup runs go-live in the home
+// directory: the one directory in the home that holds mmx_project_settings.yml,
+// where the desk's bootstrap copied the repository.
+func (e *environment) useTheSystemsRepository() error {
+	if _, err := os.Stat(filepath.Join(e.directory, projectSettingsFile)); err == nil {
+		return nil
+	}
+	found, _ := filepath.Glob(filepath.Join(e.home, "*", projectSettingsFile))
+	if len(found) != 1 {
+		return fmt.Errorf("this command runs in your systems repository, and your home holds %d directories with %s. Run it from your systems repository", len(found), projectSettingsFile)
+	}
+	e.directory = filepath.Dir(found[0])
+	e.vault = mmxVault{directory: e.directory}
+	e.git = gitInRepository(e.directory)
+	return nil
+}
+
 const sayTellTheCodingAgent = "Tell your coding agent this command finished. It checks the result with mmx secrets usage, which lists names only."
 
 // handleInterrupts lets Ctrl-C stop the command at once, except between a
 // provider issuing a key and the vault saving it. There the command first
 // finishes saving, or revokes the new key, so nothing is left half done.
 func (e *environment) handleInterrupts() {
+	// The terminal, also while go-live's quiet work swaps e.out.
+	screen := e.out
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
@@ -254,7 +322,7 @@ func (e *environment) handleInterrupts() {
 			if e.inCriticalSection {
 				e.interrupted = true
 				e.interruptMutex.Unlock()
-				fmt.Fprintln(e.out, "\nStopping once the key being saved is saved or revoked.")
+				fmt.Fprintln(screen, "\nStopping once the key being saved is saved or revoked.")
 				continue
 			}
 			clear := e.valueOnScreen
@@ -263,7 +331,7 @@ func (e *environment) handleInterrupts() {
 			if clear {
 				e.clearScreen()
 			}
-			fmt.Fprintln(e.out, "\nStopped. A rerun continues where this run stopped.")
+			fmt.Fprintln(screen, "\nStopped. A rerun continues where this run stopped.")
 			os.Exit(130)
 		}
 	}()
@@ -293,6 +361,26 @@ func (e *environment) stopIfInterrupted() error {
 		return errors.New("interrupted. A rerun continues where this run stopped")
 	}
 	return nil
+}
+
+func (e *environment) setValueOnScreen(on bool) {
+	e.interruptMutex.Lock()
+	e.valueOnScreen = on
+	e.interruptMutex.Unlock()
+}
+
+// clearValueFromScreen clears the screen and its scrollback once a shown
+// secret is no longer needed there.
+func (e *environment) clearValueFromScreen() {
+	e.clearScreen()
+	e.setValueOnScreen(false)
+}
+
+func listOrNone(items []string) string {
+	if len(items) == 0 {
+		return "none"
+	}
+	return strings.Join(items, "; ")
 }
 
 func trimPeriod(text string) string {

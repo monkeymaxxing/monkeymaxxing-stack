@@ -262,8 +262,8 @@ func TestSecretsNeedASigningRepository(t *testing.T) {
 	run, _ := h.signedSecretsRepository()
 	run(h.e.directory, "config", "commit.gpgsign", "false")
 	h.answerSecrets(nil, nil)
-	if err := runSecrets(h.e, nil); err == nil || !strings.Contains(err.Error(), "set-up-the-systems-repository") {
-		t.Fatalf("want a refusal pointing to set-up-the-systems-repository, got %v", err)
+	if err := runSecrets(h.e, nil); err == nil || !strings.Contains(err.Error(), "does not sign its commits") {
+		t.Fatalf("want a refusal saying the repository does not sign its commits, got %v", err)
 	}
 }
 

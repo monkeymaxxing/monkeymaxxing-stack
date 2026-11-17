@@ -27,10 +27,23 @@ type vault interface {
 // so no value shows in the desk's process list.
 type mmxVault struct {
 	directory string
+	// file and passwordFile name another vault file than the project's,
+	// such as the recovery bundle, and the file that holds its passphrase.
+	// Empty for the project's vault, whose passphrase MMX finds itself.
+	file         string
+	passwordFile string
+}
+
+// arguments adds --vault and --vault-password-file for another vault file.
+func (v mmxVault) arguments(arguments ...string) []string {
+	if v.file != "" {
+		arguments = append(arguments, "--vault", v.file, "--vault-password-file", v.passwordFile)
+	}
+	return arguments
 }
 
 func (v mmxVault) keys() (map[string]bool, error) {
-	command := exec.Command("mmx", "secrets", "list-keys", "--json")
+	command := exec.Command("mmx", v.arguments("secrets", "list-keys", "--json")...)
 	command.Dir = v.directory
 	var output, errorOutput bytes.Buffer
 	command.Stdout, command.Stderr = &output, &errorOutput
@@ -55,7 +68,7 @@ func (v mmxVault) set(key, value string, replace bool) error {
 	if replace {
 		arguments = append(arguments, "--replace")
 	}
-	command := exec.Command("mmx", arguments...)
+	command := exec.Command("mmx", v.arguments(arguments...)...)
 	command.Dir = v.directory
 	command.Stdin = strings.NewReader(value)
 	var errorOutput bytes.Buffer
@@ -87,6 +100,10 @@ type savedKeys struct {
 	// leftover says the run committed a vault change an earlier run left,
 	// which its push then carries.
 	leftover bool
+	// copyInto receives each saved key that copied names, as the recovery
+	// bundle receives the secrets that exist nowhere else on the desk.
+	copyInto *savedKeys
+	copied   map[string]bool
 }
 
 // beginVaultChange opens the vault for a run that saves keys in it. It fails
@@ -135,6 +152,9 @@ func (v *savedKeys) save(name, value string) error {
 		return err
 	}
 	v.saved(name)
+	if v.copyInto != nil && v.copied[name] {
+		return v.copyInto.save(name, value)
+	}
 	return nil
 }
 
@@ -154,6 +174,11 @@ func (v *savedKeys) saved(name string) {
 
 // vaultFile is the vault's file in the systems repository.
 const vaultFile = "secrets_vault.age"
+
+// filesThisCommandCommits are the only files this command commits: the
+// vault and the recovery bundle. A change of either that an earlier run left
+// is committed by the next run; any other change stops the run.
+var filesThisCommandCommits = []string{vaultFile, recoveryBundleFile}
 
 // The person's private agent socket, which signs the vault commit with the
 // production key. The desk role makes it; a test leaves it unset.
@@ -190,24 +215,24 @@ func gitInRepository(directory string) func(arguments ...string) (string, error)
 func (e *environment) prepareVaultCommit() (leftover bool, err error) {
 	signing, _ := e.git("config", "--get", "commit.gpgsign")
 	if strings.TrimSpace(signing) != "true" {
-		return false, errors.New("this repository does not sign its commits yet. Run set-up-the-systems-repository first, in chapter 2, which sets up signing with your production key")
+		return false, errors.New("this repository does not sign its commits yet, so this command cannot commit the vault. The desk's setup turns on signing with your production key")
 	}
 	status, err := e.git("status", "--porcelain")
 	if err != nil {
 		return false, err
 	}
-	var others []string
-	vaultChanged := false
+	var others, ours []string
 	for _, line := range strings.Split(strings.TrimRight(status, "\n"), "\n") {
 		if line == "" {
 			continue
 		}
-		if strings.TrimSpace(line[2:]) == vaultFile {
-			vaultChanged = true
+		if path := strings.TrimSpace(line[2:]); contains(filesThisCommandCommits, path) {
+			ours = append(ours, path)
 		} else {
-			others = append(others, strings.TrimSpace(line[2:]))
+			others = append(others, path)
 		}
 	}
+	vaultChanged := len(ours) > 0
 	if len(others) > 0 {
 		return false, fmt.Errorf("this repository has changes that are not committed: %s. This command commits only the vault, so commit or undo those first, then run it again", strings.Join(others, ", "))
 	}
@@ -222,7 +247,7 @@ func (e *environment) prepareVaultCommit() (leftover bool, err error) {
 		return false, fmt.Errorf("this repository has %s commits that are not pushed yet. This command pushes only the vault, so push those first (git push origin main), then run it again", strings.TrimSpace(ahead))
 	}
 	if vaultChanged {
-		if _, err := e.commitVault("Save the vault changes left uncommitted"); err != nil {
+		if _, err := e.commitFiles("Save the vault changes left uncommitted", ours...); err != nil {
 			return false, err
 		}
 		e.say("Committed the vault changes an earlier run or edit left uncommitted.")
@@ -234,11 +259,12 @@ func (e *environment) prepareVaultCommit() (leftover bool, err error) {
 	return vaultChanged, nil
 }
 
-func (e *environment) commitVault(message string) (string, error) {
-	if _, err := e.git("add", "--", vaultFile); err != nil {
+// commitFiles commits files, signed, and returns the commit's short hash.
+func (e *environment) commitFiles(message string, files ...string) (string, error) {
+	if _, err := e.git(append([]string{"add", "--"}, files...)...); err != nil {
 		return "", err
 	}
-	if _, err := e.git("commit", "--quiet", "-m", message, "--", vaultFile); err != nil {
+	if _, err := e.git(append([]string{"commit", "--quiet", "-m", message, "--"}, files...)...); err != nil {
 		return "", err
 	}
 	object, err := e.git("cat-file", "commit", "HEAD")
@@ -246,7 +272,7 @@ func (e *environment) commitVault(message string) (string, error) {
 		return "", err
 	}
 	if !strings.Contains(object, "\ngpgsig ") {
-		return "", errors.New("the vault commit is not signed. Check that your desk terminal reaches your agent socket, /run/desk-ssh-agent/private.sock")
+		return "", errors.New("the commit is not signed. Check that your desk terminal reaches your agent socket, /run/desk-ssh-agent/private.sock")
 	}
 	commit, err := e.git("rev-parse", "--short", "HEAD")
 	return strings.TrimSpace(commit), err
@@ -264,7 +290,7 @@ func (e *environment) finishVaultChange(v *savedKeys, command string) error {
 	commit, err := e.git("rev-parse", "--short", "HEAD")
 	commit = strings.TrimSpace(commit)
 	if err == nil && len(v.made) > 0 {
-		commit, err = e.commitVault(fmt.Sprintf("Add %d vault keys with %s\n\nKeys: %s", len(v.made), command, strings.Join(v.made, ", ")))
+		commit, err = e.commitFiles(fmt.Sprintf("Add %d vault keys with %s\n\nKeys: %s", len(v.made), command, strings.Join(v.made, ", ")), vaultFile)
 	}
 	if err == nil {
 		if _, pushErr := e.git("push", "--quiet", "origin", "HEAD:main"); pushErr != nil {
