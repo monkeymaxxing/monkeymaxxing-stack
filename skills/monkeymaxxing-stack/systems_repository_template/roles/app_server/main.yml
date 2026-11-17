@@ -33,6 +33,9 @@
 # job containers. deploy's calls change a job container only where one runs.
 inputs:
   database_moving_in: {type: mapping, default: {}}
+  # True on staging01: each app's staging_env then replaces the same names
+  # in its env, in the app's plain settings file.
+  is_staging_server: {type: boolean, default: false}
   nightly_work_starts_at:                   # vars.nightly_work_starts_at: UTC "HH:MM"; the jobs' order and spacing follow from it
     type: string
     required: false

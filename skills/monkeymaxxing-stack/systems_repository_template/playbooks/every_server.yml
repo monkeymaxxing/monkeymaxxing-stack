@@ -1515,6 +1515,43 @@ fleet_stages:
             port, where no managed PgBouncer serves them. Set it back to
             false; it is set to true only once PgBouncer runs (operating_procedures/add_pgbouncer.md,
             "Adding PgBouncer").
+      # staging01 gets each app's env with its staging_env laid over it, and
+      # R2_BUCKET from staging_uploads_r2_bucket
+      # (files_used_by_several_roles/app_settings.env). An app whose bucket
+      # setting is missing or production's would make staging write uploads
+      # to production's bucket, and an APP_ORIGIN that staging_env does not
+      # replace would send staging's links to production. An app that names
+      # R2_BUCKET in env or staging_env would have two sources for the bucket
+      # (the nightly copy reads only the bucket settings), so it is refused.
+      # An app's missing staging_env or staging_uploads_r2_bucket is read as
+      # empty.
+      - id: refuse_staging_settings_that_reach_production
+        shell:
+          script: |
+            python3 -I - <<'PYTHON'
+            import json, os, sys
+            problems = []
+            for app, settings in json.loads(os.environ['APPS']).items():
+                production_env = settings.get('env') or {}
+                staging_env = settings.get('staging_env') or {}
+                production_bucket = settings.get('production_uploads_r2_bucket', '')
+                staging_bucket = settings.get('staging_uploads_r2_bucket', '')
+                for where, names in (('env', production_env), ('staging_env', staging_env)):
+                    if 'R2_BUCKET' in names:
+                        problems.append(f"apps.{app}.{where} names R2_BUCKET. Remove it: the Stack writes R2_BUCKET from production_uploads_r2_bucket, and on staging01 from staging_uploads_r2_bucket, so the app and the uploads' nightly copy use the same bucket.")
+                if production_bucket and not staging_bucket:
+                    problems.append(f"apps.{app} keeps uploaded files (production_uploads_r2_bucket is {production_bucket}), but its staging_uploads_r2_bucket is empty, so staging01 would write uploads to production's bucket. Under apps.{app}, set staging_uploads_r2_bucket: <staging's own bucket, such as example-{app}-staging-uploads>.")
+                elif staging_bucket and staging_bucket == production_bucket:
+                    problems.append(f"apps.{app}.staging_uploads_r2_bucket is {staging_bucket}, production's bucket, so staging01 would write uploads to production's bucket. Give staging its own bucket, such as example-{app}-staging-uploads.")
+                if production_env.get('APP_ORIGIN') and staging_env.get('APP_ORIGIN') in (None, '', production_env['APP_ORIGIN']):
+                    problems.append(f"apps.{app}.env sets APP_ORIGIN, but its staging_env sets no APP_ORIGIN of its own, or sets production's, so staging01's links would point at production. Under apps.{app}, add staging_env: {{APP_ORIGIN: <staging's address, such as https://staging.{app}.example.com>}}.")
+            if problems:
+                sys.exit('Refused to configure staging01. In mmx_project_settings.yml:\n' + '\n'.join(problems))
+            PYTHON
+          run_script_in_dryrun: true       # only reads
+          env:
+            APPS: "{{ .vars.apps }}"
+          changed_when: false
       - id: install_the_program_that_finds_the_live_web_ports
         file:
           path: /usr/local/sbin/find_live_web_ports
@@ -1563,6 +1600,7 @@ fleet_stages:
           job_containers_run_only_on_the_jobs_servers: false     # staging has no jobs servers
           database_servers: "{{ .inventory.groups.staging_server }}"
           apps_connect_through_pgbouncer: "{{ .vars.apps_connect_through_pgbouncer.staging }}"
+          is_staging_server: true
           app_secrets:
             shop_database_password: "{{ .secrets.staging_shop_database_password }}"
             shop_SECRET_KEY_BASE: "{{ .secrets.staging_shop_SECRET_KEY_BASE }}"
