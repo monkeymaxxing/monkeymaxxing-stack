@@ -35,9 +35,6 @@ each term.
 - **Size:** create `lb01` and `lb02` at least the size of an app server.
   Give each load-balancer server a network port at least as fast as an app
   server's. [Why the size matters](#why-the-size-matters) says why.
-- **The person's token file:** commands that source the person's token file, `~/.config/monkeymaxxing-stack/example_systems.env`,
-  run only in the person's own desk terminal, as the secrets rule in
-  [The rules](../AGENTS.md#the-rules) says.
 - **Read each MMX run's output** with `./server_management_scripts/run_mmx_on_util01 results` from the desk.
 - **A push alone changes no server.** Apply each configuration change as
   [Making a change](../AGENTS.md#making-a-change)

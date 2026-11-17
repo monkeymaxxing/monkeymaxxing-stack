@@ -178,8 +178,9 @@ tanstack_portal:
   database_name: tanstack_portal
   env:
     APP_ORIGIN: https://portal.example.com
-    R2_BUCKET: example-tanstack-portal-production
     R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
+  staging_env:
+    APP_ORIGIN: https://staging.portal.example.com
   secrets_from_vault:
     R2_ACCESS_KEY_ID:
       where_the_value_comes_from: generated_by_the_setup
@@ -210,7 +211,7 @@ The origin checks bypassed Cloudflare. Cached public responses alone do not prov
 
 Provision private buckets through your existing account procedure.
 The setup (`set-up-outside-services`) makes the vault keys `tanstack_portal_database_password` and `tanstack_portal_<VARIABLE>` for each name in `secrets_from_vault`, and with staging01 their `staging_` copies. Nobody adds them by hand. Keep secret values out of Git.
-Production's `R2_BUCKET` must equal `production_uploads_r2_bucket`.
+Leave `R2_BUCKET` out of `env`: the Stack writes it from `production_uploads_r2_bucket`, and on staging01 from `staging_uploads_r2_bucket`, and `every_server` refuses `R2_BUCKET` in `env` or `staging_env`.
 
 In `playbooks/every_server.yml`, preserve existing entries. Add the database
 password to production's database role input:
@@ -243,7 +244,7 @@ tanstack_portal_R2_ACCESS_KEY_ID: "{{ .secrets.staging_tanstack_portal_R2_ACCESS
 tanstack_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.staging_tanstack_portal_R2_SECRET_ACCESS_KEY }}"
 ```
 
-`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
+`env:` holds production's plain settings. With staging01, `staging_env:` gives staging its own address, as above, and `staging_uploads_r2_bucket` its own bucket; `every_server` refuses staging01 without them.
 
 Extend `deployed_image_tags.staging`, `deployed_image_tags.production`,
 `public_host_names.staging`, and `public_host_names.production` in `inventories/servers.yml`.

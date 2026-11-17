@@ -11,10 +11,7 @@ the environment's app servers to the image with that tag.
 selected environment. The person confirms that CI's run is green, approves
 a production release while `production_releases_wait_for_a_persons_approval`
 is `true`, approves a bigger `staging01`, and approves and runs a rollback
-without the memory check. Commands that source the person's token file,
-`~/.config/monkeymaxxing-stack/example_systems.env`, run only in the
-person's own desk terminal, as the secrets rule in
-[The rules](../AGENTS.md#the-rules) says.
+without the memory check.
 
 ## Find your situation
 

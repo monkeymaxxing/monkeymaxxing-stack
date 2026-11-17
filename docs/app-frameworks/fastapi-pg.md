@@ -176,8 +176,9 @@ fastapi_portal:
   database_name: fastapi_portal
   env:
     APP_ORIGIN: https://portal.example.com
-    R2_BUCKET: example-fastapi-portal-production
     R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
+  staging_env:
+    APP_ORIGIN: https://staging.portal.example.com
   secrets_from_vault:
     R2_ACCESS_KEY_ID:
       where_the_value_comes_from: generated_by_the_setup
@@ -193,7 +194,7 @@ fastapi_portal:
 ```
 
 Create separate private staging and production buckets with scoped keys.
-Production's `R2_BUCKET` must equal `production_uploads_r2_bucket`.
+Leave `R2_BUCKET` out of `env`: the Stack writes it from `production_uploads_r2_bucket`, and on staging01 from `staging_uploads_r2_bucket`, and `every_server` refuses `R2_BUCKET` in `env` or `staging_env`.
 Extend the upload-backup reader's bucket scope and enable uploads backups when needed.
 A database backup does not include uploaded object bytes.
 
@@ -223,7 +224,7 @@ fastapi_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.fastapi_portal_R2_SECRET_ACCES
 
 For staging's `app_server` call, keep each left-hand name above.
 Use the corresponding `staging_fastapi_portal_` vault key on each right-hand side.
-`env:` gives every environment the same value, so with staging01 staging reads production's `APP_ORIGIN` and `R2_BUCKET`. Tell the person this before adding staging01.
+`env:` holds production's plain settings. With staging01, `staging_env:` gives staging its own address, as above, and `staging_uploads_r2_bucket` its own bucket; `every_server` refuses staging01 without them.
 Extend the app's mappings in `playbooks/end_connections_that_use_an_old_database_password.yml` using the existing app's pattern.
 The database password and both app secrets need rotation mappings.
 

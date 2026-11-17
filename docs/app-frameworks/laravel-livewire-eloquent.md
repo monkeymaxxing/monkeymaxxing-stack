@@ -188,8 +188,10 @@ vars:
       env:
         APP_ENV: production
         APP_URL: https://portal.example.com
-        R2_BUCKET: example-laravel-portal-production
         R2_ENDPOINT: https://ACCOUNT_ID.r2.cloudflarestorage.com
+      staging_env:
+        APP_ENV: staging
+        APP_URL: https://staging.portal.example.com
       secrets_from_vault:
         APP_KEY:
           where_the_value_comes_from: generated_by_the_setup
@@ -219,7 +221,8 @@ laravel_portal_R2_SECRET_ACCESS_KEY: "{{ .secrets.laravel_portal_R2_SECRET_ACCES
 ```
 
 For staging, retain the left-hand names and use separate `staging_laravel_portal_...` vault keys on the right.
-`env:` gives every environment the same value, so with staging01 staging reads production's `APP_URL`, `APP_ENV`, and `R2_BUCKET`. Tell the person this before adding staging01.
+Leave `R2_BUCKET` out of `env`: the Stack writes it from `production_uploads_r2_bucket`, and on staging01 from `staging_uploads_r2_bucket`, and `every_server` refuses `R2_BUCKET` in `env` or `staging_env`.
+`env:` holds production's plain settings. With staging01, `staging_env:` gives staging its own address, as above, and `staging_uploads_r2_bucket` its own bucket; `every_server` refuses staging01 without them.
 Staging's bucket and credentials must reach staging objects only.
 Pass the app password where the database roles receive app passwords, following the Stack's initial setup.
 Record the reviewed image tag under `deployed_image_tags` and the public hostname under `public_host_names` in `inventories/servers.yml`.

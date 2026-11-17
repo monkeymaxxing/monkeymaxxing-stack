@@ -474,8 +474,8 @@ does, and no chapter needs a fact or an account from a later one.
   in chapter 7 (install everything on the production servers), through the
   operating procedures that add them on any later day.
   Three things are defaults, not questions: the weekly restore drill and full backup run on Sunday
-  (`weekly_work_day`); the triage agent uses the desks' coding agent
-  (`triage_agent_coding_agent`, chapter 4); and the coding agent proposes
+  (`weekly_work_day`); the triage agent uses the same kind of coding agent
+  as the person's own (`triage_agent_coding_agent`); and the coding agent proposes
   the break-in response page, which the person corrects (chapter 10).
   Reason: each has an answer that fits nearly every small team, and each
   setting's comment or procedure says how to change it later.
@@ -674,8 +674,8 @@ The repository refuses a force push and a branch deletion (`receive.denyNonFastF
 `receive.denyDeletes`), and keeps a reflog of every change to `main` (`core.logAllRefUpdates`). With `util01`'s
 sshd journal, which names each root login's key, the reflog says which key pushed each change.
 
-Before `util01` exists, the first desk's checkout is the main copy: it has no `origin`, `sign-and-publish` ends at
-the fast-forward of its `main`, and the vault commands commit there. The `util_server` role makes the empty bare
+Before `util01` exists, the first desk's checkout is the main copy: it has no `origin`, `publish-branch-to-main`
+ends at the fast-forward of its `main`, and the vault commands commit there. The `util_server` role makes the empty bare
 repository, MMHotline's clone step skips it while it is empty, and the desk pushes `main` to it after the first run
 and makes it `origin` (chapter 7). The desk's own readers, the button, the WireGuard peers command, the desk review
 and the lock-out button, read pushed `main` from the coding agent's checkout, `origin/main` when it has an origin
@@ -704,14 +704,13 @@ no mechanism copies `util01`'s commits elsewhere.
 The helper `server_management_scripts/run_mmx_on_util01` accepts
 MMX arguments. The helper requires a clean systems desk copy on `main`, fetches
 `origin/main`, and requires `HEAD` to equal `origin/main`. Over SSH, as root,
-the helper first asks MMHotline to check that commit, without the lock
+the helper first asks MMHotline to bring its copy to that commit, without the lock
 ([MMHotline decides which commit is trusted](#mmhotline-decides-which-commit-is-trusted)),
-and runs nothing while a commit waits for review or MMHotline does not
-answer. Then, as the `mmhotline` user, the helper locks
+and runs nothing while MMHotline does not answer. Then, as the `mmhotline` user, the helper locks
 `/var/lib/mmhotline/systems_repository.lock` and requires
 `/var/lib/mmhotline/systems_repository` to be checked out at the systems
 desk commit, which MMHotline's check brought it to. The helper never moves
-the checkout and never marks a commit reviewed.
+the checkout.
 The helper names the current lock holder at once and every minute while waiting.
 Every message gives the status and stop commands for an MMX holder.
 After the first minute, each message also gives the minutes waited.
@@ -744,10 +743,12 @@ request page shows its run output after the run ends. Results never enter Git.
 The coding agent validates local structure with `mmx validate` and uses the buttons for vault-backed work.
 The coding agent never opens or prints the vault's contents (the template's `AGENTS.md`, "The rules"):
 it runs `secrets list-keys` and `secrets usage`, which show key names only, through its button
-(`sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`), on pushed `main`, and the person
-adds, edits and diffs the vault (`mmx secrets add-random`, `set`, `edit`, `diff-keys`) in the person's
-own terminal, whose token file names the passphrase file. The coding agent's plain `mmx secrets`
-has no passphrase and stops with exit 4 (proved on real servers). Reason: the coding agent's provider stores
+(`ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`), on pushed `main`, and the
+person adds and replaces keys with `set-up-outside-services secrets` (`ssh desk01-secrets`), which commits and
+pushes the vault itself. A key that command does not make, the person sets with `mmx secrets` on a copy of the
+vault in the person's own desk login, and installs the copy into the coding agent's checkout ("Change the vault by
+hand" in the template's `operating_procedures/rotate_a_secret.md`), so MMX never runs as root on the pulled
+checkout. The coding agent's plain `mmx secrets` has no passphrase and stops with exit 4 (proved on real servers). Reason: the coding agent's provider stores
 the conversation, so a secret the coding agent reads leaves the team's control. The rule is an
 instruction, not a lock: the coding agent is trusted and could read the vault through the buttons.
 The coding agent previews the pushed commit with `sudo -n -u servers-mmx run-mmx-on-the-servers dryrun ... --connection ssh_only`.
@@ -765,23 +766,19 @@ judged commit. MMHotline, the helper and all timers use
 `/var/lib/mmhotline/systems_repository.lock`. MMHotline commits nothing
 after a run. The request's page shows MMX output after the run ends.
 
-Before every run, MMHotline checks the new commits
+Before every run, MMHotline fetches the main copy and moves its checkout
+to the newest commit
 ([MMHotline decides which commit is trusted](#mmhotline-decides-which-commit-is-trusted)).
-A commit waiting for review blocks MMX until the commit is approved: by the
-triage agent in a commit review run, or by a person's **Mark commit
-reviewed** on **Approvals**. The next playbook run request can proceed past
-the approved commit.
 
 Every process takes `flock` before running MMX in the shared copy, and
-never while it asks MMHotline a `commit-reviews` question. After taking the lock, the holder truncates the lock file
+never while it asks MMHotline for the commit. After taking the lock, the holder truncates the lock file
 and writes one holder line. A waiting process shows the existing line.
 MMHotline leaves the file empty during short fetch, explain and push
 operations, so a waiting message must allow an unnamed holder.
 
 Reason: MMHotline owns the approval and execution boundary. The triage
 agent cannot change server settings through instructions hidden in logs.
-A signature decides only whether MMHotline trusts a commit; signatures do not
-start runs.
+A push decides only what the next run applies; a push starts no run.
 
 ### What the triage agent may do without a person
 
@@ -847,7 +844,7 @@ load checks are rendered from the same answer ([Reboots](#reboots),
   2"), which a check of the rendered file with the release's
   `mmhotline settings check` showed. 1 because the preset asks one person
   for every other fix too.
-- **MMHotline judges each request at the newest trusted commit.** It
+- **MMHotline judges each request at the newest commit.** It
   fetches before it judges a request. Reason: `replace_failed_servers`
   pushes an inventory commit, and the `every_server` request that follows
   must not be judged stale against an older checkout, or a person would be
@@ -1253,7 +1250,7 @@ commands, real Git, and real `mmx validate`.
   in the pool's nodes list; it adds the host key, moves each unfinished
   one-time playbook that names the failed server to
   `one_time_playbooks/completed/`, and runs `mmx validate`. The commit is
-  signed by `util01`'s `mmhotline` user, whose key MMHotline trusts, so
+  pushed by `util01`'s `mmhotline` user, whose key is in `root_ssh_public_keys`, so
   the `every_server` request that follows runs at the new commit. A refused push, such as after a desk's
   push, is redone on the new `main`, up to 3 pushes; the run stops when
   the failed server left the inventory or the new name is taken there.
@@ -1290,7 +1287,7 @@ replacement, with its pattern: playbooks that find their own server and
 refuse what they may not do, programs in `server_management_scripts/`
 tested with stand-ins (`tests/add_an_app_server_for_the_load_test.py`,
 `tests/remove_an_app_server_for_the_load_test.py`), commits from the
-playbook's own clone signed by `util01`, state read from Git trailers, the
+playbook's own clone pushed by `util01`, state read from Git trailers, the
 fleet hub and the provider's list, never from a file of its own on
 `util01`.
 
@@ -1435,181 +1432,55 @@ fleet hub and the provider's list, never from a file of its own on
 
 ### MMHotline decides which commit is trusted
 
-MMHotline is the one place that computes which commit of `main` is the
-trusted commit, for its own MMX runs and triage agent runs, for the helper,
-and for `util01`'s scheduled jobs. A commit signed by a key in
-`triage_agent.trusted_commit_signing_public_keys` passes;
-`mmhotline_settings.yml` fills that list from `root_ssh_public_keys`, the
-desks' production keys and `util01`'s `mmhotline` user, which signs
-MMHotline's merges of the triage agent's commits. A commit signed by
-`triage_ssh_public_key` passes when it changes only `one_time_playbooks/`
-and `triage_agent_notes/`. Every other commit is a commit waiting for
-review: MMHotline runs nothing past the trusted commit before it until the
-commit is approved, by the triage agent (below), by a person's **Mark
-commit reviewed** on the commit's page under Approvals, or by root's
-`mmhotline commit-reviews mark-reviewed`. MMHotline uses the keys of the
-settings it last applied, never the pushed repository's, so a pushed key
-trusts nobody until a run at a trusted commit, or a person's own run from
-a desk, applies the settings. `every_server` refuses `triage_ssh_public_key`
-among `root_ssh_public_keys`, compared by the key without its comment,
-because a trusted key's commits pass whatever they change.
+MMHotline is the one place that says which commit of `main` runs, for its
+own MMX runs and triage agent runs, for the helper, and for `util01`'s
+scheduled jobs. The template sets
+`triage_agent.trusted_commits: every_commit_on_origin`: MMHotline trusts
+every commit on `origin`, the main copy on `util01`. Nothing is signed, and
+no commit waits for review.
 
-**The triage agent approves an ordinary unsigned commit.** The template
-sets `triage_agent.commits_without_a_trusted_signature_are_approved_by:
-a_person_or_the_triage_agent`. For each commit that no trusted key signed,
-MMHotline starts a commit review run: a triage agent run without an alert,
-from the last trusted commit, so a rules file changed in the commit under
-review never reaches the agent. The prompt quotes each commit as data: ID,
-author, date, message, changed paths and the diff, cut at 16 KiB. The
-agent answers each commit with `mmhotline triage-agent review-commit`: it
-approves an ordinary change, and decides `needs_a_person` at sos when the
-commit changes who can get in or looks like nobody on the team made it, at
-warn when unsure. The template's `triage_agent_rules.md`, "The commit
-review run", holds the one list of what counts as a change to who can get
-in; the template's `AGENTS.md` points to it for the desk's coding agent. A
-commit review run requests no playbook runs. Reason for the default: a legitimate unsigned commit, such as an
-edit on the Git host's website, must not stop fixes at night, and the
-triage agent still wakes a person for the commit that changes who can get
-in. A team that wants a person to approve every such commit sets
-`a_person`. The coding agent is trusted; the protection is against an
-outside attacker who can push to the Git host, and against a mistake.
+Reason: only a key in `root_ssh_public_keys` can push to the main copy
+([The main copy of the systems repository](#the-main-copy-of-the-systems-repository)),
+and each of those keys, every desk's production key and `util01`'s
+`mmhotline` key, is already root on every server. A signature by the same
+keys proved nothing that the push itself does not. The Git host holds only
+a backup that nothing reads, so a break-in there reaches no server.
 
-`triage_agent.paths_only_a_person_may_approve` lists seven paths:
-`mmhotline_settings.yml`, `mmx_project_settings.yml`,
-`triage_agent_rules.md`, `AGENTS.md`, `CLAUDE.md` (the file Claude Code
-reads first, which brings in `AGENTS.md`),
-`roles/every_server/files/sudoers_triage` and
-`roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings`. A
-commit that changes one of them, against every parent of a merge and with
-both paths of a rename, waits for a person as a whole; MMHotline refuses
-the agent's approval and names the listed paths. The list is short on
-purpose: it holds only the files through which an approved commit could
-widen the triage agent's own powers or add a trusted key. Playbooks, roles
-and the inventory are the agent's judgment. A longer list is not used,
-because it would make the team wait for a person over ordinary
-changes again. The cost, which is intended: an unsigned commit that changes
-any setting in `mmx_project_settings.yml` waits for a person, because the
-trusted keys are in that file and MMHotline judges a commit by the paths it
-changes. A team that adds a file that sets the triage agent's powers or the
-trusted keys adds the file to the list.
-`tests/timers_run_only_trusted_commits_test.py` checks both settings in the
-rendered file and that each listed path exists in the template, so a
-renamed file fails a test until the list follows.
+What protects the main copy without signatures:
 
-What people get for each waiting commit:
-
-- The triage agent approves: one info alert with its report; nothing to do.
-- The triage agent decides a person must look: its report at warn, or at
-  sos, which wakes the person on call, with the commit's review link.
-- The review cannot happen, such as a failed run or no triage agent set up:
-  one MMHotline warn with the reason.
-- A commit that changes a listed path, a triage agent commit outside its
-  two folders, or any such commit under `a_person`: one MMHotline warn at
-  once.
-
-The one mechanism is unchanged: MMHotline alone decides which commit is
-trusted, and the helper, the scheduled jobs and MMHotline's own runs ask
-the same check. The triage agent's approval is one more way a waiting
-commit becomes approved, recorded by MMHotline beside a person's. During
-an ordinary alert session the triage agent sees only trusted commits; a
-waiting commit's page is where a person reads it.
-
-`util01`'s three scheduled jobs, the server settings comparison, the
-weekly restore drill and the leftover-`restore01` check, run with no person
-asking. Each first runs
-`find_the_trusted_commit_of_the_systems_repository`: it reads the commit
-`main` ends at with `git ls-remote`, then runs
-`sudo -n /usr/local/bin/mmhotline commit-reviews check --commit-id HEAD_OF_MAIN --json`.
-The `mmhotline` user has exactly that sudo line, with a 40-to-64-character
-hexadecimal commit ID, because the command socket admits only root; the
-user already runs MMHotline and owns its data, so the line grants nothing
-new. MMHotline fetches into its copy, records and alerts each new commit
-waiting for review, and moves its checkout forward to the trusted commit,
-never past it and never back. The script prints the trusted commit; the job
-then takes the shared lock, requires a clean copy on `main` whose checkout
-is at or past the trusted commit, and runs there. Only MMHotline moves the
-checkout, so a checkout past the trusted commit is a newer trusted commit.
-The script exits 1 when the Git host cannot be read, which fails the unit
-and so warns through MMWatchdog's systemd check, and 2 when MMHotline
-trusts no commit of `main` yet, which the jobs treat as done because
-MMHotline's own alert names the commits. When MMHotline does not answer,
-the job runs at the commit the copy already has, which only MMHotline
-moved there, and says so in one journal line; the MMHotline-down alarm
-and the hub-outage alerters tell a person that MMHotline is down. During a
-lock-out MMHotline's settings have no `triage_agent` section, so MMHotline
-holds no trusted keys and refuses the check with a bare "The operation could
-not be saved. Please try again."; the script reads that state
-from `/etc/mmhotline/mmhotline_settings.yml` and prints one line that says
-MMHotline checks no commit during a lock-out, in place of MMHotline's error.
+- **Who can push:** only the keys in `root_ssh_public_keys`, as root over
+  WireGuard. A person's leaving takes the desk's key out, and the run on
+  `util01` ends its push rights with its root login.
+- **The triage agent cannot push.** It runs in MMHotline's sandbox, with no
+  Git credential. MMHotline takes its commits as a bundle and pushes them
+  as the `mmhotline` user only when they change nothing but regular files
+  in `one_time_playbooks/` and `triage_agent_notes/`; anything else waits
+  for a person. `every_server` refuses `triage_ssh_public_key` among
+  `root_ssh_public_keys`, compared by the key without its comment, so the
+  triage key never gets push rights.
+- **History only grows.** The main copy refuses a force push and a branch
+  deletion. Every desk, the laptop and the Git host's backup hold copies,
+  so a rewrite shows as a refused pull or a refused backup push.
+- **Who pushed is on record.** The main copy's reflog and `util01`'s sshd
+  journal name the key and the time of each change to `main`
+  ([Respond to a break-in](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/respond_to_a_break_in.md#an-unknown-commit-in-the-systems-repository)).
+- **A lock-out trusts nothing.** During a lock-out MMHotline's settings have
+  no `triage_agent` section, so MMHotline answers no commit, and the jobs
+  run nothing new.
 
 **The lock order.** MMHotline's copy lock is
 `/var/lib/mmhotline/systems_repository.lock`, the same file the jobs and the
-helper hold, and `commit-reviews check` waits for it with no time limit,
+helper hold, and MMHotline's commit check waits for it with no time limit,
 while an MMX run can hold it for up to an hour. So every caller asks
 MMHotline first, without the lock, and takes the lock only after the
 answer: MMHotline takes and releases the lock inside the check. No caller
 calls `mmhotline` while it holds the lock, and no MMHotline-started MMX run
 waits for anything a caller holds besides the lock itself, so no cycle
-exists: a job that waits for the lock waits for one holder that finishes
-without the job. `tests/timers_run_only_trusted_commits_test.py` and
-`tests/run_mmx_on_util01_test.py` fail when `mmhotline` is called while the
-lock is held.
+exists. `tests/run_mmx_on_util01_test.py` fails when `mmhotline` is called
+while the lock is held.
 
-**A person's run from a desk.** The helper asks the same check for the
-desk's commit. While a commit waits for review, the helper names each
-waiting commit's ID, MMHotline's reason and the review page, and runs
-nothing. It says that a commit may be under the triage agent's review for
-a short time, so the coding agent waits for the review's alert or reviews
-the commit with the person now. The coding agent shows the person the
-commit, the diff, the reason and the triage agent's report, and runs
-`commit-reviews mark-reviewed` only after the person has decided. The helper never records trust by itself, so one mechanism
-decides, and a person decides once. A person who must run a commit
-waiting for review at once runs it from the desk with
-`run-mmx-on-the-servers`, which does not use `util01`'s copy.
-
-**The starting commit.** With no checkpoint, MMHotline's first check reads
-the whole history against today's keys. A new team's repository is signed
-from its first commit by the desk's production key
-(`set-up-the-systems-repository`, into an empty repository at the Git
-host), so the first check passes and setup needs no extra step. A rebuilt
-`util01` runs `commit-reviews trust-through --commit-id COMMIT` once, with the commit of
-the person's own run from the desk, in the same command as that run:
-MMHotline trusts that commit and the history before it, and sends one info
-alert naming who did it, `root` on `util01` when the helper runs it. The run
-starts `check_new_commits_on_main`, and a check before the trust-through
-warns about an old commit (seen between two separate steps);
-one command leaves seconds for that, and the trust-through resolves such a
-warning. Reason: a
-person's own run is the person's act, and a setting in the repository
-could be moved by the commit it is meant to judge. A lock-out keeps the commit MMHotline last checked and
-clears only the trusted keys, so the undo of a lock-out needs no
-trust-through.
-
-`util01` notices a pushed commit within minutes through a fourth job,
-`check_new_commits_on_main`, every `check_new_commits_on_main_every_minutes`
-minutes (5 by default). The job runs only the script, discards the
-trusted commit, takes no lock, runs no MMX, starts no coding agent, sends
-no alert of its own, and never fails its unit. Reason: MMHotline checks
-by itself only before its runs, so without the job a push from outside the
-team would wait for the next alert or the next nightly job before anyone
-heard of it. One `git ls-remote` and one fetch every few minutes cost the
-Git host nothing. While another holder has the lock, the job asks
-nothing, and the daily comparison and leftover check wait for a free lock
-before they ask: MMHotline's check would wait for the lock, and its
-waiting marker would end a running restore drill
-([The drill gives way to MMHotline](#the-drill-gives-way-to-mmhotline)).
-
-The Stack has no signature check of its own beside MMHotline's. Reason:
-with MMHotline as the one place that decides trust, one rule, one review
-and one alert serve every runner; two checks with two records can
-disagree about which commit a person decided on, and send two alerts for
-one commit.
-
-Reason: a job that ran whatever `main` held would let anyone who can push
-to the Git host run code on `util01`, with the vault passphrase and root SSH
-to every server, within a day, breaking "a push alone changes no server".
-Each commit is checked on its own, so a signed commit on top never hides an
-unsigned one below it.
+The Stack has no commit check of its own beside MMHotline's. Reason: one
+place that decides serves every runner, and two checks could disagree.
 
 CI is optional. When a team has CI, CI tests, builds, and pushes an image.
 Without CI, the coding agent tests, builds, and pushes the image. In either
@@ -1956,8 +1827,8 @@ peers on the running `wg0` with `wg set`, so open sessions to other peers keep w
 server and the value, a key that is not WireGuard's 44-character form, a private address outside
 `wireguard_network` or inside the desks' or the laptops' block, a public address that is not IPv4, a node
 name that is not a plain server name, two servers with one key or one address, and a key that is this desk's
-or one of its laptops'. Reason: the command runs as root and takes the inventory from the Git host, so an
-outside attacker who can push there must not be able to cut the person off from their desk, take a laptop's
+or one of its laptops'. Reason: the command runs as root and takes the inventory from pushed `main`, so an
+intruder who can push there must not be able to cut the person off from their desk, take a laptop's
 or a desk's address, or write anything into `wg0` but a server peer. A server on the desk's peer list reaches
 only the desk's WireGuard port: the desk's firewall admits SSH on `wg0` only from its laptops.
 
@@ -1975,8 +1846,8 @@ rebuilt desk, the file is empty, and the desk is MMX's controller in a desk revi
 peers would cut the controller off; MMX would restore the old `wg0` after two minutes and fail the run, and the
 command refuses to run before the desk has the new template, a loop seen on a real desk. With the
 file written first, a move to the new template is one desk review, and SSH to the servers loses one packet. A refused server
-value stops the run at that task, before `wg0` changes. Before the Git host knows the desk's key, as at the
-bootstrap, the fetch fails and the file stays as it is: a new desk has no server peers to keep. The coding
+value stops the run at that task, before `wg0` changes. Before the coding agent's checkout holds a commit, as
+at the start of the bootstrap, the fetch fails and the file stays as it is: a new desk has no server peers to keep. The coding
 agent's sudo rule allows only the empty argument list, so the form is root's only.
 
 The desk review shows that template's text, not its rendered result, because the
@@ -2191,7 +2062,8 @@ vars:
           steps_to_get_it: ["Open  https://dashboard.stripe.com/apikeys", "Press  Reveal live key,  then copy it."]
           checked_with: stripe
       production_uploads_r2_bucket: example-shop-uploads   # util01 copies the bucket to backups.uploads_bucket every night; "" for no uploads
-      staging_uploads_r2_bucket: ""   # staging01's own bucket, such as example-shop-staging-uploads, set by Add staging01 for an app with uploads; never copied
+      staging_uploads_r2_bucket: ""   # staging01's own bucket, such as example-shop-staging-uploads, set by Add staging01 for an app with uploads; staging01's R2_BUCKET; never copied
+      staging_env: {}                 # staging01's own plain settings in place of env's, such as its own APP_ORIGIN; every_server refuses staging01 without them
   app_server_group_of_environment:          # the group whose servers run each environment's apps
     production: app_servers
     staging: staging_server
@@ -3462,11 +3334,11 @@ packages, unattended-upgrades for the programs from vendors' apt
 repositories, and `pinned_program_releases` for the downloaded programs
 ([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
 
-- **The triage agent is Claude Code or Codex, by default the desks'
-  coding agent.** `triage_agent_coding_agent` in `mmx_project_settings.yml`
-  holds the choice, `claude_code` or `codex`; chapter 4 (set up your accounts
-  and lock your desk) sets it to `systems_desk_coding_agent`'s
-  value without a question (one question fewer, and the team already has
+- **The triage agent is Claude Code or Codex, by default the same kind as
+  the person's own coding agent.** `triage_agent_coding_agent` in
+  `mmx_project_settings.yml` holds the choice, `claude_code` or `codex`; the
+  coding agent that runs the setup sets it to its own kind without a
+  question (one question fewer, and the team already has
   that vendor's account). `mmhotline_settings.yml` reads it for
   `triage_agent.coding_agent`, `util_server` installs Codex only when it is
   `codex`, and `set-up-outside-services secrets` reads it to ask for the
@@ -3589,7 +3461,7 @@ release to read.
   another file of the project, and `stack_software` holds every downloaded
   program's pin and download address under the entry's name. The template
   repeats two install conditions of the roles: `codex` only while
-  `triage_agent_coding_agent` or `systems_desk_coding_agent` is `codex`, and
+  `triage_agent_coding_agent` is `codex`, and
   `rclone` only while `backups.uploads_backup_runs_on` is not empty, so a
   program the system does not install raises no warning. Programs from
   vendors' apt repositories update themselves and get no check. A pin whose
@@ -4791,15 +4663,16 @@ where a service offers no other way. One Stack command does the rest of the
 account and secret work: `set-up-outside-services`, a Go program in the
 Stack repository's `set_up_outside_services/`. The desk role installs it on
 every systems desk from its pin, `stack_software.set_up_outside_services`.
-The person runs it in their own desk terminal: `go-live` through the laptop's
-`ssh desk01-setup` entry, the others in their own systems repository, after
-loading their token file. `go-live` works in the desk's one working copy,
+The person runs it in their own desk login, each command through one short
+entry on the laptop, such as `ssh desk01-setup` for `go-live` and
+`ssh desk01-secrets` for `secrets`, or `ssh -t desk01 set-up-outside-services
+COMMAND`. The person keeps no checkout on the desk. `go-live` works in the desk's one working copy,
 the coding agent's checkout `/home/coding-agent/systems_repository`, which
 the person's account reaches only through `sudo -n`. It runs MMX as root,
 which opens the vault with the desk's `/etc/systems-desk/vault-passphrase`
 and gives each vault file it writes back to `coding-agent`, and it runs Git
-as `coding-agent` with the production key's relay socket, so each commit is
-signed and every file stays the coding agent's own. The recovery bundle
+as `coding-agent` with the production key's relay socket, so each push
+reaches the main copy and every file stays the coding agent's own. The recovery bundle
 gets the vault passphrase through `sudo -n cat`, on MMX's standard input.
 Reason: the passphrase never passes through a process of `coding-agent`'s,
 which the coding agent could read, and never through a file in the
@@ -4807,14 +4680,14 @@ person's home.
 
 | Command | What it does |
 | --- | --- |
-| `set-up-outside-services go-live` | Sitting 1's part on the desk, one screen at a time in the four-part form: Cloudflare (the link token; it finds the account, adds the domain, has Cloudflare copy the DNS records from the current nameservers, gives the account its workers.dev address, then does `cloudflare`'s work; with an app that keeps uploads, one more step turns R2 on, with its price, and the run waits until R2 is on), the domain's registrar (the two nameservers; the registrar's name and DNSSEC state from the registry's RDAP service; it waits for Enter), Backblaze (the master key; then `backblaze`'s work), the registry's read-only token at ghcr.io (checked to never end, to hold only `read:packages`, and to read the app's image), each app secret from `an_outside_service` on its own screen (checked at Stripe with `checked_with: stripe`), every other vault secret without a question, then the lock: the recovery passphrase, shown once and typed back, and the phone code through `sudo -n set-up-the-phone-code --emergency-codes-to PATH`. Each value is checked with its service at once; a refused value is asked again with the service's reason. It commits and pushes the vault, then the recovery bundle, each signed, and copies the bundle into the locked backup bucket. `/var/lib/monkeymaxxing-stack/setup_results.json` (0644) names each step's state and the values the coding agent needs that are not secrets; a rerun continues where a run stopped |
+| `set-up-outside-services go-live` | Sitting 1's part on the desk, one screen at a time in the four-part form: Cloudflare (the link token; it finds the account, adds the domain, has Cloudflare copy the DNS records from the current nameservers, gives the account its workers.dev address, then does `cloudflare`'s work; with an app that keeps uploads, one more step turns R2 on, with its price, and the run waits until R2 is on), the domain's registrar (the two nameservers; the registrar's name and DNSSEC state from the registry's RDAP service; it waits for Enter), Backblaze (the master key; then `backblaze`'s work), the registry's read-only token at ghcr.io (checked to never end, to hold only `read:packages`, and to read the app's image), each app secret from `an_outside_service` on its own screen (checked at Stripe with `checked_with: stripe`), every other vault secret without a question, then the lock: the recovery passphrase, shown once and typed back, and the phone code through `sudo -n set-up-the-phone-code --emergency-codes-to PATH`. Each value is checked with its service at once; a refused value is asked again with the service's reason. It commits and pushes the vault, then the recovery bundle, and copies the bundle into the locked backup bucket. `/var/lib/monkeymaxxing-stack/setup_results.json` (0644) names each step's state and the values the coding agent needs that are not secrets; a rerun continues where a run stopped |
 | `set-up-outside-services backblaze`, with `--replace-key VAULT_KEY` for a rotation and `--delete-the-old-keys-at-once` after a break-in, as for `cloudflare` | Takes the B2 account's master key at two hidden prompts. Creates every bucket the system uses, sets each bucket's Object Lock and lifecycle rule, checks each lock with a test file, makes each server's key with exactly the capabilities below, and saves each key into the vault |
 | `set-up-outside-services cloudflare` | Takes the link token, the one token the person makes by hand from a prepared link, at a hidden prompt. With it, makes the person's desk token and writes it into the API proxy and the token file; with the desk token, creates the tunnels, the apps' R2 buckets (with `staging01`, each app's staging bucket too), and, through `mmhotline status-page set-up`, the status page's bucket, host name, and rule; with the link token, makes the servers' account-owned tokens and R2 keys below and saves them into the vault, and makes the person's own posting key for the status page and writes it into the token file; with a short-lived token it deletes at once, adds the One-time PIN login method when missing and, with `staging01`, makes staging's Access service token, whose two values go into the token file. Before it makes anything, it sets the link token to end by itself after 24 hours, and it deletes the link token when it ends, after a failure too. While the status page's domain is not Active at Cloudflare, it skips the status page and its two keys, says so, and finishes the rest; a rerun adds them |
 | `set-up-outside-services cloudflare --replace-key NAME` (repeatable) or `--replace-every-key`, with `--delete-the-old-keys-at-once` after a break-in | Makes a new key for each named one and saves it where the old one was (the vault, the API proxy, or the token file). A key the servers use keeps its old key until the servers' run passed and the person presses Enter; the at-once flag deletes it without waiting. A tunnel gets a new secret; staging's service token gets a new secret with the same ID |
 | `set-up-outside-services cloudflare --delete-tokens-of-person NAME` | Deletes, by their names, the desk token, the posting key, and any link token of a person who leaves, NAME being their `vars.person_unix_username`; it refuses the person's own name |
-| `set-up-outside-services secrets`, with `--replace KEY` to enter one again | Saves every vault key the playbooks read (`mmx secrets usage`) that the vault lacks and no other command makes: the keys only a website gives, each with its page, at hidden prompts; each app's `secrets_from_vault`, making each one `generated_by_the_setup` and asking for each one from `an_outside_service`; the servers' shared root console password, shown once for the password manager and typed back, saved only as its hash `shared_root_console_password_hash`; and the random keys, made inside MMX or, for the fleet hub's signing secret, as 64 hexadecimal characters handed to `mmx secrets set` on standard input. It skips saved keys, refuses a repository with uncommitted changes other than the vault or with commits not pushed yet, pulls `main`, and ends by committing the vault, checking the commit is signed, and pushing it |
+| `set-up-outside-services secrets`, with `--replace KEY` to enter one again | Saves every vault key the playbooks read (`mmx secrets usage`) that the vault lacks and no other command makes: the keys only a website gives, each with its page, at hidden prompts; each app's `secrets_from_vault`, making each one `generated_by_the_setup` and asking for each one from `an_outside_service`; the servers' shared root console password, shown once for the password manager and typed back, saved only as its hash `shared_root_console_password_hash`; and the random keys, made inside MMX or, for the fleet hub's signing secret, as 64 hexadecimal characters handed to `mmx secrets set` on standard input. It skips saved keys, refuses a repository with uncommitted changes other than the vault or with commits not pushed yet, pulls `main`, and ends by committing the vault and pushing it |
 | `set-up-outside-services personal-token staging-access` | Takes staging's Access service token from the password manager at two hidden prompts, on a desk whose token file lacks it, and writes it into the token file |
-| `set-up-outside-services personal-token server-provider --server-listing-path PATH` | Takes the person's server provider token at a hidden prompt, checks it at the provider, only at a provider guide's own API address, named before the prompt, then writes it into both the person's token file and the API proxy's file, restarts the proxy, and checks a request through it. For a provider whose API signs each request (`systems_desk_provider_api_authentication: ovhcloud_signed_requests`), it takes each of the credential's values at its own prompt, checks them with a signed listing, writes the API proxy's credential file, restarts that proxy, and checks the listing through it |
+| `set-up-outside-services personal-token server-provider --server-listing-path PATH` | Takes the person's server provider token at a hidden prompt, checks it at the provider, only at a provider guide's own API address, named before the prompt, then writes it into the API proxy's file, its only place on the desk, restarts the proxy, and checks a request through it. For a provider whose API signs each request (`systems_desk_provider_api_authentication: ovhcloud_signed_requests`), it takes each of the credential's values at its own prompt, checks them with a signed listing, writes the API proxy's credential file, restarts that proxy, and checks the listing through it |
 
 **Why go-live works the way it does.** The screens are the product: the
 person reads only what to do, so each provider's step-by-step lines run
@@ -4857,9 +4730,7 @@ A vault that changed but was not pushed leaves the servers' runs without
 the new keys, and a person new to Git meets a commit and a push as two more
 commands to get right. The command owns the whole change: it starts only on a
 repository whose other files are committed, so its commit holds the vault
-alone; it pulls first, so the push lands on the team's `main`; and it
-checks the `gpgsig` header, because the person's signed history is how
-MMHotline and the team tell the person's commits from anyone else's. Keys
+alone; and it pulls first, so the push lands on the team's `main`. Keys
 whose value only the person knows are typed; every key nobody needs to see
 is made, because a typed random value is a chance for a weak or reused
 one. An unknown key the playbooks read is listed, not made: the step
@@ -5120,7 +4991,10 @@ derived from it: the Stack's settings are written out, never inherited. The
 command refuses an empty value or production's own bucket before it changes
 anything, so `staging01`'s key can never reach production's uploads. The
 staging bucket gets no copy to B2, since staging holds seed data only, and
-util01's reader key does not reach it.
+util01's reader key does not reach it. `staging01` gets it as the app's
+`R2_BUCKET`, and `every_server` refuses `staging01` while an app that keeps
+uploads has no staging bucket of its own, or while `staging_env` leaves
+production's `APP_ORIGIN` in place.
 When a later app adds a bucket, a rerun adds the bucket to util01's reader
 token with `PUT /accounts/ID/tokens/TOKEN_ID`, which keeps the token's value,
 so the vault needs no change. A reader key made by hand under another name
@@ -5147,9 +5021,9 @@ An existing tunnel of the same name is reused, and its token is read with
 A tunnel token belongs to its tunnel, so a failed save leaves nothing to
 revoke.
 
-**The person's own tokens on the desk.** One step reaches both places
-that need the provider token or the desk token: the person's token file
-and the API proxy's file. The person types the provider token, which
+**The person's own tokens on the desk.** The provider token lives only in
+the API proxy's file; the desk token goes into the API proxy's file and the
+person's token file. The person types the provider token, which
 must pass a check at the provider guide's server listing first; a token
 that fails changes nothing, so the old token keeps working.
 `set-up-outside-services cloudflare` makes the desk token and hands it to
@@ -5172,14 +5046,13 @@ its unit hands it exists: Cloudflare's, and the provider's token file or
 credential file. While one is missing, the step writes its file, says which
 file the proxy waits for, and skips the check through the proxy.
 
-**Recovery items.** The command shows each item's value straight from its
-file, through `sudo cat` for a root-only file, so even the command never
-holds the value. A backup passphrase lives only in the vault, which MMX
-never prints, so the command opens `mmx secrets edit` for the person to
-copy it and close without saving. An item that does not exist yet, such as
-a backup passphrase before chapter 4 (set up your accounts and lock your
-desk), is listed as not made yet, so a later rerun finishes it. The
-coding agent hears the three summary lines, which hold names only.
+**Recovery items.** `go-live` puts every recovery item into the recovery
+bundle at the lock, so no command shows recovery items one by one. MMX has
+no command that prints one vault value, so the procedures read one item of
+the bundle with `mmx secrets edit` and an editor setting that prints only
+that item ("Read an item from the recovery bundle" in the template's
+`operating_procedures/rebuild_a_systems_desk.md`). The person never edits
+a file.
 
 **What stays a website step, and why:**
 
@@ -5233,7 +5106,11 @@ So `util01` copies each app's `production_uploads_r2_bucket` every
 `backups.uploads_copy_every_hours` hours, starting one hour after
 `nightly_work_starts_at` (every night at 02:00 UTC in the template), into one B2 bucket, `backups.uploads_bucket`, in a folder
 named after the app. The script `copy_uploads_to_the_backup_bucket`
-(`roles/uploads_backup/files/`) runs from a timer of its own.
+(`roles/uploads_backup/files/`) runs from a timer of its own. The app reads
+the same setting as `R2_BUCKET`, which the Stack writes, never the app's
+`env`, so the app and the copy cannot name different buckets. On `staging01`
+the app's `R2_BUCKET` is `staging_uploads_r2_bucket`, and its other own
+settings, such as `APP_ORIGIN`, come from `staging_env`.
 
 **What comes back:** a file deleted or overwritten in R2
 comes back, as the last copy before the change held it, for
@@ -5652,55 +5529,57 @@ containers. `staging01` runs staging's job containers.
   recurring jobs that its queue schedules, such as Solid Queue's recurring
   tasks or good_job's cron, run in its job container, so they move with it.
 
-## Persistent terminals on a systems desk
+## One coding agent, on the laptop
 
-`roles/systems_desk` runs Rex as the person named by the desk's `person`
-value. `rex-desk.service` owns `/run/rex-desk/`, with mode 0700 and the
-person as owner. Rex listens only on `/run/rex-desk/server.sock`, with mode
-0600. State lives in `/home/<person>/.local/state/rex`.
+The team's coding agent is the one the person already uses, on their own
+laptop. There is no coding agent on the desk, nothing to sign in there, and
+no handoff between two agents. Reason: two agents meant two sign-ins, two
+conversations and the person carrying messages between them; one agent on
+the laptop already has the app's code, the person's Git login and the
+conversation.
 
-The system service keeps sessions and its socket alive after the person
-logs out. A login-owned runtime directory was rejected because logout
-removes that directory. The package's shared service, login service and
-both sockets stay disabled. The desk has one phone-code door, through SSH.
+**One door to the desk.** The laptop's SSH settings hold `desk01-agent`, as
+the desk's `coding-agent` user, with `ControlMaster auto`,
+`ControlPersist 1h` and `ServerAliveInterval 30`. The person types one
+phone code in the chat; the agent passes it to SSH through `SSH_ASKPASS`
+with `SSH_ASKPASS_REQUIRE=force`, so no terminal is needed, and every later
+command reuses the one shared connection. sshd gives `coding-agent`
+`DisableForwarding yes` and sets `SSH_AUTH_SOCK` and `GIT_CONFIG_SYSTEM` for
+its commands, so it uses the production key's relay socket and never holds
+the key. Both the person and `coding-agent` use one root-owned phone-code
+file, `/etc/systems-desk/phone-code`; a code used by one is refused for the
+other, so the agent's screens say WAIT FOR A NEW CODE where one code
+follows another.
 
-One SSH connection carries the terminal and a Unix-socket forward. With
-`desk01` in the laptop's SSH configuration, the person connects with:
+**The desk decides how long a login lasts.** sshd's `UnusedConnectionTimeout`
+closes a login unused for `coding_agent_login_idle_minutes` (60 in the
+template), and a timer ends a login older than
+`coding_agent_login_longest_hours` (10). Both are settings with their
+reasons. Reason for the desk and not the laptop: a changed laptop setting
+cannot lengthen them. A laptop that sleeps less than the idle hour needs
+nothing; after a longer sleep the agent asks for one new code.
 
-```sh
-ssh -tt -o ExitOnForwardFailure=yes -o StreamLocalBindUnlink=yes \
-  -L "$HOME/.rex-desk.sock:/run/rex-desk/server.sock" desk01
-```
+**Long runs are desk jobs.** A run longer than a few minutes starts with
+`systemd-run --user` as `coding-agent`, with a log file and an exit file
+named after the run. It keeps running when the connection closes, and the
+agent reads the two files later. Reason: nothing on the desk needs
+resuming, so no terminal-session program runs there; the agent's
+conversation lives on the laptop, where the agent already keeps it.
 
-The person enters one phone code and keeps that terminal open. Rex uses
-the forwarded socket. For example, the laptop CLI lists sessions with:
+**Edits on the laptop, publishing on the desk.** The agent clones the
+desk's checkout, `git clone desk01-agent:systems_repository`, edits with
+its own tools, pushes a branch to the desk, and runs
+`ssh desk01-agent publish-branch-to-main BRANCH`. That rebases the branch
+onto `main`, fast-forwards `main`, pushes it to the main copy on `util01`,
+and deletes the branch; on a conflict it names the files and changes
+nothing. The laptop pushes the Git host's backup with the person's own login.
 
-```sh
-rex --autostart=false -S "unix://$HOME/.rex-desk.sock" list
-```
-
-Closing SSH ends access through the forward. A fresh code opens another
-connection to the existing sessions. Another ordinary desk account cannot open the
-person's socket. Programs running as the person can use Rex with the
-person's authority. Plain SSH remains the fallback while Rex is a preview.
-
-Rex comes from Superlogical's `preview` apt repository. The signing key is
-checked by SHA-256. MMX's `0.1.0~preview.*` package rule also writes apt
-preferences, excluding Debian's unrelated Perl package named `rex`.
-The desk permits automatic updates from `origin=Superlogical,codename=preview`.
-Rex has no archive pin under `stack_software`, because apt owns its updates.
-Restarting Rex ends its sessions, including a restart after an update.
-
-The vendor's [preview package index](https://pkgs.superlogical.com/rex/apt/dists/preview/main/binary-amd64/Packages)
-lists published versions. The vendor's [community documentation](https://www.superlogical.com/rex/docs/beta/community-mcp)
-says release notes require beta Discord access. No public security-advisory
-page was found, so Rex's advisory URL is empty in
-`software_outside_the_distribution.yml`.
-
-The vendor's [installation page](https://www.superlogical.com/rex/docs/installation)
-says Linux and Windows GUI clients are not yet part of public testing.
-Linux guest proofs use the packaged CLI through the forward. GUI scrolling
-and the Mac client still need the person's real-life test.
+**What the desk protects, and what it leaves.** The production key, the
+vault passphrase and the person's tokens stay on the desk, and the agent
+uses them without copying them. While the shared login is open, any
+program on the laptop could use it too. That is the main risk of this
+design, and the reason for the idle hour, the ten-hour limit, and the guide's
+rule to run the app's install and test commands in a container.
 
 ## Naming
 
@@ -5735,71 +5614,53 @@ Reason: production's base role would replace the phone-code door with production
 The desk manages `127.0.0.1` with `/root/.ssh/systems_desk_self_management_key`.
 The separate root-owned key never enters the production SSH socket.
 `ssh/desk01` pins the host key under `HostKeyAlias desk01`, preventing a desk from applying another desk's identity to loopback.
-The person runs, in the person's own desk terminal and repository:
+The person runs, on the laptop, with a phone code:
 
 ```sh
-review-and-apply-the-systems-desk-settings
+ssh desk01-review
 ```
+
+The entry runs `review-and-apply-the-systems-desk-settings` on the desk, as the person.
 
 The command runs `mmx run systems_desk --var desk_name=<this desk> --connection ssh_only` as root,
 with the person-owned private agent socket, which reaches `util01` to read the monitoring join code.
 First bootstrap runs only `--only-fleet-stages systems_desk`, because `util01` does not exist yet;
 the laptop's bootstrap run uses `mmx` directly, and every later run uses the command.
-The command first runs `git pull --ff-only origin main` as the person, and stops with nothing run when
-the pull fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
+The command first fetches `origin` into the coding agent's checkout, as the coding agent, reads pushed `main`
+from it as data, and stops with nothing run when the fetch fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
 the lock-out button shares the pull but goes on without it.
 
-### The desk bootstrap: the agent writes, the person runs one command
+### The desk bootstrap: the agent does the whole desk setup before the lock
 
 The laptop's coding agent writes every final value of the systems repository before the copy to the
 desk: the project, the schedule, the backup address at the Git host, the provider address, and
 `desk01`'s keys and addresses. Only the bootstrap connection differs, and only in the laptop's own copy,
-which the chapter clears: MMX reads how it connects from the inventory and `ssh/desk01`, not from
+which chapter 4 moves aside: MMX reads how it connects from the inventory and `ssh/desk01`, not from
 `--var`, so the laptop's copy points `desk01` at its WireGuard address and laptop key while the desk's
-copy keeps `127.0.0.1` and the self-management key. The desk role makes the copied repository the
-person's own and installs `/etc/systems-desk/vault-passphrase` from the person's passphrase file,
-root:servers-mmx, mode 0640, again whenever the person's file changes.
-`set-up-the-systems-repository`, which the person runs once in the person's own desk terminal, does the
-rest: the production key into `root_ssh_public_keys` and the desk's `production_ssh_public_key`, Git with
-signing and `origin`, the passphrase and token files, the vault, the first signed push, the first desk
-review, and the coding agent's checkout. Reason: these steps touch the vault passphrase and sign with
-the production key through the person's private socket, which the coding agent never reaches, and a
-person new to servers typing a dozen Git and file commands by hand is a dozen chances for a wrong setting.
+copy keeps `127.0.0.1` and the self-management key.
 
-A desk that joins a team's existing repository, a new member's or a rebuilt one, runs the same command. It needs
-no option: an empty main copy is a new team's, and a `main` there, which always holds the vault,
-is one to join; a rerun on the first desk after its push takes the joining form too, so only an empty repository
-ever gets a new vault passphrase. Before anything from the fetched `main` is used, the command checks that it is
-this team's repository (`project_name`), that it lists this desk in
-`systems_desks` with this desk's production key in `root_ssh_public_keys` and `production_ssh_public_key`, and
-that its newest commit is signed by a key in that `root_ssh_public_keys`, as `util01` checks before its timers
-run a commit. It names the commit and its signer, which the person compares with what the team member who pushed
-it says. Reason: the desk review runs the desk playbook from this repository as root, and a joining desk has no
-earlier state of its own to compare with, so the anchor is a signed commit and a colleague's word for it.
-Older commits are not checked one by one: a team keeps a reviewed unsigned commit, such as a web-button merge, and
-`util01` itself trusts `main` from its last checked commit on, so a full-history check would refuse a sound
-repository forever. So the order is: the existing member's coding agent adds the new desk and its keys and pushes
-first, then the new person runs the command. The bootstrap copy's own edits go to `git stash`, never lost, and a
-local commit that `main` lacks stops the command. A file marked with `git add --intent-to-add` is unmarked first and
-stays as a file, because `git stash` cannot keep such a mark ("not uptodate. Cannot merge."); the
-team-member procedure shows a new file with `git diff --no-index` instead. The team's vault passphrase is pasted at a hidden prompt and
-kept only when `mmx secrets list-keys` opens the vault with it. `tests/desk_repository_and_lock_out_button_test.py`
-runs the joining form against a stand-in Git host with real SSH signatures: main that lists the desk, main before
-the desk is added, an unsigned commit on top, a commit signed by a key outside the list, another team's
-repository, a wrong passphrase, an intent-to-add mark, `git log --show-signature` afterwards, and an empty
-repository, which takes the first desk's form.
+The bootstrap, `mmx run systems_desk` from the laptop as root, does the whole desk setup before the lock:
+the person's production key, the vault passphrase `/etc/systems-desk/vault-passphrase` (root:servers-mmx,
+0640), the vault, which holds its own passphrase, the systems repository in the coding agent's checkout
+`/home/coding-agent/systems_repository` with its first commit (`start-the-systems-repository`), the first
+desk review recorded without a question, and the coding agent's door. Its normal end prints "The desk is
+ready." and the production public key. Reason: before the lock, root SSH from the laptop works, so the
+agent does every desk step itself, and the person's part is the accounts and the lock in
+`ssh desk01-setup`. The first desk review is recorded without a question because the person has nothing
+to compare it with, and the bootstrap ran this very desk playbook from the same repository.
 
-`git log --show-signature` verifies signatures with one file on the desk, `/etc/systems-desk/allowed-signers`,
-which the desk role writes from `root_ssh_public_keys` at each desk review, each key named by its comment, such
-as `alex_on_desk01`. The person's repository names it in `gpg.ssh.allowedSignersFile`
-(`set-up-the-systems-repository`), and so does the coding agent's Git settings file. When a desk joins, leaves or
-is rebuilt, each other desk's file follows at that desk's next desk review, which the team-member and rebuild
-procedures ask for. The command's own check of a fetched `main` does not read this file: it checks `main` against
-the keys in `main` itself, before anything from it is trusted.
-The person's own steps that remain are the ones only the person can do: scanning the phone code,
-pasting the provider token,
-approving the first desk review, and starting the coding agent with the person's subscription.
-After inventory changes, the coding agent's `sudo -n update-this-desks-wireguard-peers` refreshes the desk's server peers in `wg0`.
+**A desk that joins a team's repository,** a new member's or a rebuilt one, gets a copy of the laptop's clone
+with its history. `start-the-systems-repository` sees the commits, starts nothing, and stops the bootstrap
+until the team's vault passphrase is in `/etc/systems-desk/vault-passphrase`; the person writes it there from the
+recovery bundle at a hidden prompt. So only an empty copy ever gets a new vault passphrase. A rebuilt desk also gets
+the lost desk's production key from the bundle. Then the desk's checkout takes `origin`, the main copy on `util01`,
+and resets to its `main`. The anchor is `util01` itself: its host key is in the repository's `ssh/known_hosts`, and
+it lets in only a desk whose key a teammate's run, or the restored key, put in `root_ssh_public_keys`. A new member
+starts from the Git host's backup only after the person checked its push activity, because the bootstrap runs the
+desk playbook from that copy as root.
+
+After inventory changes, the coding agent's `sudo -n update-this-desks-wireguard-peers` refreshes the desk's
+server peers in `wg0`.
 
 ### The person reviews each change to the desk playbook
 
@@ -5821,7 +5682,7 @@ included settings in the file itself. Reason: an included file is outside the re
 approved an `Include`, a later change to the included file alone would run as root unseen. Following
 each `Include` into the review was built first and dropped after the real desk playbook run: OpenSSH reads an
 included file only when root or the user running `ssh` owns it, so for root's run of the desk playbook an included file
-in the person's repository never works, and a root-owned file elsewhere could change after the review.
+in the coding agent's checkout never works, and a root-owned file elsewhere could change after the review.
 The lock-out button refuses an `Include` the same way. Line numbers and value
 origins are left out. Reason: a fixed list of paths either misses an input, such as `ssh/config`, which
 the run uses for `util01`, or asks on every unrelated settings change, such as a deploy's image tags.
@@ -5838,9 +5699,8 @@ a pushed change to the installed command shows in the review before it applies.
 The command reads the answer from `/dev/tty` of the person's `sudo` session. The coding agent cannot
 answer: it has no sudo rule for the command, its own processes run in a separate terminal
 (`sudo -u coding-agent -i` gets its own pseudo-terminal), the person's terminal device is the person's
-own, and the person's Rex server socket is in a directory only the person reads.
-A new or rebuilt desk has no record, so its first desk review asks once with nothing to compare;
-the rebuild procedure has the person read the recent commits with the team first.
+own, and the coding agent's login has no terminal of the person's.
+A new or rebuilt desk's bootstrap records its first desk review, as above.
 The lock-out button, `sudo lock-everyone-out`, runs as root on the desk too, so it follows the same rule.
 The desk review installs root-owned copies of every file the lock-out loads except data, in
 `/usr/local/lib/systems-desk/lock-everyone-out/`: `playbooks/lock_everyone_out.yml`, the
@@ -5856,7 +5716,7 @@ names the desk that keeps access, today's servers and `connections_between_serve
 a node whose `ssh_config` is not a reviewed SSH settings file, an `Include` in them, and a pulled link
 that leaves the repository, because root would read or write through it in a directory the coding agent
 can change. It opens the vault with the root-owned `/etc/systems-desk/vault-passphrase`, so it
-needs no token file. Reason: an outside attacker who can push to the Git host must not get root on the desk,
+needs no token file. Reason: an intruder who can push to the main copy must not get root on the desk,
 or on every server, through the lock-out, and the lock-out must still work when a push is the way in.
 Server-side content counts too: a pushed WireGuard peer, a wider triage sudo rule or a changed MMHotline
 setting, such as `fleet_view_command`, which MMHotline runs as root, would otherwise reach the servers
@@ -5866,16 +5726,16 @@ names each reviewed path whose pulled version differs, for the person to review 
 `tests/desk_repository_and_lock_out_button_test.py` lists every file `mmx explain lock_everyone_out --json`
 says the lock-out loads, in both states, and fails when one is neither reviewed nor data, so the list cannot drift.
 
-The person's part is one command, in their own terminal. The coding agent prepares and pushes the
-one-line inventory commit, and the lock-out button first runs `git pull --ff-only origin main` as the
-person in the person's repository. When the pull fails, because the Git host does not answer within
-`PULL_TIME_LIMIT_SECONDS` (30) or the repository has changes in the way, the lock-out button says so in
-one sentence and goes on with the repository as it is. Reason: a break-in must not wait for the Git host,
+The person's part is one command, `ssh -t desk01 sudo lock-everyone-out`. The coding agent prepares and
+publishes the one-line inventory commit, and the lock-out button first fetches `origin` into the coding
+agent's checkout, as the coding agent, and reads pushed `main` from it as data. When the fetch fails, because
+`util01` does not answer within `PULL_TIME_LIMIT_SECONDS` (30), the lock-out button says so in
+one sentence and goes on with the checkout as it is. Reason: a break-in must not wait for `util01`,
 and the person checks the result in the list that follows. The desk review shares the same pull, but stops
 when the pull fails, because nothing about a desk review is urgent.
 
 The inventory is data, but the lock-out peers every server with the servers it names, so a server that an
-outside attacker pushed with their own WireGuard key would join the private network through the lock-out
+intruder pushed with their own WireGuard key would join the private network through the lock-out
 itself. So the lock-out button shows, at every press, every inventory node that is not a systems desk, one
 line each, with its pools, its private address and its public address; then the desk that keeps access
 and the desks that lose access; and asks for `yes` at the person's own terminal, in the same way and for
@@ -5889,8 +5749,7 @@ The keys the lock-out button lets in are checked against a record. The lock-out 
 the desk that keeps access, from that desk's address; it reads `root_ssh_public_keys` from the project settings only
 to check that the key of the desk that keeps access is in it, and installs no triage key. The undo, the press after
 `everyone_locked_out_except_desk` is removed, installs every key in `root_ssh_public_keys` as root's
-authorized keys and `triage_ssh_public_key` as the triage user's key on every server, and MMHotline takes
-the triage key as the triage agent's commit signing key. So a key pushed before or during the incident
+authorized keys and `triage_ssh_public_key` as the triage user's key on every server. So a key pushed before or during the incident
 would be let in as root on every server by the undo itself. The desk review shows and records
 those two settings in `lock_out_button_keys_view`, one line per key, sorted, and the lock-out button compares the
 pulled settings with that record whenever its press lets them in on some server, by the switch's value
@@ -5920,7 +5779,7 @@ The other MMX runs during an incident, such as the `every_server` run that shows
 the rebuild procedures' runs, are the coding agent's, with its button on the desk that keeps access,
 `sudo -n -u servers-mmx run-mmx-on-the-servers ... --connection ssh_only`.
 Reason: the lock-out cuts off the other desks and `util01` at the servers; it does not need to stop the
-person's own coding agent, which the Stack trusts. An earlier version stopped the coding agent, its
+person's own coding agent, which the Stack trusts, and which reaches the servers only through that desk. An earlier version stopped the coding agent, its
 buttons and the API proxy on the desk that keeps access and gave the person a separate MMX
 command for the incident; that left the person alone with the incident's MMX work, in the hour when
 the coding agent helps most. The evidence copy, `save_break_in_evidence.py`, needs root to read the desk's own logs,
@@ -5941,9 +5800,7 @@ The "node busy" end was seen on the first run of every test desk. Cause: the tes
 controller as a systemd service on the desk itself; the run's own `install_the_waiting_security_updates_on_a_new_server`
 ran needrestart, which restarted every service with an old library, the controller's included. The job carried on
 alone, and the rerun met it. A restart of `ssh.service` does not end an open SSH session, so a controller on the
-laptop keeps its connection. On a desk, needrestart therefore never restarts `rex-desk.service`
-(`roles/every_server/files/needrestart.conf`): the person's terminals, with any desk review, lock-out press or
-coding agent run in them, live there. A rerun that reaches the desk after the orphaned job finished stops with "The
+laptop keeps its connection. A rerun that reaches the desk after the orphaned job finished stops with "The
 phone code is missing …", which names the enrollment command; chapter 3 says so. The marker below stays the
 signal: a desk where nobody enrolled must not pass a desk review.
 The person immediately runs `set-up-the-phone-code`, saves the secret, scans the QR code, and confirms a real phone code.
@@ -5974,72 +5831,58 @@ One wrong code is an `info` alert; the lockout sends one alert with `alert_sever
 Debian's ordinary sshd jail and OpenSSH source penalties are disabled.
 Reason: the documented ban rule must own the refusal timing.
 A typo, reused code, and rate limit show the same authentication refusal; a ban shows connection refused.
-One code opens one connection per 30-second step, carrying the terminal and Rex forward together.
-Rex uses a persistent service socket under `/run/rex-desk/`.
-Plain SSH is the fallback when Rex is unavailable.
+One code opens one connection per 30-second step; the coding agent's shared login carries all its commands.
 
 MMWatchdog joins from the desk's full playbook after `util01` is configured.
 The first rejected-code reading opens one incident per burst; the opening reading's count is not a running total.
 Reason: a brute-force burst must not overwhelm the person with repeated alerts.
 A missing enrollment file also warns.
 
-Recovery keeps the phone secret, production SSH key, desk WireGuard key, vault passphrase,
-and Git-host access in the password manager, alongside existing account recovery and backup passphrases.
-The desk's SSH host keys are not kept. A rebuilt desk makes new ones under a new desk name, and the laptop
-enrolls them over the WireGuard route as for a first desk. Reason: only the machine holding the restored
-WireGuard key answers at that address on that route, so the check needs no saved host key, and the
-root-only host key files no longer go through the person's clipboard into the password manager.
+Recovery rests on one recovery passphrase in the password manager. It opens the recovery bundle,
+`recovery_bundle.age`, in the systems repository, with a copy in the locked backup bucket: the vault
+passphrase, the first desk's production and WireGuard private keys, the console password, the phone code's
+emergency codes, and the provider, Cloudflare and Backblaze credentials. The phone code's secret itself stays
+only on the desk. The desk's SSH host keys are not kept. A rebuilt desk makes new ones under a new desk name, and
+the laptop enrolls them over the WireGuard route as for a first desk. Reason: only the machine holding the
+restored WireGuard key answers at that address on that route, so the check needs no saved host key.
 The root-only self-management key can be generated again.
-The rebuild runs in the order proved on a real desk: the host key is enrolled before the
-bootstrap, because the bootstrap's `ssh/<desk>` pins it; it is read with `ssh-keygen -F`, because Debian's
-laptop SSH settings hash host names; the person restores the production key and its public file in
-`/etc/systems-desk/`, which Git, signing and the buttons name; the replacement's coding agent takes the
-bootstrap copy's changes as a patch, runs `update-this-desks-wireguard-peers`, and pushes the rename signed by
-the restored key; then `set-up-the-systems-repository` joins that `main`. Reason: the joining form takes
-`main` only when it lists the desk with its key, and a solo person has no other desk to push the rename from.
-A new phone gets the alerts by signing in to the person's Pushover account, so nothing in the systems repository
-or the vault changes; a stolen phone is deleted from the account's devices. The person then logs in with an open
-session, a saved recovery code, or the saved secret, and makes a new phone code with `set-up-the-phone-code`.
-Reason: restoring the saved secret alone would leave the lost phone's codes working with the laptop's key, so a
-new secret is the default, and the saved secret is only one way back in.
+The rebuild runs in this order: the host key is enrolled before the bootstrap, because the bootstrap's
+`ssh/<desk>` pins it; it is read with `ssh-keygen -F`, because Debian's laptop SSH settings hash host names;
+the laptop's rename commit travels to the desk inside the copy's history; the bootstrap stops for the vault
+passphrase; the person restores the production key and the vault passphrase from the bundle; the bootstrap
+finishes; the checkout takes `origin` and publishes the rename. Reason: a solo person has no other desk to push
+the rename from, and the restored key is already in `root_ssh_public_keys`.
+A teammate's desk is not in the bundle, so a lost teammate desk is replaced as a new member's desk, and the old
+one leaves as a leaving member's does.
+A new phone gets the alerts by signing in to the person's Pushover account, so nothing in the vault changes;
+a stolen phone is deleted from the account's devices. The person then logs in with one emergency code and
+makes a new phone code with `set-up-the-phone-code`; the new emergency codes replace the old ones in the bundle.
 A lost laptop gets fresh laptop keys and a replacement desk; deleting the old desk revokes the stolen laptop's door.
 The person also replaces the personal provider token, because the laptop held it during setup.
-A lost desk is rebuilt by MMX and restores production identities from the password manager.
-The guide lists the recovery items but leaves the recovery-vault decision open.
+Changes to the bundle and the vault by hand run as the person, with MMX on a copy in the person's own folder,
+which root then installs into the checkout. Reason: MMX never runs as root on the pulled checkout on a desk.
 
 ### The coding agent and personal credentials
 
-The systems coding agent runs as `coding-agent`. `systems_desk_coding_agent` in `mmx_project_settings.yml`
-picks it, `claude_code` or `codex`, apart from `triage_agent_coding_agent`. Reason: the desks' coding agent
-and the triage agent are different jobs, and a team may pay for them differently. Claude Code comes from
-Anthropic's apt repository, as on `util01`; Codex is the release pinned in `stack_software.codex`, unpacked
-and linked as on `util01`. A desk that switches keeps the other program until the desk is rebuilt, as the
-setting's comment says: nothing removes it, because the start command runs only the chosen program and nothing
-else runs the other one, so removing it would add tasks that protect nothing.
-The desk review writes `/usr/local/bin/start-the-coding-agent`, which the person runs in their own terminal:
-it starts the chosen coding agent through `sudo -u coding-agent -i`, in `~/systems_repository`, and passes on
-its arguments. Reason: one short command that is the same for both coding agents, in place of a long
-`sudo ... bash -c` line that names one program.
-A person may run another trusted coding agent in the same account.
-Reason: protection uses Unix file ownership, independent of a particular agent's sandbox settings.
-The persistent production SSH socket permits production login and commit signing without exporting the private key.
+The coding agent runs on the person's laptop and reaches the desk as `coding-agent`
+([One coding agent, on the laptop](#one-coding-agent-on-the-laptop)). No coding agent is installed on the
+desk. Reason: protection uses Unix file ownership on the desk, independent of a particular agent's sandbox
+settings, and the person's own agent already holds the app's code and the conversation.
+The persistent production SSH socket permits production login and pushes to the main copy without exporting the private key.
 The relay passes the whole agent protocol on, so `ssh-agent` starts with `-P /nonexistent/*`, a pattern
 that matches no file: the agent refuses to load any PKCS#11 or security-key library a relay client names.
 Reason: a library loaded in the person's agent runs as the person, who has sudo. The desk key is a plain key file.
 The production private key stays in the person's protected home.
 The desk's login profile, `/etc/profile.d/desk-buttons.sh`, gives each account its agent: the coding agent the
-relay socket, and the person the private socket. Reason: Git's SSH signing reads the agent only from
-`SSH_AUTH_SOCK`, and the person's SSH login from the laptop brings none, so without it the person's own
-`git commit`, such as the vault commit after `mmx secrets set`, failed with "No private key found" on a
-real desk. The repository's `core.sshCommand` names the agent for pulls and pushes only; Git has no
-setting that names the signing agent.
+relay socket, and the person the private socket. Reason: the person's SSH login from the laptop brings no
+agent, and the person's own SSH from the desk, such as to a server during an incident, needs the production
+key.
 
 `sudo -n -u servers-mmx run-mmx-on-the-servers` runs MMX as the separate `servers-mmx` account.
 The button fetches pushed `main` into a private execution checkout and keeps MMX history there.
 The button uses the actual committed production inventory and settings, with desks excluded.
 Reason: running MMX as the person would let a committed absolute `file.source` read personal keys from the controller.
 The button's vault passphrase is `/etc/systems-desk/vault-passphrase`, root:servers-mmx, mode `0640`.
-`sudo set-up-coding-agent-repository` clones the configured remote and enables socket-backed SSH signing.
 
 The API proxy supplies provider and Cloudflare authentication through loopback ports 8081 and 8082, from root-only token files. It is the desk's one program for this job. Reason: nginx, the alternative for the providers that take a token in a header, needs `proxy_http_version 1.1` and a deep enough `proxy_ssl_verify_depth` to reach Hetzner, Scaleway or Vultr, and one program already signs requests for the others. Go's HTTP client speaks HTTP/1.1 or later and verifies with the system's certificate store, and one program means one set of behavior for every provider.
 `systems_desk_provider_api_url` selects the provider's HTTPS base URL, including a trailing slash.
@@ -6050,7 +5893,7 @@ Authorization), where the proxy adds the token on 8081, or one where it signs th
 (Google Compute Engine). The desk role refuses any other value before it changes anything.
 `set-up-outside-services personal-token server-provider` sends the typed credential only to one of the
 provider guides' API addresses for that setting, and names the address before the prompt.
-Reason: anyone who can push to the Git host can change the setting, and the person's token must reach only the provider.
+Reason: anyone who can push to the main copy can change the setting, and the person's token must reach only the provider.
 The desk review shows a change to either setting before a proxy uses it.
 
 **The API proxy.** Three providers' APIs need more than a fixed header. OVHcloud's signs each request
@@ -6123,7 +5966,7 @@ the answer, its status and its headers, such as a pagination cursor, go back unc
   systemd and MMX report the start as a success.
 - The desk keeps only the provider credential its setting uses: with `token_in_a_header` the desk role
   removes the proxy's credential file, and otherwise the proxy's
-  `provider-api-token.conf`. The person's token file gets the new provider's token when the person runs
+  `provider-api-token.conf`. The proxy gets the new provider's token when the person runs
   `personal-token server-provider` for it. Reason: after a move to another provider, a working credential for
   the account the team left would otherwise stay on the desk, unused and forgotten. The credentials
   themselves are deleted at the old provider when the move ends ("Move the servers to another provider").
@@ -6158,14 +6001,16 @@ The coding agent can still misuse granted production authority and read producti
 including the passphrase needed by the MMX execution account.
 Committed playbooks leave a Git record; ad hoc MMX commands leave MMX history.
 Direct SSH commands are not automatically recorded in Git or MMX history.
-Malware controlling the laptop during an open desk session can act through the session.
-Without CI, the desk holds separate app Git credentials and registry publishing credentials for builds and releases.
+Malware controlling the laptop while the coding agent's shared login is open can act through that login.
+Without CI, the desk holds the registry publishing credential for builds and releases.
 Reason: the desk reduces lasting personal-key theft; the desk does not remove authority required for production work.
 
 ### Several people
 
-Every desk uses `main`. The order is edit, commit, pull with rebase, show incoming commits, push, run.
-On a conflict, the coding agent runs `git rebase --abort`, tells the person, and never resolves the conflict.
+Every desk uses `main`. The order is edit on the laptop, commit on a branch, push the branch to the desk,
+publish it with `publish-branch-to-main`, which shows incoming commits, then run.
+On a conflict, `publish-branch-to-main` changes nothing and names the files; the coding agent tells the person,
+and never resolves the conflict.
 Before a big change, the person announces the work in the team's chat.
 The same synchronization rules apply to a solo person.
 Reason: every run applies the full pushed branch, including colleagues' changes.
@@ -6222,7 +6067,7 @@ teammate, the teammate's desk runs the undo, and one commit adds the fresh key a
 `operating_procedures/respond_to_a_break_in.md` gives both orders and the rescue-system recovery for a press that
 stopped partway for another cause.
 Reviewed SSH host keys are copied to root-owned files on the desk that keeps access. The helper uses the private
-person-owned agent socket. Reason: a node task runs outside the person's repository directory.
+person-owned agent socket. Reason: a node task runs outside the repository directory.
 Production keeps only the named desk's root key, restricted to that desk's WireGuard address.
 SSH admission also restricts login to root from that address. Every other desk peer disappears
 from both the saved WireGuard configuration and the running interface.
@@ -6235,8 +6080,8 @@ because an old automation request must not provide a second route into productio
 MMHotline's alerts, the fleet hub, backups, tunnels, apps, replication and database logins keep running.
 Containment is applied from the desk that keeps access over SSH, rather than from the controller being cut off.
 
-On the desk that keeps access, the lock-out changes nothing for the person, the coding agent, its
-buttons, the API proxy or Rex. The button leaves one root-owned file there,
+On the desk that keeps access, the lock-out changes nothing for the person, the coding agent's login, its
+buttons or the API proxy. The button leaves one root-owned file there,
 `/etc/systems-desk/everyone-locked-out`, which says that the person pressed the lock-out button on this
 desk; the undo removes it. Only `playbooks/lock_everyone_out.yml` writes or removes the file.
 Its first line holds the desk that keeps access, that desk's `private_ip`, `wireguard_public_key` and
@@ -6268,7 +6113,7 @@ the checks out of them. `util01`'s daily server settings comparison reads from `
 first check runs, and during a lock-out ends with a message instead of a failed unit that would warn.
 Undo also starts an existing MMX HTTPS service. Reason: restoring SSH keys alone
 does not restart the management listener stopped during containment.
-No desk connects to another desk. Other desks retain their local sessions, Rex and coding agent.
+No desk connects to another desk. Other desks retain their local sessions and their coding agents' logins.
 Every desk runs its own desk playbook during a lock-out too. Reason: a new desk joins during a lock-out with a
 teammate, and a desk playbook manages only its own desk, over loopback, while a cut-off
 desk reaches no server. The lock-out button itself runs only on the desk that keeps access.

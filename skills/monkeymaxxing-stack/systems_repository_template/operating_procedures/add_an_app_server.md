@@ -89,11 +89,13 @@ needs one, by the rule in
    If the playbook says "nothing to add" or refuses, see
    [If something is different](#if-something-is-different).
 
-2. **Pull the playbook's commit:** `git pull --rebase`.
-   Reason: the playbook commits the new server to `main` itself, signed by
+2. **Pull the playbook's commit,** in the desk's checkout and in your
+   clone: `ssh desk01-agent 'cd systems_repository && git pull --ff-only'`,
+   then `git pull --ff-only` on the laptop.
+   Reason: the playbook commits the new server to `main` itself, as
    `util01`, so pull before your next change. After a commit that a
    playbook pushed, the helper refuses the next run with "HEAD must equal
-   pushed main" until you run `git pull --rebase`
+   pushed main" until you pull
    ([The rules](../AGENTS.md#the-rules)).
 
 3. **Install the new server:**

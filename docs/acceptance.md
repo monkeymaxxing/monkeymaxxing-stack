@@ -88,7 +88,7 @@ The contracts below state the required outcomes for changes to the stack.
   The proof records the HTTP write pause, every acknowledged write, replica state, backups, and old-system power-off.
 - **Private administration:** each person's laptop reaches only the person's systems desk through doubleshell and a phone-code SSH login.
   The desk runs outside production's location, uses kernel `wg0`, and peers directly with production and staging servers.
-  The systems coding agent works as `coding-agent`, using the SSH socket, `run-mmx-on-the-servers` (run as the `servers-mmx` account), and API proxy.
+  The desk is a locked key box: it holds the production key, the vault passphrase and the person's tokens, and no coding agent runs there.
   The person manages the desk through a separate root-owned loopback key, with `review-and-apply-the-systems-desk-settings`:
   an unchanged desk playbook runs at once; a changed one shows each change since the person's last
   desk review and runs only after the person types yes in the person's own terminal, which the coding agent cannot answer.
@@ -100,8 +100,8 @@ The contracts below state the required outcomes for changes to the stack.
   removes the departing desk's key from `root_ssh_public_keys`, which also ends its push rights to the main copy of
   the systems repository on `util01`. No desk or server key is registered at the Git host, which keeps only a backup
   that the laptop pushes and nothing reads.
-  The person's provider token goes only to a provider guide's API address. Shown recovery values are cleared
-  from the desk terminal, and the person checks the laptop's terminal or Rex for a copy.
+  The person's provider token goes only to a provider guide's API address. The recovery passphrase is shown once,
+  and cleared from the desk terminal after the person types it back.
   Production servers retain account-owned tokens; only a person's desk holds personal tokens.
   At Cloudflare the person makes one token by hand, from the link `set-up-outside-services cloudflare` prints;
   the command makes every other token, the person's desk token and posting key named after the person, and
@@ -109,24 +109,39 @@ The contracts below state the required outcomes for changes to the stack.
   run brought the new one and the person pressed Enter, so a routine replacement stops no upload; after a
   break-in, `--delete-the-old-keys-at-once` deletes it at once. A person's leaving
   deletes that person's Cloudflare tokens by name. No secret appears in the coding agent's conversation.
-  Every desk uses `main`, commits before pulling with rebase, reports incoming changes, and stops on a rebase conflict.
+  The team uses one branch, `main`. Publishing a branch reports incoming changes, and stops on a rebase conflict
+  with nothing changed.
   The setup offers only providers the coding agent can reach at `http://127.0.0.1:8081/` without reading the person's credential: Hetzner Cloud, DigitalOcean, Vultr, and Scaleway, where the API proxy adds the token, and OVHcloud, AWS EC2 and Google Compute Engine, whose APIs need each request signed or a token made from a key, where the same proxy signs the request.
-- **Persistent desk terminals:** Rex runs as the desk's person behind the
-  SSH phone-code door. One login carries a terminal and the Rex socket
-  forward. Sessions and the service-owned socket survive SSH logout.
-  A new login reaches the existing sessions. Other ordinary desk accounts cannot
-  open the socket. Plain SSH remains available while Rex is a preview.
+- **One coding agent, on the laptop:** the person works with one coding agent, the one they already use, on their
+  own laptop. It edits the systems repository in its clone on the laptop, and reaches the desk only through one SSH
+  entry, `desk01-agent`, as the desk's `coding-agent` user. One phone code, typed in the chat, opens one shared
+  login; the desk closes it after `coding_agent_login_idle_minutes` unused (60 in the template) and after
+  `coding_agent_login_longest_hours` (10), so a changed laptop setting cannot lengthen it. Through that login the
+  agent uses the production key's socket, `run-mmx-on-the-servers` (run as the `servers-mmx` account) and the API
+  proxy, and never reads a key or a token. A run longer than a few minutes is a desk job that keeps running while
+  the laptop sleeps; the agent reads its log and exit file later. Nothing on the desk needs resuming, and nothing
+  is signed in there. The person logs in to the desk only for a hidden prompt or a desk review, each one short
+  command plus one phone code.
+- **The team's main copy is on `util01`:** a root-owned bare repository that refuses force pushes and branch
+  deletions. Only keys in `root_ssh_public_keys` can push to it. MMHotline and `util01` trust every commit on it
+  (`triage_agent.trusted_commits: every_commit_on_origin`); nothing is signed. MMHotline pushes the triage agent's
+  commits only when they change nothing but its notes and one-time playbooks. The Git host keeps a backup that the
+  laptop pushes with the person's own login; nothing reads from it, and a refused backup push is shown to the
+  person.
+- **One recovery passphrase:** the recovery bundle, `recovery_bundle.age`, holds every item a lost desk needs,
+  encrypted with one six-word passphrase that the person saves in the password manager. A copy sits in the locked
+  backup bucket. Rebuilding a lost desk, a lost phone and a new team member's desk each start from it.
 - **A practiced break-in response:** only a person starts or undoes a lock-out. The coding agent prepares and
-  pushes the one-line inventory commit, `everyone_locked_out_except_desk`, and the person runs one command,
-  the lock-out button, `sudo lock-everyone-out`, in their own terminal on the desk that keeps access. The lock-out
-  button pulls `main`, and goes on without the pull when the Git host does not answer; it shows every server
+  publishes the one-line inventory commit, `everyone_locked_out_except_desk`, and the person runs one command,
+  the lock-out button, `ssh -t desk01 sudo lock-everyone-out`, for the desk that keeps access. The lock-out
+  button pulls `main`, and goes on without the pull when `util01` does not answer; it shows every server
   and the desk that keeps access, and runs only after the person types `yes`. It runs only the lock-out copies
-  that the person's last desk review installed, so a change that an outside attacker pushes to the Git host
+  that the person's last desk review installed, so a change that an intruder pushes to the main copy
   reaches it only through that review. It keeps the production key and WireGuard address of the desk that keeps
   access, and stops before changing any server when the inventory names others. Other desks keep local
   sessions but lose server keys, peers and established server access; server triage stops; customer-serving
-  credentials stay, and no path between desks appears. The person and the coding agent keep working on the desk
-  that keeps access. Ordinary runs keep containment, and refuse to start or undo a lock-out that the lock-out
+  credentials stay, and no path between desks appears. The person and the coding agent keep working through the
+  desk that keeps access. Ordinary runs keep containment, and refuse to start or undo a lock-out that the lock-out
   button did not make. Undo restores managed access. A separate
   status-page switch diverts public app requests. Retained logs reach the desk
   that keeps access and verified encrypted copies reach the backup bucket before rebuilding.

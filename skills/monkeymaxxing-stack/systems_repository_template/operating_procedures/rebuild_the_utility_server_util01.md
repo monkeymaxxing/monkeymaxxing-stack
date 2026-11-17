@@ -69,7 +69,7 @@ an open SOS when step 3 asks.
 2. **Prepare the new `util01` on the systems desk,** following steps 2 to 4 of
    [Add a server](add_a_server.md), with the utility-server exceptions below.
    - First make the desk's checkout the main copy again, so
-     `sign-and-publish` publishes without the lost `util01`:
+     publishing, as [Making a change](../AGENTS.md#making-a-change) says, works without the lost `util01`:
      `ssh desk01-agent 'cd systems_repository && git remote remove origin'`.
    - Run `wg genkey` and pipe the private key to `wg pubkey`.
      Hold the pair only in memory.
@@ -82,8 +82,8 @@ an open SOS when step 3 asks.
      `location` to the create script's, and replace
      `wireguard_public_key` with the setup-generated public key.
    - Trust the new SSH host key over wg0, as shared step 4 shows.
-   - Commit the inventory and host key, and publish them with
-     `sign-and-publish`. Skip shared step 3's
+   - Commit the inventory and host key, and publish them, as
+     [Making a change](../AGENTS.md#making-a-change) says. Skip shared step 3's
      utility-server run: the new `util01` is not configured yet.
 
    Reason: systems desk access reaches the new utility server directly. A
@@ -140,7 +140,7 @@ an open SOS when step 3 asks.
    - `util_server/ssh_key_of_the_triage_agent`. The two SSH tasks are in fleet stage `util_server`.
      Set `triage_ssh_public_key` in `mmx_project_settings.yml`.
 
-   Commit, and publish with `sign-and-publish`.
+   Commit, and publish, as [Making a change](../AGENTS.md#making-a-change) says.
    Then register the new `mmhotline` user's public key at the server
    provider under the name `util01, the mmhotline user`.
    Every new server and each week's `restore01` start with the public key
@@ -179,24 +179,18 @@ an open SOS when step 3 asks.
    **Check:** MMX reports: "registered the node
    db02, the primary, with the monitor at 10.20.0.1:5432, which had no
    record of it".
-7. **Run `every_server` again from the systems desk, for every server, and
-   mark the history up to the run's commit trusted right after it,** in one
-   command, with the systems desk's pushed `main` as COMMIT:
+7. **Run `every_server` again from the systems desk, for every server:**
 
    ```sh
-   sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only;
-     ./server_management_scripts/run_mmx_on_util01 commit-reviews trust-through --commit-id COMMIT
+   sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only
    ```
 
    The step 7 run gives the new `util01`'s keys to every other
    server and registers each replica with the monitor.
    The step 7 run also clones `util01`'s copy of the systems repository, `/var/lib/mmhotline/systems_repository`.
-   When the trust-through moves the trusted commit forward, MMHotline
-   sends one info alert, such as "root on util01 marked every commit
-   through abc1234 trusted": it names `root` on `util01`, the account the
-   helper uses there, not the person. Tell the person to expect the alert.
-   [Why the trust-through follows the run at once](#why-the-trust-through-follows-the-run-at-once)
-   gives the reasons.
+   MMHotline trusts every commit on the main copy
+   (`triage_agent.trusted_commits: every_commit_on_origin`), so the new
+   `util01` needs nothing more before it runs `main`.
 
    Then compare every environment's live web and job images
    with the inventory's requested tags. Run `deploy` on `util01` for any
@@ -211,9 +205,8 @@ an open SOS when step 3 asks.
    Read `/var/lib/restore_drill/latest_result.json` and the drill journal
    on `util01`. Update `backups_restore_every_week` from the evidence.
 
-   **Check:** the run passes, the trust-through either moves the trusted
-   commit or says that it changed nothing, and each running release is
-   verified after the deploy.
+   **Check:** the run passes, and each running release is verified after
+   the deploy.
 8. **Reboot and verify.** From a systems desk, reboot the replacement `util01` to use the updates
    installed during the rebuild.
    Follow step 7 of [Add a server](add_a_server.md) for `util01`.
@@ -236,8 +229,6 @@ an open SOS when step 3 asks.
   messages"): a new Pushover application token is refused while an SOS
   that rings through Pushover is still unclaimed. Have the person on call
   claim the SOS, then run `every_server` again to apply the new token.
-- **The trust-through says that it changed nothing:** MMHotline's own
-  check already trusted every commit through `COMMIT`, and no alert comes.
 - **Step 8's reboot refuses to start:** the restore drill still runs and
   holds the shared lock. Read the drill's result as step 7 says, then rerun
   step 8's reboot once the shared lock is free.
@@ -275,20 +266,3 @@ not the old ones. Tell the person on call to expect:
   ("wait for MMHotline to close the open Pushover emergency
   messages"). Have the person on call claim the SOS, then run
   `every_server` again to apply the new token.
-
-## Why the trust-through follows the run at once
-
-Reason for one command: the run starts `check_new_commits_on_main`,
-which checks `main` every 5 minutes; a check before the trust-through
-sends a warning, "Review needed for commit …", for an old commit, which
-the trust-through resolves seconds later and which needs nothing from
-the person.
-
-Reason: the new `util01` has a new key, so the merges the old
-`util01` signed match no trusted key. A restored or new MMHotline
-database would otherwise check the history again from the restored
-checkpoint, or from the first commit, and hold each such merge for a
-person's review. The step 7 run is the person's own act, so the
-commits it ran are trusted. Until the trust-through, the helper refuses
-to run and the scheduled jobs run nothing past the trusted commit.
-Later commits go through MMHotline's check as usual.
