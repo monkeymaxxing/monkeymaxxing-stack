@@ -23,21 +23,119 @@ type projectSettings struct {
 		StatusPageHostName        string `yaml:"status_page_host_name"`
 		SystemsDeskProviderAPIURL string `yaml:"systems_desk_provider_api_url"`
 		// token_in_a_header, or a signing method in requestSigningMethods.
-		SystemsDeskProviderAPIAuthentication string                 `yaml:"systems_desk_provider_api_authentication"`
-		TriageAgentCodingAgent               string                 `yaml:"triage_agent_coding_agent"`
-		Apps                                 map[string]appSettings `yaml:"apps"`
-		Backups                              backupSettings         `yaml:"backups"`
+		SystemsDeskProviderAPIAuthentication string `yaml:"systems_desk_provider_api_authentication"`
+		TriageAgentCodingAgent               string `yaml:"triage_agent_coding_agent"`
+		// PasswordManager names the team's password manager on go-live's
+		// screens, such as 1Password. Without it they say "your password manager".
+		PasswordManager string                 `yaml:"password_manager"`
+		Apps            map[string]appSettings `yaml:"apps"`
+		Backups         backupSettings         `yaml:"backups"`
 	} `yaml:"vars"`
 }
 
 type appSettings struct {
+	Image                           string `yaml:"image"`
 	ProductionUploadsR2Bucket       string `yaml:"production_uploads_r2_bucket"`
 	StagingUploadsR2Bucket          string `yaml:"staging_uploads_r2_bucket"`
 	ProductionUploadsR2KeyVariables struct {
 		AccessKeyID     string `yaml:"access_key_id"`
 		SecretAccessKey string `yaml:"secret_access_key"`
 	} `yaml:"production_uploads_r2_key_variables"`
-	SecretsFromVault []string `yaml:"secrets_from_vault"`
+	SecretsFromVault appSecrets `yaml:"secrets_from_vault"`
+}
+
+// appSecrets is an app's secrets_from_vault: each environment variable the
+// app reads from the vault, and where its value comes from.
+type appSecrets map[string]appSecret
+
+// appSecret says where one of an app's secrets comes from, so the setup
+// makes it or asks for it on its own screen, with no question about it.
+type appSecret struct {
+	// WhereTheValueComesFrom is secretGeneratedByTheSetup or
+	// secretFromAnOutsideService.
+	WhereTheValueComesFrom string `yaml:"where_the_value_comes_from"`
+	// For a secret from an outside service: one sentence for the screen,
+	// the steps that get it, one per line, and optionally a built-in check
+	// of the value at the service, by its name in outsideServiceChecks.
+	WhatItIsFor  string   `yaml:"what_it_is_for"`
+	StepsToGetIt []string `yaml:"steps_to_get_it"`
+	CheckedWith  string   `yaml:"checked_with"`
+}
+
+const (
+	// The setup makes the value: a random one, or for an app's R2 key
+	// variables, the key it makes at Cloudflare.
+	secretGeneratedByTheSetup = "generated_by_the_setup"
+	// A service outside the Stack gives the value, such as a Stripe key; the
+	// person pastes it on its own screen.
+	secretFromAnOutsideService = "an_outside_service"
+)
+
+// UnmarshalYAML refuses the earlier list form with the way to the new one.
+func (secrets *appSecrets) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.SequenceNode {
+		if len(node.Content) == 0 {
+			*secrets = appSecrets{}
+			return nil
+		}
+		return fmt.Errorf("line %d: secrets_from_vault is a list of names. Write it as a mapping that says where each value comes from, such as\n"+
+			"      secrets_from_vault:\n        SECRET_KEY_BASE:\n          where_the_value_comes_from: %s", node.Line, secretGeneratedByTheSetup)
+	}
+	var plain map[string]appSecret
+	if err := node.Decode(&plain); err != nil {
+		return err
+	}
+	*secrets = plain
+	return nil
+}
+
+// names lists the secrets' names in order.
+func (secrets appSecrets) names() []string {
+	var names []string
+	for name := range secrets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// outsideServiceChecks are the services whose keys the setup checks before
+// saving them. Each address is fixed here, never read from the settings,
+// so a pushed settings change can never send a key elsewhere.
+var outsideServiceChecks = map[string]bool{"stripe": true}
+
+// checkAppSecrets checks that each app secret says where its value comes
+// from, and that a secret from an outside service has its screen's text.
+func (s systemSettings) checkAppSecrets() error {
+	for _, app := range sortedAppNames(s) {
+		for _, name := range s.Vars.Apps[app].SecretsFromVault.names() {
+			secret := s.Vars.Apps[app].SecretsFromVault[name]
+			where := "vars.apps." + app + ".secrets_from_vault." + name
+			switch secret.WhereTheValueComesFrom {
+			case secretGeneratedByTheSetup:
+			case secretFromAnOutsideService:
+				if strings.TrimSpace(secret.WhatItIsFor) == "" || len(secret.StepsToGetIt) == 0 {
+					return fmt.Errorf("%s in %s comes from an outside service, so it needs what_it_is_for, one sentence, and steps_to_get_it, one step per line: the setup shows them on the key's screen", where, projectSettingsFile)
+				}
+				if secret.CheckedWith != "" && !outsideServiceChecks[secret.CheckedWith] {
+					return fmt.Errorf("%s.checked_with in %s is %q. The setup checks keys only with: %s. Leave checked_with out for another service", where, projectSettingsFile, secret.CheckedWith, strings.Join(sortedNames(outsideServiceChecks), ", "))
+				}
+			default:
+				return fmt.Errorf("%s.where_the_value_comes_from in %s is %q. Write %s for a value the setup makes, or %s for one a service outside the Stack gives", where, projectSettingsFile,
+					secret.WhereTheValueComesFrom, secretGeneratedByTheSetup, secretFromAnOutsideService)
+			}
+		}
+	}
+	return nil
+}
+
+func sortedAppNames(s systemSettings) []string {
+	var names []string
+	for name := range s.Vars.Apps {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 type backupSettings struct {
@@ -392,7 +490,7 @@ func cloudflareAccountTokenPlan(s systemSettings, accountID string) ([]cloudflar
 			return nil, fmt.Errorf("vars.apps.%s keeps uploads, so it needs production_uploads_r2_key_variables: the two names in its secrets_from_vault that hold its R2 key, access_key_id and secret_access_key", name)
 		}
 		for _, variable := range []string{variables.AccessKeyID, variables.SecretAccessKey} {
-			if !contains(app.SecretsFromVault, variable) {
+			if _, listed := app.SecretsFromVault[variable]; !listed {
 				return nil, fmt.Errorf("vars.apps.%s.production_uploads_r2_key_variables names %s, which its secrets_from_vault does not list", name, variable)
 			}
 		}
@@ -536,4 +634,19 @@ func contains(list []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// domain is the domain the system runs on: status_page_host_name without its
+// first label, such as example.com for status.example.com. The status page
+// sits right under the domain, as the template has it.
+func (s systemSettings) domain() (string, error) {
+	host := s.Vars.StatusPageHostName
+	if err := plainSetting("vars.status_page_host_name", host); err != nil {
+		return "", err
+	}
+	_, domain, _ := strings.Cut(host, ".")
+	if !strings.Contains(domain, ".") {
+		return "", fmt.Errorf("vars.status_page_host_name in %s is %s. Set it to a name right under your domain, such as status.example.com", projectSettingsFile, host)
+	}
+	return domain, nil
 }

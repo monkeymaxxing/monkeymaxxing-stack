@@ -26,9 +26,14 @@ vars:
   systems_desk_provider_api_url: PROVIDER_URL
   systems_desk_provider_api_authentication: token_in_a_header
   triage_agent_coding_agent: claude_code
+  password_manager: 1Password
   apps:
     shop:
-      secrets_from_vault: [SECRET_KEY_BASE, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]
+      image: ghcr.io/acme/shop
+      secrets_from_vault:
+        SECRET_KEY_BASE: {where_the_value_comes_from: generated_by_the_setup}
+        R2_ACCESS_KEY_ID: {where_the_value_comes_from: generated_by_the_setup}
+        R2_SECRET_ACCESS_KEY: {where_the_value_comes_from: generated_by_the_setup}
       production_uploads_r2_bucket: UPLOADS_R2_BUCKET
       staging_uploads_r2_bucket: acme-shop-staging-uploads
       production_uploads_r2_key_variables:

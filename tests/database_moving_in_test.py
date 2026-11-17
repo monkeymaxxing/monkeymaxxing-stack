@@ -80,7 +80,7 @@ class RenderedFiles(unittest.TestCase):
 
     def render(self, filename, **changes):
         values = dict(database_moving_in=MOVING, database_servers=['db01','db02'], apps_connect_through_pgbouncer=False,
-                      app_secrets={'shop_database_password':'invented123'}, app={'key':'shop','value':{'database_name':'shop','secrets_from_vault':[]}},
+                      app_secrets={'shop_database_password':'invented123'}, app={'key':'shop','value':{'database_name':'shop','secrets_from_vault':{}}},
                       inventory_groups={}, inventory_nodes={'app001':{'vars':{'private_ip':'10.20.1.1'}}},
                       allowed_laptops=[], is_systems_desk=False, is_app_server=True, is_database_server=False, is_jobs_server=False,
                       is_util_server=False,is_staging_server=False,is_load_balancer_server=False,

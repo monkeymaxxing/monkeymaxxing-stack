@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
@@ -242,44 +243,12 @@ func (c *b2Client) ensureBucket(plan b2BucketPlan) (*b2Bucket, []string, error) 
 // key without deleteFiles would prove nothing, so the master key's
 // capabilities are checked first (b2CapabilitiesNeeded).
 func (c *b2Client) checkLockRefusesDeletion(bucket *b2Bucket, lockDays int, now time.Time) error {
-	// https://www.backblaze.com/apidocs/b2-get-upload-url
-	var upload struct {
-		UploadURL          string `json:"uploadUrl"`
-		AuthorizationToken string `json:"authorizationToken"`
-	}
-	if err := c.call("b2_get_upload_url", map[string]any{"bucketId": bucket.BucketID}, &upload); err != nil {
-		return err
-	}
 	random := make([]byte, 4)
 	_, _ = rand.Read(random)
 	fileName := "set_up_outside_services_lock_check/" + now.UTC().Format("20060102T150405Z") + "-" + hex.EncodeToString(random) + ".txt"
-	content := []byte("Monkeymaxxing Stack Object Lock check\n")
-	checksum := sha1.Sum(content)
-	// https://www.backblaze.com/apidocs/b2-upload-file
-	request, err := http.NewRequest(http.MethodPost, upload.UploadURL, strings.NewReader(string(content)))
+	file, err := c.uploadFile(bucket.BucketID, fileName, "text/plain", []byte("Monkeymaxxing Stack Object Lock check\n"))
 	if err != nil {
 		return err
-	}
-	request.Header.Set("Authorization", upload.AuthorizationToken)
-	request.Header.Set("X-Bz-File-Name", url.PathEscape(fileName))
-	request.Header.Set("Content-Type", "text/plain")
-	request.Header.Set("X-Bz-Content-Sha1", hex.EncodeToString(checksum[:]))
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return &networkError{Provider: "Backblaze", Call: "b2_upload_file", Err: stripURLFromError(err)}
-	}
-	body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		code, message := readB2Error(body)
-		return &apiError{Provider: "Backblaze", Call: "b2_upload_file", Status: response.StatusCode, Code: code, Message: message}
-	}
-	var file struct {
-		FileID   string `json:"fileId"`
-		FileName string `json:"fileName"`
-	}
-	if err := json.Unmarshal(body, &file); err != nil || file.FileID == "" {
-		return errors.New("Backblaze answered b2_upload_file with something this command cannot read")
 	}
 	// https://www.backblaze.com/apidocs/b2-get-file-info
 	var info struct {
@@ -313,6 +282,49 @@ func (c *b2Client) checkLockRefusesDeletion(bucket *b2Bucket, lockDays int, now 
 	// Hide the test file, so the lifecycle rule deletes it once its lock ends.
 	// https://www.backblaze.com/apidocs/b2-hide-file
 	return c.call("b2_hide_file", map[string]any{"bucketId": bucket.BucketID, "fileName": file.FileName}, nil)
+}
+
+// b2File is an uploaded file, by its ID and name.
+type b2File struct {
+	FileID   string `json:"fileId"`
+	FileName string `json:"fileName"`
+}
+
+// uploadFile uploads one small file into a bucket.
+func (c *b2Client) uploadFile(bucketID, fileName, contentType string, content []byte) (b2File, error) {
+	// https://www.backblaze.com/apidocs/b2-get-upload-url
+	var upload struct {
+		UploadURL          string `json:"uploadUrl"`
+		AuthorizationToken string `json:"authorizationToken"`
+	}
+	if err := c.call("b2_get_upload_url", map[string]any{"bucketId": bucketID}, &upload); err != nil {
+		return b2File{}, err
+	}
+	checksum := sha1.Sum(content)
+	// https://www.backblaze.com/apidocs/b2-upload-file
+	request, err := http.NewRequest(http.MethodPost, upload.UploadURL, bytes.NewReader(content))
+	if err != nil {
+		return b2File{}, err
+	}
+	request.Header.Set("Authorization", upload.AuthorizationToken)
+	request.Header.Set("X-Bz-File-Name", url.PathEscape(fileName))
+	request.Header.Set("Content-Type", contentType)
+	request.Header.Set("X-Bz-Content-Sha1", hex.EncodeToString(checksum[:]))
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return b2File{}, &networkError{Provider: "Backblaze", Call: "b2_upload_file", Err: stripURLFromError(err)}
+	}
+	body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		code, message := readB2Error(body)
+		return b2File{}, &apiError{Provider: "Backblaze", Call: "b2_upload_file", Status: response.StatusCode, Code: code, Message: message}
+	}
+	var file b2File
+	if err := json.Unmarshal(body, &file); err != nil || file.FileID == "" {
+		return b2File{}, errors.New("Backblaze answered b2_upload_file with something this command cannot read")
+	}
+	return file, nil
 }
 
 // https://www.backblaze.com/apidocs/b2-list-keys
@@ -423,17 +435,65 @@ func runBackblaze(e *environment, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	client, err := authorizeB2(e.b2AuthorizeURL, keyID, applicationKey)
+	client, err := e.signInToBackblaze(keyID, applicationKey)
 	if err != nil {
 		return err
 	}
-	if missing := missingCapabilities(client.capabilities); len(missing) > 0 {
-		return fmt.Errorf("this key lacks %s. Use the account's master application key, from Backblaze's App Keys page: %s", strings.Join(missing, ", "), b2KeysPage)
-	}
-	if endpoint := settings.Vars.Backups.B2S3Endpoint; endpoint != "" && client.s3APIURL != "" && !strings.HasSuffix(client.s3APIURL, "//"+endpoint) {
+	if endpoint := settings.Vars.Backups.B2S3Endpoint; !client.hasS3Endpoint(endpoint) {
 		return fmt.Errorf("the account's S3 endpoint is %s, but vars.backups.b2_s3_endpoint in %s is %s. Set b2_s3_endpoint and b2_region to the account's, then run this command again", client.s3APIURL, projectSettingsFile, endpoint)
 	}
 	e.say("Signed in to Backblaze account %s.", client.accountID)
+	if err := e.setUpBackblaze(client, plan, saved, oldKeys); err != nil {
+		return err
+	}
+	e.say("")
+	e.say("See the buckets on Backblaze's website: %s", b2BucketsPage)
+	e.say("See the keys: %s", b2KeysPage)
+	if atOnce {
+		if err := e.deleteOldKeys(oldKeys, "backblaze", false, client.deleteKey, b2KeysPage); err != nil {
+			return err
+		}
+	}
+	if err := e.finishVaultChange(saved, "set-up-outside-services backblaze"); err != nil {
+		return err
+	}
+	if atOnce && len(replace) > 0 {
+		e.say("The servers get the new keys at the next run of every_server: tell your coding agent to run it now.")
+	}
+	// The vault is pushed, so the run can bring the new keys to the servers.
+	// The master key stays in this command's memory only while it waits.
+	if err := e.deleteOldKeys(oldKeys, "backblaze", true, client.deleteKey, b2KeysPage); err != nil {
+		return err
+	}
+	e.say(sayTellTheCodingAgent)
+	if settings.uploadsAreBackedUp() && len(settings.Vars.Backups.UploadsBackupRunsOn) == 0 {
+		e.say("The uploads' bucket and key are ready, so your coding agent can now set vars.backups.uploads_backup_runs_on to [util_server].")
+	}
+	return nil
+}
+
+// signInToBackblaze signs in with the master application key, and refuses
+// a key that lacks a capability this command uses, before anything changes.
+func (e *environment) signInToBackblaze(keyID, applicationKey string) (*b2Client, error) {
+	client, err := authorizeB2(e.b2AuthorizeURL, keyID, applicationKey)
+	if err != nil {
+		return nil, err
+	}
+	if missing := missingCapabilities(client.capabilities); len(missing) > 0 {
+		return nil, fmt.Errorf("this key lacks %s. Use the account's master application key, from Backblaze's App Keys page: %s", strings.Join(missing, ", "), b2KeysPage)
+	}
+	return client, nil
+}
+
+// hasS3Endpoint says whether the account's S3 endpoint is endpoint, such as
+// s3.eu-central-003.backblazeb2.com. An empty one on either side matches.
+func (c *b2Client) hasS3Endpoint(endpoint string) bool {
+	return endpoint == "" || c.s3APIURL == "" || strings.HasSuffix(c.s3APIURL, "//"+endpoint)
+}
+
+// setUpBackblaze makes each bucket of the plan match it, checks each lock
+// before the bucket's first key, and saves each server's key in the vault.
+func (e *environment) setUpBackblaze(client *b2Client, plan []b2BucketPlan, saved *savedKeys, oldKeys string) error {
 	for _, bucketPlan := range plan {
 		if err := e.stopIfInterrupted(); err != nil {
 			return err
@@ -472,29 +532,6 @@ func runBackblaze(e *environment, arguments []string) error {
 				return err
 			}
 		}
-	}
-	e.say("")
-	e.say("See the buckets on Backblaze's website: %s", b2BucketsPage)
-	e.say("See the keys: %s", b2KeysPage)
-	if atOnce {
-		if err := e.deleteOldKeys(oldKeys, "backblaze", false, client.deleteKey, b2KeysPage); err != nil {
-			return err
-		}
-	}
-	if err := e.finishVaultChange(saved, "set-up-outside-services backblaze"); err != nil {
-		return err
-	}
-	if atOnce && len(replace) > 0 {
-		e.say("The servers get the new keys at the next run of every_server: tell your coding agent to run it now.")
-	}
-	// The vault is pushed, so the run can bring the new keys to the servers.
-	// The master key stays in this command's memory only while it waits.
-	if err := e.deleteOldKeys(oldKeys, "backblaze", true, client.deleteKey, b2KeysPage); err != nil {
-		return err
-	}
-	e.say(sayTellTheCodingAgent)
-	if settings.uploadsAreBackedUp() && len(settings.Vars.Backups.UploadsBackupRunsOn) == 0 {
-		e.say("The uploads' bucket and key are ready, so your coding agent can now set vars.backups.uploads_backup_runs_on to [util_server].")
 	}
 	return nil
 }

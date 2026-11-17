@@ -20,6 +20,9 @@ const (
 	PermissionTunnelWrite              = "Cloudflare Tunnel Write"
 	PermissionR2StorageWrite           = "Workers R2 Storage Write"
 	PermissionZoneRead                 = "Zone Read"
+	PermissionZoneWrite                = "Zone Write"
+	PermissionDNSWrite                 = "DNS Write"
+	PermissionWorkersScriptsWrite      = "Workers Scripts Write"
 	PermissionTransformRulesWrite      = "Zone Transform Rules Write"
 	PermissionAccessServiceTokensRead  = "Access: Service Tokens Read"
 	PermissionAccessServiceTokensWrite = "Access: Service Tokens Write"
@@ -58,7 +61,7 @@ type PermissionGroup struct {
 var PermissionGroups = []PermissionGroup{
 	{"2efd5506f9c8494dacb1fa10a3e7d5b6", "Workers R2 Storage Bucket Item Write", ScopeR2Bucket},
 	{"6a018a9f2fc74eb6b293b0c548f38b39", "Workers R2 Storage Bucket Item Read", ScopeR2Bucket},
-	{"e086da7e2179491d91ee5f35b3ca210a", "Workers Scripts Write", ScopeAccount},
+	{"e086da7e2179491d91ee5f35b3ca210a", PermissionWorkersScriptsWrite, ScopeAccount},
 	{"1a71c399035b4950a1bd1466bbe4f420", "Workers Scripts Read", ScopeAccount},
 	{"c07321b023e944ff818fec44d8203567", PermissionTunnelWrite, ScopeAccount},
 	{"959972745952452f8be2452be8cbb9f2", "Access: Apps and Policies Write", ScopeAccount},
@@ -67,7 +70,8 @@ var PermissionGroups = []PermissionGroup{
 	{"3f376c8e6f764a938b848bd01b8995c4", PermissionAccessServiceTokensRead, ScopeAccount},
 	{"a1c0fec57cf94af79479a6d827fa518c", PermissionAccessServiceTokensWrite, ScopeAccount},
 	{"bf7481a1826f439697cb59a20b22293e", PermissionR2StorageWrite, ScopeAccount},
-	{"4755a26eedb94da69e1066d98aa820be", "DNS Write", ScopeZone},
+	{"4755a26eedb94da69e1066d98aa820be", PermissionDNSWrite, ScopeZone},
+	{"e6d2666161e84845a636613608cee8d5", PermissionZoneWrite, ScopeZone},
 	{"9ff81cbbe65c400b97d92c3c1033cab6", "Cache Settings Write", ScopeZone},
 	{"c8fed203ed3043cba015a93ad1616f1f", PermissionZoneRead, ScopeZone},
 	{"5c1b2c30ac6a4aa9bc95a2ff3c1df7f5", PermissionZoneRead, ScopeAccount},
@@ -114,14 +118,28 @@ type CloudflareTunnel struct {
 	Secret string `json:"-"`
 }
 
-// Cloudflare is a stand-in Cloudflare account with one zone.
+// Cloudflare is a stand-in Cloudflare account with at most one zone.
 type Cloudflare struct {
-	mu            sync.Mutex
-	AccountID     string
-	ZoneName      string
-	ZoneStatus    string // "active", or "pending" before the domain moved
-	Tokens        []*CloudflareToken
-	ServiceTokens []*AccessServiceToken
+	mu        sync.Mutex
+	AccountID string
+	ZoneName  string
+	// ZoneStatus is "active", "pending" before the domain moved, or "" while
+	// the account has no zone yet; POST /zones adds ZoneName as pending.
+	ZoneStatus  string
+	NameServers []string
+	// DNSScans counts the scans of the zone's DNS records.
+	DNSScans int
+	// WorkersSubdomain is the account's workers.dev address, "" for none;
+	// TakenSubdomains are other accounts'.
+	WorkersSubdomain string
+	TakenSubdomains  map[string]bool
+	// R2Off makes every R2 call fail as in an account that never turned R2 on.
+	R2Off bool
+	// RefuseAccountsList makes GET /accounts refuse, as Cloudflare may for an
+	// account-owned token.
+	RefuseAccountsList bool
+	Tokens             []*CloudflareToken
+	ServiceTokens      []*AccessServiceToken
 	// IdentityProviders are Access's login methods. The stand-in answers
 	// 409 to a second One-time PIN. OneTimePINConflictsUnlisted makes it
 	// answer 409 although the list shows none, as a real Cloudflare account
@@ -138,7 +156,8 @@ type Cloudflare struct {
 }
 
 func NewCloudflare(accountID string) *Cloudflare {
-	return &Cloudflare{AccountID: accountID, ZoneName: "example.org", ZoneStatus: "active", R2Buckets: map[string]bool{}, CustomDomains: map[string][]string{},
+	return &Cloudflare{AccountID: accountID, ZoneName: "example.org", ZoneStatus: "active", NameServers: []string{"ada.ns.cloudflare.com", "bob.ns.cloudflare.com"},
+		TakenSubdomains: map[string]bool{}, R2Buckets: map[string]bool{}, CustomDomains: map[string][]string{},
 		Rulesets: map[string]map[string]any{}, Failures: map[string]string{}}
 }
 
@@ -270,13 +289,38 @@ func (c *Cloudflare) route(token *CloudflareToken, r *http.Request) (any, *cfRef
 			return nil, denied
 		}
 		zones := []any{}
-		if r.URL.Query().Get("name") == c.ZoneName {
-			zones = append(zones, map[string]any{"id": "zone0001", "name": c.ZoneName, "status": c.ZoneStatus})
+		if r.URL.Query().Get("name") == c.ZoneName && c.ZoneStatus != "" {
+			zones = append(zones, c.zoneView())
 		}
 		return zones, nil
 	}
+	// https://developers.cloudflare.com/api/resources/zones/methods/create/
+	if path == "/client/v4/zones" && r.Method == http.MethodPost {
+		if !token.may(PermissionZoneWrite) {
+			return nil, denied
+		}
+		var body struct {
+			Name    string            `json:"name"`
+			Account map[string]string `json:"account"`
+			Type    string            `json:"type"`
+		}
+		if !decodeCloudflare(r, &body) || body.Account["id"] != c.AccountID || body.Type != "full" {
+			return nil, malformed
+		}
+		if body.Name != c.ZoneName {
+			return nil, &cfRefusal{400, 1099, "the stand-in knows only the zone " + c.ZoneName}
+		}
+		if c.ZoneStatus != "" {
+			return nil, &cfRefusal{400, 1061, body.Name + " already exists"}
+		}
+		c.ZoneStatus = "pending"
+		return c.zoneView(), nil
+	}
 	// https://developers.cloudflare.com/api/resources/accounts/methods/list/
 	if path == "/client/v4/accounts" && r.Method == http.MethodGet {
+		if c.RefuseAccountsList {
+			return nil, &cfRefusal{403, 9109, "Unauthorized to access requested resource"}
+		}
 		return []any{map[string]any{"id": c.AccountID, "name": "Stand-in account"}}, nil
 	}
 	if match := zonePath.FindStringSubmatch(path); match != nil {
@@ -302,7 +346,32 @@ func (c *Cloudflare) route(token *CloudflareToken, r *http.Request) (any, *cfRef
 		if !token.may(PermissionR2StorageWrite) {
 			return nil, denied
 		}
+		if c.R2Off {
+			return nil, &cfRefusal{403, 10042, "Please enable R2 through the Cloudflare Dashboard."}
+		}
 		return c.r2Route(r, rest)
+	// https://developers.cloudflare.com/api/resources/workers/subresources/subdomains/
+	case rest == "/workers/subdomain":
+		if !token.may(PermissionWorkersScriptsWrite) {
+			return nil, denied
+		}
+		if r.Method == http.MethodGet {
+			if c.WorkersSubdomain == "" {
+				return nil, &cfRefusal{404, 10007, "This account does not have a workers.dev subdomain."}
+			}
+			return map[string]any{"subdomain": c.WorkersSubdomain}, nil
+		}
+		var body struct {
+			Subdomain string `json:"subdomain"`
+		}
+		if r.Method != http.MethodPut || !decodeCloudflare(r, &body) || body.Subdomain == "" {
+			return nil, malformed
+		}
+		if c.TakenSubdomains[body.Subdomain] {
+			return nil, &cfRefusal{409, 10032, "This subdomain is not available."}
+		}
+		c.WorkersSubdomain = body.Subdomain
+		return map[string]any{"subdomain": body.Subdomain}, nil
 	// https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/service_tokens/
 	case rest == "/access/service_tokens" || strings.HasPrefix(rest, "/access/service_tokens/"):
 		if r.Method == http.MethodGet && !token.may(PermissionAccessServiceTokensRead) && !token.may(PermissionAccessServiceTokensWrite) ||
@@ -667,6 +736,14 @@ func (c *Cloudflare) r2Route(r *http.Request, rest string) (any, *cfRefusal) {
 // The URL rewrite rule of MMHotline's status page set-up.
 // https://developers.cloudflare.com/rules/transform/url-rewrite/create-api/
 func (c *Cloudflare) zoneRoute(token *CloudflareToken, r *http.Request, zone, rest string) (any, *cfRefusal) {
+	// https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/scan/
+	if rest == "/dns_records/scan" && r.Method == http.MethodPost {
+		if zone != "zone0001" || c.ZoneStatus == "" || !token.may(PermissionDNSWrite) {
+			return nil, denied
+		}
+		c.DNSScans++
+		return map[string]any{"recs_added": 3, "total_records_parsed": 3}, nil
+	}
 	if zone != "zone0001" || !token.may(PermissionTransformRulesWrite) {
 		return nil, denied
 	}
@@ -700,6 +777,10 @@ func (c *Cloudflare) zoneRoute(token *CloudflareToken, r *http.Request, zone, re
 		return ruleset, nil
 	}
 	return nil, &cfRefusal{404, 7003, "No route for that URI"}
+}
+
+func (c *Cloudflare) zoneView() map[string]any {
+	return map[string]any{"id": "zone0001", "name": c.ZoneName, "status": c.ZoneStatus, "name_servers": c.NameServers}
 }
 
 // LiveTokensNamed lists the account tokens of that name not deleted.

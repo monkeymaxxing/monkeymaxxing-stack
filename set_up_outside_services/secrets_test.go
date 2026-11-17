@@ -22,6 +22,17 @@ var templateKeys = []string{
 	"staging_shop_database_password", "util01_provider_api_token", "a_key_of_the_teams_own",
 }
 
+// stripeSecret is an app secret from an outside service, as the coding agent
+// writes it into secrets_from_vault.
+const stripeSecret = `        STRIPE_API_KEY:
+          where_the_value_comes_from: an_outside_service
+          what_it_is_for: Stripe takes your customers' card payments with it.
+          steps_to_get_it:
+            - Open  https://dashboard.stripe.com/apikeys
+            - Press  Reveal live key,  then copy it.
+          checked_with: stripe
+`
+
 // signedSecretsRepository makes the harness's directory a Git checkout of a
 // bare origin, signing its commits with a test SSH key the way the desk's
 // repository signs with the production key, and returns git and origin.
@@ -92,7 +103,7 @@ func TestSecretsSkipsSavedKeysMakesRandomOnesAndPushesASignedCommit(t *testing.T
 	h.vault.values["pushover_application_token"] = "saved-before"
 	settingsPath := filepath.Join(h.e.directory, projectSettingsFile)
 	text, _ := os.ReadFile(settingsPath)
-	writeFile(t, settingsPath, strings.Replace(string(text), "[SECRET_KEY_BASE,", "[SECRET_KEY_BASE, STRIPE_API_KEY,", 1))
+	writeFile(t, settingsPath, strings.Replace(string(text), "      secrets_from_vault:\n", "      secrets_from_vault:\n"+stripeSecret, 1))
 	h.commitAll("Add the Stripe key")
 	h.vault.values["shared_root_console_password_hash"] = "$6$saved-before"
 	run, origin := h.signedSecretsRepository()
@@ -100,7 +111,8 @@ func TestSecretsSkipsSavedKeysMakesRandomOnesAndPushesASignedCommit(t *testing.T
 		// util01's token, the group key, the triage key, the registry token,
 		// then the two Stripe keys.
 		[]string{"util01-token-value", "group-key-value", "triage-key-value", "registry-token-value", "sk_live_value", "sk_test_value"},
-		[]string{"", "random", "", "random", ""})
+		// The triage credential's kind; the app's secrets ask nothing.
+		[]string{""})
 	if err := runSecrets(h.e, nil); err != nil {
 		t.Fatalf("secrets: %v\n%s", err, h.out)
 	}
@@ -262,8 +274,8 @@ func TestSecretsNeedASigningRepository(t *testing.T) {
 	run, _ := h.signedSecretsRepository()
 	run(h.e.directory, "config", "commit.gpgsign", "false")
 	h.answerSecrets(nil, nil)
-	if err := runSecrets(h.e, nil); err == nil || !strings.Contains(err.Error(), "set-up-the-systems-repository") {
-		t.Fatalf("want a refusal pointing to set-up-the-systems-repository, got %v", err)
+	if err := runSecrets(h.e, nil); err == nil || !strings.Contains(err.Error(), "does not sign its commits") {
+		t.Fatalf("want a refusal saying the repository does not sign its commits, got %v", err)
 	}
 }
 

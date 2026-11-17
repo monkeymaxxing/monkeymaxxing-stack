@@ -23,6 +23,10 @@ var (
 
 var errNoTerminal = errors.New("this command asks for keys at hidden prompts, so it needs your own terminal. Run it in your desk terminal, not through a pipe or your coding agent")
 
+// errEmptyValue is Enter at a hidden prompt with nothing typed, which
+// go-live answers by asking again.
+var errEmptyValue = errors.New("the value was empty")
+
 func getTermios(fd uintptr) (*syscall.Termios, error) {
 	var state syscall.Termios
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, ioctlGetTermios, uintptr(unsafe.Pointer(&state))); errno != 0 {
@@ -71,7 +75,7 @@ func readHiddenLine(label string) (string, error) {
 	value := strings.TrimRight(line, "\r\n")
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "", errors.New("the value was empty")
+		return "", errEmptyValue
 	}
 	return value, nil
 }
@@ -99,8 +103,8 @@ func restoreTerminal() {
 	}
 }
 
-// clearTerminal clears the screen and its scrollback, so a recovery item
-// shown on the screen does not stay there.
+// clearTerminal clears the screen and its scrollback, so a secret shown on
+// the screen does not stay there.
 func clearTerminal() {
 	fmt.Fprint(os.Stdout, "\033[3J\033[H\033[2J")
 }
