@@ -380,6 +380,32 @@ Stack is open source: you can copy it and change any part to fit your needs.
 The [design](docs/design.md#why-these-tools) records each choice in full,
 with what it costs and what was considered instead.
 
+## Security: use only a coding agent you trust
+
+**The Stack requires a coding agent you trust.** It is built only for
+trusted agents. Trust means you trust the agent to do the work well, you
+trust its intentions, and you trust the company that runs it, because your
+work passes through that company. Your agent will have full control of your
+servers; that is how it runs them for you. If you would not trust an agent
+with that, do not use it here. Using one you do not trust is at your own
+risk.
+
+What the Stack protects you from:
+
+- **A stolen or lost laptop.** Your keys are not on your laptop. Each time
+  your coding agent starts work on your servers, you type a code from your
+  phone.
+- **Your secrets reaching the company that runs your agent.** Your agent
+  uses your keys without ever seeing them. You type each secret at a hidden
+  prompt, never in the chat.
+- **Clumsy mistakes,** yours or your agent's. Risky changes show you what
+  will change first, and you type `yes`.
+- **Attackers from outside.** Your servers talk over a private network, and
+  only your laptop can reach your desk.
+
+What it does not protect you from: an agent, or something on your laptop,
+that you do not trust. Do not use either one to run your servers.
+
 ## The setup: a few hours to go live
 
 Your coding agent does every step it can. Before you start, you need a

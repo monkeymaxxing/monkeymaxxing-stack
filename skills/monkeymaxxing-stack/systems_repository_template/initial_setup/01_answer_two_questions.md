@@ -120,6 +120,12 @@ the questions with a mode that skips them all. Reason: a wildcard in an
 file:
 
 ```text
+USE ONLY A CODING AGENT YOU TRUST.  It will have full control of your servers.
+
+Trust means three things: it does the work well, it means you well, and you trust
+the company that runs it, because your work passes through that company.
+An agent you would not trust with your servers should never be used here.
+
 Before I start: one approval, so I do not ask "allow?" at every step.
 
 I add one list to this folder, in  .claude/settings.local.json.

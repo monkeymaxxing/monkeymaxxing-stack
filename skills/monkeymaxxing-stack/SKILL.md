@@ -13,6 +13,13 @@ the reason for each action, and why each action matters. A system that
 works, but that its owner does not understand, has failed, however good it
 is technically.
 
+**The Stack requires a coding agent the person trusts:** to do the work
+well, in its intentions, and through the company that runs it. It is built
+only for trusted agents. Say so on the setup's first screen, as chapter 1
+shows. The desk's protections stop a stolen laptop, secrets reaching your
+conversation, clumsy mistakes, and outside attackers; they are not there to
+fence you.
+
 The goal of the setup, and its three rules, are in the systems repository
 template's [`AGENTS.md`, "The rules"](systems_repository_template/AGENTS.md#the-rules):
 a person who is new to running servers finishes in about a working day with

@@ -5642,6 +5642,46 @@ container on the laptop.
 
 ## The systems desk
 
+### Use only a coding agent you trust
+
+The Stack requires a coding agent the person trusts, and it is built only
+for trusted agents. Trust means three things: the person trusts the agent
+to do the work well, trusts its intentions, and trusts the company that
+runs it, because the person's work passes through that company. Using an
+agent the person does not trust on production servers is at the person's
+own risk; an agent or a model the person would not trust with root on
+every server must never be used here.
+
+### What the desk protects against, and what it does not
+
+The agent works on the servers with root, because that is its job. Every
+protection on the desk exists for one of four things:
+
+- **A stolen or lost laptop.** The keys live on the desk, not the laptop,
+  and every login to the desk needs a code from the person's phone.
+- **A secret reaching the agent's conversation.** What the agent reads goes
+  to the company that runs it. So the agent uses the keys through the desk
+  and never sees them. The person types each secret at a hidden prompt, and
+  no command the agent runs prints one.
+- **Clumsy mistakes.** For example, a cleanup that deletes the desk itself,
+  a typo that cuts the person's laptop off, or a screen that says "locked"
+  when the desk is not.
+- **Attackers from outside.** Only the person's laptop reaches the desk.
+  Wrong phone codes get banned, and the person gets an alert.
+
+The desk does **not** protect against an agent, or a laptop, the person
+does not trust. Code that runs with the agent's login already has root on
+every server, through the button. A fence on the desk against it would add
+parts and steps, and still not stop it. For example, the agent's account on
+the desk reaches the internet, and through the servers it reaches whatever
+they reach, like any administrator. That is accepted.
+
+**Judge every review finding and every design question by this list.** A
+finding that needs the agent, or a program using the agent's login, to act
+against the person is not a finding. Nor is a desk part whose only job is
+to fence the agent: such a part is a candidate to remove. A security
+review's brief quotes this section first.
+
 Each person has a numbered systems desk, `desk01`, `desk02`, and upward.
 The desk holds systems work; the laptop keeps app development and desk-only login keys.
 The desk runs in a location different from production.
