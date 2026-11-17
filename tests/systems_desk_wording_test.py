@@ -8,7 +8,7 @@ A newcomer reads "desk" as furniture. Everything a person reads says
 command names such as `desk01`, `ssh desk01-setup` and `desk01-agent`, and
 file paths, are not prose and stay as they are.
 
-Scanned: README.md; the template's README.md; the `text` code blocks of
+Scanned: README.md; the template's README.md; the `text` code blocks and quoted (>) lines of
 initial_setup/*.md, operating_procedures/*.md and talking_with_the_team.md;
 the string literals of set_up_outside_services/*.go (not *_test.go); and the
 messages that the systems desk's own commands print
@@ -44,14 +44,18 @@ def bare_desk_columns(line):
 
 
 def text_blocks(path):
-    """(line_number, line) for every line inside a ```text block."""
+    """(line_number, line) for every line inside a ```text block, and every
+    quoted line (starting with ">") outside code blocks: the "Tell the
+    person" messages and chapter 0's map are quotes."""
     inside = False
+    in_code = False
     for number, line in enumerate(path.read_text().splitlines(), 1):
         stripped = line.strip()
         if stripped.startswith('```'):
-            inside = (not inside) and stripped[3:].strip() == 'text'
+            in_code = not in_code
+            inside = in_code and stripped[3:].strip() == 'text'
             continue
-        if inside:
+        if inside or (not in_code and stripped.startswith('>')):
             yield number, line
 
 

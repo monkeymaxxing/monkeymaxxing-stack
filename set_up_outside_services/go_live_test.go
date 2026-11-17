@@ -221,7 +221,7 @@ func (h *goLiveHarness) bundleKeys() map[string]bool {
 	return keys
 }
 
-// The whole of sitting 1 on the desk, with one refused value on each screen
+// The whole of the first part of the setup on the desk, with one refused value on each screen
 // that checks one.
 func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	h := newGoLiveHarness(t, true)

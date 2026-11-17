@@ -95,7 +95,7 @@ guide's values: the guide's server listing path, Scaleway's
 `--token-header X-Auth-Token`, and, at a provider whose requests the proxy
 signs, `--provider-api-authentication` and `--provider-api-address` from
 `systems_desk_provider_api_authentication` and
-`systems_desk_provider_api_url`. In the first sitting `util01` uses the
+`systems_desk_provider_api_url`. In the first part of the setup `util01` uses the
 same key. A narrower key for `util01`, as each guide's `util01` section
 describes, is a later choice of the team.
 

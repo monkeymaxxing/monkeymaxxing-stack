@@ -57,7 +57,7 @@ Access.
 | `talking_with_the_team.md` | The Plain English rules, how to talk with the team before, during, and after a step, example messages, and the technical terms |
 | `AGENTS.md` | This file: the rules for every coding agent, and which operating procedure to follow when |
 | `triage_agent_rules.md` | The triage agent's rules, which it reads in full |
-| `initial_setup/` | The setup chapters, done once in order: chapters 1 to 9 are the first sitting, which puts the app live. Alerts, the triage agent, the status page and chapter 10 come in later sittings. The `initial_setup/` files record how the system was set up |
+| `initial_setup/` | The setup chapters, done once in order: chapters 1 to 9 are the first part of the setup, which puts the app live. Alerts, the triage agent, the status page and chapter 10 come in later parts. The `initial_setup/` files record how the system was set up |
 | `operating_procedures/` | One file per operating procedure: its steps and its verification, upgrading to a new stack version and assessing the running system included |
 | `CLAUDE.md` | One line, `@AGENTS.md`, so Claude Code reads `AGENTS.md` |
 | `monkeymaxxing_stack_checklist.yml` | Every item of the stack: done, open, or deviated, and why; and, in their own section, the growth and improvement items with their triggers |
@@ -341,7 +341,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   MMHotline's included: never in another file of this repository, a commit
   message, an image, or a log. The person types each secret once, at a hidden
   prompt of `set-up-outside-services` on the desk, never in the chat. In the
-  first sitting, `ssh desk01-setup` asks for each key a website gives and makes
+  the first part of the setup, `ssh desk01-setup` asks for each key a website gives and makes
   every random key itself
   ([chapter 4 (set up your accounts and lock your systems desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)).
   Later, give the person `ssh desk01-secrets`: it asks for each key the vault
@@ -393,7 +393,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   agent would skip the push limit above.
 - **What the triage agent may do without a person** is the team's one
   answer, `what_the_triage_agent_may_do_without_a_person` in
-  `mmx_project_settings.yml` (the triage agent's sitting asks it): `every_fix_waits_for_a_person`,
+  `mmx_project_settings.yml` (the triage agent's part of the setup asks it): `every_fix_waits_for_a_person`,
   `routine_fixes`, or `routine_fixes_and_server_work`. With the third,
   the triage agent replaces a failed server of the pools that
   `triage_agent_server_work` lists, with `replace_failed_servers` (the

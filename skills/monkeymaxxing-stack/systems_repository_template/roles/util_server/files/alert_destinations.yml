@@ -42,5 +42,5 @@ destinations:
 
   # phone_alerts_are_set_up is false in mmx_project_settings.yml, so there is
   # no push destination yet and no alert pretends to reach a phone. The alerts
-  # sitting adds it.
+  # part of the setup adds it.
 {{- end }}

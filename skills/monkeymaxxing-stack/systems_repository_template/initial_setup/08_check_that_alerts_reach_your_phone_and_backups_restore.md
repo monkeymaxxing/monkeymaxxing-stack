@@ -1,20 +1,20 @@
 # Chapter 8: Check that alerts reach your phone and backups restore
 
-**When:** in four sittings.
+**When:** in four parts of the setup.
 
-- **The first sitting** runs only part 1 (read the backup results), right
+- **The first part of the setup** runs only part 1 (read the backup results), right
   after chapter 7 (install everything on the production servers). Then
   chapter 9 puts the app live.
 - **The alerts part of the setup,** when the person says "set up alerts", runs
   part 2 (phone alerts). It needs the domain to show "Active" at
   Cloudflare.
-- **The triage agent's sitting,** when the person asks for it, runs
+- **The triage agent's part of the setup,** when the person asks for it, runs
   part 3 (the triage agent).
-- **The status page's sitting,** when the person asks for it, runs part 4
+- **The status page's part of the setup,** when the person asks for it, runs part 4
   (the status page). It needs the domain to show "Active" too.
 
 Until the alerts part of the setup is done, say plainly that the site has no phone
-alerts, whenever you report on the system. Keep the sittings that are
+alerts, whenever you report on the system. Keep the parts that are
 still open in the README's next actions, so the person sees what is left.
 
 **What this chapter does:** the first backup's and the first restore
@@ -28,7 +28,7 @@ the desk, and run every test. The person makes the outside accounts, types
 each secret at a hidden prompt on the desk, and presses Acknowledge on the
 phone.
 
-**Tell the person when the chapter starts,** in the first sitting:
+**Tell the person when the chapter starts,** in the first part of the setup:
 
 > I am reading the first backup and the first restore drill.
 
@@ -64,7 +64,7 @@ phone.
 
 ## Part 1: Read the backup results
 
-This part runs in the first sitting. The person does nothing.
+This part runs in the first part of the setup. The person does nothing.
 
 1. **Read the first uploads copy.** During chapter 7 (install everything
    on the production servers), MMX's `every_server` run started the first
@@ -414,12 +414,12 @@ You do the rest. It takes about 15 minutes.
 
     **Ask the person:**
 
-    > Last step: your desk joins the monitoring, so you hear when it has trouble too.
+    > Last step: your systems desk joins the monitoring, so you hear when it has trouble too.
     > Please type this in your terminal, plus a code from your phone:
     >
     > `ssh desk01-review`
     >
-    > It shows what changes on your desk: [the short summary]. Type yes.
+    > It shows what changes on your systems desk: [the short summary]. Type yes.
 
     **Tell the person after,** which ends the alerts part of the setup:
 
@@ -431,7 +431,7 @@ You do the rest. It takes about 15 minutes.
 
 ## Part 3: The triage agent
 
-This part is the triage agent's sitting. The person picks what the agent
+This part is the triage agent's part of the setup. The person picks what the agent
 may do alone, makes one key, and types it on the desk.
 
 13. **What the triage agent may do alone.** The answer is
@@ -527,7 +527,7 @@ may do alone, makes one key, and types it on the desk.
 
 ## Part 4: The status page
 
-This part is the status page's sitting. The person runs one Cloudflare
+This part is the status page's part of the setup. The person runs one Cloudflare
 command on the desk, looks at the page, and resolves one test notice.
 
 16. **The page's address.** Set `vars.status_page_host_name` in
@@ -593,7 +593,7 @@ command on the desk, looks at the page, and resolves one test notice.
 
     **Tell the person first:**
 
-    > Next, I post a test notice to your status page. You then close it from your desk, the way you post while `util01` is down.
+    > Next, I post a test notice to your status page. You then close it from your systems desk, the way you post while `util01` is down.
     > Customers can see the test under "Recently resolved" until five later notices push it off.
 
     **Ask the person,** with the `notice_id` the post printed:
@@ -609,16 +609,16 @@ command on the desk, looks at the page, and resolves one test notice.
     once, the same way as the post, because customers must not see an open
     test. Then fix the person's posting key with step 17's command.
 
-    **Tell the person after,** which ends the status page's sitting:
+    **Tell the person after,** which ends the status page's part of the setup:
 
-    > Your status page works: [the page's link]. You can post to it from MMHotline, and from your desk while `util01` is down.
+    > Your status page works: [the page's link]. You can post to it from MMHotline, and from your systems desk while `util01` is down.
 
     **Check:** the page says "Everything is working." again, with the
     test under "Recently resolved". Mark `status_page_for_customers` done.
 
 ## If something is different
 
-- **The domain is still pending:** in the first sitting, part 1 needs
+- **The domain is still pending:** in the first part of the setup, part 1 needs
   nothing from the domain. Parts 2 and 4 wait, as
   [Before you start](#before-you-start) says.
 - **A settings part fails to apply** (steps 8, 15 and 18): read the reason
@@ -639,7 +639,7 @@ command on the desk, looks at the page, and resolves one test notice.
 
 **Go live first, alerts the same day.** The site goes live without phone
 alerts, and the alerts part of the setup adds them in about 15 minutes. Reason: the
-first sitting is long already, and each extra account in it is one more
+first part of the setup is long already, and each extra account in it is one more
 chance to stop before the site is live.
 
 **The button until the triage agent's settings.** `util01`'s helper runs
@@ -666,5 +666,5 @@ recovery time, not the time to recover the whole site.
 account, so the page works while every server is down, and the desk can
 post with the person's own R2 key while `util01` is down.
 
-Next, in the first sitting: [Chapter 9: Go live](09_go_live.md), once
+Next, in the first part of the setup: [Chapter 9: Go live](09_go_live.md), once
 part 1's checks passed.

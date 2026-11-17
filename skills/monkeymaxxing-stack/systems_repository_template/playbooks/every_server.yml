@@ -680,7 +680,7 @@ fleet_stages:
   # the hub.
   # The Pushover keys go onto util01 before the hub validates its candidate
   # configuration. The stage is left out while phone_alerts_are_set_up is
-  # false in mmx_project_settings.yml, so the first sitting needs no
+  # false in mmx_project_settings.yml, so the first part of the setup needs no
   # Pushover key in the vault: `secrets usage` lists the keys only for a
   # stage that runs.
   - id: util_push_app_keys

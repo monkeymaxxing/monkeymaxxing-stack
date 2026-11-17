@@ -14,10 +14,10 @@ out every other value from the laptop and the domain, and do the rest.
 **Tell the person when the chapter starts:** the first question. The one
 approval below comes in the next reply, with the second question.
 
-Chapters 1 to 9 are the first sitting, "go live". The first sitting ends
-with the app live, protected and backed up. Phone alerts are the second
-sitting. The triage agent, the status page and the break-in page are later
-sittings, each a short one.
+Chapters 1 to 9 are the first part of the setup, "go live". The first part ends
+with the app live, protected and backed up. Phone alerts are the alerts part of
+the setup. The triage agent, the status page and the break-in page are later
+parts, each a short one.
 [Chapter 0](00_before_you_start_what_we_build_and_how_long_it_takes.md)
 holds the map of the whole system, for when the person asks.
 
@@ -239,10 +239,10 @@ the rules with this team's folders.
      each with its public address, from the provider's prices, as the
      provider guide says. Before the provider credential exists, read the
      provider's public price page or public catalog. Name every paid thing
-     across the sittings: the servers, backup storage, and the one-time
+     across the parts of the setup: the servers, backup storage, and the one-time
      fee for phone alerts. When you leave a paid thing out, say plainly
      that it comes later and has a fee. Reason: a paid service that
-     appears mid-sitting feels like a trick. Chapter 6 reads the prices
+     appears in the middle of a part feels like a trick. Chapter 6 reads the prices
      again with the API.
 
    **Ask the person:**
@@ -350,7 +350,7 @@ the rules with this team's folders.
      `chapter 7 (install everything on the production servers), step 10: the team chose the fuller system`.
    - What the triage agent may do,
      `what_the_triage_agent_may_do_without_a_person`, keeps the template's
-     `routine_fixes`. The triage agent's own sitting asks the person.
+     `routine_fixes`. The triage agent's part of the setup asks the person.
 
    The servers' production location and the desk's location go into the
    settings that chapter 3 and chapter 6 name.

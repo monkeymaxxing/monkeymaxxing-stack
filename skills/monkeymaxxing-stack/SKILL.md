@@ -52,9 +52,9 @@ then its first question. The person has already chosen the stack, so do
 not explain the whole project first. [Chapter 0](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
 holds the map, for when the person asks.
 
-The setup comes in sittings. The first sitting, chapters 1 to 9, puts the
-app live, protected and backed up, in a few hours. The second sitting
-adds phone alerts. Later short sittings add the triage agent, the status
+The setup comes in parts. The first part of the setup, chapters 1 to 9, puts the
+app live, protected and backed up, in a few hours. The alerts part of the
+setup adds phone alerts. Later short parts add the triage agent, the status
 page, and chapter 10. Until the alerts part of the setup is done, say plainly that
 the site has no phone alerts.
 

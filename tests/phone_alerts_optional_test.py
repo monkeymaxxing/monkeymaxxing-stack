@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The first sitting needs no Pushover key; the alerts part of the setup adds them.
+"""The first part of the setup needs no Pushover key; the alerts part of the setup adds them.
 
   MMX_BINARY=/path/to/mmx python3 tests/phone_alerts_optional_test.py
 
 phone_alerts_are_set_up is false in mmx_project_settings.yml until the alerts
-sitting. While false: `mmx secrets usage` does not ask for
+part of the setup. While false: `mmx secrets usage` does not ask for
 mmwatchdog_pushover_user_or_group_key, and the fleet hub's alert_destinations
 file has no push destination (so no alert pretends to reach a phone). While
 true, the key is needed and the push destination is there, unchanged.
@@ -38,7 +38,7 @@ def mmx():
     return binary
 
 
-class PhoneAlertsAreOptionalInTheFirstSitting(unittest.TestCase):
+class PhoneAlertsAreOptionalInTheFirstPartOfTheSetup(unittest.TestCase):
     def project(self, phone_alerts_are_set_up):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -66,10 +66,10 @@ class PhoneAlertsAreOptionalInTheFirstSitting(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
 
-    def test_the_vault_needs_no_pushover_key_before_the_alerts_sitting(self):
+    def test_the_vault_needs_no_pushover_key_before_the_alerts_part_of_the_setup(self):
         self.assertNotIn('mmwatchdog_pushover_user_or_group_key', self.missing(self.project(False)))
 
-    def test_the_vault_needs_the_pushover_key_once_the_alerts_sitting_set_it(self):
+    def test_the_vault_needs_the_pushover_key_once_the_alerts_part_of_the_setup_set_it(self):
         self.assertIn('mmwatchdog_pushover_user_or_group_key', self.missing(self.project(True)))
 
     def test_both_settings_validate(self):
@@ -78,7 +78,7 @@ class PhoneAlertsAreOptionalInTheFirstSitting(unittest.TestCase):
                                     env={k: v for k, v in os.environ.items() if k != 'TMPDIR'})
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_the_hub_has_no_push_destination_before_the_alerts_sitting(self):
+    def test_the_hub_has_no_push_destination_before_the_alerts_part_of_the_setup(self):
         destinations = self.render('alert_destinations.yml', False)
         self.assertNotIn('on_call_push_app', destinations.replace('# ', ''))
         self.assertNotIn('pushover-application-token', destinations)
@@ -87,7 +87,7 @@ class PhoneAlertsAreOptionalInTheFirstSitting(unittest.TestCase):
                            if not line.lstrip().startswith('#'))
         self.assertNotIn('on_call_push_app', settings)
 
-    def test_the_hub_has_the_push_destination_once_the_alerts_sitting_set_it(self):
+    def test_the_hub_has_the_push_destination_once_the_alerts_part_of_the_setup_set_it(self):
         destinations = self.render('alert_destinations.yml', True)
         self.assertIn('on_call_push_app:', destinations)
         self.assertIn('application_token_file: /etc/mmwatchdog/secrets/pushover-application-token', destinations)

@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// go-live is sitting 1's whole part on the desk. The person runs it with
+// go-live is the whole first part of the setup, on the desk. The person runs it with
 // ssh desk01-setup, whose SSH entry runs it as the person. It walks the
 // outside accounts one screen at a time (Cloudflare, the domain's registrar,
 // Backblaze, the registry's token, the apps' keys from outside services),

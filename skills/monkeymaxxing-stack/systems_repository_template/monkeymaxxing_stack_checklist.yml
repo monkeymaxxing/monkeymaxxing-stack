@@ -297,8 +297,10 @@ items:
       window, to the four accounts whose loss would lock the team out of the
       system: Cloudflare, the server provider, Backblaze, and the Git host; the
       password manager also holds the recovery passphrase, which opens the
-      recovery bundle with the shared console password and a copy of each
-      configured pgBackRest cipher passphrase.
+      recovery bundle, and the shared root console password once a rotation
+      has made a new one. The recovery bundle holds the rest of what a lost
+      systems desk needs, including the pgBackRest cipher passphrase, so the
+      password manager keeps no cipher passphrase.
     waits_for: the initial setup
 
   - id: systems_desk_ready
@@ -314,8 +316,9 @@ items:
       and both API proxies without reading personal private keys or tokens;
       run-mmx-on-the-servers selects the pushed main commit and cannot enter a desk;
       the person's loopback self-management works; the desk reports to
-      MMWatchdog; the laptop's temporary repository, MMX, provider token,
-      provider CLI credentials, and first-boot payload are cleared;
+      MMWatchdog; the laptop's setup folder (the bootstrap copy and the key
+      command), provider token, provider CLI credentials, and first-boot
+      payload are cleared, while the laptop keeps MMX and doubleshell;
       the desk has no registry publishing login and no app test or build
       tools (without CI, tests and builds run in containers on the laptop).
       The details of the desk's login protections, such as the refusal of a
@@ -323,17 +326,22 @@ items:
     waits_for: chapter 3 (make your server account and your systems desk), then chapter 7 (install everything on the production servers) for monitoring enrollment, then the real access and cleanup checks
 
   - id: systems_desk_recovery_items_saved
-    title: The recovery items are in the team password manager
+    title: The recovery bundle is saved, and its passphrase is in the team password manager
     state: open
     part: setup
-    protects_against: losing the only way to administer surviving production servers when a phone, a laptop, or a desk is lost
+    protects_against: losing the only way to administer surviving production servers when a phone, a laptop, or a systems desk is lost
     verification: >-
-      the password manager holds the phone-code secret, production SSH key,
-      desk WireGuard key, vault passphrase, and Git-host
-      recovery access, each saved by the person while the coding agent named
-      the item and its label; the recovery bundle holds the shared root console password and a copy
-      of the production pgBackRest cipher passphrase, and the person saved
-      the recovery passphrase that opens it.
+      recovery_bundle.age is in the systems repository on the main copy, with
+      a copy in the locked backup bucket at the backup provider. It holds the
+      vault passphrase, the production SSH private key, the systems desk's
+      WireGuard private key, the server provider credential, the systems
+      desk's Cloudflare token, the shared root console password, the phone
+      code's emergency codes, the production pgBackRest cipher passphrase,
+      and the read-only Backblaze key that restores the backups, never the
+      Backblaze master key. The set-up-outside-services command lists any
+      item the bundle lacks, and the person typed the recovery passphrase
+      back to prove they saved it in the team password manager as the one
+      item that opens the bundle.
     waits_for: the initial setup
 
   - id: cloudflare_account
@@ -1221,9 +1229,11 @@ growth_and_improvement_items:
       server first, serving before the database servers changed, then a
       database server and switch_database_primary, then the other app
       servers, staging01, and util01 last, with seconds of interruption at
-      the switchover; each systems desk was rebuilt at the new provider with
-      rebuild_a_systems_desk and made its first approved
-      review-and-apply-the-systems-desk-settings; the weekly drill made restore01 at the new
+      the switchover; the first systems desk, whose keys are in the recovery bundle, was
+      rebuilt at the new provider with rebuild_a_systems_desk, and its
+      bootstrap recorded its first desk review itself; each teammate joined
+      with a new systems desk, as "Joining" in add_or_remove_a_team_member
+      says, and the old desk was removed; the weekly drill made restore01 at the new
       provider; and the old provider holds no server of the system, no
       systems desk included, and no API token of the system.
     trigger: a cheaper or closer provider, or a decision to leave the current one
@@ -1296,7 +1306,7 @@ growth_and_improvement_items:
       replacement desk restores production access and host identity; status
       posting works from a browser while util01 works and from a replacement
       desk while util01 is down; no untested recovery path is marked done.
-    trigger: a real recovery, or a recovery practice that the team chooses; the recovery items are saved in setup (systems_desk_recovery_items_saved)
+    trigger: a real recovery, or a recovery practice that the team chooses; the recovery bundle is saved in setup (systems_desk_recovery_items_saved)
 
   # The team repeats the bad-change recovery drill and the util01 rebuild
   # drill every six months. Stricter teams pick every three months.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sitting 1 asks for no approval of the first release; one setting puts it back.
+"""The first part of the setup asks for no approval of the first release; one setting puts it back.
 
   python3 tests/first_release_approval_test.py
 

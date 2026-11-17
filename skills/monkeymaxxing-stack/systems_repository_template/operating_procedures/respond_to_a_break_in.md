@@ -968,7 +968,7 @@ Answer these questions once, in a password-manager page named **Break-in respons
 
 1. **The coding agent proposes every answer from what it knows:** the people in
    `mmhotline_settings.yml`, the status page's host name, the accounts and
-   recovery items the setup saved, and this procedure's place in the systems
+   the recovery bundle the setup saved, and this procedure's place in the systems
    repository.
    Reason: correcting a filled-in page takes minutes; a blank page of
    questions waits for days.
@@ -985,7 +985,7 @@ The questions:
 - Which lawyer, insurer, and business owner must the team contact?
 - Which notices does the business owe, to whom, by when, and who confirms those requirements?
 - Where are the provider, Git, Cloudflare, registry, storage and password-manager recovery logins?
-- Where are the backup passphrase, desk recovery items and this procedure?
+- Where are the recovery passphrase, the recovery bundle and this procedure?
 - Which public status-page address can customers use?
 - Where will the team record decisions, evidence locations, times and notices during an incident?
 

@@ -115,7 +115,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    The CNAME's content is the tunnel's `TUNNEL_ID.cfargotunnel.com`
    (`POST .../zones/ZONE_ID/dns_records` with `"proxied": true`).
    Never create the status page's DNS
-   record yourself: the status page's own sitting creates the record,
+   record yourself: the status page's part of the setup creates the record,
    through `mmhotline status-page set-up`, as
    [chapter 8, part 4](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-4-the-status-page)
    says.
@@ -173,7 +173,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    proxy. `company_email` stays `open` until the person's first sign-in in
    the alerts part of the setup, because the item's `verification` includes that
    sign-in. A team without email at its domain adds it in the alerts
-   sitting too.
+   part of the setup too.
 
 5. **MMHotline's Access settings,** in `mmhotline_settings.yml`, which came
    with the template ([chapter 7 (install everything on the production servers)](07_install_everything_on_the_production_servers.md#chapter-7-install-everything-on-the-production-servers) fills in the rest):

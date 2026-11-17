@@ -90,7 +90,7 @@ vars:
   # sets false, because the deploy's health check keeps users on the old
   # version when the new version fails.
   production_releases_wait_for_a_persons_approval: true
-  # The first release, at the end of the first sitting (chapter 9), asks for
+  # The first release, at the end of the first part of the setup (chapter 9), asks for
   # no approval while this is false. Reason: the person approved the app's
   # changes in chapter 2, and the first release is that approved image.
   # Setting it to true asks again, once, before the first release. Like the
@@ -108,7 +108,7 @@ vars:
   # (pushover_application_token and mmwatchdog_pushover_user_or_group_key).
   # While false, util01 and the other servers need no Pushover key: the fleet
   # hub has no push destination, so no alert pretends to reach a phone.
-  # Reason: the first sitting goes live without alerts, and a person who has
+  # Reason: the first part of the setup goes live without alerts, and a person who has
   # no Pushover account yet should not have to make one to get the site up.
   # The alerts part of the setup sets it to true in the same change that adds the keys.
   phone_alerts_are_set_up: false

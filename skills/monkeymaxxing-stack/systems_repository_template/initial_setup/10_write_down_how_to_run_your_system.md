@@ -1,7 +1,7 @@
 # Chapter 10: Write down how to run your system
 
-**When:** in the last sitting, after chapter 9 (go live) and the alerts
-sitting, when the person asks for it. The person's part is two answers:
+**When:** in the last part of the setup, after chapter 9 (go live) and the alerts
+part, when the person asks for it. The person's part is two answers:
 correcting the break-in response page, and saying who does each next
 action and when.
 
@@ -172,7 +172,7 @@ and when.
    **Tell the person first:**
 
    > Your operating guide is in [the README's link]. To come back later, open me on this laptop and ask in plain words, such as "[a request from the README]".
-   > I ask for one code from your phone when I need your desk. The README lists the common requests.
+   > I ask for one code from your phone when I need your systems desk. The README lists the common requests.
 
    **Check:** the person can name where the README is and how to start a
    new session.

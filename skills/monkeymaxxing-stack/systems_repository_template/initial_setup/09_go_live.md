@@ -2,7 +2,7 @@
 
 **When:** after chapter 8's part 1 (read the backup results), once its
 checks passed and Cloudflare shows the domain as "Active". Chapter 9 ends
-the first sitting.
+the first part of the setup.
 
 **What this chapter does:** the app has run on the servers since
 chapter 7 (install everything on the production servers), but nobody has
@@ -57,7 +57,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    [Making a change](../AGENTS.md#making-a-change) steps). Then
    `public_sites` exists on `util01`, and an app that stops answering sends
    an `sos` alert. The alert wakes the person on call only after the alerts
-   sitting.
+   part of the setup.
 
    **Tell the person:** no message, because step 2's screen gives the
    result.
@@ -167,7 +167,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
 
    **Tell the person after,** which also ends the chapter:
 
-   > Your first release is live. Your setup's first sitting is done.
+   > Your first release is live. The first part of your setup is done.
    > When you are ready, say "set up alerts", so a broken site wakes you.
 
    **Check:** `restore_drill_checks_data_people_create` waits for its
@@ -193,5 +193,5 @@ copy holds the data people create. A query for recent data, such as an
 order from the last two days, also fails when a restore brings back an
 old database.
 
-Next, in a later sitting: [Chapter 10: Write down how to run your system](10_write_down_how_to_run_your_system.md).
+Next, in a later part of the setup: [Chapter 10: Write down how to run your system](10_write_down_how_to_run_your_system.md).
 The alerts part of the setup comes first: [chapter 8, part 2](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-phone-alerts).

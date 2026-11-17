@@ -107,7 +107,7 @@ inputs:
     type: string
     required: true
     secret: true
-  # false in the first sitting: the fleet hub then has no push destination.
+  # false in the first part of the setup: the fleet hub then has no push destination.
   # The Pushover keys come from the role util_push_app_keys, which the
   # fleet stage util_push_app_keys of every_server.yml runs before this role
   # and only while this is true.

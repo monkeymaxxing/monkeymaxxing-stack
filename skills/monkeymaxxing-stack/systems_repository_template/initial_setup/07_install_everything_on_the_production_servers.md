@@ -63,7 +63,7 @@ chapter.
    **Tell the person first.** Say what the triage agent may do by itself,
    from `what_the_triage_agent_may_do_without_a_person`. The example below
    is `routine_fixes`, the template's default until the triage agent's
-   sitting:
+   part of the setup:
 
    > Next, I write MMHotline's first settings: who is on call, and what the triage agent may fix by itself.
    > With the default answer, the triage agent makes only fixes that cannot lose data, such as restarting a failed service or freeing disk space, and reports each fix.
@@ -410,9 +410,13 @@ chapter.
 
    `reboot_util01_after_updates` puts `util01` in MMWatchdog maintenance,
    which suppresses `util01`'s own alerts during the reboot.
-   The hub-outage alerters can still send alerts: they already send a push
-   alert to everyone in the Pushover group if `util01` stays down for more
-   than two minutes.
+   In the first part of the setup no push alert exists yet:
+   `phone_alerts_are_set_up` is `false`, no Pushover key is saved, and the
+   hub-outage alerters have no push destination, so nothing alerts a phone
+   if `util01` stays down. The run's own return-to-service check tells you
+   whether `util01` came back. Once the alerts part of the setup has run, the
+   hub-outage alerters send a push alert to everyone in the Pushover group
+   if `util01` stays down for more than two minutes.
    While another run holds `util01`'s lock, `reboot_util01_after_updates`
    stops before changing anything. Let the running job finish, pull the
    job's commits, and try `reboot_util01_after_updates` again.
@@ -422,7 +426,7 @@ chapter.
    **Tell the person first,** before `util01`'s reboot:
 
    > Next, `util01` restarts. The restart takes about a minute.
-   > If `util01` stays down longer than two minutes, two other servers alert every phone in your Pushover group. That alert means `util01` did not come back.
+   > Phone alerts are not set up yet, so no alert reaches your phone if `util01` does not come back. I check that it did, and I tell you.
 
    **Tell the person after:**
 
@@ -465,12 +469,12 @@ chapter.
    full desk playbook joins the desk to MMWatchdog. It runs as root on the
    desk, so the person runs it, with `ssh desk01-review` and a phone code.
    Ask for it in the alerts part of the setup, together with the other alert steps,
-   not in the first sitting. After it ran, verify that `desk01` appears in
+   not in the first part of the setup. After it ran, verify that `desk01` appears in
    the fleet (`sudo mmwatchdog fleet` on `util01`). The test of the desk's
    wrong-code alert is optional:
    [Check my system's protections](../operating_procedures/assess_a_running_system_and_recommend_changes.md#check-my-systems-protections).
 
-   **Tell the person:** no message in the first sitting.
+   **Tell the person:** no message in the first part of the setup.
 
    **Check:** in the alerts part of the setup, `sudo mmwatchdog fleet` on `util01`
    lists `desk01`.

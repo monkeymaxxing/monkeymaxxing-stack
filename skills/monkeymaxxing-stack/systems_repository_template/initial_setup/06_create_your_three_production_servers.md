@@ -122,7 +122,7 @@ nothing, unless the prices rose since chapter 1 (step 3).
    replace a server with a bigger server. Commit the limits.
 
    `what_the_triage_agent_may_do_without_a_person` keeps
-   `routine_fixes` from chapter 1. The triage agent's own sitting asks the
+   `routine_fixes` from chapter 1. The triage agent's part of the setup asks the
    person, with the three answers and a recommendation.
 
    **Tell the person after:** no message, because step 4 starts with the

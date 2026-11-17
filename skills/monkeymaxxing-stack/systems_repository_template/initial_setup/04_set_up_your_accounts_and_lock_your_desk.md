@@ -186,7 +186,7 @@ domain at Cloudflare, its DNS records, and the lock.
    and adds One-time PIN, Access's login method that emails a code. When
    an app keeps uploaded files, it waits until R2 is on, saying so, and
    then makes the app's uploads bucket and its key in the same run. Then
-   it deletes the link token. The status page waits for its own sitting.
+   it deletes the link token. The status page waits for its own part of the setup.
 
    When the results file shows the step `cloudflare` done:
 
@@ -305,7 +305,8 @@ domain at Cloudflare, its DNS records, and the lock.
    name them, with Object Lock on the database backups' bucket and the
    uploads' copy, checks each lock with a test file, saves each server's
    own narrow key in the vault, and forgets the master key. The master key
-   is never stored, so nothing needs deleting.
+   is never stored, not in the vault and not in the recovery bundle, so
+   nothing needs deleting.
 
    **Check:** the results file shows Backblaze done, with each lock
    checked.
@@ -387,8 +388,8 @@ domain at Cloudflare, its DNS records, and the lock.
    **Check:** the results file shows the Git host token done, and
    `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`
    lists no key `not defined` that chapters 5 to 9 need. The keys of the
-   later sittings, such as Pushover's and the triage agent's, stay
-   `not defined` until their sitting.
+   later parts of the setup, such as Pushover's and the triage agent's, stay
+   `not defined` until their part of the setup.
 
 7. **The lock.** The command shows two last steps. First the recovery
    passphrase:
@@ -548,7 +549,7 @@ domain at Cloudflare, its DNS records, and the lock.
    **Tell the person:**
 
    > Thank you. Now I create your servers, install everything, set up your backups, prove a restore, and put your app live.
-   > That takes about an hour. Your laptop may sleep: the work continues on your desk.
+   > That takes about an hour. Your laptop may sleep: the work continues on your systems desk.
    > I tell you what I am doing, one line at a time.
 
    **Check:** you started chapter 5.
@@ -588,7 +589,8 @@ So no key waits in an open browser tab.
 provider and Cloudflare, so a lost server account leaves the backups safe.
 
 **The master key is never stored.** Every server gets its own narrow key,
-and nothing needs the master key again.
+and nothing needs the master key again. The recovery bundle holds only the
+read-only Backblaze key that restores the backups, never the master key.
 
 **MMHotline's backup bucket stays unlocked.** Litestream (checked with
 0.5.18 on 2026-11-12) sends no checksum with its uploads, and B2 refuses

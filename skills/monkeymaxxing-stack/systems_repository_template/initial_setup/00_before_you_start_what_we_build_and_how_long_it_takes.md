@@ -7,7 +7,7 @@ with this map.
 **What this chapter does:** the person sees what the setup builds, from a
 web app and no servers to the system the initial setup builds: `app001`, `db01`, and
 `util01`, a systems desk per person, plus `staging01` and `app002` if the team chooses the fuller
-system. The person also sees the chapters, the sittings, and how long they take.
+system. The person also sees the chapters, the parts of the setup, and how long they take.
 The first page of the [team's `README.md`](../README.md#what-the-monkeymaxxing-stack-builds)
 describes that system; this chapter's map follows the first page's words.
 
@@ -143,7 +143,7 @@ check.
 >   working meanwhile. Chapter 9 needs the move to be finished.
 > - The first server setup, in chapter 7, takes most of an hour, mostly
 >   for the servers' security updates. Your laptop may sleep: the work
->   continues on your desk.
+>   continues on your systems desk.
 >
 > After the first part and the alerts part, your site is live, alerts reach your phone, and your
 > backups are proven to restore. After the setup, your team has one

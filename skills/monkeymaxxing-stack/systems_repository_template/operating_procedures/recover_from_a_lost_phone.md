@@ -19,7 +19,7 @@ each term. Pushover is the push app that puts the alerts on the phone.
 ## Tell the person before you start
 
 > First we put the alerts on your new phone and send a test alert, so an urgent alert reaches you again.
-> Then you log in to your desk with an emergency code and make a new phone code.
+> Then you log in to your systems desk with an emergency code and make a new phone code.
 > The new phone code stops the old phone's codes from working, even if someone else has the old phone.
 
 ## Before you start

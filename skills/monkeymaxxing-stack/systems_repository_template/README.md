@@ -290,8 +290,8 @@ four new accounts and already has four accounts.
   Pushover.
 - **Four accounts your team already has:** your domain's registrar, your
   team's password manager, your Git host, and your coding agent's provider.
-  The password manager holds the logins and the recovery items for every
-  account and for your systems desk.
+  The password manager holds the logins for every
+  account, and the recovery passphrase that opens your systems desk's recovery bundle.
 - **Two more accounts only when needed:** email addresses at your company's
   domain, for the sign-in to MMHotline's dashboard, and an email sending
   service when your app sends email.

@@ -46,9 +46,9 @@ inventory's real names and addresses, and the next unused desk name.
 
 ## Tell the person before you start
 
-> Your desk is lost, so I build a new one, `desk02`, and give it your old desk's keys back. Your servers keep running.
+> Your systems desk is lost, so I build a new one, `desk02`, and give it your old systems desk's keys back. Your servers keep running.
 > You do five small things: open your recovery bundle with your recovery passphrase, paste three items from it,
-> make one Cloudflare key, scan a new QR code with your phone, and confirm the old desk's number at Hetzner.
+> make one Cloudflare key, scan a new QR code with your phone, and confirm the old systems desk's number at your server provider.
 > I tell you each one when it comes.
 
 ## Prepare on the laptop
@@ -200,7 +200,7 @@ inventory's real names and addresses, and the next unused desk name.
 13. **The person gives the desk its production key and the vault
     passphrase,** from the recovery bundle. Tell the person:
 
-    > I'll give you a few commands for your laptop terminal, then a few for the desk.
+    > I'll give you a few commands for your laptop terminal, then a few for the systems desk.
     > Each laptop command asks for your recovery passphrase. Nothing secret shows on screen.
 
     The person runs every line of
