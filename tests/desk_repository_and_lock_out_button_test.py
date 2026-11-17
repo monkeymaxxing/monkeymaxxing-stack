@@ -473,6 +473,12 @@ class PullIntoTheDesksCopy(unittest.TestCase):
             patcher = patch.object(DESK_REVIEW, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        # Root reaches the stand-in main copy by its path; on a desk,
+        # main_copy_url gives root@util01's address:main_copy_path_on_util01.
+        self.main_copy_url = str(self.origin)
+        patcher = patch.object(DESK_REVIEW, 'main_copy_url', lambda repository, revision: self.main_copy_url, create=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def run_git(self, *arguments, cwd):
         subprocess.run(['git', '-c', 'commit.gpgsign=false', '-c', 'user.name=A', '-c', 'user.email=a@example.com', *arguments],
@@ -521,8 +527,66 @@ class PullIntoTheDesksCopy(unittest.TestCase):
         self.assertFalse((self.repository/'unpushed.yml').exists())
         self.assertEqual((self.repository/'.mmx/history').read_text(), 'a run\n')
 
+    def test_after_util01_root_runs_only_what_reached_the_main_copy(self):
+        """The coding agent points its checkout's origin, and its
+        origin/main, at a commit that never reached util01."""
+        elsewhere = Path(self.directory.name)/'agent-made.git'
+        self.run_git('init', '--quiet', '--bare', '-b', 'main', str(elsewhere), cwd=self.directory.name)
+        (self.checkout/'inventory.yml').write_text('never pushed to util01\n')
+        self.run_git('commit', '--quiet', '-am', 'not pushed', cwd=self.checkout)
+        self.run_git('push', '--quiet', str(elsewhere), 'main', cwd=self.checkout)
+        self.run_git('remote', 'set-url', 'origin', str(elsewhere), cwd=self.checkout)
+        self.run_git('update-ref', 'refs/remotes/origin/main', 'HEAD', cwd=self.checkout)
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'two\n')
+        self.assertIn('Pulled main from the main copy on util01', said)
+
+    def test_once_root_pulled_from_util01_removing_the_checkouts_origin_does_not_turn_it_back(self):
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.run_git('remote', 'remove', 'origin', cwd=self.checkout)
+        (self.checkout/'inventory.yml').write_text('only on the desk\n')
+        self.run_git('commit', '--quiet', '-am', 'the checkout says it is the main copy again', cwd=self.checkout)
+        self.commit('three\n', 'third')
+        pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
+        self.assertTrue(pulled, said)
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'three\n')
+
+    def test_root_reaches_util01_with_the_private_socket_and_the_committed_host_keys(self):
+        """The real main_copy_url, on the template's values, written as JSON
+        (which is YAML), so the test needs no YAML library."""
+        settings_text = (T/'mmx_project_settings.yml').read_text()
+        inventory_text = (T/'inventories/servers.yml').read_text()
+        self.assertRegex(settings_text, r'(?m)^default_inventory: servers\b')
+        self.assertRegex(settings_text, r'(?m)^  systems_repository:\n(    .*\n)*?    main_copy_path_on_util01: /var/lib/systems_repository.git$')
+        self.assertRegex(inventory_text, r'(?m)^  util_server:\n    nodes: \[util01\]$')
+        self.assertRegex(inventory_text, r'(?m)^  util01:\n    address: 10.20.0.1 .*\n(    .*\n)*?    ssh_user: root$')
+        copy = Path(self.directory.name)/'template'
+        (copy/'inventories').mkdir(parents=True)
+        (copy/'mmx_project_settings.yml').write_text(json.dumps({'default_inventory': 'servers', 'vars': {
+            'systems_repository': {'main_copy_path_on_util01': '/var/lib/systems_repository.git'}}}))
+        (copy/'inventories/servers.yml').write_text(json.dumps({'nodes': {'util01': {'address': '10.20.0.1', 'ssh_user': 'root'}},
+                                                                'groups': {'util_server': {'nodes': ['util01']}}}))
+        self.run_git('init', '--quiet', '-b', 'main', cwd=copy)
+        self.run_git('add', '.', cwd=copy)
+        self.run_git('commit', '--quiet', '-m', 'template values', cwd=copy)
+        patch.stopall()
+        with patch.dict(sys.modules, {'yaml': stand_in_yaml()}):
+            self.assertEqual(DESK_REVIEW.main_copy_url(copy, 'HEAD'), 'root@10.20.0.1:/var/lib/systems_repository.git')
+            (copy/'inventories/servers.yml').write_text(json.dumps({'nodes': {'util01': {'address': '-oProxyCommand=x', 'ssh_user': 'root'}},
+                                                                    'groups': {'util_server': {'nodes': ['util01']}}}))
+            self.run_git('commit', '--quiet', '-am', 'an option for an address', cwd=copy)
+            with self.assertRaisesRegex(DESK_REVIEW.Stop, 'names no main copy on util01'):
+                DESK_REVIEW.main_copy_url(copy, 'HEAD')
+        ssh = DESK_REVIEW.ssh_to_the_main_copy('/tmp/k').split()
+        for option in ('IdentityAgent=/run/desk-ssh-agent/private.sock', 'IdentitiesOnly=yes', 'UserKnownHostsFile=/tmp/k',
+                       'StrictHostKeyChecking=yes', 'ForwardAgent=no'):
+            self.assertIn(option, ssh)
+        self.assertEqual(ssh[:3], ['ssh', '-F', '/dev/null'])
+
     def test_an_unreachable_util01_stops_the_pull_and_keeps_the_copy(self):
-        self.run_git('remote', 'set-url', 'origin', str(self.origin) + '-gone', cwd=self.checkout)
+        self.main_copy_url = str(self.origin) + '-gone'
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
         self.assertFalse(pulled)
         self.assertTrue(said.startswith('The pull of main from the main copy on util01 did not work (git said: '), said)

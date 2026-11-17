@@ -60,16 +60,15 @@ DESK_COPY = Path('/var/lib/systems-desk/systems_repository')
 # Where the bootstrap's copy of the systems repository is, which the desk
 # copy starts from.
 CODING_AGENT_CHECKOUT = Path('/home/coding-agent/systems_repository')
-# Root's Git reads only local repositories: it fetches pushed main from a
-# copy of the coding agent's checkout (FETCH_PUSHED_MAIN), never from util01
-# itself.
+# Root's Git runs only in root's own repositories. It fetches pushed main
+# from the main copy on util01 over SSH (pull_main_into_the_desks_copy), and
+# before util01 exists from a copy of the coding agent's checkout
+# (FETCH_PUSHED_MAIN), never with Git in the checkout.
 GIT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8',
                    'GIT_CONFIG_GLOBAL': os.devnull}
-# The coding agent's own Git, as its logins get it (sshd.conf), which
-# reaches the main copy on util01 (origin of its checkout) with the
-# production key through the relay socket and util01's committed host key
-# (ssh.conf). Root runs it only to bring the checkout's origin/main up to
-# date, so root never runs Git inside the coding agent's checkout.
+# The coding agent's own Git, as its logins get it (sshd.conf). Root runs it
+# only to ask whether the checkout has an origin, until root's first pull
+# from util01, so root never runs Git inside the coding agent's checkout.
 CODING_AGENT_GIT = ['/usr/sbin/runuser', '-u', 'coding-agent', '--', GIT, '-c', 'core.hooksPath=/dev/null']
 CODING_AGENT_GIT_ENVIRONMENT = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/home/coding-agent', 'LANG': 'C.UTF-8',
                                 'SSH_AUTH_SOCK': '/run/desk-ssh-agent/socket',
@@ -339,16 +338,100 @@ def as_the_coding_agent(*arguments):
                           env=CODING_AGENT_GIT_ENVIRONMENT)
 
 
+# Root-owned, in the desk copy's .git: written at the first pull that
+# finds util01, so the coding agent cannot turn root back to its checkout
+# by removing the checkout's origin.
+PUSHED_MAIN_COMES_FROM_UTIL01 = '.git/pushed-main-comes-from-util01'
+
+
+def main_copy_url(repository, revision):
+    """The main copy on util01, as root reaches it over SSH: util01's
+    address and SSH user from the inventory, and
+    systems_repository.main_copy_path_on_util01 from the settings, at
+    revision of the desk copy: HEAD, pushed main as root last fetched it,
+    or on a copy with no commit yet the checkout's main just read as data.
+    Never the coding agent's remote.origin.url."""
+    import yaml  # python3-yaml, which the desk role installs
+
+    def read(name):
+        shown = git(repository, 'show', '%s:%s' % (revision, name))
+        if shown.returncode:
+            raise Stop('%s is missing at %s' % (name, revision))
+        loaded = yaml.safe_load(shown.stdout)
+        return loaded if isinstance(loaded, dict) else {}
+    settings = read('mmx_project_settings.yml')
+    variables = settings.get('vars') if isinstance(settings.get('vars'), dict) else {}
+    path = (variables.get('systems_repository') or {}).get('main_copy_path_on_util01')
+    inventory = read('inventories/%s.yml' % settings.get('default_inventory', ''))
+    nodes = ((inventory.get('groups') or {}).get('util_server') or {}).get('nodes') or ['']
+    node = (inventory.get('nodes') or {}).get(nodes[0]) or {}
+    address, user = node.get('address'), node.get('ssh_user') or 'root'
+    for value in (path, address, user):
+        if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_./-]+', value) or value.startswith('-'):
+            raise Stop('the desk copy names no main copy on util01 that root can reach (util01\'s address %s, ssh_user %s, '
+                       'main_copy_path_on_util01 %s)' % (visible(str(address)), visible(str(user)), visible(str(path))))
+    return '%s@%s:%s' % (user, address, path)
+
+
+def ssh_to_the_main_copy(known_hosts):
+    """Root's SSH to the main copy on util01: the production key through the
+    person's private agent socket, as the desk playbook reads util01's join
+    code, and only the host keys in known_hosts."""
+    return ('ssh -F /dev/null -o IdentityAgent=%s -o IdentityFile=/etc/systems-desk/production_key.pub -o IdentitiesOnly=yes '
+            '-o UserKnownHostsFile=%s -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes -o BatchMode=yes '
+            '-o ForwardAgent=no -o ClearAllForwardings=yes -o ConnectTimeout=10' % (PRIVATE_AGENT_SOCKET, known_hosts))
+
+
 def pull_main_into_the_desks_copy(repository=DESK_COPY):
     """Makes the desk copy pushed main: fetch, then reset, keeping only the
-    run history in .mmx. Pushed main is main of the main copy on util01,
-    origin of the coding agent's checkout, which the checkout fetches first;
-    before util01 exists the checkout has no origin and its own main is
-    pushed main. Returns whether the pull worked, and one plain sentence
-    that says what happened or what is in the way."""
-    has_origin = as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0
-    if has_origin:
-        fetched = as_the_coding_agent('fetch', '--quiet', '--no-tags', 'origin', 'main')
+    run history in .mmx. Returns whether the pull worked, and one plain
+    sentence that says what happened or what is in the way.
+
+    Pushed main is main of the main copy on util01, which root fetches
+    itself, into this root-owned copy, with main_copy_url's address. Root
+    never reads a ref the coding agent writes for it, so every commit root
+    runs is in the main copy's log of main.
+
+    Before util01 exists, the coding agent's checkout has no origin and is
+    the main copy, so its own main is pushed main, which root reads as data
+    (FETCH_PUSHED_MAIN). The first pull that finds an origin in the checkout
+    writes PUSHED_MAIN_COMES_FROM_UTIL01, and from then on root fetches from
+    util01 only, also while util01 is lost: a desk review then waits for
+    the new util01, and the lock-out button goes on with the copy it has.
+    util01's host key comes from ssh/known_hosts of both the desk copy and
+    the checkout's main, so a rebuilt util01's committed key works."""
+    if not (repository/'.git').is_dir():
+        # A desk from an earlier Stack version, whose desk reviews ran in the
+        # person's own checkout, gets its desk copy at its first such pull.
+        repository.mkdir(mode=0o700, parents=True, exist_ok=True)
+        repository.chmod(0o700)
+        git(repository, 'init', '--quiet', '-b', 'main')
+    marker = repository/PUSHED_MAIN_COMES_FROM_UTIL01
+    from_util01 = marker.exists() or as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0
+    # Root reads the checkout, which coding-agent owns, as data only.
+    fetched = subprocess.run([FETCH_PUSHED_MAIN, str(CODING_AGENT_CHECKOUT), str(repository)], text=True, capture_output=True,
+                             env=GIT_ENVIRONMENT)
+    if not from_util01 and fetched.returncode:
+        return False, visible(' '.join(fetched.stderr.split()) or 'The fetch of pushed main did not work.')
+    if from_util01:
+        has_head = git(repository, 'rev-parse', '--verify', '--quiet', 'HEAD').returncode == 0
+        checkout_main = 'FETCH_HEAD' if fetched.returncode == 0 else None
+        known_hosts = ''.join(git(repository, 'show', '%s:ssh/known_hosts' % revision).stdout + '\n'
+                              for revision in ('HEAD' if has_head else None, checkout_main) if revision)
+        try:
+            revision = 'HEAD' if has_head else checkout_main
+            if not revision:
+                raise Stop('the desk copy has no commit yet, and the checkout\'s main could not be read')
+            url = main_copy_url(repository, revision)
+        except Stop as stop:
+            return False, 'The pull of main from the main copy on util01 did not work (%s).' % stop
+        with tempfile.NamedTemporaryFile('w', prefix='util01-known-hosts-') as hosts:
+            hosts.write(known_hosts)
+            hosts.flush()
+            fetched = subprocess.run(['timeout', '--kill-after=5', str(PULL_TIME_LIMIT_SECONDS), GIT, '-c', 'core.hooksPath=/dev/null',
+                                      '-C', str(repository), 'fetch', '--quiet', '--no-tags', '--', url, 'main'],
+                                     text=True, capture_output=True, stdin=subprocess.DEVNULL,
+                                     env={**GIT_ENVIRONMENT, 'GIT_SSH_COMMAND': ssh_to_the_main_copy(hosts.name)})
         if fetched.returncode:
             said = ' '.join((fetched.stderr or fetched.stdout).split())[:400] or 'no message'
             if fetched.returncode in (124, 137):
@@ -356,22 +439,12 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY):
             else:
                 cause = 'git said: %s' % visible(said)
             return False, 'The pull of main from the main copy on util01 did not work (%s).' % cause
-    if not (repository/'.git').is_dir():
-        # A desk from an earlier Stack version, whose desk reviews ran in the
-        # person's own checkout, gets its desk copy at its first such pull.
-        repository.mkdir(mode=0o700, parents=True, exist_ok=True)
-        repository.chmod(0o700)
-        git(repository, 'init', '--quiet', '-b', 'main')
-    # Root reads the checkout, which coding-agent owns, as data only.
-    fetched = subprocess.run([FETCH_PUSHED_MAIN, str(CODING_AGENT_CHECKOUT), str(repository)], text=True, capture_output=True,
-                             env=GIT_ENVIRONMENT)
-    if fetched.returncode:
-        return False, visible(' '.join(fetched.stderr.split()) or 'The fetch of pushed main did not work.')
+        marker.write_text('Root fetches pushed main from the main copy on util01 (review-and-apply-the-systems-desk-settings).\n')
     for arguments in [('reset', '--quiet', '--hard', 'FETCH_HEAD'), ('clean', '--quiet', '-d', '--force', '-x', '--exclude=.mmx')]:
         done = git(repository, *arguments)
         if done.returncode:
             return False, 'git %s in %s did not work: %s' % (arguments[0], repository, visible(' '.join(done.stderr.split())[:400]))
-    if has_origin:
+    if from_util01:
         return True, 'Pulled main from the main copy on util01: the desk\'s copy is at %s.' % current_commit(repository)
     return True, ('Pulled main from the coding agent\'s checkout, the main copy until util01 exists: the desk\'s copy is at %s.'
                   % current_commit(repository))

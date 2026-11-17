@@ -7,9 +7,8 @@ prepares and pushes the one-line inventory commit,
 everyone_locked_out_except_desk: DESK; only the person starts a lock-out
 or its undo.
 
-1. It pulls main from the main copy on util01, through the coding agent's
-   checkout, into the desk's own copy of the systems repository, the one
-   the desk review uses. A break-in must not wait for util01: when the pull
+1. It pulls main from the main copy on util01 into the desk's own copy of
+   the systems repository, the one the desk review uses. A break-in must not wait for util01: when the pull
    fails, the lock-out button says why and uses the desk's copy as it is.
 2. It shows every server of the inventory, one line each, and the desk that
    keeps access, and asks the person to type yes, in the person's own

@@ -677,12 +677,17 @@ sshd journal, which names each root login's key, the reflog says which key pushe
 Before `util01` exists, the first desk's checkout is the main copy: it has no `origin`, `publish-branch-to-main`
 ends at the fast-forward of its `main`, and the vault commands commit there. The `util_server` role makes the empty bare
 repository, MMHotline's clone step skips it while it is empty, and the desk pushes `main` to it after the first run
-and makes it `origin` (chapter 7). The desk's own readers, the button, the WireGuard peers command, the desk review
-and the lock-out button, read pushed `main` from the coding agent's checkout, `origin/main` when it has an origin
-and its own `main` before, so they work before `util01` exists and while it is lost; the desk review and the
-lock-out button first fetch `origin` into the checkout as the coding agent. The WireGuard peers command must read
-the checkout, not `util01`: a rebuilt `util01`'s new WireGuard key is what lets the desk reach it. All four read the
-checkout as data, through `fetch-pushed-main-from-the-coding-agents-checkout`: it copies the checkout's objects and
+and makes it `origin` (chapter 7). The button and the WireGuard peers command read pushed `main` from the coding
+agent's checkout, `origin/main` when it has an origin and its own `main` before, so they work before `util01` exists
+and while it is lost. The WireGuard peers command must read the checkout, not `util01`: a rebuilt `util01`'s new
+WireGuard key is what lets the desk reach it. The desk review and the lock-out button, which run as root, fetch
+`main` from the main copy on `util01` themselves, into root's own desk copy, over SSH as root with the person's
+private agent socket, at the address and path in that copy. Reason: a ref in the coding agent's checkout is one the
+coding agent writes, and a commit root runs must be in the main copy's log of `main`, which the break-in guide reads.
+Before `util01` exists they read the checkout's own `main`; the first pull that finds an `origin` in the checkout
+leaves a root-owned mark in the desk copy, and from then on they fetch from `util01` only. While `util01` is lost, a
+desk review waits for the new one, and the lock-out button goes on with the copy it has. Every reader of the
+checkout reads it as data, through `fetch-pushed-main-from-the-coding-agents-checkout`: it copies the checkout's objects and
 refs into a new bare repository of the reader's own account, fetches the one ref from that copy, and deletes it.
 Reason: Git in a repository runs commands that the repository's own settings name, such as `core.fsmonitor`, and
 `coding-agent` writes those settings, so root and `servers-mmx` never run Git in the checkout or with it as the
@@ -5626,8 +5631,8 @@ The command runs `mmx run systems_desk --var desk_name=<this desk> --connection 
 with the person-owned private agent socket, which reaches `util01` to read the monitoring join code.
 First bootstrap runs only `--only-fleet-stages systems_desk`, because `util01` does not exist yet;
 the laptop's bootstrap run uses `mmx` directly, and every later run uses the command.
-The command first fetches `origin` into the coding agent's checkout, as the coding agent, reads pushed `main`
-from it as data, and stops with nothing run when the fetch fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
+The command first fetches pushed `main` from the main copy on `util01` into root's own desk copy (before `util01`
+exists, from the coding agent's checkout as data), and stops with nothing run when the fetch fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
 the lock-out button shares the pull but goes on without it.
 The command stops, with nothing run, when the desk playbook names a file it reads by an absolute path or by a
 path that leaves the repository: a `source`, `template`, `*_source` or key-file argument, or the desk's `ssh_config`
