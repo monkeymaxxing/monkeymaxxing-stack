@@ -223,10 +223,6 @@ inventory's real names and addresses, and the next unused desk name.
     sudo -n update-this-desks-wireguard-peers
     ```
 
-    The bootstrap of steps 12 and 14 read `main` from the copy, so it
-    works while `util01` is lost too. From the first desk review after this
-    step, the desk review and the lock-out button fetch `main` from `util01`
-    only.
     The first peers command gives the desk its server peers, `util01`
     included, from the copy. `util01` lets the desk in because the
     restored production key is in `root_ssh_public_keys`.

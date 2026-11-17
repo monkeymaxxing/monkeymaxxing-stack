@@ -322,10 +322,6 @@ node_tasks:
   # writes (files/fetch-pushed-main-from-the-coding-agents-checkout says why).
   - id: install_the_command_that_reads_pushed_main_as_data
     file: {path: /usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout, source: files/fetch-pushed-main-from-the-coding-agents-checkout, owner: root, group: root, permissions_mode: "0755"}
-  # The button's check of pushed main's SSH settings files, which ssh would
-  # otherwise let run a program as servers-mmx (the file says why).
-  - id: install_the_check_of_the_pushed_ssh_settings
-    file: {path: /usr/local/bin/check-the-pushed-ssh-settings, source: files/check-the-pushed-ssh-settings, owner: root, group: root, permissions_mode: "0755"}
   - id: install_the_run_mmx_on_the_servers_command
     file: {path: /usr/local/bin/run-mmx-on-the-servers, source: files/run-mmx-on-the-servers, owner: root, group: root, permissions_mode: "0755"}
   # The person's desk review. It runs the desk playbook as root only after

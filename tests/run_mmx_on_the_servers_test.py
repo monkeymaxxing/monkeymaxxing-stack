@@ -24,9 +24,7 @@ class ServersMmxTests(unittest.TestCase):
         (binary / 'mmx').write_text('#!/usr/bin/env python3\nimport json,os,sys\nprint(json.dumps({"args":sys.argv[1:],"vault_file":os.environ.get("MMX_VAULT_PASSWORD_FILE"),"vault_password":os.environ.get("MMX_VAULT_PASSWORD")}))\n')
         (binary / 'flock').write_text('#!/bin/sh\nexit 0\n')
         (binary / 'fetch-pushed-main').write_text('#!/bin/sh\necho 0123456789abcdef\n')
-        # The SSH settings check: refuses when the checkout holds a file named refuse-ssh-settings.
-        (binary / 'check-ssh').write_text('#!/bin/sh\nif [ -e "$1/refuse-ssh-settings" ]; then echo "ssh/config, line 2, uses ProxyCommand" >&2; exit 64; fi\n')
-        for name in ['git', 'mmx', 'flock', 'fetch-pushed-main', 'check-ssh']:
+        for name in ['git', 'mmx', 'flock', 'fetch-pushed-main']:
             (binary / name).chmod(0o755)
         self.button = self.root / 'run-mmx-on-the-servers'
         self.button.write_text(BUTTON.read_text()
@@ -34,7 +32,6 @@ class ServersMmxTests(unittest.TestCase):
             .replace('/etc/systems-desk/everyone-locked-out', str(self.root / 'everyone-locked-out'))
             .replace('export PATH=/usr/local/bin:/usr/bin:/bin', f'export PATH={binary}:/usr/bin:/bin')
             .replace('/usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout', str(binary / 'fetch-pushed-main'))
-            .replace('/usr/local/bin/check-the-pushed-ssh-settings', str(binary / 'check-ssh'))
             .replace('/usr/local/bin/mmx', str(binary / 'mmx')))
 
     def invoke(self, *arguments):
@@ -136,13 +133,6 @@ class ServersMmxTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 64)
                 self.assertIn('run-mmx-on-the-servers runs only', result.stderr)
 
-    def test_refused_ssh_settings_stop_the_run_before_mmx(self):
-        (self.root / 'systems_repository/refuse-ssh-settings').write_text('')
-        result = self.invoke('run', 'every_server')
-        self.assertEqual(result.returncode, 64)
-        self.assertIn('ProxyCommand', result.stderr)
-        self.assertNotIn('"args"', result.stdout)
-
     def test_local_commands_receive_no_invented_options(self):
         for arguments in [('version',), ('module-usage', '--module', 'file'), ('help',)]:
             with self.subTest(arguments=arguments):
@@ -185,7 +175,6 @@ class PushedMainFromTheDeskCheckout(unittest.TestCase):
             .replace('/etc/systems-desk/everyone-locked-out', str(self.root / 'everyone-locked-out'))
             .replace('export PATH=/usr/local/bin:/usr/bin:/bin', f'export PATH={binary}:/usr/bin:/bin:/usr/local/bin')
             .replace('/usr/local/bin/fetch-pushed-main-from-the-coding-agents-checkout', str(FETCH_PUSHED_MAIN))
-            .replace('/usr/local/bin/check-the-pushed-ssh-settings', 'true')
             .replace('/usr/local/bin/mmx', str(binary / 'mmx')))
 
     def git(self, cwd, *arguments):

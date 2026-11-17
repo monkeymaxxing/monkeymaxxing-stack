@@ -3,10 +3,8 @@
 
     fetch-pushed-main-from-the-coding-agents-checkout CHECKOUT REPOSITORY
 
-The MMX button and the WireGuard peers command (as servers-mmx) read pushed
-main from the coding agent's checkout, which coding-agent owns; the desk
-review and the lock-out button read it before util01 exists, and for
-util01's host key. They run
+The desk's root-run commands and the MMX button (servers-mmx) read pushed
+main from the coding agent's checkout, which coding-agent owns. They run
 this, as their own account, with REPOSITORY a repository that account owns.
 It prints the commit it fetched, and REPOSITORY's FETCH_HEAD names it.
 
