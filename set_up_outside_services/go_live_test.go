@@ -11,14 +11,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
 	registryToken         = "ghp_registrytokenvalue0000000000000001"
 	expiringRegistryToken = "ghp_registrytokenvalue0000000000000002"
-	vaultPassphrase       = "vault-passphrase-value"
-	emergencyCodes        = "11111111\n22222222\n33333333"
-	stripeKey             = "sk_live_stripekeyvalue000000000001"
+	// endsTooSoonRegistryToken ends in 10 days, expiringRegistryToken in 90.
+	endsTooSoonRegistryToken = "ghp_registrytokenvalue0000000000000003"
+	vaultPassphrase          = "vault-passphrase-value"
+	emergencyCodes           = "11111111\n22222222\n33333333"
+	stripeKey                = "sk_live_stripekeyvalue000000000001"
 )
 
 // github stands in for GitHub's API and ghcr.io: each token's scopes, end
@@ -114,7 +117,8 @@ func newGoLiveHarness(t *testing.T, dnssec bool) *goLiveHarness {
 		t.Skip("go-live's tests keep the recovery bundle in a real MMX vault, so they need mmx on PATH")
 	}
 	h := &goLiveHarness{harness: newHarness(t, false, false), github: &github{scopes: map[string]string{
-		registryToken: "read:packages", expiringRegistryToken: "read:packages"}, ends: map[string]string{expiringRegistryToken: "2026-12-17 09:00:00 UTC"}}}
+		registryToken: "read:packages", expiringRegistryToken: "read:packages", endsTooSoonRegistryToken: "read:packages"},
+		ends: map[string]string{expiringRegistryToken: tokenEnd(90), endsTooSoonRegistryToken: tokenEndsInTenDays}}}
 	h.transcript = &strings.Builder{}
 	h.e.out = h.transcript
 	h.cloudflare.ZoneStatus = ""
@@ -173,6 +177,13 @@ func newGoLiveHarness(t *testing.T, dnssec bool) *goLiveHarness {
 	return h
 }
 
+var tokenEndsInTenDays = tokenEnd(10)
+
+// tokenEnd is a token's end date in GitHub's format, days from now.
+func tokenEnd(days int) string {
+	return time.Now().UTC().AddDate(0, 0, days).Format("2006-01-02 15:04:05 UTC")
+}
+
 func typed(values ...string) []func() string {
 	var answers []func() string
 	for _, value := range values {
@@ -221,9 +232,9 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	h.commitAll("An app with uploads and a Stripe key")
 	h.cloudflare.R2Off = true
 	turnOnR2 := func() string { h.cloudflare.Lock(); h.cloudflare.R2Off = false; h.cloudflare.Unlock(); return "" }
-	h.hidden = append(typed("not-the-token-it-made", h.addLinkToken(), "wrong-application-key", masterKey, expiringRegistryToken, registryToken,
+	h.hidden = append(typed("not-the-token-it-made", h.addLinkToken(), "wrong-application-key", masterKey, endsTooSoonRegistryToken, expiringRegistryToken, registryToken,
 		"sk_live_notthekey", stripeKey, "maple orbit candle river stone pilot"), h.theShownPassphrase)
-	h.visible = append([]func() string{turnOnR2}, typed("", masterKeyID, masterKeyID)...)
+	h.visible = append([]func() string{turnOnR2}, typed("", masterKeyID, masterKeyID, "no")...)
 	err := runGoLive(h.e)
 	t.Logf("The person's terminal:\n%s", h.transcript)
 	if err != nil {
@@ -247,6 +258,13 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 		}
 		at += next
 	}
+	// The labels the providers' pages show.
+	for _, label := range []string{"Two-Factor Authentication", "Scroll to the bottom, below the list of permissions.", "Press  Review token,  then  Create token.",
+		"When Backblaze asks for a region, choose  EU Central.", "Get Started Free", "Confirm access"} {
+		if !strings.Contains(output, label) {
+			t.Errorf("the screens lack the provider's label %q", label)
+		}
+	}
 	// Each loud line is in capitals on its own line, with a blank line above and below.
 	for _, loud := range []string{"TURN OFF DNSSEC FIRST.  YOUR SITE WILL NOT WORK WITH IT ON.", "THE REGION CANNOT BE CHANGED LATER.",
 		`SET EXPIRATION TO "NO EXPIRATION".  OTHERWISE YOUR DEPLOYS STOP IN 30 DAYS.`, "SAVE IT NOW.  IT IS SHOWN ONLY ONCE."} {
@@ -256,7 +274,7 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	}
 	// Each refused value was asked again, with the service's reason.
 	for _, reason := range []string{"Cloudflare did not accept the token.  It said: Invalid request headers.",
-		"Backblaze did not accept the key.  It said: The applicationKeyId and/or the applicationKey are wrong.", "This token stops working on 2026-12-17 09:00:00 UTC",
+		"Backblaze did not accept the key.  It said: The applicationKeyId and/or the applicationKey are wrong.", "This token stops working on " + tokenEndsInTenDays + ", less than 30 days from now",
 		"Stripe did not accept the key.  It said: Invalid API Key provided: sk_live_****wxyz.", "That is not the passphrase above."} {
 		if !strings.Contains(output, reason) {
 			t.Errorf("the output lacks the refusal %q", reason)
@@ -440,7 +458,7 @@ func TestTheAccountIDScreenWhenCloudflareDoesNotListTheAccount(t *testing.T) {
 	if err != nil || link.accountID != testAccountID {
 		t.Fatalf("want the token accepted in the typed account, got %v", err)
 	}
-	for _, line := range []string{"Type  Copy account ID  and press Enter.", "An account ID is 32 letters and digits."} {
+	for _, line := range []string{"Under  Account Details,  press the copy button beside  Account ID.", "right after  dash.cloudflare.com/", "An account ID is 32 letters and digits."} {
 		if !strings.Contains(h.transcript.String(), line) {
 			t.Errorf("the screen lacks %q", line)
 		}
@@ -453,10 +471,10 @@ func TestTheRegistryTokenIsCheckedAsTheServersUseIt(t *testing.T) {
 	h.github.scopes["ghp_narrow"] = "read:user"
 	g := &goLive{e: h.e}
 	for token, want := range map[string]string{
-		"ghp_unknown":         "Bad credentials",
-		expiringRegistryToken: "stops working on 2026-12-17",
-		"ghp_broad":           "can also use repo",
-		"ghp_narrow":          "cannot download packages",
+		"ghp_unknown":            "Bad credentials",
+		endsTooSoonRegistryToken: "less than 30 days from now",
+		"ghp_broad":              "can also use repo",
+		"ghp_narrow":             "cannot download packages",
 	} {
 		_, advice, err := g.checkTheRegistryToken(token, "acme/shop")
 		if err == nil || advice == "" || !strings.Contains(err.Error(), want) {
@@ -470,6 +488,39 @@ func TestTheRegistryTokenIsCheckedAsTheServersUseIt(t *testing.T) {
 	check, _, err := g.checkTheRegistryToken(registryToken, "acme/shop")
 	if err != nil || !check.imageFound || check.login != "alex-acme" {
 		t.Errorf("a good token: %+v, %v", check, err)
+	}
+}
+
+// A token that ends 30 or more days from now is accepted after the person
+// types yes, and its end date goes to the coding agent.
+func TestGoLiveAcceptsARegistryTokenThatExpires(t *testing.T) {
+	h := newGoLiveHarness(t, false)
+	h.cloudflare.ZoneStatus = "active"
+	h.hidden = append(typed(h.addLinkToken(), masterKey, expiringRegistryToken, expiringRegistryToken), h.theShownPassphrase)
+	h.visible = typed(masterKeyID, "no", "yes")
+	if err := runGoLive(h.e); err != nil {
+		t.Fatalf("go-live: %v\n%s", err, h.transcript)
+	}
+	t.Logf("The person's terminal:\n%s", h.transcript)
+	output := h.transcript.String()
+	ends := strings.TrimSuffix(tokenEnd(90), " UTC")
+	ends = strings.Split(ends, " ")[0]
+	for _, line := range []string{"This token stops working on " + ends, "your servers cannot download your app.",
+		"Deploys and new servers stop until you replace the token.", "Type  yes  to use this token.", `SET EXPIRATION TO "NO EXPIRATION".`} {
+		if !strings.Contains(output, line) {
+			t.Errorf("the screen lacks %q", line)
+		}
+	}
+	if strings.Count(output, "GitHub accepted the token.") != 1 {
+		t.Error("the token must be accepted once, after yes, not after no")
+	}
+	if h.vault.values["container_registry_read_only_token"] != expiringRegistryToken {
+		t.Error("the accepted token is not in the vault")
+	}
+	got := h.last().ForTheCodingAgent["container_registry_read_only_token_expires_at"]
+	want := time.Now().UTC().AddDate(0, 0, 90).Format("2006-01-02")
+	if !strings.HasPrefix(got, want) || !strings.HasSuffix(got, "Z") {
+		t.Errorf("container_registry_read_only_token_expires_at = %q, want %s...Z", got, want)
 	}
 }
 

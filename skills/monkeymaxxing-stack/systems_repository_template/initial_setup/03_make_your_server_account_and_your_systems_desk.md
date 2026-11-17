@@ -64,8 +64,9 @@ account screen of step 1 is the opening.
    Do this now:
      1. Open  https://accounts.hetzner.com/signUp  and make an account.
      2. Save the login in 1Password.
-     3. Turn on two-step sign-in:  https://accounts.hetzner.com/account/security
-     4. Open  https://console.hetzner.cloud  and press  New project.  Name it  Example.
+     3. Turn on two-step sign-in, which Hetzner calls  Two-factor authentication (2FA):
+          https://accounts.hetzner.com/tfa
+     4. Open  https://console.hetzner.com  and press  New project.  Name it  Example.
      5. In the project, open  Security,  then  API tokens.
         Press  Generate API token.  Name it  example-desk.  Choose  Read & Write.
 

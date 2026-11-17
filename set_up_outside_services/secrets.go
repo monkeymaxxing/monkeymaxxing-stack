@@ -236,7 +236,7 @@ func madeElsewhere(key string) string {
 // providerTokenPages are where each provider guide's provider makes an API
 // token, by the guide's API address.
 var providerTokenPages = map[string]string{
-	"https://api.hetzner.cloud/v1/":    "https://console.hetzner.cloud/projects, then your project, Security, API tokens, Generate API token (Read & Write)",
+	"https://api.hetzner.cloud/v1/":    "https://console.hetzner.com/projects, then your project, Security, API tokens, Generate API token (Read & Write)",
 	"https://api.digitalocean.com/v2/": "https://cloud.digitalocean.com/account/api/tokens, Generate New Token",
 	"https://api.vultr.com/v2/":        "https://my.vultr.com/settings/#settingsapi, then Personal Access Tokens or a sub-account's API key",
 	"https://api.scaleway.com/":        "https://console.scaleway.com/iam/api-keys, Generate an API key for the application util01-restore",

@@ -725,7 +725,8 @@ func (e *environment) askForTheLinkToken(settings systemSettings, accountID stri
 	e.say("Open this link, which fills in its one permission, Account API Tokens Edit, and its name:")
 	e.say("  %s", tokenMakingLink(settings, e.person))
 	e.say("If Cloudflare asks which account, pick the one whose ID is %s (cloudflare_account_id).", accountID)
-	e.say("Keep the link's settings, select Continue to summary, then Create Token.")
+	e.say("Keep the link's settings. The page is long: scroll to the bottom, below the list of permissions.")
+	e.say("Select Review token, then Create token.")
 	e.say("Cloudflare shows the token only once: copy all of it and paste it below.")
 	e.say("This command sets the link token to end by itself after 24 hours and deletes it when the run ends, so no token that can make tokens stays behind.")
 	e.say("")
@@ -783,7 +784,7 @@ func (e *environment) acceptLinkToken(settings systemSettings, link *cloudflareC
 		e.deleteTheLinkToken(link)
 		return fmt.Errorf("%v. Cloudflare did not let the link token set its own end, so this run stopped before making anything. "+
 			"Make a new link token with the link above and run this command again. If this happens again, "+
-			"give the link token an end date on Cloudflare's form, under TTL, before you select Continue to summary", err)
+			"give the link token an end date on Cloudflare's form, under TTL, before you select Review token", err)
 	}
 	if changed {
 		e.say("Set the link token to end by itself at %s UTC tomorrow, in case this run is cut off. The run deletes it at its end.", ends.Format("15:04"))

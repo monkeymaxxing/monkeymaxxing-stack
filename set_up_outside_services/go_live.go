@@ -389,7 +389,7 @@ func (g *goLive) cloudflare() (string, error) {
 	steps := []string{
 		"Open  https://dash.cloudflare.com/sign-up  and make an account.",
 		"Save the login in " + g.passwordManager() + ".",
-		"Turn on two-step sign-in:  https://dash.cloudflare.com/profile/authentication",
+		"Turn on two-step sign-in, which Cloudflare calls  Two-Factor Authentication:\n       https://dash.cloudflare.com/profile/authentication",
 	}
 	needsR2 := len(g.settings.appsWithUploads()) > 0
 	if needsR2 {
@@ -398,7 +398,8 @@ func (g *goLive) cloudflare() (string, error) {
 	}
 	g.tokenStep = len(steps) + 1
 	steps = append(steps, "Open this link.  It fills in the key for you:\n       "+tokenMakingLink(g.settings, e.person)+
-		"\n     Press  Continue to summary,  then  Create Token.")
+		"\n     The page is long.  Scroll to the bottom, below the list of permissions."+
+		"\n     Press  Review token,  then  Create token.")
 	var screen strings.Builder
 	screen.WriteString("\nAccount 2 of 4: Cloudflare (your web address and protection)\n\nWhat this is for:\n" +
 		"  Cloudflare puts your site on the internet and keeps your private pages private.\n\nDo this now:\n")
@@ -505,13 +506,15 @@ func (g *goLive) checkTheLinkToken(value string) (*cloudflareClient, string, err
 }
 
 // askForTheAccountID asks for the account's ID where Cloudflare's dashboard
-// shows it: its search finds "Copy account ID" on any page
-// (https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/).
+// shows it: the R2 overview page's "Account Details", and the address bar of
+// every dashboard page, as the 32 characters after dash.cloudflare.com/.
 func (g *goLive) askForTheAccountID() (string, error) {
 	g.e.show(`
 Cloudflare did not tell me your account ID.  Copy it from Cloudflare's page:
-  1. On any page of  https://dash.cloudflare.com  press  Search  at the top.
-  2. Type  Copy account ID  and press Enter.  Cloudflare copies the ID.
+  1. Open  ` + r2OverviewLink + `
+  2. Under  Account Details,  press the copy button beside  Account ID.
+     Or read it from the address bar of any page at  https://dash.cloudflare.com
+     It is the 32 letters and digits right after  dash.cloudflare.com/
   3. Paste it here.
 
 `)
@@ -693,9 +696,9 @@ func (g *goLive) backblaze() (string, error) {
 		return "", err
 	}
 	endpoint := g.settings.Vars.Backups.B2S3Endpoint
-	region := "the region your coding agent named"
+	region := " the region your coding agent named."
 	if name := backblazeRegionName(endpoint); name != "" {
-		region = "the region  " + name + "."
+		region = "  " + name + "."
 	}
 	e.show(fmt.Sprintf(`
 Account 4 of 4: Backblaze (your backups)
@@ -705,7 +708,8 @@ What this is for:
 
 Do this now:
   1. Open  https://www.backblaze.com/sign-up/cloud-storage
-  2. Choose %s
+     Type your email and press  Get Started Free.  Then finish making the account.
+  2. When Backblaze asks for a region, choose%s
 
   THE REGION CANNOT BE CHANGED LATER.
 
@@ -772,6 +776,8 @@ One more key: so your servers can download your app.
 Do this now:
   1. Open this link.  It fills in the key for you:
        %s
+     GitHub may first show  Confirm access  and ask for an authentication code or password.
+     Enter it.  The link is not broken.
   2. Set  Expiration  to  No expiration.
 
   SET EXPIRATION TO "NO EXPIRATION".  OTHERWISE YOUR DEPLOYS STOP IN 30 DAYS.
@@ -793,6 +799,27 @@ Then paste the token here.
 		if err != nil {
 			g.refused("GitHub", "token", err, advice)
 			continue
+		}
+		if !check.expiresAt.IsZero() {
+			e.show(fmt.Sprintf(`
+This token stops working on %s.
+
+  After that, your servers cannot download your app.
+  Deploys and new servers stop until you replace the token.
+  Your coding agent reminds you in the weekly review.
+
+  Type  yes  to use this token.
+  Press Enter to paste a token with no end date instead.
+
+`, check.expiresAt.Format("2006-01-02 15:04:05 UTC")))
+			answer, err := e.confirm("  Use this token (yes): ")
+			if err != nil {
+				return "", err
+			}
+			if strings.ToLower(strings.TrimSpace(answer)) != "yes" {
+				continue
+			}
+			g.note("container_registry_read_only_token_expires_at", check.expiresAt.Format(time.RFC3339))
 		}
 		if err := g.saved.save(vaultKey, token); err != nil {
 			return "", err
@@ -823,7 +850,15 @@ func (g *goLive) firstAppImage() string {
 type registryTokenCheck struct {
 	login      string
 	imageFound bool
+	// expiresAt is when GitHub stops accepting the token; zero for a token
+	// that never ends.
+	expiresAt time.Time
 }
+
+// shortestRegistryTokenLife is the least time a token that ends may have
+// left. A shorter token would stop the servers' deploys before the weekly
+// review reminds the person to replace it.
+const shortestRegistryTokenLife = 30 * 24 * time.Hour
 
 // checkTheRegistryToken checks a GitHub token the way the servers use it:
 // it never ends, it can only read packages, and it reads the app's image at
@@ -864,7 +899,15 @@ func (g *goLive) checkTheRegistryToken(token, repository string) (registryTokenC
 	check.login = user.Login
 	// GitHub names a classic token's end date and scopes in its headers.
 	if ends := response.Header.Get("GitHub-Authentication-Token-Expiration"); ends != "" {
-		return check, fromTheLink + ", with  Expiration  set to  No expiration.", fmt.Errorf("this token stops working on %s, and your deploys with it", ends)
+		// https://docs.github.com/en/rest/overview/resources-in-the-rest-api#authentication
+		expiresAt, err := time.Parse("2006-01-02 15:04:05 MST", ends)
+		if err != nil {
+			return check, fromTheLink + ", with  Expiration  set to  No expiration.", fmt.Errorf("this token stops working on %s, and your deploys with it", ends)
+		}
+		if expiresAt.Sub(g.e.now()) < shortestRegistryTokenLife {
+			return check, fromTheLink + ", with  Expiration  set to  No expiration.", fmt.Errorf("this token stops working on %s, less than 30 days from now, and your deploys with it", ends)
+		}
+		check.expiresAt = expiresAt.UTC()
 	}
 	scopes := map[string]bool{}
 	for _, scope := range strings.Split(response.Header.Get("X-OAuth-Scopes"), ",") {

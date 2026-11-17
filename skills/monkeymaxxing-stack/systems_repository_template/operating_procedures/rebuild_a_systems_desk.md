@@ -60,7 +60,7 @@ Tell the person what they will do on websites and in the password manager:
 - At Cloudflare's website, in step 24, they make one Cloudflare link
   token, in about a minute. `set-up-outside-services cloudflare` prints a
   link to Cloudflare's token form with everything filled in. The person
-  selects Continue to summary, then Create Token, and pastes the token at
+  scrolls to the bottom of the long page, selects Review token, then Create token, and pastes the token at
   the command's hidden prompt. The link token can only make tokens. With
   it, the command makes the rebuilt desk's own Cloudflare token and
   status-page posting key, and deletes the lost desk's tokens, which have

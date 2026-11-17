@@ -134,8 +134,31 @@ proposal.
      by the same rule, and otherwise says "nothing to remove" and changes
      nothing.
 
-   **Check:** each due item is `open` again or verified, and each arrived
-   trigger is on the list for the report.
+   - The registry token's end date. Read
+     `container_registry_read_only_token_expires_at` in the setup's results
+     file. It is the date the servers can no longer download the app, so
+     deploys and new servers stop:
+
+     ```sh
+     ssh desk01-agent cat /var/lib/monkeymaxxing-stack/setup_results.json
+     ```
+
+     `for_the_coding_agent` holds the field only when the person chose a
+     token that ends. The file is root's, so after a replacement the new
+     date is a line in the README's "Next actions", such as "The registry
+     token ends 2027-05-01"; the later of the two dates counts. With no
+     date, or a date more than 30 days away, there is nothing to do. With
+     a date within 30 days, put the date on the list for the report, with
+     the steps of
+     [The container registry token](rotate_a_secret.md#the-container-registry-token):
+     the person makes the new token with the link on the setup's Git host
+     token screen (GitHub may first ask for an authentication code), and
+     sets it in the vault as that section says. Ask for the new token's end date, and write it in
+     "Next actions".
+
+   **Check:** each due item is `open` again or verified, each arrived
+   trigger is on the list for the report, and a registry token that ends
+   within 30 days is on it with its date.
 
 ## Move the finished one-time playbooks
 

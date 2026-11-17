@@ -60,9 +60,9 @@ func TestCloudflareMakesEveryTokenFromOneLinkToken(t *testing.T) {
 		!strings.Contains(h.out.String(), "name=acme_systems%3A+alex+makes+tokens") {
 		t.Fatalf("the link must fill in Account API Tokens Edit and the link token's name:\n%s", h.out)
 	}
-	// Cloudflare's form needs Continue to summary before Create Token, shows
+	// Cloudflare's form needs Review token before Create token, is long, shows
 	// the token once, and may ask which account: the prompt says all three.
-	for _, text := range []string{"select Continue to summary, then Create Token", "shows the token only once",
+	for _, text := range []string{"scroll to the bottom, below the list of permissions", "Select Review token, then Create token.", "shows the token only once",
 		"If Cloudflare asks which account, pick the one whose ID is " + testAccountID} {
 		if !strings.Contains(h.out.String(), text) {
 			t.Fatalf("the prompt must say %q:\n%s", text, h.out)

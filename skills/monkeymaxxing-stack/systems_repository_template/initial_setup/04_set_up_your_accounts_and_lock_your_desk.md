@@ -101,10 +101,12 @@ domain at Cloudflare, its DNS records, and the lock.
    Do this now:
      1. Open  https://dash.cloudflare.com/sign-up  and make an account.
      2. Save the login in 1Password.
-     3. Turn on two-step sign-in:  https://dash.cloudflare.com/profile/authentication
+     3. Turn on two-step sign-in, which Cloudflare calls  Two-Factor Authentication:
+          https://dash.cloudflare.com/profile/authentication
      4. Open this link.  It fills in the key for you:
           https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=...&name=...
-        Press  Continue to summary,  then  Create Token.
+        The page is long.  Scroll to the bottom, below the list of permissions.
+        Press  Review token,  then  Create token.
 
    Then paste the token here.
 
@@ -219,7 +221,8 @@ domain at Cloudflare, its DNS records, and the lock.
 
    Do this now:
      1. Open  https://www.backblaze.com/sign-up/cloud-storage
-     2. Choose the region  EU Central.
+        Type your email and press  Get Started Free.  Then finish making the account.
+     2. When Backblaze asks for a region, choose  EU Central.
 
      THE REGION CANNOT BE CHANGED LATER.
 
@@ -254,6 +257,8 @@ domain at Cloudflare, its DNS records, and the lock.
    Do this now:
      1. Open this link.  It fills in the key for you:
           https://github.com/settings/tokens/new?scopes=read:packages&description=example-servers
+        GitHub may first show  Confirm access  and ask for an authentication code or password.
+        Enter it.  The link is not broken.
      2. Set  Expiration  to  No expiration.
 
      SET EXPIRATION TO "NO EXPIRATION".  OTHERWISE YOUR DEPLOYS STOP IN 30 DAYS.
@@ -273,6 +278,16 @@ domain at Cloudflare, its DNS records, and the lock.
    `container_image_found` says whether CI has built the first image yet.
    With `no, not built yet`, check CI before chapter 7, with `gh run watch`
    when `gh` is signed in.
+
+   An organization may require a token that ends. The command accepts a
+   token that ends 30 or more days from now, after the person types `yes`,
+   and refuses one that ends sooner. The screen says that the servers can
+   no longer download the app on the end date, and that deploys and new
+   servers stop. The results file's `for_the_coding_agent` then holds
+   `container_registry_read_only_token_expires_at`, the end date in UTC,
+   such as `2027-02-15T09:00:00Z`. The weekly review reads it
+   ([Do the weekly system review](../operating_procedures/do_the_weekly_system_review.md)).
+   A token with no end date leaves the field out.
 
    Then the command makes every other vault secret without a question,
    because each is random: the database passwords, the failover monitor's
