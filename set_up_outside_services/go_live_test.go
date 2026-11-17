@@ -280,6 +280,18 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 			t.Errorf("the output lacks the refusal %q", reason)
 		}
 	}
+	// After each refusal, a line says the setup still waits at the prompt,
+	// which shows nothing while the person types.
+	for _, refusal := range []string{"Cloudflare did not accept", "Backblaze did not accept", "less than 30 days from now", "Stripe did not accept", "That is not the passphrase above."} {
+		at := strings.Index(output, refusal)
+		next := strings.Index(output[at:], "(hidden): ")
+		if next < 0 {
+			next = strings.Index(output[at:], "Recovery passphrase: ")
+		}
+		if !strings.Contains(output[at:at+next], "The setup is still running.  It waits for you at the line below.") {
+			t.Errorf("after %q, no line says the setup still waits:\n%s", refusal, output[at:at+next])
+		}
+	}
 	if strings.Contains(output, "Made ") || strings.Contains(output, "Bucket ") || strings.Contains(output, "Tunnel") {
 		t.Error("the screens show the work's step-by-step lines")
 	}
@@ -511,6 +523,10 @@ func TestGoLiveAcceptsARegistryTokenThatExpires(t *testing.T) {
 			t.Errorf("the screen lacks %q", line)
 		}
 	}
+	afterNo := output[strings.Index(output, "Use this token (yes): no"):]
+	if !strings.Contains(afterNo[:strings.Index(afterNo, "GitHub token (hidden): ")], "The setup is still running.  It waits for you at the line below.") {
+		t.Errorf("after no, no line says the setup still waits for a token:\n%s", afterNo)
+	}
 	if strings.Count(output, "GitHub accepted the token.") != 1 {
 		t.Error("the token must be accepted once, after yes, not after no")
 	}
@@ -541,5 +557,59 @@ func TestTheRegionNameOnBackblazesSignUpPage(t *testing.T) {
 		if got := backblazeRegionName(endpoint); got != want {
 			t.Errorf("%q: got %q, want %q", endpoint, got, want)
 		}
+	}
+}
+
+// A Backblaze account in another region than the plan: the screen names the
+// account's region, says it cannot change, and waits for the person's choice
+// between carrying on and a new account in the planned region.
+func TestGoLiveAsksWhenTheBackblazeAccountIsInAnotherRegion(t *testing.T) {
+	for _, choice := range []string{"1", "2"} {
+		t.Run("choice "+choice, func(t *testing.T) {
+			h := newGoLiveHarness(t, false)
+			h.cloudflare.ZoneStatus = "active"
+			h.b2.S3APIURL = "https://s3.us-west-001.backblazeb2.com"
+			// The person's choice; a new account is in the planned region.
+			choose := func() string {
+				if choice == "2" {
+					h.b2.S3APIURL = "https://s3.eu-central-003.backblazeb2.com"
+				}
+				return choice
+			}
+			hidden := []string{h.addLinkToken(), masterKey}
+			visible := []func() string{func() string { return masterKeyID }, func() string { return "3" }, choose}
+			if choice == "2" {
+				hidden = append(hidden, masterKey)
+				visible = append(visible, func() string { return masterKeyID })
+			}
+			h.hidden = append(typed(append(hidden, registryToken)...), h.theShownPassphrase)
+			h.visible = visible
+			if err := runGoLive(h.e); err != nil {
+				t.Fatalf("go-live: %v\n%s", err, h.transcript)
+			}
+			t.Logf("The person's terminal:\n%s", h.transcript)
+			output := h.transcript.String()
+			for _, line := range []string{"Your Backblaze account is in  US West.  The plan was  EU Central,  near your servers.",
+				"An account's region cannot be changed.",
+				"  1. Carry on with  US West.  Your backups work the same, farther from your servers.",
+				"  2. Make a new Backblaze account in  EU Central.  It needs another email address.",
+				"  Type 1 or 2: 3", "  Type 1 or 2: " + choice} {
+				if !strings.Contains(output, line) {
+					t.Errorf("the screen lacks %q", line)
+				}
+			}
+			endpoint := h.last().ForTheCodingAgent["b2_s3_endpoint"]
+			if choice == "1" && endpoint != "s3.us-west-001.backblazeb2.com" {
+				t.Errorf("carrying on: b2_s3_endpoint = %q, want the account's", endpoint)
+			}
+			if choice == "2" {
+				if endpoint != "" {
+					t.Errorf("a new account in the planned region: b2_s3_endpoint = %q, want none", endpoint)
+				}
+				if !strings.Contains(output, "When Backblaze asks for a region, choose  EU Central.") || strings.Count(output, "Backblaze accepted the key.") != 2 {
+					t.Error("a new account: the screen must say which region to choose, and accept the new account's key")
+				}
+			}
+		})
 	}
 }
