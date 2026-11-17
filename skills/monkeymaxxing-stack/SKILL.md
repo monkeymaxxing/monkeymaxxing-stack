@@ -287,9 +287,7 @@ repository at that version's tag, such as
 
 ## Not in this version's template yet
 
-- An outgoing-traffic limit for `servers-mmx`, the MMX button's account on the systems desk (open since
-  2026-11-17). The desk firewall limits `coding-agent` to loopback and WireGuard, but not `servers-mmx`.
-  Next step: measure what MMX's controller reaches during a desk run, then extend the rule to it.
+Nothing at this version.
 
 ## Agent-run operations
 
