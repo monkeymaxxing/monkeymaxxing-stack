@@ -764,6 +764,22 @@ vars:
       version: "0.1.0"
       download_url: https://github.com/monkeymaxxing/mmx/releases/download/v0.1.0/mmx-0.1.0-linux-amd64.tar.gz
       sha256: "603b7a7d82bb710906d37dffe788d1c1ea75089fdf63fc2335dc27f2a7152ab4"
+    # doubleshell runs only on the person's laptop, which chapter 1
+    # (initial_setup/01_answer_two_questions.md) installs it on.
+    # download_url and sha256 are its linux-amd64 archive, as for every pin.
+    # laptop_archive_sha256 gives each laptop platform's archive,
+    # doubleshell-VERSION-PLATFORM.tar.gz beside download_url, from the
+    # release's SHA256SUMS. Reason: a pin, not the newest release, so every
+    # laptop runs the release this Stack version was tested with.
+    doubleshell:
+      version: "0.1.1"
+      download_url: https://github.com/monkeymaxxing/doubleshell/releases/download/v0.1.1/doubleshell-0.1.1-linux-amd64.tar.gz
+      sha256: "39a7c664ebcd89ab224a9a5e328ee9448a7c4c3ff5446874d2fbef805e64b1fb"
+      laptop_archive_sha256:
+        linux-amd64: "39a7c664ebcd89ab224a9a5e328ee9448a7c4c3ff5446874d2fbef805e64b1fb"
+        linux-arm64: "65b29ae1b3dcb6004d6450eff48d08b3144875445734e6f39cd631c259dea978"
+        macos-amd64: "f7e9082abd2525c369cbceb0a7f787370d7c2c897db356e3179728eccaf8626b"
+        macos-arm64: "982c3d3ce7a267b599bc4e21080e2474f18a74c5aada486c1d708679180a1b95"
     mmwatchdog:
       version: "0.1.0"
       download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.1.0/mmwatchdog-0.1.0-linux-amd64.tar.gz
