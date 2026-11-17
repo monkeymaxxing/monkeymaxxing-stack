@@ -322,7 +322,7 @@ repository's name, including paths inside quoted SSH commands.
    `coding-agent`: one shared connection that later commands reuse. The
    other three each start one command for the person: `desk01-setup` in
    chapter 4, `desk01-secrets` for a key the vault still lacks, such as
-   Pushover's in the alerts sitting, and `desk01-review` for a desk
+   Pushover's in the alerts part of the setup, and `desk01-review` for a desk
    review.
    Enroll the first SSH host key through the authenticated WireGuard
    route:

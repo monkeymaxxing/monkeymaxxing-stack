@@ -53,7 +53,7 @@ holds the map, for when the person asks.
 The setup comes in sittings. The first sitting, chapters 1 to 9, puts the
 app live, protected and backed up, in a few hours. The second sitting
 adds phone alerts. Later short sittings add the triage agent, the status
-page, and chapter 10. Until the alerts sitting is done, say plainly that
+page, and chapter 10. Until the alerts part of the setup is done, say plainly that
 the site has no phone alerts.
 
 Each chapter opens with **When**, **What this chapter does**, **Who acts**,
@@ -105,7 +105,7 @@ In every reply:
 - Never say or imply that the app's tests passed when you did not run
   them. Say plainly that they were not run, and why. Reason: a shipped,
   untested app fails at go-live.
-- Until the alerts sitting is done, say plainly that nobody is paged yet:
+- Until the alerts part of the setup is done, say plainly that nobody is paged yet:
   at go-live, and whenever the person asks whether the team would hear
   about a problem. Reason: the person may think someone is watching.
 - At the first use of a Stack word in a reply, such as "systems
@@ -158,9 +158,9 @@ exception with its rule, and give its reason.
    companies' resources, such as DNS records, Access applications, and
    buckets, live in the companies' accounts. The companies' resources are
    set up once (idea 4). Each person's contact methods, such as a Pushover
-   user key, are saved through MMHotline's page, because the phone belongs
-   to the person. Each person adds the contact methods for the person's
-   own phone.
+   user key, live only in MMHotline's database, because MMHotline's settings
+   file cannot hold them. The coding agent adds them with
+   `mmhotline contact-methods add`, from the person's own Pushover user key.
 2. **The vault holds every secret the servers use.** Never a secret in
    another file of the repository, a commit message, an image, a log, or
    this conversation. What a program makes and keeps for itself, such as

@@ -11,7 +11,7 @@ marks as cacheable.
 
 **Who acts:** you, the coding agent, do every step through Cloudflare's
 API, from the desk's API proxy. The person does nothing. The person's
-first sign-in at the private pages comes in the alerts sitting, in
+first sign-in at the private pages comes in the alerts part of the setup, in
 [chapter 8](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-phone-alerts).
 
 **Tell the person when the chapter starts:**
@@ -171,7 +171,7 @@ first sign-in at the private pages comes in the alerts sitting, in
 
    **Check:** every Allow rule names the domain, read through the API
    proxy. `company_email` stays `open` until the person's first sign-in in
-   the alerts sitting, because the item's `verification` includes that
+   the alerts part of the setup, because the item's `verification` includes that
    sign-in. A team without email at its domain adds it in the alerts
    sitting too.
 

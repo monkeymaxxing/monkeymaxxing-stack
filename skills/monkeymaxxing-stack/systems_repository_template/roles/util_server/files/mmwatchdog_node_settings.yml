@@ -15,7 +15,7 @@ alert_severity_when_this_node_has_rebooted: warn
 send_silence_alerts_of_this_node_only_to_destinations: [on_call_push_app]
 {{- else }}
 # No push destination yet: phone_alerts_are_set_up is false in
-# mmx_project_settings.yml until the alerts sitting.
+# mmx_project_settings.yml until the alerts part of the setup.
 {{- end }}
 # MMHotline's dashboard draws one box per MMWatchdog node group.
 # MMWatchdog's node groups match the inventory groups: util01 uses util_server.

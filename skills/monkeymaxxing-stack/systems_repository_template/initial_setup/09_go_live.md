@@ -194,4 +194,4 @@ order from the last two days, also fails when a restore brings back an
 old database.
 
 Next, in a later sitting: [Chapter 10: Write down how to run your system](10_write_down_how_to_run_your_system.md).
-The alerts sitting comes first: [chapter 8, part 2](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-phone-alerts).
+The alerts part of the setup comes first: [chapter 8, part 2](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-phone-alerts).
