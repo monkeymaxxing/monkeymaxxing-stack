@@ -32,8 +32,9 @@ domain at Cloudflare, its DNS records, and the lock.
   `not_started`, and `stopped_with`, the reason a run stopped. Its
   `for_the_coding_agent` block holds values that are not secrets, which
   you write into the settings or check. The file never holds a secret.
-  Read the file through your login, every 30 seconds while the command
-  runs:
+  The person is in the command, not in the chat, so read the file each
+  time the person comes back to you, with a question or when the command
+  is done:
 
   ```sh
   # On the laptop:
@@ -48,9 +49,8 @@ domain at Cloudflare, its DNS records, and the lock.
 
 1. **Open your shared login before the lock.** Before the phone code
    exists, your login needs only the laptop key. Open the shared
-   connection now, and keep it in use: the reads of the results file use
-   it every 30 seconds, so the desk's one-hour idle limit never closes it
-   during this chapter.
+   connection now. When the person takes longer than the desk's one-hour
+   idle limit, the login closes, and step 8 says how to open it again.
 
    ```sh
    # On the laptop:
@@ -85,10 +85,15 @@ domain at Cloudflare, its DNS records, and the lock.
 
      ssh desk01-setup
 
-   It shows the next 3 accounts, one at a time.  I watch from here.
+   It shows the next 3 accounts, one at a time.
+   When it says  Go back to your coding agent,  tell me "done" here.
+   Ask me here at any time if a step is unclear.
    ```
 
-   **Check:** the results file shows that `go-live` started.
+   End your reply with the screen, and start no wait in the same reply.
+
+   **Check:** when the person comes back, the results file shows that
+   `go-live` started.
 
 3. **Cloudflare.** The command shows:
 
@@ -159,9 +164,9 @@ domain at Cloudflare, its DNS records, and the lock.
      record that the scan missed. The MX records come first, because
      without them the company's email stops arriving.
 
-   **Tell the person,** after the command accepted the token: one line
-   about each piece of work, as it happens, such as "Cloudflare accepted
-   your token. I am checking your domain's DNS records at Cloudflare."
+   **Tell the person,** when the person comes back: one line about each
+   piece of work, such as "Cloudflare accepted your token. I checked your
+   domain's DNS records at Cloudflare."
 
    **Check:** the step `cloudflare` is `done`, and
    `vars.cloudflare_account_id` is committed in your clone.
@@ -236,9 +241,23 @@ domain at Cloudflare, its DNS records, and the lock.
    ```
 
    The command checks the key and prints `Backblaze accepted the key.`
-   When the account's region differs from `vars.backups`, the results
-   file's `b2_s3_endpoint` names the account's own endpoint: write it into
-   `vars.backups`, because the region cannot change.
+   When the account's region differs from `vars.backups`, the command
+   says so on the person's screen and waits for the person's choice:
+
+   ```text
+   Your Backblaze account is in  US West.  The plan was  EU Central,  near your servers.
+   An account's region cannot be changed.
+
+   Choose one:
+     1. Carry on with  US West.  Your backups work the same, farther from your servers.
+     2. Make a new Backblaze account in  EU Central.  It needs another email address.
+
+     Type 1 or 2:
+   ```
+
+   With 1, the results file's `b2_s3_endpoint` names the account's own
+   endpoint: write it, and its region, into `vars.backups`. With 2, the
+   command shows the new account's steps and asks for its key.
    Then it makes the buckets and keys as the settings in `vars.backups`
    name them, with Object Lock on the database backups' bucket and the
    uploads' copy, checks each lock with a test file, saves each server's
@@ -277,7 +296,21 @@ domain at Cloudflare, its DNS records, and the lock.
    publish once `go-live` has finished, as in step 3.
    `container_image_found` says whether CI has built the first image yet.
    With `no, not built yet`, check CI before chapter 7, with `gh run watch`
-   when `gh` is signed in.
+   when `gh` is signed in. Without `gh`, show the person one screen, with
+   the app's repository in the link:
+
+   ```text
+   One check: did GitHub build your app?
+
+   Do this now:
+     1. Sign in to GitHub in your browser.  Without it, the page says  Page not found.
+     2. Open  https://github.com/OWNER/shop/actions
+     3. Tell me what the newest run shows: a green tick, a red cross, or a yellow dot.
+   ```
+
+   A red cross: ask the person to open the run and tell you the failed
+   step's name, fix the app, and push the fix after the person's "yes".
+   A yellow dot: the build still runs; ask again in a few minutes.
 
    An organization may require a token that ends. The command accepts a
    token that ends 30 or more days from now, after the person types `yes`,

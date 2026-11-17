@@ -51,9 +51,10 @@ account screen of step 1 is the opening.
    `mmx_project_settings.yml`, as the guide says, including the trailing
    slash.
 
-   **Ask the person:** the screen below, with the guide's own website
-   steps. At OVHcloud, steps 4 and 5 become the guide's prefilled
-   createToken link, and the command asks for the three values.
+   **Ask the person:** the screen below, whole, in your own reply, with
+   the guide's own website steps. End the reply with the screen. At
+   OVHcloud, steps 4 and 5 become the guide's prefilled createToken
+   link, and the command asks for the three values.
 
    ```text
    Account 1 of 4: Hetzner (your servers)
@@ -75,12 +76,14 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
+   When it says  Hetzner accepted the key,  tell me "done" here.
    ```
 
-   Wait for the key file, `~/example-setup/provider-key`. Check every
-   20 seconds that the file exists and is mode `0600`. Never print the
-   file. The command prints `Hetzner accepted the key.` to the person, so
-   the person tells you nothing.
+   Start no wait for the key file in the same reply: the person reads
+   the steps in your reply, and cannot ask you anything while you wait.
+   When the person says "done", check that the key file,
+   `~/example-setup/provider-key`, exists and is mode `0600`. Never print
+   the file.
 
    **Check:** `~/example-setup/provider-key` exists, mode `0600`.
 
@@ -261,7 +264,7 @@ repository's name, including paths inside quoted SSH commands.
    is one short name the person or you type:
 
    ```sshconfig
-   Host desk01 desk01-agent desk01-setup desk01-alerts desk01-secrets desk01-review
+   Host desk01 desk01-agent desk01-setup desk01-secrets desk01-review
      HostName 10.20.9.1
      IdentityFile ~/.ssh/desk01
      IdentitiesOnly yes
@@ -270,7 +273,7 @@ repository's name, including paths inside quoted SSH commands.
      StrictHostKeyChecking yes
      ProxyCommand doubleshell --wireguard-config ~/.config/doubleshell/desk01.conf proxy-ssh %h %p
 
-   Host desk01 desk01-setup desk01-alerts desk01-secrets desk01-review
+   Host desk01 desk01-setup desk01-secrets desk01-review
      User alex
 
    Host desk01-agent
@@ -284,10 +287,6 @@ repository's name, including paths inside quoted SSH commands.
      RequestTTY yes
      RemoteCommand set-up-outside-services go-live
 
-   Host desk01-alerts
-     RequestTTY yes
-     RemoteCommand set-up-outside-services alerts
-
    Host desk01-secrets
      RequestTTY yes
      RemoteCommand set-up-outside-services secrets
@@ -299,8 +298,10 @@ repository's name, including paths inside quoted SSH commands.
 
    `desk01` is the person's own login. `desk01-agent` is your login, as
    `coding-agent`: one shared connection that later commands reuse. The
-   other four each start one command for the person: `desk01-setup` in
-   chapter 4, the others in later sittings.
+   other three each start one command for the person: `desk01-setup` in
+   chapter 4, `desk01-secrets` for a key the vault still lacks, such as
+   Pushover's in the alerts sitting, and `desk01-review` for a desk
+   review.
    Enroll the first SSH host key through the authenticated WireGuard
    route:
 
@@ -480,7 +481,7 @@ secret once, at a hidden prompt, and you never see one.
 | Secret | Where the secret is stored | How it gets there |
 | --- | --- | --- |
 | Every secret the servers use, listed below | The vault, `secrets_vault.age`, in the systems repository. Playbook key names come from `mmx secrets usage`. MMHotline's key names come from the `.secrets` references in `mmhotline_settings.yml` | In the first sitting, `set-up-outside-services go-live` (`ssh desk01-setup`): it asks for each key a website gives, makes every random one without a question, and commits and pushes the vault. Later, `set-up-outside-services secrets` (`ssh desk01-secrets`) asks for each key the vault still lacks. `--replace KEY` enters one key again, such as for a rotation: `ssh -t desk01 set-up-outside-services secrets --replace KEY` |
-| The person's own tokens: the provider credential, the desk's Cloudflare token, and the R2 key for posting to the status page while `util01` is down | The API proxy's root-only files and the person's own token file on the desk | The provider credential: the laptop key command of chapter 3, which you move to the desk right after the bootstrap. The Cloudflare tokens: `go-live` makes them |
+| The person's own tokens: the provider credential, the desk's Cloudflare token, and the R2 key for posting to the status page while `util01` is down | The provider credential: only the API proxy's root-only file. The Cloudflare token: the API proxy's root-only file and the person's own token file on the desk. The R2 key: the person's own token file | The provider credential: the laptop key command of chapter 3, which you move to the desk right after the bootstrap. The Cloudflare tokens: `go-live` makes them |
 | The recovery bundle: the vault passphrase, the production private key, the desk's WireGuard private key, the shared root console password, the phone code's emergency codes, and the provider, Cloudflare and Backblaze credentials | `recovery_bundle.age` in the systems repository, and a copy in the locked backup bucket at Backblaze, encrypted with the recovery passphrase | `go-live` makes it at the lock in chapter 4 |
 | The recovery passphrase, and every account's login and recovery codes | The team's password manager | The person saves each one when it is made |
 

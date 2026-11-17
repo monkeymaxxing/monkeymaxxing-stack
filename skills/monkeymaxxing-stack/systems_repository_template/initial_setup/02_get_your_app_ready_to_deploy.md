@@ -128,7 +128,8 @@ the person's. Then you push the changes and watch the first build.
 
 3. **The app's hostnames, image tags, and secret mappings:** in
    `inventories/servers.yml`, set the app's production host name in
-   `public_host_names`, such as `shop.example.com`, and the app's
+   `public_host_names` to the app's address from chapter 1's screen, such
+   as `example.com`, and the app's
    `deployed_image_tags`. [Add staging01](../operating_procedures/add_staging01.md)
    adds staging's beside them. Each tag is the app's full Git commit, 40
    lowercase hexadecimal characters; the playbooks refuse any other tag.
@@ -316,7 +317,9 @@ the person's. Then you push the changes and watch the first build.
    each change one line that says what it does and why, then the diff,
    such as "Uploads go to R2, so a new app server has every picture."
    Explain a term the person needs for a change, such as the primary
-   database server or R2, in the same line.
+   database server or R2, in the same line. Name every file that changed
+   or is new: compare your list with `git status --short` in the app's
+   folder, so a file such as `README.md` is not left out.
 
    **Ask the person:**
 
@@ -338,8 +341,12 @@ the person's. Then you push the changes and watch the first build.
    - With `gh` signed in: `gh run watch` on the run of the pushed commit.
      A green run whose last step names `linux/amd64` means the image is at
      the registry.
-   - Without `gh`: nothing to watch from the laptop. Chapter 4's Git host
-     token screen reads the image at the registry with the new token.
+   - Without `gh`: you cannot see the run, and the person needs nothing
+     now. Never send the person to the Actions page: a private
+     repository's page says "Page not found" to a browser that is not
+     signed in to GitHub. Chapter 4's Git host token screen reads the
+     image at the registry with the new token, and the results file's
+     `container_image_found` tells you whether CI built it.
 
    Record the pushed commit's full ID, 40 characters, as the app's tag in
    production's `deployed_image_tags` in the laptop's copy, and commit
@@ -352,7 +359,10 @@ the person's. Then you push the changes and watch the first build.
 
    **Check:** the push succeeded, and `deployed_image_tags` holds the
    pushed commit's full ID. With `gh`, the run is green and names
-   `linux/amd64`.
+   `linux/amd64`. Without `gh`, chapter 4 checks the image.
+
+   Never commit `.claude/settings.local.json` from chapter 1's approval:
+   it holds this laptop's approvals, not the app's code.
 
 8. **An app requirement in the checklist that the app cannot meet** is a
    deviation, recorded with the reason. For example, a job queue in Redis,
