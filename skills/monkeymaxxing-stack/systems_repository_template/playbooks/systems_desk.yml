@@ -40,7 +40,7 @@ fleet_stages:
             SHA-256 of zeros: this systems repository was copied from a Stack
             checkout that is not a released version, so no published release
             fits the pin. Copy stack_software from the template of a released
-            Stack version, a tag such as 2026-11, whose pins hold each
+            Stack version, a tag such as v0.1.0, whose pins hold each
             program's real release. Nothing changed.
       - role: systems_desk
         inputs:

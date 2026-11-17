@@ -211,6 +211,17 @@ class PinnedProgramReleases(unittest.TestCase):
                      'add_or_update_a_program_from_outside_the_distribution.md'):
             self.assertIn(text, output)
 
+    def test_a_newer_stack_release_is_found_by_its_semantic_version(self):
+        # The Stack tags v0.1.0, v0.1.1, v0.2.0 ... as the tools do; 0.10.0 is newer than 0.9.0.
+        for newer in ('0.1.1', '0.2.0', '0.10.0'):
+            code, output = self.run_script(self.check('set_up_outside_services'), {
+                'monkeymaxxing/monkeymaxxing-stack': [release('v' + newer, 'monkeymaxxing/monkeymaxxing-stack')]})
+            self.assertEqual(code, 1, output)
+            self.assertIn('set_up_outside_services has a newer release, ' + newer, output)
+        code, output = self.run_script(self.check('set_up_outside_services'), {
+            'monkeymaxxing/monkeymaxxing-stack': [release('v0.1.0', 'monkeymaxxing/monkeymaxxing-stack')]})
+        self.assertEqual(code, 0, output)
+
     def test_a_newer_release_by_number_fails_whatever_the_tag_prefix(self):
         code, output = self.run_script(self.check('rclone'), {'rclone/rclone': [release('v1.100.0', 'rclone/rclone')]})
         self.assertEqual(code, 1, output)
@@ -256,7 +267,7 @@ class PinnedProgramReleases(unittest.TestCase):
         every_source = {'monkeymaxxing/mmx': [release('v0.1.0', 'monkeymaxxing/mmx')],
                         'monkeymaxxing/mmwatchdog': [release('v0.1.0', 'monkeymaxxing/mmwatchdog')],
                         'monkeymaxxing/mmhotline': [(404, '{"message": "Not Found"}')],
-                        'monkeymaxxing/monkeymaxxing-stack': [release('2026-11', 'monkeymaxxing/monkeymaxxing-stack')],
+                        'monkeymaxxing/monkeymaxxing-stack': [release('v0.1.0', 'monkeymaxxing/monkeymaxxing-stack')],
                         'benbjohnson/litestream': [release('v0.5.17', 'benbjohnson/litestream')],
                         'rclone/rclone': [release('v1.75.2', 'rclone/rclone')]}
         code, output = self.run_script(script, every_source)

@@ -61,7 +61,7 @@ class ReleaseBuild(unittest.TestCase):
         self.assertEqual(built, [f'set-up-outside-services-{version}-linux-amd64.tar.gz'])
         pin = re.search(r'^    set_up_outside_services:\n((?:      .*\n)+)', settings, re.M)[1]
         self.assertIn(f'      version: "{version}"\n', pin)
-        self.assertIn(f'/{version}/set-up-outside-services-{version}-linux-amd64.tar.gz\n', pin)
+        self.assertIn(f'/v{version}/set-up-outside-services-{version}-linux-amd64.tar.gz\n', pin)
         self.assertIn(f'      sha256: "{SHA256}"\n', pin)
         # The other pins are left as they were.
         original = (ROOT/TEMPLATE/'mmx_project_settings.yml').read_text()

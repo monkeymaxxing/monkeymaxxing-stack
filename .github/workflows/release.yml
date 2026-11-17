@@ -1,16 +1,16 @@
 name: Publish the release archive
 
-# Pushing a version tag, such as 2026-11, builds the release archive of
+# Pushing a version tag, such as v0.1.0, builds the release archive of
 # set-up-outside-services with set_up_outside_services/build_release_archive.sh
 # and attaches it, with SHA256SUMS, to a GitHub release of that tag. The tag
 # must name the release commit: stack_version in the template's checklist is
-# the tag, and stack_software.set_up_outside_services already pins this
+# the tag without its v, and stack_software.set_up_outside_services already pins this
 # archive's SHA-256. The build is reproducible, so the job refuses an archive
 # whose SHA-256 differs from the pin.
 
 on:
   push:
-    tags: ['[0-9][0-9][0-9][0-9]-[0-9][0-9]*']
+    tags: ['v*']
 
 permissions: {}
 
@@ -31,14 +31,24 @@ jobs:
         with:
           go-version-file: set_up_outside_services/go.mod
           cache: false
+      - name: Confirm the tag is a version, such as v0.1.0
+        id: version
+        shell: bash
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "The tag $GITHUB_REF_NAME is not a Stack version such as v0.1.0." >&2; exit 1
+          fi
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - name: Confirm the pinned Go toolchain
         shell: bash
         run: test "$(go env GOVERSION)" = "$(awk '$1 == "toolchain" {print $2}' set_up_outside_services/go.mod)"
       - name: Build the archive and compare it with the template's pin
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
-          # The script refuses a tag other than stack_version, and rewrites the pin from the archive it built.
-          set_up_outside_services/build_release_archive.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/release"
+          # The script refuses a version other than stack_version, and rewrites the pin from the archive it built.
+          set_up_outside_services/build_release_archive.sh "$RELEASE_VERSION" "$RUNNER_TEMP/release"
           if ! git diff --exit-code -- skills/monkeymaxxing-stack/systems_repository_template/mmx_project_settings.yml; then
             echo "The archive's SHA-256 differs from stack_software.set_up_outside_services in the tagged commit. Build the release commit's archive again and commit its pin before tagging." >&2
             exit 1

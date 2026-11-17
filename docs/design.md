@@ -126,9 +126,16 @@ export and standalone rehearsal from production cutover. Export archives,
 credentials, password hashes, and private documents stay outside Git.
 An independent replay checks that the guide needs no hidden setup knowledge.
 
-**Versions are Git tags** of the Monkeymaxxing Stack repository, named
-after the version, such as `2026-11`, the value of `stack_version` in the
-template's checklist. Publishing a version creates the version's tag.
+**Versions are Git tags** of the Monkeymaxxing Stack repository: `v`
+and the version, the value of `stack_version` in the template's
+checklist, such as `v0.1.0` for `0.1.0`. Versions follow semantic
+versioning, as MMX, MMWatchdog and MMHotline do. While the major number is
+0, a release that changes a setting or needs a step of
+[A new version](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/upgrade_to_a_new_stack_version.md#a-new-version)
+beyond copying the template's changes raises the minor number, such as
+`0.2.0`, and a release of fixes alone raises the last number, such as
+`0.1.1`. Reason: one numbering for every Monkeymaxxing tool, which Git
+hosts, `sort -V` and dependency tools order correctly. Publishing a version creates the version's tag.
 A team clones the stack's repository, checks out the newest version tag,
 and uses the skill from that tag. A new version is `git fetch --tags` and
 a checkout of the new version's tag. Reason: between releases, `main`
@@ -3207,7 +3214,7 @@ ready yet in this Stack version" for any other. Reason: an item that no
 team can finish stays open forever and teaches the team to ignore open items.
 
 ```yaml
-stack_version: 2026-11
+stack_version: 0.1.0
 stack_commit: "3f2a1c9..."          # the stack's commit the template files came from, written in by the coding agent
 apps:
   shop:
@@ -3473,8 +3480,8 @@ build, not the one the Stack was tested with.
 
 The release step, in one commit that the tag then names:
 
-1. Set `stack_version` in the template's checklist to the new tag, such as
-   `2026-12`.
+1. Set `stack_version` in the template's checklist to the new version, such
+   as `0.2.0`, whose tag is `v0.2.0`.
 2. Pin the MMX, MMWatchdog and MMHotline releases the Stack was tested
    with, each from its release's `SHA256SUMS`. The MMX release must have:
    - `mmx mark-node-work-failed`, which the restore drill and

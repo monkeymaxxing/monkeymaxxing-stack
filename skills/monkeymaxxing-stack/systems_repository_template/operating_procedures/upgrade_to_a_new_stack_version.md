@@ -32,14 +32,14 @@ before the push, picks the quiet hour, and adds each missing vault key.
 
 **Before you start:**
 
-- The stack's repository tags each version with its name, such as `2026-11`.
+- The stack's repository tags each version with `v` and its number, such as `v0.1.0`.
   A team uses the Stack at a version tag, never at `main`. Reason: between
   releases, `main` pins the Stack's programs with SHA-256 values of zeros,
   which `every_server` and the desk playbook refuse.
 - `STACK_REPOSITORY` below is the path to a clone of the stack's repository.
   Use the clone from which the Monkeymaxxing Stack skill was installed,
   or a fresh `git clone https://github.com/monkeymaxxing/monkeymaxxing-stack.git`.
-- `NEW_VERSION` is the new version's tag, such as `2026-12`. Bring it into
+- `NEW_VERSION` is the new version's tag, such as `v0.2.0`. Bring it into
   the clone with `git -C STACK_REPOSITORY fetch --tags`, then
   `git -C STACK_REPOSITORY checkout NEW_VERSION`. Follow this page as that
   checkout holds it.
@@ -51,7 +51,7 @@ before the push, picks the quiet hour, and adds each missing vault key.
   If the checklist has no `stack_commit`, use the checklist's
   `stack_version`, the old version's tag, as `OLD_COMMIT` instead.
 - `OLD_VERSION` is the checklist's `stack_version` before step 3 changes
-  it, such as `2026-11`.
+  it, such as `0.1.0`.
 - The template is the example systems repository in the stack's repository,
   at `skills/monkeymaxxing-stack/systems_repository_template`.
 - `VERSION_CHANGE_DIRECTORY` is a new, empty directory outside the systems
@@ -193,10 +193,12 @@ systems repository:
 
 Later Stack releases add their one-time steps here, such as a one-time
 playbook that removes files an older version wrote. Each entry names the
-Stack version that brought its change, such as `2026-12`. An entry
+Stack version that brought its change, such as `0.2.0`. An entry
 applies when its version is newer than `OLD_VERSION`, the system's
-`stack_version` before the upgrade. Versions are a year and a month, so
-`2026-12` is newer than `2026-11`.
+`stack_version` before the upgrade. Compare versions number by number,
+so `0.10.0` is newer than `0.9.1`;
+`printf '%s\n' OLD_VERSION ENTRY_VERSION | sort -V | tail -n 1` prints the
+newer one.
 
 Before you push, read each entry that applies: an entry can say what the
 version restarts, or what to do before the push. After `util01`'s run of

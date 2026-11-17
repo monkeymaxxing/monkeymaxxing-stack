@@ -440,7 +440,7 @@ mkdir -p ~/.agents/skills
 ln -s ~/monkeymaxxing-stack/skills/monkeymaxxing-stack ~/.agents/skills/monkeymaxxing-stack
 ```
 
-Each release is a Git tag named after its month, such as `2026-11`. Use a
+Each release is a Git tag with a version number, such as `v0.1.0`. Use a
 release, not the `main` branch: between releases, `main` names no released
 programs, and the setup refuses to install from it.
 

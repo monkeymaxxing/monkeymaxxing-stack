@@ -4,9 +4,9 @@
 # version, address and SHA-256 into stack_software.set_up_outside_services
 # in the template's mmx_project_settings.yml, for the release commit.
 #
-#   ./build_release_archive.sh 2026-11 /tmp/release
+#   ./build_release_archive.sh 0.1.0 /tmp/release
 #
-# The version must be the template's stack_version, the tag of the release.
+# The version must be the template's stack_version, the release's tag without its v.
 # The address keeps the template's pattern with the new version in place
 # of the old one.
 # The build is reproducible: the same source, Go toolchain (go.mod's
@@ -14,7 +14,7 @@
 # anyone can check a published archive by building it again. Run it on
 # Linux: it needs GNU tar for the archive's fixed file order and times.
 set -euo pipefail
-version=${1:?give the version, such as 2026-11}
+version=${1:?give the version, such as 0.1.0}
 output_directory=${2:?give the output directory}
 source_directory=$(cd "$(dirname "$0")" && pwd)
 template="$source_directory/../skills/monkeymaxxing-stack/systems_repository_template"
