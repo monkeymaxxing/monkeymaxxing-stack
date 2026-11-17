@@ -32,8 +32,8 @@ domain at Cloudflare, its DNS records, and the lock.
   `not_started`, and `stopped_with`, the reason a run stopped. Its
   `for_the_coding_agent` block holds values that are not secrets, which
   you write into the settings or check. The file never holds a secret.
-  Wait for the file as step 2 says, and read it again each time the
-  person writes to you:
+  Wait for the file with `ssh desk01-agent wait-for-the-setup`, as step 2
+  says, and read it again each time the person writes to you:
 
   ```sh
   # On the laptop:
@@ -69,8 +69,8 @@ domain at Cloudflare, its DNS records, and the lock.
 
    **Tell the person:** no message.
 
-   **Check:** `ssh -O check desk01-agent` says the master connection is
-   running, and `~/code/example_systems` is a clone of the desk's
+   **Check:** `~/code/example_systems/ssh/open-the-desk-login --check`
+   says the login is open, and `~/code/example_systems` is a clone of the desk's
    repository.
 
 2. **The desk's setup command.**
@@ -96,30 +96,30 @@ domain at Cloudflare, its DNS records, and the lock.
 
    ```sh
    # On the laptop. Waits up to 9 minutes for go-live to finish or stop.
-   ssh desk01-agent 'f=/var/lib/monkeymaxxing-stack/setup_results.json; start=$(date +%s)
-     for i in $(seq 108); do
-       [ -f "$f" ] && [ "$(stat -c %Y "$f")" -ge "$start" ] && grep -qE "\"finished\": true|\"stopped_with\":" "$f" && break
-       sleep 5
-     done
-     cat "$f"'
+   ssh desk01-agent wait-for-the-setup
    ```
 
-   The wait counts only a results file written after it started, and a
-   new `go-live` run drops the earlier run's `stopped_with`. Reason for 9
-   minutes: the loop ends by itself before Claude Code's 10-minute limit
-   stops the command, and a question the person types meanwhile waits 9
-   minutes at most. The wait is one more session on your shared login, and
-   the person's `ssh desk01-setup` is a separate login, so neither blocks
-   the other. Both go through the same doubleshell tunnel, which serves
-   several connections at once.
+   It prints the steps as they change, and a line at least once a minute.
+   It ends with the results file's summary: the steps, `finished`,
+   `stopped_with` and `for_the_coding_agent`. Exit 0 means `go-live`
+   finished, 1 that it stopped, and 124 that it still runs after 9 minutes.
+   A stop counts only when the run wrote the file after the wait started,
+   so an earlier run's `stopped_with` never ends the wait for the next run.
+   Reason for 9 minutes: the wait ends by itself before Claude Code's
+   10-minute limit stops the command, and a question the person types
+   meanwhile waits 9 minutes at most. The wait is one more session on your
+   shared login, and the person's `ssh desk01-setup` is a separate login, so
+   neither blocks the other. Both go through the same doubleshell tunnel,
+   which serves several connections at once.
 
    When `finished` is true, carry on with the steps below without being
    told. With `stopped_with`, tell the person the reason in plain words and
-   what to do. When the limit passed, read the file, do the work of each
-   step that is done, such as step 3's, then say in one line that you are
-   still waiting and that the person can type anything here when the
-   command is done, and end the reply. At the person's next message, read
-   the file, and wait again while `go-live` still runs. An agent that does
+   what to do. When the limit passed, do the work of each step that is
+   done, such as step 3's, then say in one line that you are still waiting
+   and that the person can type anything here when the command is done,
+   and end the reply. At the person's next message, run
+   `ssh desk01-agent wait-for-the-setup` again: it ends at once when
+   `go-live` finished. An agent that does
    not show its text before a command ends its reply with the screen and
    "When it says  Go back to your coding agent,  tell me "done" here."
 
@@ -325,7 +325,20 @@ domain at Cloudflare, its DNS records, and the lock.
    into `mmx_project_settings.yml`, and commit it in your clone, to
    publish once `go-live` has finished, as in step 3.
    `container_image_found` says whether CI has built the first image yet.
-   With `no, not built yet`, check CI before chapter 7, with `gh run watch`
+   With `no, not built yet`, wait for the image on the laptop, before
+   chapter 6, with the tag chapter 2 recorded in `deployed_image_tags`:
+
+   ```sh
+   # On the laptop, in ~/code/example_systems. Waits up to 9 minutes.
+   ./server_management_scripts/wait_for_the_app_image ghcr.io/example/shop:FULL_APP_COMMIT_ID
+   ```
+
+   Exit 0: the image is at the registry; carry on. Exit 1: it is still
+   missing after 9 minutes, so the build failed or still runs; check CI as
+   below. Exit 3: the registry does not let the laptop read a private image
+   without a registry login, so the command cannot tell; check CI as below.
+   Never tell the person the app's tests passed from the image alone: say
+   only what CI's run or the command showed. Check CI with `gh run watch`
    when `gh` is signed in. Without `gh`, show the person one screen, with
    the app's repository in the link:
 

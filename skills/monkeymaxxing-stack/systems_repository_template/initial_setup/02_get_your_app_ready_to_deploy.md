@@ -350,12 +350,16 @@ the person's. Then you push the changes and watch the first build.
    - With `gh` signed in: `gh run watch` on the run of the pushed commit.
      A green run whose last step names `linux/amd64` means the image is at
      the registry.
-   - Without `gh`: you cannot see the run, and the person needs nothing
-     now. Never send the person to the Actions page: a private
-     repository's page says "Page not found" to a browser that is not
-     signed in to GitHub. Chapter 4's Git host token screen reads the
-     image at the registry with the new token, and the results file's
-     `container_image_found` tells you whether CI built it.
+   - Without `gh`: run
+     `./server_management_scripts/wait_for_the_app_image IMAGE:FULL_APP_COMMIT_ID`
+     in the systems repository. Exit 0 means the image is at the registry.
+     Exit 3 means the image is private and this laptop has no registry
+     login, so it cannot tell; the person needs nothing now. Never send the
+     person to the Actions page: a private repository's page says "Page not
+     found" to a browser that is not signed in to GitHub. Chapter 4's Git
+     host token screen reads the image at the registry with the new token,
+     and the results file's `container_image_found` tells you whether CI
+     built it.
 
    Record the pushed commit's full ID, 40 characters, as the app's tag in
    production's `deployed_image_tags` in the laptop's copy, and commit

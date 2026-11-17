@@ -42,10 +42,15 @@ without the memory check.
 2. **Build and test the image.**
    - **With CI:** CI tests, builds, and pushes the image when the team has
      CI (chapter 2's ready GitHub Actions file does).
-     **Check:** ask the person to confirm that CI's run for the full app
-     commit is green (the repository's Actions tab, or
-     `gh run list --commit FULL_APP_COMMIT_ID`) and that the last step's
-     output names `linux/amd64`; that step asks the registry for the tag.
+     **Check:** CI's run for the full app commit is green
+     (`gh run list --commit FULL_APP_COMMIT_ID`, or ask the person to look
+     at the repository's Actions tab) and the last step's output names
+     `linux/amd64`; that step asks the registry for the tag. Before that,
+     run `./server_management_scripts/wait_for_the_app_image IMAGE_NAME:FULL_APP_COMMIT_ID`
+     on the laptop: exit 0 means the image is there, exit 1 that it is
+     still missing after 9 minutes, and exit 3 that the laptop cannot read
+     the private image without a registry login. The image alone never
+     says the tests ran.
      The desk has no registry login to check with, and needs none (see
      [Why the desk does not check the registry](#why-the-desk-does-not-check-the-registry)).
    - **Without CI:** run the app's tests and the build only inside a
@@ -57,12 +62,15 @@ without the memory check.
      from `vars.apps`:
 
      ```sh
-     # On the laptop, only for a team with no CI (docker manifest inspect with docker):
-     podman manifest inspect IMAGE_NAME:FULL_APP_COMMIT_ID
+     # On the laptop, in the systems repository. Waits up to 9 minutes.
+     ./server_management_scripts/wait_for_the_app_image IMAGE_NAME:FULL_APP_COMMIT_ID
      ```
 
-     **Check:** it prints a manifest that names `linux/amd64`;
-     `manifest unknown` means the tag is not at the registry.
+     **Check:** it exits 0 and says the image is at the registry. Exit 1
+     means the tag is not at the registry. It reads a private image with
+     the registry login that `podman login` saved in its file. With a login
+     kept in the keychain, such as Docker Desktop's, it exits 3, cannot
+     tell: then check with `docker manifest inspect IMAGE_NAME:FULL_APP_COMMIT_ID`.
    - **With `staging01`:** set staging's tag in the systems inventory,
      commit, push, and run:
 
