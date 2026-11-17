@@ -23,6 +23,11 @@ inputs:
   # (provider_server_id in the desk's entry of inventories/servers.yml). The
   # API proxy refuses a request other than GET that names it.
   provider_server_id: {type: string, required: true}
+  # This desk's own name at the provider, for the providers that put a name
+  # in the API path: an OVHcloud VPS's service name, a Google Cloud
+  # instance's name (provider_server_name in the desk's inventory entry). Empty
+  # when not recorded.
+  provider_server_name: {type: string, default: ""}
   # From systems_desk_provider_api_authentication: token_in_a_header, where
   # the API proxy adds the token on 127.0.0.1:8081, or
   # ovhcloud_signed_requests, aws_signed_requests or
@@ -522,6 +527,13 @@ node_tasks:
     file:
       path: /etc/systems-desk/desk-server-id
       content: "{{ .inputs.provider_server_id }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: write_the_desks_own_server_name_for_the_api_proxy
+    file:
+      path: /etc/systems-desk/desk-server-name
+      content: "{{ .inputs.provider_server_name }}\n"
       owner: root
       group: root
       permissions_mode: "0644"

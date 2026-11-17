@@ -429,6 +429,7 @@ func TestProxyRefusesARequestThatWouldChangeTheDeskItself(t *testing.T) {
 	standIn, received := headerStandIn(t)
 	proxy := newHeaderTokenProxy(standIn.URL+"/v1/", headerTokenSigner{"Authorization", "Bearer token"}, standIn.Client())
 	proxy.deskServerID = deskID
+	proxy.deskServerName = "vps-1a2b3c4d.vps.ovh.us"
 	server := httptest.NewServer(proxy)
 	defer server.Close()
 	send := func(method, path, body string) (int, string) {
@@ -453,6 +454,9 @@ func TestProxyRefusesARequestThatWouldChangeTheDeskItself(t *testing.T) {
 		{"a JSON body that names it", "POST", "/servers/bulk", `{"servers":["1","` + deskID + `"]}`},
 		{"a JSON number that names it", "POST", "/servers/bulk", `{"server_id":` + deskID + `}`},
 		{"AWS terminate", "POST", "/", "Action=TerminateInstances&InstanceId.1=" + deskID},
+		{"OVHcloud VPS rebuild by name", "POST", "/vps/vps-1a2b3c4d.vps.ovh.us/rebuild", `{"imageId":"x"}`},
+		{"Google Cloud instance delete by name", "DELETE", "/projects/P/zones/Z/instances/vps-1a2b3c4d.vps.ovh.us", ""},
+		{"a body that names it", "POST", "/servers/bulk", `{"names":["vps-1a2b3c4d.vps.ovh.us"]}`},
 		{"Google delete", "DELETE", "/projects/P/zones/Z/instances/" + deskID, ""},
 	}
 	for _, c := range refused {
@@ -467,6 +471,9 @@ func TestProxyRefusesARequestThatWouldChangeTheDeskItself(t *testing.T) {
 		{"a GET of the listing", "GET", "/servers?per_page=50", ""},
 		{"a delete of another server", "DELETE", "/servers/4242424243", ""},
 		{"a delete of a server whose ID only starts like the desk's", "DELETE", "/servers/" + deskID + "9", ""},
+		{"a GET of the desk by name", "GET", "/vps/vps-1a2b3c4d.vps.ovh.us", ""},
+		{"a rebuild of another VPS", "POST", "/vps/vps-99999999.vps.ovh.us/rebuild", ""},
+		{"a delete of an instance whose name only starts like the desk's", "DELETE", "/instances/vps-1a2b3c4d.vps.ovh.us-2", ""},
 		{"a create", "POST", "/servers", `{"name":"app002","size":42424242420}`},
 	}
 	for _, c := range passed {
@@ -481,6 +488,7 @@ func TestProxyRefusesARequestThatWouldChangeTheDeskItself(t *testing.T) {
 func TestProxyNeedsTheDesksServerID(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("CREDENTIALS_DIRECTORY", directory)
+	os.WriteFile(filepath.Join(directory, "desk-server-name"), nil, 0o600)
 	os.WriteFile(filepath.Join(directory, "provider-api-token"), []byte(`proxy_set_header Authorization "Bearer t";`+"\n"), 0o600)
 	err := runProviderAPIProxy([]string{"--provider-api-url", providerGuideAPIAddresses[0]})
 	if err == nil || !strings.Contains(err.Error(), "desk's own server ID") {

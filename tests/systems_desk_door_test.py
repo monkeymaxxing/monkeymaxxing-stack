@@ -179,6 +179,9 @@ class TheDeskDoor(unittest.TestCase):
         fields = {argument['field']: argument['value'] for argument in task['arguments']}
         self.assertEqual((fields['file.content'], fields['file.owner'], fields['file.group'], fields['file.path']),
                          ('4242424242\n', 'root', 'root', '/etc/systems-desk/desk-server-id'))
+        name = [task for _, task in self.tasks if task['path'].endswith('/write_the_desks_own_server_name_for_the_api_proxy')][0]
+        self.assertEqual({argument['field']: argument['value'] for argument in name['arguments']}['file.path'], '/etc/systems-desk/desk-server-name')
+        self.assertIn('LoadCredential=desk-server-name:/etc/systems-desk/desk-server-name', (T/'roles/systems_desk/files/provider-api-proxy.service').read_text())
         self.assertIn('LoadCredential=desk-server-id:/etc/systems-desk/desk-server-id', (T/'roles/systems_desk/files/provider-api-proxy.service').read_text())
 
     def test_the_coding_agent_gets_the_socket_and_its_git_settings_and_no_forwarding(self):
