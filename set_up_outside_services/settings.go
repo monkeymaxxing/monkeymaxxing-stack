@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -172,9 +171,11 @@ const (
 
 var cloudflareAccountIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
-func readSystemSettings(directory string) (systemSettings, error) {
+// readSystemSettings reads the settings with read, which reads a file of
+// the systems repository by its name there.
+func readSystemSettings(read func(name string) ([]byte, error)) (systemSettings, error) {
 	var settings systemSettings
-	text, err := os.ReadFile(filepath.Join(directory, projectSettingsFile))
+	text, err := read(projectSettingsFile)
 	if errors.Is(err, os.ErrNotExist) {
 		return settings, fmt.Errorf("this directory has no %s. Run this command in your systems repository on this desk, such as ~/%s", projectSettingsFile, "example_systems")
 	}
@@ -187,7 +188,7 @@ func readSystemSettings(directory string) (systemSettings, error) {
 	if settings.ProjectName == "" {
 		return settings, fmt.Errorf("%s has no project_name", projectSettingsFile)
 	}
-	inventoryText, err := os.ReadFile(filepath.Join(directory, inventoryFile))
+	inventoryText, err := read(inventoryFile)
 	if err != nil {
 		return settings, err
 	}

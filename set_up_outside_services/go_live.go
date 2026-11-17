@@ -146,7 +146,7 @@ func runGoLive(e *environment) error {
 // person never does a screen's steps for a run that then stops on a setting.
 func (g *goLive) prepare() error {
 	e := g.e
-	settings, err := readSystemSettings(e.directory)
+	settings, err := readSystemSettings(e.readRepositoryFile)
 	if err != nil {
 		return err
 	}
@@ -172,11 +172,6 @@ func (g *goLive) prepare() error {
 	}
 	if g.providerCredential, err = g.readProviderCredential(); err != nil {
 		return err
-	}
-	// ssh desk01-setup loads no token file, so the vault's passphrase file is
-	// found where the desk keeps it.
-	if os.Getenv("MMX_VAULT_PASSWORD_FILE") == "" && os.Getenv("MMX_VAULT_PASSWORD") == "" {
-		os.Setenv("MMX_VAULT_PASSWORD_FILE", filepath.Join(e.home, ".config", "monkeymaxxing-stack", settings.ProjectName+"_mmx_vault_passphrase"))
 	}
 	err = e.quietly(func() error {
 		g.saved, err = e.beginVaultChange()

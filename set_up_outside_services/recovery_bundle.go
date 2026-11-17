@@ -38,6 +38,9 @@ const (
 // The desk's files the bundle copies. The desk role makes each.
 const deskWireGuardPrivateKeyFile = "/etc/wireguard/wg0.private_key"
 
+// productionKeyFile is the production private key, which the desk role
+// makes in the person's own home (roles/systems_desk/main.yml,
+// create_the_persons_production_key) for the desk's SSH agent.
 func (e *environment) productionKeyFile() string {
 	return filepath.Join(e.home, ".ssh", "production_key")
 }
@@ -78,7 +81,7 @@ func (g *goLive) openTheBundle() error {
 	case err == nil:
 		g.passphrase = strings.TrimSpace(string(text))
 	case errors.Is(err, os.ErrNotExist):
-		if _, err := os.Stat(filepath.Join(e.directory, recoveryBundleFile)); err == nil {
+		if e.repositoryHas(recoveryBundleFile) {
 			return fmt.Errorf("%s exists, but its passphrase file %s is gone. Delete %s from the systems repository and run this command again: it makes a new bundle", recoveryBundleFile, path, recoveryBundleFile)
 		}
 		if g.passphrase, err = newRecoveryPassphrase(); err != nil {
@@ -95,9 +98,10 @@ func (g *goLive) openTheBundle() error {
 	}
 	// MMX runs from the passphrase's folder, which holds no project settings,
 	// so the bundle never depends on the project's MMX settings.
-	store := mmxVault{directory: filepath.Dir(path), file: filepath.Join(e.directory, recoveryBundleFile), passwordFile: path}
+	store := mmxVault{directory: filepath.Dir(path), file: filepath.Join(e.directory, recoveryBundleFile), passwordFile: path,
+		asRoot: e.inTheCodingAgentsCheckout}
 	names := map[string]bool{}
-	if _, err := os.Stat(filepath.Join(e.directory, recoveryBundleFile)); err == nil {
+	if e.repositoryHas(recoveryBundleFile) {
 		if names, err = store.keys(); err != nil {
 			return err
 		}
@@ -114,7 +118,7 @@ func (g *goLive) recoveryBundle() (string, error) {
 	e := g.e
 	tokenFile := e.tokenFilePath(g.settings)
 	fromTheDesk := []struct{ key, path string }{
-		{bundleVaultPassphrase, os.Getenv("MMX_VAULT_PASSWORD_FILE")},
+		{bundleVaultPassphrase, deskVaultPassphraseFile},
 		{bundleProductionKey, e.productionKeyFile()},
 		{bundleWireGuardKey, deskWireGuardPrivateKeyFile},
 	}
@@ -174,7 +178,7 @@ func (g *goLive) recoveryBundle() (string, error) {
 		}
 	}
 	err = e.quietly(func() error {
-		content, err := os.ReadFile(filepath.Join(e.directory, recoveryBundleFile))
+		content, err := e.readRepositoryFile(recoveryBundleFile)
 		if err != nil {
 			return err
 		}

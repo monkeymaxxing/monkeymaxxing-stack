@@ -128,7 +128,7 @@ func newGoLiveHarness(t *testing.T, dnssec bool) *goLiveHarness {
 	h.e.stripeAPIURL = stripeServer.URL
 	rootFiles := map[string]string{
 		"/etc/systems-desk/provider-api-token.conf":    `proxy_set_header Authorization "Bearer ` + providerToken + `";` + "\n",
-		os.Getenv("MMX_VAULT_PASSWORD_FILE"):           vaultPassphrase + "\n",
+		deskVaultPassphraseFile:                        vaultPassphrase + "\n",
 		filepath.Join(h.e.home, ".ssh/production_key"): "-----BEGIN OPENSSH PRIVATE KEY-----\nproduction\n-----END OPENSSH PRIVATE KEY-----\n",
 		deskWireGuardPrivateKeyFile:                    "wireguardprivatekeyvalue=\n",
 	}
@@ -429,7 +429,7 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 func TestTheAccountIDScreenWhenCloudflareDoesNotListTheAccount(t *testing.T) {
 	h := newGoLiveHarness(t, false)
 	h.cloudflare.RefuseAccountsList = true
-	settings, err := readSystemSettings(h.e.directory)
+	settings, err := readSystemSettings(h.e.readRepositoryFile)
 	if err != nil {
 		t.Fatal(err)
 	}

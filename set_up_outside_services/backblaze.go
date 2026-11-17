@@ -404,7 +404,7 @@ func missingCapabilities(have []string) []string {
 }
 
 func runBackblaze(e *environment, arguments []string) error {
-	settings, err := readSystemSettings(e.directory)
+	settings, err := readSystemSettings(e.readRepositoryFile)
 	if err != nil {
 		return err
 	}

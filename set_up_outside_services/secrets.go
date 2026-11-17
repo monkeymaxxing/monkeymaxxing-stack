@@ -226,7 +226,7 @@ func madeElsewhere(key string) string {
 	case strings.Contains(key, "_b2_"), strings.HasPrefix(key, "mmhotline_backup_"):
 		return "set-up-outside-services backblaze"
 	case key == "mmx_vault_passphrase":
-		return "set-up-the-systems-repository, in chapter 2"
+		return "the desk's bootstrap, in chapter 3"
 	case strings.HasPrefix(key, "database_moving_in_"):
 		return "Move a database into the Stack, only while a database moves in"
 	}
@@ -349,7 +349,7 @@ func runSecrets(e *environment, arguments []string) error {
 	if err := flags.Parse(arguments); err != nil || flags.NArg() > 0 {
 		return fmt.Errorf("secrets takes only --replace KEY: %w", errUsage)
 	}
-	settings, err := readSystemSettings(e.directory)
+	settings, err := readSystemSettings(e.readRepositoryFile)
 	if err != nil {
 		return err
 	}
@@ -642,8 +642,7 @@ func consolePasswordHash(password string) (string, error) {
 // `mmx secrets usage --json` reports them. MMX exits 1 when a key is
 // missing, which is the case this reads, so its JSON decides.
 func (v mmxVault) missing() ([]string, error) {
-	command := exec.Command("mmx", "secrets", "usage", "--json")
-	command.Dir = v.directory
+	command := v.command("secrets", "usage", "--json")
 	var output, errorOutput bytes.Buffer
 	command.Stdout, command.Stderr = &output, &errorOutput
 	runErr := command.Run()
@@ -664,8 +663,7 @@ func (v mmxVault) addRandom(key string, length int, replace bool) error {
 	if replace {
 		arguments = append(arguments, "--replace")
 	}
-	command := exec.Command("mmx", v.arguments(arguments...)...)
-	command.Dir = v.directory
+	command := v.command(v.arguments(arguments...)...)
 	var errorOutput bytes.Buffer
 	command.Stdout, command.Stderr = &errorOutput, &errorOutput
 	if err := command.Run(); err != nil {

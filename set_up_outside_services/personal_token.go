@@ -78,7 +78,7 @@ func runPersonalToken(e *environment, arguments []string) error {
 	if len(arguments) == 0 {
 		return fmt.Errorf("personal-token needs server-provider or staging-access: %w", errUsage)
 	}
-	settings, err := readSystemSettings(e.directory)
+	settings, err := readSystemSettings(e.readRepositoryFile)
 	if err != nil {
 		return err
 	}

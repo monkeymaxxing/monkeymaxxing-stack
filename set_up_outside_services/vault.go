@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -32,7 +33,23 @@ type mmxVault struct {
 	// Empty for the project's vault, whose passphrase MMX finds itself.
 	file         string
 	passwordFile string
+	// asRoot runs MMX as root through sudo, for a vault in the coding
+	// agent's checkout on the desk, which the person's account cannot read.
+	// MMX then reads the project vault's passphrase from the desk's root
+	// file itself, and the vault file MMX wrote goes back to coding-agent.
+	// Reason for root and not coding-agent: a process of coding-agent's
+	// could be read by the coding agent, which must never see the vault
+	// passphrase.
+	asRoot bool
 }
+
+// The coding agent's checkout of the systems repository on the desk, which
+// the desk's bootstrap makes (roles/systems_desk/files/start-the-systems-repository),
+// and the vault passphrase the bootstrap makes there, root:servers-mmx 0640.
+const (
+	codingAgentCheckout     = "/home/coding-agent/systems_repository"
+	deskVaultPassphraseFile = "/etc/systems-desk/vault-passphrase"
+)
 
 // arguments adds --vault and --vault-password-file for another vault file.
 func (v mmxVault) arguments(arguments ...string) []string {
@@ -42,9 +59,28 @@ func (v mmxVault) arguments(arguments ...string) []string {
 	return arguments
 }
 
+// command is mmx with arguments, run in the vault's directory.
+func (v mmxVault) command(arguments ...string) *exec.Cmd {
+	if !v.asRoot {
+		command := exec.Command("mmx", arguments...)
+		command.Dir = v.directory
+		return command
+	}
+	written := v.file
+	if written == "" {
+		written = filepath.Join(v.directory, vaultFile)
+	}
+	// The person's account cannot enter the coding agent's home, so the
+	// shell changes into the directory as root.
+	script := `cd -- "$1" || exit 1; written=$2; shift 2; mmx "$@"; status=$?
+if [ -e "$written" ]; then chown --no-dereference coding-agent:coding-agent -- "$written" || exit 1; fi
+exit "$status"`
+	return exec.Command("sudo", append([]string{"-n", "env", "MMX_VAULT_PASSWORD_FILE=" + deskVaultPassphraseFile,
+		"sh", "-c", script, "sh", v.directory, written}, arguments...)...)
+}
+
 func (v mmxVault) keys() (map[string]bool, error) {
-	command := exec.Command("mmx", v.arguments("secrets", "list-keys", "--json")...)
-	command.Dir = v.directory
+	command := v.command(v.arguments("secrets", "list-keys", "--json")...)
 	var output, errorOutput bytes.Buffer
 	command.Stdout, command.Stderr = &output, &errorOutput
 	if err := command.Run(); err != nil {
@@ -68,8 +104,7 @@ func (v mmxVault) set(key, value string, replace bool) error {
 	if replace {
 		arguments = append(arguments, "--replace")
 	}
-	command := exec.Command("mmx", v.arguments(arguments...)...)
-	command.Dir = v.directory
+	command := v.command(v.arguments(arguments...)...)
 	command.Stdin = strings.NewReader(value)
 	var errorOutput bytes.Buffer
 	command.Stdout, command.Stderr = &errorOutput, &errorOutput
@@ -112,7 +147,7 @@ type savedKeys struct {
 // prepareVaultCommit). It lists the keys after the pull, so the run sees the
 // team's vault.
 func (e *environment) beginVaultChange() (*savedKeys, error) {
-	if os.Getenv("MMX_VAULT_PASSWORD_FILE") == "" && os.Getenv("MMX_VAULT_PASSWORD") == "" {
+	if desk, _ := e.vault.(mmxVault); !desk.asRoot && os.Getenv("MMX_VAULT_PASSWORD_FILE") == "" && os.Getenv("MMX_VAULT_PASSWORD") == "" {
 		return nil, fmt.Errorf("MMX_VAULT_PASSWORD_FILE is not set, so MMX could not save the new keys. Load your token file first: . ~/.config/monkeymaxxing-stack/PROJECT_NAME.env && set-up-outside-services ...")
 	}
 	leftover, err := e.prepareVaultCommit()
@@ -183,6 +218,26 @@ var filesThisCommandCommits = []string{vaultFile, recoveryBundleFile}
 // The person's private agent socket, which signs the vault commit with the
 // production key. The desk role makes it; a test leaves it unset.
 var personAgentSocket = "/run/desk-ssh-agent/private.sock"
+
+// gitAsTheCodingAgent runs git as coding-agent in its checkout on the desk,
+// as the coding agent's own logins run it (roles/systems_desk/files/sshd.conf):
+// the production key's relay socket signs each commit, and the coding
+// agent's Git settings name the Git host's verified keys. So every file
+// stays coding-agent's own, and no value passes through. Hooks are off: no
+// file of the checkout runs here.
+func gitAsTheCodingAgent(directory string) func(arguments ...string) (string, error) {
+	return func(arguments ...string) (string, error) {
+		command := exec.Command("sudo", append([]string{"-n", "-u", "coding-agent", "env", "-C", directory,
+			"HOME=/home/coding-agent", "SSH_AUTH_SOCK=/run/desk-ssh-agent/socket",
+			"GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig", "git", "-c", "core.hooksPath=/dev/null"}, arguments...)...)
+		var output, errorOutput bytes.Buffer
+		command.Stdout, command.Stderr = &output, &errorOutput
+		if err := command.Run(); err != nil {
+			return output.String(), fmt.Errorf("git %s failed: %s", strings.Join(arguments, " "), firstLine(errorOutput.String(), err))
+		}
+		return output.String(), nil
+	}
+}
 
 // gitInRepository runs git in the systems repository, signing and pushing
 // through the person's own agent socket when it exists.
@@ -272,7 +327,7 @@ func (e *environment) commitFiles(message string, files ...string) (string, erro
 		return "", err
 	}
 	if !strings.Contains(object, "\ngpgsig ") {
-		return "", errors.New("the commit is not signed. Check that your desk terminal reaches your agent socket, /run/desk-ssh-agent/private.sock")
+		return "", errors.New("the commit is not signed. Check that the desk's production key agent runs: systemctl status desk-ssh-agent desk-ssh-agent-relay")
 	}
 	commit, err := e.git("rev-parse", "--short", "HEAD")
 	return strings.TrimSpace(commit), err

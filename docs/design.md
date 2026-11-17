@@ -4755,7 +4755,17 @@ Stack repository's `set_up_outside_services/`. The desk role installs it on
 every systems desk from its pin, `stack_software.set_up_outside_services`.
 The person runs it in their own desk terminal: `go-live` through the laptop's
 `ssh desk01-setup` entry, the others in their own systems repository, after
-loading their token file:
+loading their token file. `go-live` works in the desk's one working copy,
+the coding agent's checkout `/home/coding-agent/systems_repository`, which
+the person's account reaches only through `sudo -n`. It runs MMX as root,
+which opens the vault with the desk's `/etc/systems-desk/vault-passphrase`
+and gives each vault file it writes back to `coding-agent`, and it runs Git
+as `coding-agent` with the production key's relay socket, so each commit is
+signed and every file stays the coding agent's own. The recovery bundle
+gets the vault passphrase through `sudo -n cat`, on MMX's standard input.
+Reason: the passphrase never passes through a process of `coding-agent`'s,
+which the coding agent could read, and never through a file in the
+person's home.
 
 | Command | What it does |
 | --- | --- |

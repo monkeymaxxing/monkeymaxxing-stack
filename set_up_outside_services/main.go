@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -151,9 +152,7 @@ func (e *environment) dispatch(arguments []string) error {
 		if !stdinIsTerminal() {
 			return errNoTerminal
 		}
-		if err := e.useTheSystemsRepository(); err != nil {
-			return err
-		}
+		e.useTheCodingAgentsCheckout()
 		return e.withNoMoreArguments(arguments, runGoLive)
 	}
 	return fmt.Errorf("unknown command %q: %w", arguments[0], errUsage)
@@ -210,9 +209,13 @@ type environment struct {
 	// deleteOldKeysAtOnce deletes a replaced key's old key without waiting
 	// for the servers' run, after a break-in.
 	deleteOldKeysAtOnce bool
-	// git runs git in the systems repository, through the person's own
+	// git runs git in the systems repository, through the production key's
 	// agent socket, which signs the vault's commits.
 	git func(arguments ...string) (string, error)
+	// inTheCodingAgentsCheckout says the systems repository is the coding
+	// agent's checkout on the desk, which the person's account reaches
+	// only through sudo.
+	inTheCodingAgentsCheckout bool
 
 	interruptMutex    sync.Mutex
 	inCriticalSection bool
@@ -291,22 +294,36 @@ func (e *environment) quietly(work func() error) error {
 	return work()
 }
 
-// useTheSystemsRepository finds the person's systems repository when the
-// command runs outside it, as ssh desk01-setup runs go-live in the home
-// directory: the one directory in the home that holds mmx_project_settings.yml,
-// where the desk's bootstrap copied the repository.
-func (e *environment) useTheSystemsRepository() error {
-	if _, err := os.Stat(filepath.Join(e.directory, projectSettingsFile)); err == nil {
-		return nil
+// useTheCodingAgentsCheckout makes the command work in the desk's one
+// working copy of the systems repository, the coding agent's checkout,
+// where the desk's bootstrap made the vault: MMX runs as root with the
+// desk's vault passphrase file, and git runs as coding-agent with the
+// production key's relay socket, so each commit is signed and every file
+// stays coding-agent's own. The person keeps no checkout on the desk.
+func (e *environment) useTheCodingAgentsCheckout() {
+	e.directory = codingAgentCheckout
+	e.vault = mmxVault{directory: codingAgentCheckout, asRoot: true}
+	e.git = gitAsTheCodingAgent(codingAgentCheckout)
+	e.inTheCodingAgentsCheckout = true
+}
+
+// readRepositoryFile reads a file of the systems repository, through sudo
+// in the coding agent's checkout.
+func (e *environment) readRepositoryFile(name string) ([]byte, error) {
+	path := filepath.Join(e.directory, name)
+	if e.inTheCodingAgentsCheckout {
+		return e.readRootFile(path)
 	}
-	found, _ := filepath.Glob(filepath.Join(e.home, "*", projectSettingsFile))
-	if len(found) != 1 {
-		return fmt.Errorf("this command runs in your systems repository, and your home holds %d directories with %s. Run it from your systems repository", len(found), projectSettingsFile)
+	return os.ReadFile(path)
+}
+
+// repositoryHas says whether the systems repository holds a file.
+func (e *environment) repositoryHas(name string) bool {
+	if e.inTheCodingAgentsCheckout {
+		return exec.Command("sudo", "-n", "test", "-e", filepath.Join(e.directory, name)).Run() == nil
 	}
-	e.directory = filepath.Dir(found[0])
-	e.vault = mmxVault{directory: e.directory}
-	e.git = gitInRepository(e.directory)
-	return nil
+	_, err := os.Stat(filepath.Join(e.directory, name))
+	return err == nil
 }
 
 const sayTellTheCodingAgent = "Tell your coding agent this command finished. It checks the result with mmx secrets usage, which lists names only."
