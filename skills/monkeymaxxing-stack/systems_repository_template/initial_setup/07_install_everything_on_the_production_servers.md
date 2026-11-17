@@ -216,6 +216,7 @@ chapter.
    **Tell the person first:**
 
    > Next, the first MMX run prepares `util01`, the server that runs the system tools.
+   > The first MMX run on a server also sets up MMX's HTTPS service there, `mmx-https-api.service`, on TCP port 7443. Each server's firewall admits that port only from `util01` over WireGuard.
    > WireGuard already carries SSH from your systems desk to every server. MMX reuses each server's first-boot key and adds the private connections that each server's job needs. WireGuard encrypts the connections between the servers.
 
    **Tell the person while waiting:**

@@ -512,6 +512,12 @@ each change, because only the desk holds the production key that lets a push int
    in the clone, and delete the local branch.
 5. For configuration, preview the pushed commit with
    `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers dryrun every_server --connection ssh_only` while `util01` runs nothing.
+   On a server MMX has never reached, the first dryrun copies MMX's program,
+   `mmx-runner`, to the server and works over SSH. It starts no service and
+   opens no port. Tell the person that in one line, then go on.
+   The first `mmx run` on a server also sets up MMX's HTTPS service,
+   `mmx-https-api.service`, on TCP port 7443. Tell the person before that run.
+   A dryrun that reports work `not_checked` prints one line that explains why, above "Run ...:".
    Exit 0 means no change; 2 means proposed changes; 3 means incomplete preview;
    1 means failed work; 4 means command error. Until the first restore drill has passed,
    every preview exits 2 for `start_the_restore_drill_in_the_background` alone. An MMX

@@ -156,6 +156,9 @@ each term.
 5. **Preview and apply the new server's configuration.** Commit the host
    key, synchronize, and push. Preview the pushed commit with
    `sudo -n -u servers-mmx run-mmx-on-the-servers dryrun every_server --connection ssh_only`.
+   Tell the person in one line first that this first preview copies MMX's
+   program, `mmx-runner`, to the new server and starts no service. The
+   run that follows also sets up MMX's HTTPS service there, on TCP port 7443.
    Exit 3 is expected: the new server lacks the packages, accounts and
    programs that earlier tasks of the run install, so the preview reports
    the tasks that need them `not_checked`, such as
