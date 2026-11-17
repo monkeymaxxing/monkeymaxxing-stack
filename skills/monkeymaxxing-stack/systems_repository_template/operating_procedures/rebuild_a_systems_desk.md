@@ -139,13 +139,13 @@ inventory's real names and addresses, and the next unused desk name.
    ```sh
    set +x
    umask 077
-   desk_private_key=$(bundle_item desk_wireguard_private_key)
    # LAPTOP_WIREGUARD_PUBLIC_KEY: the laptop's wireguard_public_key under the desk's allowed_laptops.
    laptop_public_key='LAPTOP_WIREGUARD_PUBLIC_KEY'
-   jq -n --arg private_key "$desk_private_key" --arg laptop_public_key "$laptop_public_key" \
-     '{private_key:$private_key, private_ip:"10.20.9.1", peers:[{public_key:$laptop_public_key, allowed_ips:["10.20.10.1/32"]}]}' |
+   # jq reads the key as its first input line (`input`), so the key is never in a variable or on a command line.
+   bundle_item desk_wireguard_private_key \
+     jq -Rn --arg laptop_public_key "$laptop_public_key" \
+     '{private_key:input, private_ip:"10.20.9.1", peers:[{public_key:$laptop_public_key, allowed_ips:["10.20.10.1/32"]}]}' |
      ./server_management_scripts/render_server_first_boot > /tmp/desk02-first-boot.yml
-   unset desk_private_key
    ```
 
    **Check:** the block prints no error, and `/tmp/desk02-first-boot.yml`
@@ -354,24 +354,30 @@ laptop terminal:
 ```sh
 # On the laptop, in your own terminal:
 cd ~/code/example_systems
-# MMX has no command that prints one value: this editor setting prints the one item and changes nothing.
-# When MMX has a one-value command, such as `mmx secrets show`, use it here instead.
+# bundle_item KEY COMMAND [ARGUMENT ...]: sends the item KEY to COMMAND's standard input.
+# `mmx secrets pipe-to` only reads the bundle, so the file stays unchanged.
 bundle_item() {
-  EDITOR="awk -v key=$1 '\$0 ~ \"^\" key \":\" {on=1; v=substr(\$0, length(key)+3); if (v !~ /^[|]/) {gsub(/^\"|\"\$/, \"\", v); print v; on=0}; next} on && /^[^ ]/ {on=0} on {sub(/^  /, \"\"); print}'" \
-    ~/.local/bin/mmx secrets edit --vault recovery_bundle.age | grep -v '^Saved encrypted vault: '
-  git restore recovery_bundle.age
+  local key=$1
+  shift
+  ~/.local/bin/mmx secrets pipe-to --vault recovery_bundle.age "$key" -- "$@"
 }
 ```
 
-Then `bundle_item KEY` asks for the recovery passphrase and prints only
-that item, such as `bundle_item phone_code_emergency_codes`. The steps
-pipe most items straight where they go, so nothing secret shows.
-`git restore` puts the bundle back: `mmx secrets edit` saves the file
-again, even with no change. The person never sees the rest of the bundle
-and never edits a file.
+Then `bundle_item KEY COMMAND ...` asks for the recovery passphrase and
+sends only that item to the command's input, such as
+`bundle_item mmx_vault_passphrase ssh desk02 'umask 077 && cat > ~/vault-passphrase'`.
+The command must save or use its input and never print it: never `cat`,
+`echo` or `tee`. The steps send each item straight where it goes, so
+nothing secret shows. The person never sees the rest of the bundle and
+never edits a file.
 
-**Check:** the command printed one item, and `git status` shows no change
-to `recovery_bundle.age`.
+To read one item on the screen, the person runs
+`~/.local/bin/mmx secrets show --vault recovery_bundle.age KEY`
+in the terminal (the emergency codes are the case that needs it).
+`show` prints only to a terminal, so run by a coding agent it fails.
+
+**Check:** the command ran, and `git status` shows no change to
+`recovery_bundle.age`.
 
 The bundle holds the vault passphrase (`mmx_vault_passphrase`), the
 production private key (`production_ssh_private_key`), the desk's
@@ -394,9 +400,9 @@ says. Each command asks for the recovery passphrase.
 ```sh
 # On the laptop, in your own terminal:
 # The production key: only for a rebuilt desk. A new teammate's desk keeps the key its bootstrap made.
-bundle_item production_ssh_private_key | ssh desk02 'umask 077 && cat > ~/.ssh/production_key'
+bundle_item production_ssh_private_key ssh desk02 'umask 077 && cat > ~/.ssh/production_key'
 # The vault passphrase: for every desk.
-bundle_item mmx_vault_passphrase | ssh desk02 'umask 077 && cat > ~/vault-passphrase'
+bundle_item mmx_vault_passphrase ssh desk02 'umask 077 && cat > ~/vault-passphrase'
 ```
 
 **On the desk,** in the person's own terminal (`ssh desk02`):

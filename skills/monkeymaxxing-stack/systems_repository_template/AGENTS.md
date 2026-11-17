@@ -352,7 +352,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   lists every secret and where it lives.
 
   You never open or print the vault's contents: no
-  `mmx secrets edit`, no playbook or `run-command` that prints a secret,
+  `mmx secrets edit` or `mmx secrets show`, no playbook or `run-command` that prints a secret,
   and no reading of a rendered secret file on a server, such as an app's
   env file in `/etc/<app>/`. To learn which keys exist or are missing, run
   `secrets list-keys` and `secrets usage` through your button, which holds

@@ -5048,12 +5048,12 @@ credential file. While one is missing, the step writes its file, says which
 file the proxy waits for, and skips the check through the proxy.
 
 **Recovery items.** `go-live` puts every recovery item into the recovery
-bundle at the lock, so no command shows recovery items one by one. MMX has
-no command that prints one vault value, so the procedures read one item of
-the bundle with `mmx secrets edit` and an editor setting that prints only
-that item ("Read an item from the recovery bundle" in the template's
-`operating_procedures/rebuild_a_systems_desk.md`). The person never edits
-a file.
+bundle at the lock, so no command shows recovery items one by one. The procedures send one item of
+the bundle straight to a program with `mmx secrets pipe-to`, or print it to
+the person's own terminal with `mmx secrets show`, which refuses to print
+anywhere but a terminal ("Read an item from the recovery bundle" in the
+template's `operating_procedures/rebuild_a_systems_desk.md`). The person
+never edits a file.
 
 **What stays a website step, and why:**
 
@@ -5966,7 +5966,7 @@ Reason: running MMX as the person would let a committed absolute `file.source` r
 The button's vault passphrase is `/etc/systems-desk/vault-passphrase`, root:servers-mmx, mode `0640`.
 The button runs only an allow-list of MMX commands and options. Of the `secrets` commands it runs `set`, `add-random`,
 `list-keys`, `diff-keys` and `usage`, and refuses `--vault`, `--vault-password-file` and `--new-vault-password-file`.
-Reason: `secrets edit` opens an editor on the decrypted vault and `describe-module` a pager, which put vault secrets on the
+Reason: `secrets edit` opens an editor on the decrypted vault, `secrets show` prints a secret, `secrets pipe-to` runs any program with a secret on its input, and `describe-module` opens a pager, which put vault secrets on the
 coding agent's screen, and a run must not point at another vault by mistake.
 No account on the desk accepts the production key that the button's runs offer: sshd admits only root from
 loopback, with the root-owned self-management key alone, and the person and `coding-agent` from elsewhere, with a
