@@ -170,7 +170,7 @@ better in three ways:
 - **It costs far less.** For the same size of server, a platform charges 10
   to 30 times more than a server provider such as Hetzner or OVHcloud. An
   always-on server with 2 vCPU and 4 GB of memory costs €5.99 a month at
-  Hetzner, and $5.35 a month, month to month, as an OVHcloud VPS in the US.
+  Hetzner, and $5.85 a month, month to month, as an OVHcloud VPS in the US.
   The same size costs $85 a month at Render and $150 a month at Heroku.
   These prices are from each company's pricing page or catalog, read
   between 2026-11-13 and 2026-11-17.
@@ -309,14 +309,15 @@ catalog, read on 2026-11-17, month to month.
 
 | Machine | Size | Hetzner Cloud (Europe) | OVHcloud VPS (US) |
 | --- | --- | --- | --- |
-| App server `app001` | 4 vCPU, 8 GB of memory | €8.99 (CX33) | $10.00 (VPS-2) |
-| Database server `db01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.35 (VPS-1) |
-| Utility server `util01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.35 (VPS-1) |
-| One systems desk | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.35 (VPS-1) |
-| **Total each month** | | **€26.96** | **$26.05** |
+| App server `app001` | 4 vCPU, 8 GB of memory | €8.99 (CX33) | $10.60 (VPS-2) |
+| Database server `db01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.85 (VPS-1) |
+| Utility server `util01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.85 (VPS-1) |
+| One systems desk | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.85 (VPS-1) |
+| **Total each month** | | **€26.96** | **$28.15** |
 
 Hetzner's prices are without VAT and include each server's public address
-and 20 TB of traffic. OVHcloud's VPS prices include unlimited traffic. At
+and 20 TB of traffic. OVHcloud's VPS prices include unlimited traffic and
+the daily backup that OVHcloud requires with each VPS ($0.50 or $0.60). At
 OVHcloud, the servers the Stack creates and removes by itself, such as the
 weekly restore drill's server, are Public Cloud servers billed by the hour,
 so a drill costs a few cents. Your coding agent shows you each server's
