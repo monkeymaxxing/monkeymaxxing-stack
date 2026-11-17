@@ -137,7 +137,8 @@ person for one code in the chat, in one short message:
 ```text
 I need one code from your phone to work on your desk.
 
-Type the 6 digits here.
+Type the 6 digits here. This is safe: the code works once, for 30 seconds,
+and only from this laptop.
 ```
 
 When the person just typed a code for something else, add the line

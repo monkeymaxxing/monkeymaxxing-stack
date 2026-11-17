@@ -191,12 +191,25 @@ the rules.
    - **Company name:** from the domain, such as `Example` for
      `example.com`.
    - **Password manager:** the one the laptop has, such as 1Password,
-     Bitwarden, or KeePassXC. On a Mac, look in `/Applications`.
+     Bitwarden, or KeePassXC. On a Mac, look in `/Applications`. On Linux,
+     look for `1password`, `bitwarden`, or `keepassxc` on `PATH` or in
+     `~/.local/share/applications`. When you find none, or the person
+     already named one, do not recommend one: write "Which password
+     manager do you use?" on the screen. Reason: a recommendation to a
+     person who has a manager reads as not listening.
    - **Your name on the desk:** the laptop's user name, `$USER`.
-   - **Cost:** the desk and the three servers, each with its public
-     address, from the provider's prices, as the provider guide says. Before
-     the provider credential exists, read the provider's public price page
-     or public catalog. Chapter 6 reads the prices again with the API.
+   - **Sign-in email:** the address from `git config user.email`. When it
+     is empty, ask for one. Reason: the sign-in link for the private pages
+     goes to this address, and the domain has no mailbox yet.
+   - **Cost:** the real price of the desk and each of the three servers,
+     each with its public address, from the provider's prices, as the
+     provider guide says. Before the provider credential exists, read the
+     provider's public price page or public catalog. Name every paid thing
+     across the sittings: the servers, backup storage, and the one-time
+     fee for phone alerts. When you leave a paid thing out, say plainly
+     that it comes later and has a fee. Reason: a paid service that
+     appears mid-sitting feels like a trick. Chapter 6 reads the prices
+     again with the API.
 
    **Ask the person:**
 
@@ -205,12 +218,16 @@ the rules.
 
      Servers near:       Frankfurt          (from your laptop's time zone: change this if your users are somewhere else)
      Size:               the smallest system (3 servers and 1 desk)
-     Your app's address: example.com        (your domain itself)
+     Your app's address: example.com        (your domain itself: say if you want another, such as notes.example.com)
      Company name:       Example            (from your domain)
      Password manager:   1Password          (the one this laptop has)
      Your name on the desk:  alex           (your laptop's user name)
+     Sign-in email:      alex@gmail.com     (from your Git settings)
 
-     Cost:               about €27 a month at Hetzner
+     Cost:               about €27 a month for the servers at Hetzner
+                         (one line per server with its real price: the desk, app001, db01, util01)
+                         Backups at Backblaze: a few cents a month at first
+                         Later, phone alerts: Pushover, a one-time fee of about $5 for each phone
 
    I will also install two small tools in your home folder: mmx and doubleshell.
 
@@ -222,9 +239,14 @@ the rules.
    "go" approves everything on the screen and what comes with it: the
    prices of the desk and the three servers, the weekly restore drill,
    the default growth limits in `growth_limits` of
-   `mmx_project_settings.yml`, and the two installs. When the person asks
-   what one line means, answer in one or two sentences, then show the
-   screen again.
+   `mmx_project_settings.yml`, and the two installs. Chapter 6 creates the
+   servers at these prices without asking again. Never promise the person
+   a later price approval. Reason: the chapters make none, and a promise
+   the agent invents is a promise that breaks. When the price or the
+   server type at creation differs from this screen (no stock, a changed
+   price, a different size), stop and ask again with the new number.
+   When the person asks what one line means, answer in one or two
+   sentences, then show the screen again.
 
    When the person changes a line, confirm each change in your next reply,
    in one line each, such as "Password manager: 1Password, as you said.

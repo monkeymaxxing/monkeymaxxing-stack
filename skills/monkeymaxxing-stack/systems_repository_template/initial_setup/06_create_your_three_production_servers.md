@@ -96,7 +96,10 @@ nothing, unless the prices rose since chapter 1 (step 3).
    > The prices at [the provider] rose since you said "go": your servers now cost about [the new total] a month, not [the old total].
    > Say "go" to create them, or tell me what to change.
 
-   Otherwise ask nothing: the person's "go" in chapter 1 approved these
+   The same holds for the server type: when a type is out of stock or
+   differs from chapter 1's screen, stop and ask again with the new
+   number and size. Otherwise ask nothing, and never promise a separate
+   approval: the person's "go" in chapter 1 approved these
    servers and the weekly restore drill. The drill runs each
    `weekly_work_day`, Sunday in the template, on a temporary server of
    the database server's size, usually within the hour. The first drill

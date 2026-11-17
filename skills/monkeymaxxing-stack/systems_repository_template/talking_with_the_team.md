@@ -196,7 +196,8 @@ the person to paste a secret into a file with an editor.
 - **For a wait,** say its cause and the next check. Give a time only when a
   test result or the provider's information supports it. Say whether the
   person must stay for the wait.
-- **For a failure,** name the part that failed and its effect on the
+- **For a failure,** start with one plain sentence: what failed, whether
+  anything is harmed, and what happens next. Then name the part that failed and its effect on the
   service and the data. Give the known facts, the unknown facts, and the
   next safe step.
 - **After a mistake you made,** say what it affected, what you corrected,

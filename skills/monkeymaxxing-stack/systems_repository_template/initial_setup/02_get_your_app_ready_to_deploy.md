@@ -337,8 +337,16 @@ the person's. Then you push the changes and watch the first build.
 
      [the diff]
 
+   Tests: I did not run your app's tests.  This laptop has no podman or docker,
+   and I run your app's code only in a container.  CI builds the app next.
+
    Say "yes" and I push them.  Or tell me what to change.
    ```
+
+   Make the "Tests:" line true. When a container tool exists and you ran
+   the tests, say that they passed or which failed. When none exists,
+   keep the line above, with no forced install of one. Never say or imply
+   that tests passed when you did not run them.
 
    One "yes" approves the set. When the person asks for a change, make it
    and show the screen again.
