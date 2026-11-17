@@ -136,7 +136,8 @@ new setup builds. Only a release that makes existing teams act, such as a
 changed setting or a step of
 [A new version](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/upgrade_to_a_new_stack_version.md#a-new-version)
 beyond copying the template's changes, raises the middle number, such as
-`0.3.0`. Small text fixes wait on `main` and go out together, unless one
+`0.3.0`, and so does a new feature of the Stack's program
+`set-up-outside-services`, such as a new command. Small text fixes wait on `main` and go out together, unless one
 fixes something people would otherwise get wrong. Reason: one numbering
 for every Monkeymaxxing tool, which Git hosts, `sort -V` and dependency
 tools order correctly, and a version number that tells a team whether it
