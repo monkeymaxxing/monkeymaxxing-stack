@@ -1,0 +1,35 @@
+# The two Pushover keys on util01, for MMWatchdog's fleet hub. The hub sends
+# them to every server for the alert that util01 went silent. Run only while
+# phone_alerts_are_set_up is true (fleet stage util_push_app_keys in
+# playbooks/every_server.yml). The role util_server validates the hub's
+# candidate configuration, which reads these files, so they go first.
+inputs:
+  pushover_application_token:
+    type: string
+    required: true
+    secret: true
+  pushover_user_or_group_key:
+    type: string
+    required: true
+    secret: true
+node_tasks:
+  - id: create_the_secrets_directory_for_the_push_app
+    directory:
+      path: /etc/mmwatchdog/secrets
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  - id: write_the_push_app_application_token
+    file:
+      path: /etc/mmwatchdog/secrets/pushover-application-token
+      content: "{{ .inputs.pushover_application_token }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0600"
+  - id: write_the_push_app_user_or_group_key
+    file:
+      path: /etc/mmwatchdog/secrets/pushover-user-or-group-key
+      content: "{{ .inputs.pushover_user_or_group_key }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0600"

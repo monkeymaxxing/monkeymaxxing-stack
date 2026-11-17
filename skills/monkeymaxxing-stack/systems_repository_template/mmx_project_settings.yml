@@ -90,6 +90,13 @@ vars:
   # sets false, because the deploy's health check keeps users on the old
   # version when the new version fails.
   production_releases_wait_for_a_persons_approval: true
+  # The first release, at the end of the first sitting (chapter 9), asks for
+  # no approval while this is false. Reason: the person approved the app's
+  # changes in chapter 2, and the first release is that approved image.
+  # Setting it to true asks again, once, before the first release. Like the
+  # setting above, the coding agent follows it; no server reads it. Later
+  # releases follow production_releases_wait_for_a_persons_approval.
+  first_release_waits_for_a_persons_approval: false
   # The inventory overrides this only while a database moves in. Removing
   # the inventory block returns to this empty default.
   database_moving_in: {}
@@ -97,6 +104,14 @@ vars:
   # An empty string means everyone has their normal access.
   everyone_locked_out_except_desk: ""
   send_app_requests_to_the_status_page: false
+  # false until the alerts sitting has put the two Pushover keys in the vault
+  # (pushover_application_token and mmwatchdog_pushover_user_or_group_key).
+  # While false, util01 and the other servers need no Pushover key: the fleet
+  # hub has no push destination, so no alert pretends to reach a phone.
+  # Reason: the first sitting goes live without alerts, and a person who has
+  # no Pushover account yet should not have to make one to get the site up.
+  # The alerts sitting sets it to true in the same change that adds the keys.
+  phone_alerts_are_set_up: false
   # Phone-code lockout on each systems desk. A person's laptop is locked
   # out of the desk after wrong_codes_before_lockout wrong phone codes
   # within ten minutes. For lockout_minutes the desk then refuses

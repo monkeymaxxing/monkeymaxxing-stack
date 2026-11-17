@@ -19,7 +19,35 @@ var (
 	terminalMutex sync.Mutex
 	savedTerminal *syscall.Termios
 	stdinReader   = bufio.NewReader(os.Stdin)
+	// promptLineOpen says a question's label is on the screen and its answer
+	// was not read, so the cursor is not at the start of a line. The next
+	// question then starts on a new line: never two questions on one line.
+	promptLineOpen bool
 )
+
+// ignoredTypedAhead is shown when keys pressed before a question appeared
+// were thrown away, so a stray Enter or a paste meant for something else
+// cannot answer it.
+const ignoredTypedAhead = "Ignored what was typed before this question.  The setup waits for your answer below."
+
+// beginQuestion makes the next question stand alone: it ends a line still
+// open from an earlier question, throws away keys typed before this one
+// (the terminal's unread input and what the reader holds) and says so, then
+// the caller shows its label. Reason: a value pasted for an earlier step, or
+// a second Enter, would otherwise answer a hidden or yes/no question the
+// person had not read yet.
+func beginQuestion(fd uintptr) {
+	if promptLineOpen {
+		fmt.Fprintln(os.Stdout)
+	}
+	dropped := stdinReader.Buffered()
+	_, _ = stdinReader.Discard(dropped)
+	dropped += unreadTerminalBytes(fd)
+	flushUnreadTerminalInput(fd)
+	if dropped > 0 {
+		fmt.Fprintln(os.Stdout, ignoredTypedAhead)
+	}
+}
 
 var errNoTerminal = errors.New("this command asks for keys at hidden prompts, so it needs your own terminal. Run it in your desk terminal, not through a pipe or your coding agent")
 
@@ -65,10 +93,13 @@ func readHiddenLine(label string) (string, error) {
 	if err := setTermios(fd, &hidden); err != nil {
 		return "", err
 	}
+	beginQuestion(fd)
 	fmt.Fprint(os.Stdout, label)
+	promptLineOpen = true
 	line, readErr := stdinReader.ReadString('\n')
 	restoreTerminal()
 	fmt.Fprintln(os.Stdout)
+	promptLineOpen = false
 	if readErr != nil {
 		return "", errors.New("no value was entered")
 	}
@@ -85,11 +116,14 @@ func readVisibleLine(label string) (string, error) {
 	if !stdinIsTerminal() {
 		return "", errNoTerminal
 	}
+	beginQuestion(os.Stdin.Fd())
 	fmt.Fprint(os.Stdout, label)
+	promptLineOpen = true
 	line, err := stdinReader.ReadString('\n')
 	if err != nil {
 		return "", errors.New("no answer was entered")
 	}
+	promptLineOpen = false
 	return strings.TrimSpace(line), nil
 }
 

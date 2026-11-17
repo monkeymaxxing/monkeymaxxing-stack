@@ -236,13 +236,19 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	turnOnR2 := func() string { h.cloudflare.Lock(); h.cloudflare.R2Off = false; h.cloudflare.Unlock(); return "" }
 	h.hidden = append(typed("not-the-token-it-made", h.addLinkToken(), "wrong-application-key", masterKey, endsTooSoonRegistryToken, expiringRegistryToken, registryToken,
 		"sk_live_notthekey", stripeKey, "maple orbit candle river stone pilot"), h.theShownPassphrase)
-	h.visible = append([]func() string{turnOnR2}, typed("", masterKeyID, masterKeyID, "no")...)
+	h.visible = append([]func() string{turnOnR2}, typed(masterKeyID, masterKeyID, "no")...)
 	err := runGoLive(h.e)
 	t.Logf("The person's terminal:\n%s", h.transcript)
 	if err != nil {
 		t.Fatalf("go-live: %v", err)
 	}
 	output := h.transcript.String()
+
+	// The registrar screen asks for no keypress: nothing before the domain's
+	// own chapter needs the nameservers.
+	if strings.Contains(output, "Press Enter here when you saved") || !strings.Contains(output, "Nothing to press here.") {
+		t.Error("the registrar screen waits for a keypress, or does not say it waits for none")
+	}
 
 	// Each screen in the design's order, with its four parts.
 	order := []string{"Account 2 of 4: Cloudflare (your web address and protection)", "4. Turn on R2", "It costs nothing up to 10 GB of files a month.",

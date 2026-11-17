@@ -303,6 +303,37 @@ class FirstDeskReview(unittest.TestCase):
         self.assertFalse((Path(self.directory.name)/'record').exists())
 
 
+class StagesAndFailure(unittest.TestCase):
+    def test_before_util01_exists_the_review_runs_the_desks_own_stages_and_says_so(self):
+        only, line = DESK_REVIEW.stages_to_run([], util01_exists=False)
+        self.assertEqual(only, ['--only-fleet-stages', 'systems_desk,lock'])
+        self.assertEqual(line, 'util01 does not exist yet, so this review skips joining the desk to monitoring. '
+                               'The first review after util01 exists does it.')
+
+    def test_once_util01_exists_the_review_runs_every_stage(self):
+        self.assertEqual(DESK_REVIEW.stages_to_run([], util01_exists=True), ([], None))
+
+    def test_a_stage_the_person_named_stays_as_given(self):
+        named = ['--only-fleet-stages', 'systems_desk']
+        self.assertEqual(DESK_REVIEW.stages_to_run(named, util01_exists=False), (named, None))
+
+    def test_a_failed_run_ends_with_one_plain_sentence_and_the_exit_code(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = DESK_REVIEW.run_and_explain_a_failure(['/bin/sh', '-c', 'echo technical line; exit 3'], '/')
+        self.assertEqual(code, 3)
+        text = output.getvalue()
+        self.assertIn(DESK_REVIEW.FAILED_REVIEW_SENTENCE, text)
+        for answer in ('failed', 'not affected', 'run the review again'):
+            self.assertIn(answer, DESK_REVIEW.FAILED_REVIEW_SENTENCE)
+
+    def test_a_run_that_works_adds_nothing(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(DESK_REVIEW.run_and_explain_a_failure(['/bin/sh', '-c', 'exit 0'], '/'), 0)
+        self.assertEqual(output.getvalue(), '')
+
+
 class Question(unittest.TestCase):
     def test_the_question_is_read_from_the_terminal_and_not_from_standard_input(self):
         import pty

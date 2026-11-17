@@ -316,6 +316,13 @@ def as_the_coding_agent(*arguments):
                           env=CODING_AGENT_GIT_ENVIRONMENT)
 
 
+def util01_exists():
+    """Whether the coding agent's checkout has an origin. Chapter 7 adds
+    origin, util01's main copy, once util01 exists; before that the checkout
+    is the main copy and has none."""
+    return as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0
+
+
 def pull_main_into_the_desks_copy(repository=DESK_COPY):
     """Makes the desk copy pushed main: fetch, then reset, keeping only the
     run history in .mmx. Pushed main is main of the main copy on util01,
@@ -323,7 +330,7 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY):
     before util01 exists the checkout has no origin and its own main is
     pushed main. Returns whether the pull worked, and one plain sentence
     that says what happened or what is in the way."""
-    has_origin = as_the_coding_agent('remote', 'get-url', 'origin').returncode == 0
+    has_origin = util01_exists()
     if has_origin:
         fetched = as_the_coding_agent('fetch', '--quiet', '--no-tags', 'origin', 'main')
         if fetched.returncode:
@@ -334,8 +341,7 @@ def pull_main_into_the_desks_copy(repository=DESK_COPY):
                 cause = 'git said: %s' % visible(said)
             return False, 'The pull of main from the main copy on util01 did not work (%s).' % cause
     if not (repository/'.git').is_dir():
-        # A desk from an earlier Stack version, whose desk reviews ran in the
-        # person's own checkout, gets its desk copy at its first such pull.
+        # The desk copy does not exist before the first pull.
         repository.mkdir(mode=0o700, parents=True, exist_ok=True)
         repository.chmod(0o700)
         git(repository, 'init', '--quiet', '-b', 'main')
@@ -494,10 +500,53 @@ def main(arguments):
     if not review(view, commit):
         raise Stop('Stopped. Nothing ran, and nothing was recorded.')
     write_record(view, commit, keys_view)
+    only, skipped = stages_to_run(only, util01_exists())
+    if skipped:
+        print(skipped, flush=True)
     command = [MMX, 'run', PLAYBOOK, '--var', 'desk_name=' + socket.gethostname(), *only, '--connection', 'ssh_only']
     print(' '.join(command), flush=True)
-    os.chdir(repository)
-    os.execve(MMX, command, {**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+    return run_and_explain_a_failure(command, repository)
+
+
+def stages_to_run(only, util01_exists):
+    """The --only-fleet-stages arguments for the run, and one plain line when
+    this skips the monitoring stages.
+
+    Joining the desk to MMWatchdog's fleet hub reads util01's join code, so
+    it cannot run before util01 exists. The checkout has an origin once
+    util01 exists (util01_exists); until then the
+    review runs the desk's own stages only, as the bootstrap does, and the
+    first review after util01 exists joins the desk to monitoring. A person's
+    own --only-fleet-stages stays as given."""
+    if util01_exists or only:
+        return only, None
+    return ['--only-fleet-stages', 'systems_desk,lock'], (
+        'util01 does not exist yet, so this review skips joining the desk to monitoring. '
+        'The first review after util01 exists does it.')
+
+
+def run_and_explain_a_failure(command, repository):
+    """Runs mmx with the person's private agent socket, in the desk's copy,
+    on the person's own terminal (so MMX keeps its live display). When it
+    fails, one plain sentence follows: what failed, whether anything is
+    harmed, and what happens next. The lines above it are for the coding
+    agent. Reason it is printed after: buffering the run to print it first
+    would hide the progress of a run that takes minutes."""
+    run = subprocess.Popen(command, cwd=repository, env={**os.environ, 'SSH_AUTH_SOCK': PRIVATE_AGENT_SOCKET})
+    try:
+        code = run.wait()
+    except KeyboardInterrupt:
+        code = run.wait()
+    if code:
+        print()
+        print(FAILED_REVIEW_SENTENCE, flush=True)
+    return code
+
+
+FAILED_REVIEW_SENTENCE = (
+    'The desk review failed: one step of the desk playbook did not work, and nothing else was touched. '
+    'Your site and servers are not affected, and the desk keeps working with the settings it had. '
+    'Tell your coding agent: it reads the technical lines above, fixes the cause, and you run the review again.')
 
 
 if __name__ == '__main__':

@@ -107,14 +107,11 @@ inputs:
     type: string
     required: true
     secret: true
-  pushover_application_token:
-    type: string
-    required: true
-    secret: true
-  pushover_user_or_group_key:
-    type: string
-    required: true
-    secret: true
+  # false in the first sitting: the fleet hub then has no push destination.
+  # The Pushover keys come from the role util_push_app_keys, which the
+  # fleet stage util_push_app_keys of every_server.yml runs before this role
+  # and only while this is true.
+  phone_alerts_are_set_up: {type: boolean, default: false}
   # The fleet hub signs alerts and check-ins to MMHotline with
   # mmhotline_signing_secret_of_the_fleet_hub. For example, an alert reports
   # a failed check.
@@ -901,27 +898,12 @@ node_tasks:
             group: root
             permissions_mode: "0644"
 
-        # The Pushover application token, Pushover user or group key, and
-        # mmhotline_signing_secret_of_the_fleet_hub go in place before
+        # mmhotline_signing_secret_of_the_fleet_hub goes in place before
         # candidate validation, because validation reads the secrets.
-        # The hub sends the Pushover credentials to every server for the
-        # alert about util01. The hub signs alerts and check-ins to MMHotline
-        # with mmhotline_signing_secret_of_the_fleet_hub, so changing any of
-        # the three secrets restarts the hub.
-        - id: write_the_push_app_application_token
-          file:
-            path: /etc/mmwatchdog/secrets/pushover-application-token
-            content: "{{ .inputs.pushover_application_token }}\n"
-            owner: root
-            group: root
-            permissions_mode: "0600"
-        - id: write_the_push_app_user_or_group_key
-          file:
-            path: /etc/mmwatchdog/secrets/pushover-user-or-group-key
-            content: "{{ .inputs.pushover_user_or_group_key }}\n"
-            owner: root
-            group: root
-            permissions_mode: "0600"
+        # The hub signs alerts and check-ins to MMHotline with it, so
+        # changing it restarts the hub. The Pushover keys that the hub
+        # sends to every server for the alert about util01 are already in
+        # place when phone_alerts_are_set_up is true (role util_push_app_keys).
         - id: write_the_signing_secret_for_mmhotline
           file:
             path: /etc/mmwatchdog/secrets/mmhotline-signing-secret
