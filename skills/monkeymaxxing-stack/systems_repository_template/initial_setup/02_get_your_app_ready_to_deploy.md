@@ -382,9 +382,6 @@ the person's. Then you push the changes and watch the first build.
    pushed commit's full ID. With `gh`, the run is green and names
    `linux/amd64`. Without `gh`, chapter 4 checks the image.
 
-   Never commit `.claude/settings.local.json` from chapter 1's approval:
-   it holds this laptop's approvals, not the app's code.
-
 8. **An app requirement in the checklist that the app cannot meet** is a
    deviation, recorded with the reason. For example, a job queue in Redis,
    a separate data store that holds waiting background jobs, differs from

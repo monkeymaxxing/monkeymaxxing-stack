@@ -84,26 +84,13 @@ account screen of step 1 is the opening.
    Then, in the same turn, wait for the key file, as
    [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
    says: the screen is in your reply's text, and you say in one line what
-   you wait for. Write the wait before
-   the screen, when you write the key command, as the script
-   `~/code/example_systems/coding_agent_scratch/wait-for-the-provider-key`,
-   as
-   [`AGENTS.md`, "One plain command per tool call"](../AGENTS.md#one-plain-command-per-tool-call)
-   says, and make it runnable:
+   you wait for. Give the command the longest time your agent allows a
+   command, 10 minutes in Claude Code:
 
    ```sh
-   #!/usr/bin/env bash
-   # Waits up to 9 minutes for the key file, then shows it.
+   # On the laptop. Waits up to 9 minutes for the key file.
    for i in $(seq 108); do [ -f ~/example-setup/provider-key ] && break; sleep 5; done
    ls -l ~/example-setup/provider-key
-   ```
-
-   Run it by its full path, and give the command the longest time your
-   agent allows a command, 10 minutes in Claude Code:
-
-   ```sh
-   # On the laptop:
-   ~/code/example_systems/coding_agent_scratch/wait-for-the-provider-key
    ```
 
    Reason for 9 minutes: the loop ends by itself before Claude Code's
@@ -163,22 +150,12 @@ account screen of step 1 is the opening.
    and the
    [provider script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts).
    The scripts call the provider's API with `curl` and `jq`, so install
-   no provider program on the laptop. The scripts read the key from the
-   environment only, so write one script that hands them the key file,
-   `~/code/example_systems/coding_agent_scratch/with-the-provider-key`,
-   and make it runnable:
-
-   ```sh
-   #!/usr/bin/env bash
-   # Runs the command it is given with the provider key in SERVER_PROVIDER_API_TOKEN.
-   SERVER_PROVIDER_API_TOKEN="$(cat ~/example-setup/provider-key)" exec "$@"
-   ```
-
-   Check the key with the list script:
+   no provider program on the laptop. Check the key with the list script,
+   which reads it from the environment only:
 
    ```sh
    # On the laptop:
-   ~/code/example_systems/coding_agent_scratch/with-the-provider-key ~/code/example_systems/server_management_scripts/list_the_servers_at_the_provider
+   SERVER_PROVIDER_API_TOKEN="$(cat ~/example-setup/provider-key)" ~/code/example_systems/server_management_scripts/list_the_servers_at_the_provider
    ```
 
    A new account answers `{"servers": []}`.
@@ -186,8 +163,7 @@ account screen of step 1 is the opening.
    the stock now, with the key and before any order, as chapter 1's
    [stock line](01_answer_two_questions.md#steps) says: `desk01`'s size in
    its location, and each production size in production's location. Use
-   the guide's stock request, in a script in `coding_agent_scratch/` that
-   reads the key file. When a size is sold out, show the person the
+   the guide's stock request, with the key read from the key file. When a size is sold out, show the person the
    choices that chapter 1's stock line names, with their prices, before
    any order.
    Choose `desk01`'s location: the provider location chapter 1 picked for
@@ -251,12 +227,11 @@ repository's name, including paths inside quoted SSH commands.
    `desk01.vars.allowed_laptops` holds the laptop.
 
 2. **Create the desk.** First register `~/.ssh/desk01.pub` with the
-   provider, as the provider guide says, through `with-the-provider-key`.
-   Then write the script below as
-   `~/code/example_systems/coding_agent_scratch/create-desk01`, make it
-   runnable, and run it once by its full path. The script must be one
-   program because the desk's private key lives only in its memory. It
-   creates the desk's WireGuard pair with
+   provider, as the provider guide says, with `SERVER_PROVIDER_API_TOKEN`
+   read from `~/example-setup/provider-key` in the same command. Then run
+   the block below once, as one command, because the desk's private key
+   lives only in shell memory and your shell keeps no variables from one
+   command to the next. The block creates the desk's WireGuard pair with
    `doubleshell create-server-wireguard-key`, renders the first-boot data
    through `server_management_scripts/render_server_first_boot`, prints
    the desk's public key and never the private key, creates the desk with
@@ -267,8 +242,7 @@ repository's name, including paths inside quoted SSH commands.
    that the desk is ordered.
 
    ```sh
-   #!/usr/bin/env bash
-   # Creates desk01 at the provider, once. Run it by its full path.
+   # On the laptop. Creates desk01 at the provider, once.
    set -euo pipefail
    set +x
    umask 077
@@ -299,7 +273,7 @@ repository's name, including paths inside quoted SSH commands.
    `desk01.vars.provider_server_id`; at OVHcloud (a VPS) and Google Cloud,
    also the order or create receipt's service or instance name as
    `desk01.vars.provider_server_name`. When the provider refuses the
-   request, such as for no stock, the script stops before
+   request, such as for no stock, the block stops before
    `desk-ordered`: tell the person in one line, and offer the choices of
    chapter 1's [stock line](01_answer_two_questions.md#steps).
 
@@ -427,18 +401,13 @@ repository's name, including paths inside quoted SSH commands.
    desk's history with its own first commit, and stops on a copy that has
    commits already.
 
-   Write the copy as the script
-   `~/code/example_systems/coding_agent_scratch/copy-the-repository-to-desk01`,
-   make it runnable, and run it by its full path:
-
    ```sh
-   #!/usr/bin/env bash
-   # Copies the laptop's systems repository to desk01, without Git's history and your own scratch files.
+   # On the laptop. Copies the laptop's systems repository to desk01, without Git's history.
    set -euo pipefail
    cd ~/code/example_systems
    # COPYFILE_DISABLE=1 stops a Mac's tar from adding ._ metadata files; Linux ignores it.
    # --warning=no-unknown-keyword keeps the desk's tar quiet about a Mac's file labels, which it skips anyway.
-   COPYFILE_DISABLE=1 tar --exclude=./.git --exclude=./.mmx --exclude=./coding_agent_scratch -cf - . |
+   COPYFILE_DISABLE=1 tar --exclude=./.git --exclude=./.mmx -cf - . |
      ssh root@desk01 'mkdir -p /home/coding-agent/systems_repository && tar --warning=no-unknown-keyword -C /home/coding-agent/systems_repository -xf -'
    ```
 
@@ -448,8 +417,7 @@ repository's name, including paths inside quoted SSH commands.
    `desk01.ssh_identity_file` to the laptop key's absolute path; in
    `ssh/desk01`, keep `HostKeyAlias desk01`, replace `IdentityFile` with
    that absolute path, and add the desk-only `ProxyCommand` from the
-   laptop's SSH entry. Then run, after `cd ~/code/example_systems` as a
-   call of its own:
+   laptop's SSH entry. Then run:
 
    ```sh
    # On the laptop, in ~/code/example_systems:
@@ -466,13 +434,9 @@ repository's name, including paths inside quoted SSH commands.
    file. MMX keeps every laptop file a run reads in the run's history, so
    the bootstrap cannot do this itself. The person does nothing. Use the
    provider guide's server listing path, here Hetzner Cloud's `servers`.
-   Write the move as the script
-   `~/code/example_systems/coding_agent_scratch/move-the-provider-key-to-desk01`,
-   make it runnable, and run it by its full path:
-
+   
    ```sh
-   #!/usr/bin/env bash
-   # Moves the provider key to desk01's API proxy, then deletes the laptop's copy.
+   # On the laptop. Moves the provider key to desk01's API proxy, then deletes the laptop's copy.
    set -euo pipefail
    cd ~/code/example_systems
    ssh -F ssh/desk01 root@10.20.9.1 set-up-outside-services write-api-token-proxy-file \
@@ -556,7 +520,7 @@ after a reboot.
 
    ```sh
    # On the laptop:
-   grep -rnE 'example|203\.0\.113\.|0{40}' --exclude-dir=.git --exclude-dir=.mmx --exclude-dir=coding_agent_scratch --exclude=AGENTS.md --exclude=triage_agent_rules.md --exclude=talking_with_the_team.md --exclude-dir=initial_setup --exclude-dir=operating_procedures ~/code/example_systems
+   grep -rnE 'example|203\.0\.113\.|0{40}' --exclude-dir=.git --exclude-dir=.mmx --exclude=AGENTS.md --exclude=triage_agent_rules.md --exclude=talking_with_the_team.md --exclude-dir=initial_setup --exclude-dir=operating_procedures ~/code/example_systems
    ```
 
    Or search with your search tool, with the same pattern and exclusions.

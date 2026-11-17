@@ -447,7 +447,7 @@ such as `available` or `shortage`. Chapter 1 reads it before the price screen, a
 **Prices.** Scaleway's public product catalog gives each type's price per hour, and needs no credential:
 
 ```sh
-# On the laptop, one command per tool call; after the setup, save into coding_agent_scratch/ instead:
+# On the laptop:
 curl -sS --create-dirs -o ~/example-setup/scaleway-catalog-page-1.json 'https://api.scaleway.com/product-catalog/v2alpha1/public-catalog/products?product_types=instance&zone=fr-par-1&page_size=100&page=1'
 jq '.products[] | select(.product == "DEV1-M") | {product, description, price: .price.retail_price, unit_of_measure}' ~/example-setup/scaleway-catalog-page-1.json
 ```

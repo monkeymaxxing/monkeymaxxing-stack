@@ -149,20 +149,15 @@ nothing, unless the prices rose since chapter 1 (step 3).
    file outside Git, with mode `0600`. Remove the rendered file immediately
    after the provider accepts the data. Keep no setup-machine copy.
 
-   Make the key, render the first-boot data, and create the server
-   (step 4) in one script per server, such as
-   `~/code/example_systems/coding_agent_scratch/create-util01`, written
-   with your write tool on the laptop and sent to the desk with
-   `ssh desk01-agent bash -s < /Users/alex/code/example_systems/coding_agent_scratch/create-util01`,
-   as [`AGENTS.md`, "One plain command per tool call"](../AGENTS.md#one-plain-command-per-tool-call)
-   says. The private key never leaves the script's memory on the desk and
-   the temporary file; the script prints the public key, which you then
-   save in the inventory. For `util01`, with the desk peers from the
+   Your shell keeps no variables from one command to the next, so make the
+   key, render the first-boot data, and create the server (step 4) in one
+   command per server, on the desk. The private key never leaves that
+   command's memory and the temporary file; the command prints the public
+   key, which you then save in the inventory. For `util01`, with the desk peers from the
    inventory written into `peers`:
 
    ```sh
-   #!/usr/bin/env bash
-   # Runs on the systems desk, in the coding agent's checkout. One script per server.
+   # The systems desk, in the coding agent's checkout. One command per server.
    cd ~/systems_repository
    set -euo pipefail
    umask 077
