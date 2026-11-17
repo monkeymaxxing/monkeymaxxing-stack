@@ -171,9 +171,7 @@ func (g *goLive) recoveryBundle() (string, error) {
 		return "", err
 	}
 	if g.b2 == nil {
-		// A rerun whose Backblaze screen was done in an earlier run: the
-		// master key is never kept, so the copy needs it once more.
-		if _, err := g.backblaze(); err != nil {
+		if err := g.askForTheMasterKeyAgain(); err != nil {
 			return "", err
 		}
 	}

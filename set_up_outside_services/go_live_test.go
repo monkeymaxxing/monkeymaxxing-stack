@@ -437,13 +437,22 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 		t.Fatalf("rerun: %v\n%s", err, h.transcript)
 	}
 	output := h.transcript.String()
-	for _, screen := range []string{"Account 2 of 4", "Account 3 of 4", "One more key", "Step 1 of 2"} {
+	for _, screen := range []string{"Account 2 of 4", "Account 3 of 4", "Account 4 of 4", "Get Started Free", "One more key", "Step 1 of 2"} {
 		if strings.Contains(output, screen) {
 			t.Errorf("the rerun showed %q again", screen)
 		}
 	}
-	if !strings.Contains(output, "Step 2 of 2: your phone code") || !strings.Contains(output, "Account 4 of 4: Backblaze") {
-		t.Fatalf("the rerun did not ask for the phone code and the Backblaze key:\n%s", output)
+	// The master key is never kept, so the bundle's copy at Backblaze asks
+	// for it again, on a short screen that says why.
+	for _, line := range []string{"Paste your Backblaze master key again.",
+		"The setup needs it once more, to put a copy of your recovery bundle into your locked backup bucket.  It does not keep the key.",
+		"press  Generate New Master Application Key.", "Backblaze accepted the key."} {
+		if !strings.Contains(output, line) {
+			t.Errorf("the rerun's Backblaze screen lacks %q", line)
+		}
+	}
+	if !strings.Contains(output, "Step 2 of 2: your phone code") {
+		t.Fatalf("the rerun did not ask for the phone code:\n%s", output)
 	}
 	keys := h.bundleKeys()
 	if !keys[bundleConsolePassword] || !keys[bundlePhoneCodeEmergencyCode] || !keys["pgbackrest_repository_cipher_passphrase"] {

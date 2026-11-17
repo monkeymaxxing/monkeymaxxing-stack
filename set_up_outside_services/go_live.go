@@ -724,14 +724,47 @@ Do this now:
 Then paste the two values here.
 
 `, region, g.passwordManager()))
+	if err := g.askForTheMasterKey(endpoint); err != nil {
+		return "", err
+	}
+	err = e.quietly(func() error { return e.setUpBackblaze(g.b2, plan, g.saved, g.oldKeys) })
+	if err != nil {
+		return "", err
+	}
+	return stepDone, nil
+}
+
+// askForTheMasterKeyAgain is for a rerun whose Backblaze screen was done in
+// an earlier run: the master key is never kept, so the recovery bundle's
+// copy at Backblaze needs it once more.
+func (g *goLive) askForTheMasterKeyAgain() error {
+	g.e.show(fmt.Sprintf(`
+Paste your Backblaze master key again.
+
+What this is for:
+  The setup needs it once more, to put a copy of your recovery bundle into your locked backup bucket.  It does not keep the key.
+
+Do this now:
+  1. Find the keyID and applicationKey, if you saved them in %s.
+     If you did not, open  App Keys  at Backblaze and press  Generate New Master Application Key.
+  2. Paste the two values here.
+
+`, g.passwordManager()))
+	return g.askForTheMasterKey(g.settings.Vars.Backups.B2S3Endpoint)
+}
+
+// askForTheMasterKey asks until Backblaze accepts a master key in an account
+// the person keeps, and signs in with it.
+func (g *goLive) askForTheMasterKey(endpoint string) error {
+	e := g.e
 	for g.b2 == nil {
 		keyID, err := g.askVisible("  keyID: ")
 		if err != nil {
-			return "", err
+			return err
 		}
 		applicationKey, err := g.askHidden("  applicationKey (hidden): ")
 		if err != nil {
-			return "", err
+			return err
 		}
 		client, err := authorizeB2(e.b2AuthorizeURL, keyID, applicationKey)
 		var refusal *apiError
@@ -739,7 +772,7 @@ Then paste the two values here.
 		case errors.As(err, &refusal):
 			g.refused("Backblaze", "key", err, "Check that you copied both values whole, then paste them again.")
 		case err != nil:
-			return "", err
+			return err
 		case len(missingCapabilities(client.capabilities)) > 0:
 			g.refused("Backblaze", "key", errors.New("this key is not the master key: it cannot make buckets and keys"),
 				"Press  Generate New Master Application Key,  and paste its two values.")
@@ -747,18 +780,14 @@ Then paste the two values here.
 			e.say("Backblaze accepted the key.")
 			keep, err := g.keepTheAccountsRegion(client, endpoint)
 			if err != nil {
-				return "", err
+				return err
 			}
 			if keep {
 				g.b2 = client
 			}
 		}
 	}
-	err = e.quietly(func() error { return e.setUpBackblaze(g.b2, plan, g.saved, g.oldKeys) })
-	if err != nil {
-		return "", err
-	}
-	return stepDone, nil
+	return nil
 }
 
 // keepTheAccountsRegion asks the person, when the account's region differs
