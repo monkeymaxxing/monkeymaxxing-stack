@@ -308,6 +308,14 @@ needs the term. Use only the rows that the step needs. Add a new technical
 term to the Technical terms table in `talking_with_the_team.md` before
 using the term in the team's documentation.
 
+Say "systems desk", never a bare "desk". Reason: a newcomer reads "desk" as
+furniture. The first time "systems desk" appears in a reply, on a page or on
+a screen, add what it is in the same sentence: "your systems desk, a small
+separate server that holds your keys". After that, "systems desk" alone is
+fine there. Host names and commands keep their names (`desk01`,
+`ssh desk01-setup`); where a command first appears, say what it reaches:
+"`ssh desk01-setup` logs in to your systems desk".
+
 | Term | Explanation |
 | --- | --- |
 | Production servers | The app servers, database servers, and utility server, `util01`. |

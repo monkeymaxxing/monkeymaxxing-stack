@@ -97,7 +97,7 @@ def build_run_directory(repository, reviewed, run_directory):
     can change after the checks."""
     for path in REVIEWED_PATHS:
         if not (reviewed/path).exists():
-            raise Stop('This desk has no reviewed copy of %s. Run review-and-apply-the-systems-desk-settings once, which installs the '
+            raise Stop('This systems desk has no reviewed copy of %s. Run review-and-apply-the-systems-desk-settings once, which installs the '
                        'button\'s reviewed copies. Nothing changed.' % path)
     run_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(run_directory, 0o700)
@@ -161,7 +161,7 @@ def check_connection_settings(run_directory, inventory):
         value = (node or {}).get('ssh_config')
         if value is not None and os.path.normpath(str(value)) not in reviewed_settings:
             raise Stop('nodes.%s.ssh_config in the inventory is %s, which is not one of the SSH settings files of your '
-                       'last desk review (%s). The lock-out button connects only with reviewed SSH settings. '
+                       'last systems desk review (%s). The lock-out button connects only with reviewed SSH settings. '
                        'Nothing changed.' % (name, value, ', '.join(sorted(reviewed_settings))))
     for path in sorted(run_directory.glob('ssh/*')):
         for number, line in enumerate(path.read_text(errors='replace').split('\n'), 1):
@@ -201,18 +201,18 @@ def server_list(desk_review, inventory, desk_that_keeps_access, lock_out_recorde
     lines = ['  ' + '  '.join(cell.ljust(width) for cell, width in zip(row, widths)).rstrip() for row in rows]
     others = sorted(desk_review.visible(str(desk)) for desk in desks if desk != desk_that_keeps_access)
     if desk_that_keeps_access:
-        lines.append('The desk that keeps access: %s, at %s.' % (desk_review.visible(str(desk_that_keeps_access)),
+        lines.append('The systems desk that keeps access: %s, at %s.' % (desk_review.visible(str(desk_that_keeps_access)),
                                                                   value(nodes.get(desk_that_keeps_access), 'private_ip')))
-        lines.append('Every other desk loses access to the servers: %s.' % (', '.join(others) or 'there is no other desk'))
+        lines.append('Every other systems desk loses access to the servers: %s.' % (', '.join(others) or 'there is no other systems desk'))
     elif lock_out_recorded:
-        lines.append('everyone_locked_out_except_desk is not set, so this press undoes the lock-out: every desk and util01')
-        lines.append('get their access back, and the triage agent starts again. Desks: %s.' % (', '.join(others) or 'none'))
+        lines.append('everyone_locked_out_except_desk is not set, so this press undoes the lock-out: every systems desk and util01')
+        lines.append('get their access back, and the triage agent starts again. Systems desks: %s.' % (', '.join(others) or 'none'))
     else:
         # A lock-out press that stopped before its last stage leaves the
         # servers locked without this record, so the press still offers to
         # apply normal access.
-        lines.append('No lock-out is set or recorded on this desk, so this press only applies normal access on every server')
-        lines.append('again, which changes something only after a lock-out press that stopped part way. Desks: %s.'
+        lines.append('No lock-out is set or recorded on this systems desk, so this press only applies normal access on every server')
+        lines.append('again, which changes something only after a lock-out press that stopped part way. Systems desks: %s.'
                      % (', '.join(others) or 'none'))
     return lines
 
@@ -229,7 +229,7 @@ def confirm_the_servers(desk_review, inventory, desk_that_keeps_access, lock_out
     try:
         answer = desk_review.ask_the_person('Type yes to %s, or press Enter to stop: ' % action)
     except desk_review.Stop:
-        raise Stop('The lock-out button asks you a question, so run it in your own desk terminal. Nothing changed.')
+        raise Stop('The lock-out button asks you a question, so run it in your own systems desk terminal. Nothing changed.')
     if answer.lower() != 'yes':
         raise Stop('Stopped. Nothing changed.')
 
@@ -274,14 +274,14 @@ def review_the_keys_it_lets_in(desk_review, settings, inventory):
     view = desk_review.lock_out_button_keys_view(settings)
     old, commit = desk_review.read_record('lock_out_button_keys_view')
     if old == view:
-        print('The keys the lock-out button lets in are the same as at your last desk review (%s).' % commit, flush=True)
+        print('The keys the lock-out button lets in are the same as at your last systems desk review (%s).' % commit, flush=True)
         return
     if old is None:
-        print('This desk has no reviewed record of the keys the lock-out button lets in yet, so there is nothing to compare with.')
+        print('This systems desk has no reviewed record of the keys the lock-out button lets in yet, so there is nothing to compare with.')
         print('Your next review-and-apply-the-systems-desk-settings records them.')
         old = []
     else:
-        print('The keys the lock-out button lets in changed since your last desk review (%s).' % commit)
+        print('The keys the lock-out button lets in changed since your last systems desk review (%s).' % commit)
     print('With everyone_locked_out_except_desk removed, the lock-out button lets in, on every server, each key in')
     print('root_ssh_public_keys as root, and triage_ssh_public_key as the triage user from util01.')
     print('Anyone who can push to your main copy on util01 can add a key, and the undo would let that key in.')
@@ -300,7 +300,7 @@ def review_the_keys_it_lets_in(desk_review, settings, inventory):
     try:
         answer = desk_review.ask_the_person('Type yes to let these keys in on every server, or press Enter to stop: ')
     except desk_review.Stop:
-        raise Stop('The lock-out button asks you a question, so run it in your own desk terminal. Nothing changed.')
+        raise Stop('The lock-out button asks you a question, so run it in your own systems desk terminal. Nothing changed.')
     if answer.lower() != 'yes':
         raise Stop('Stopped. Nothing changed.')
 
@@ -312,16 +312,16 @@ def main(arguments):
         raise Stop('Run the lock-out button with sudo: sudo lock-everyone-out. Nothing changed.')
     person = os.environ.get('SUDO_USER', '')
     if not person or person in ('root', 'coding-agent', 'servers-mmx'):
-        raise Stop('Run sudo lock-everyone-out as yourself, from your own desk terminal. Nothing changed.')
+        raise Stop('Run sudo lock-everyone-out as yourself, from your own systems desk terminal. Nothing changed.')
     desk_review = load_the_desk_review_command()
     repository = desk_review.DESK_COPY
     pulled, reason = desk_review.pull_main_into_the_desks_copy(repository)
     if pulled:
         print(reason, flush=True)
     elif (repository/'mmx_project_settings.yml').is_file():
-        print('%s The lock-out button goes on with the desk\'s copy as it is.' % reason, flush=True)
+        print('%s The lock-out button goes on with the systems desk\'s copy as it is.' % reason, flush=True)
     else:
-        raise Stop('%s The desk has no copy of the systems repository to run from. Nothing changed.' % reason)
+        raise Stop('%s The systems desk has no copy of the systems repository to run from. Nothing changed.' % reason)
     import yaml  # python3-yaml, which the desk role installs
     build_run_directory(repository, REVIEWED, RUN_DIRECTORY)
     settings = yaml.safe_load((RUN_DIRECTORY/'mmx_project_settings.yml').read_text()) or {}
@@ -337,7 +337,7 @@ def main(arguments):
                '--connection', 'ssh_only', '--vault-password-file', VAULT_PASSPHRASE]
     print('Running the reviewed lock-out copies from %s, with the inventory of %s.' % (REVIEWED, repository), flush=True)
     for path in paths_that_differ(repository, REVIEWED):
-        print('The pulled repository changes %s since your last desk review. The lock-out button uses the reviewed copy. '
+        print('The pulled repository changes %s since your last systems desk review. The lock-out button uses the reviewed copy. '
               'After the incident, run review-and-apply-the-systems-desk-settings and read the change.' % path, flush=True)
     print(' '.join(command), flush=True)
     # Ctrl-C reaches MMX, which stops its run; the button waits for MMX and
@@ -386,7 +386,7 @@ def last_lines(desk_that_keeps_access, exit_code, failed=None, desk='', lock_out
         node == desk and task and task.split('/')[-1] == CLOUDFLARE_SESSIONS_TASK for node, task in failed)
     if exit_code and only_the_cloudflare_sessions:
         lines.append('MMX ended with exit code %d. Every server was locked out; only the revocation of Cloudflare Access '
-                     'sessions on this desk failed (its error is above), so people signed in to your private pages stay '
+                     'sessions on this systems desk failed (its error is above), so people signed in to your private pages stay '
                      'signed in: revoke their sessions at Cloudflare, as operating_procedures/respond_to_a_break_in.md '
                      'says for Cloudflare.' % exit_code)
     elif exit_code and desk_that_keeps_access:
@@ -394,7 +394,7 @@ def last_lines(desk_that_keeps_access, exit_code, failed=None, desk='', lock_out
                      'still a way in until you isolate it at the provider.' % exit_code)
     elif exit_code and lock_out_recorded:
         lines.append('MMX ended with exit code %d. Read the result for every server above: a server where the undo failed '
-                     'is still locked out, so util01 and the other desks cannot reach it yet. Your coding agent fixes '
+                     'is still locked out, so util01 and the other systems desks cannot reach it yet. Your coding agent fixes '
                      'the cause, and you run sudo lock-everyone-out again.' % exit_code)
     elif exit_code:
         lines.append('MMX ended with exit code %d. Read the result for every server above: a server that failed did '

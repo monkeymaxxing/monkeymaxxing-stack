@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Check the desk's repository commands without a desk.
+"""Check the systems desk's repository commands without a systems desk.
 
-start-the-systems-repository, the bootstrap's step, writes the desk's
+start-the-systems-repository, the bootstrap's step, writes the systems desk's
 production key into the settings; these tests run its edits on the
-template's own files. The desk review and the lock-out button pull main
-into the desk's own copy; these tests pull from a stand-in main copy.
+template's own files. The systems desk review and the lock-out button pull main
+into the systems desk's own copy; these tests pull from a stand-in main copy.
 lock-everyone-out, the lock-out button, pulls main, shows the
 inventory's servers and asks for yes, and runs the reviewed copies that the
-desk review installed, with only data from the pulled repository; these
+systems desk review installed, with only data from the pulled repository; these
 tests build its run directory from a pulled repository whose lock-out
 script a push changed, and check what the person sees and types.
 """
@@ -200,7 +200,7 @@ class BreakInButton(unittest.TestCase):
 
 
 def reviewed_inventory():
-    """An inventory the last desk review recorded, as JSON: the
+    """An inventory the last systems desk review recorded, as JSON: the
     test runs on laptops without a YAML library, and JSON is YAML."""
     def server(address, key):
         return {'address': address, 'ssh_user': 'root', 'ssh_known_hosts': 'ssh/known_hosts', 'ssh_config': 'ssh/config',
@@ -249,9 +249,9 @@ class LockOutButtonShowsTheServers(unittest.TestCase):
         lines = self.output.split('\n')
         self.assertIn('  db01    database_servers  10.20.2.1        203.0.113.1', lines)
         self.assertIn('  util01  util_server       10.20.0.1        203.0.113.1', lines)
-        self.assertFalse(any(line.startswith('  desk0') for line in lines), 'desks are not servers')
-        self.assertIn('The desk that keeps access: desk01, at 10.20.9.1.', lines)
-        self.assertIn('Every other desk loses access to the servers: desk02.', lines)
+        self.assertFalse(any(line.startswith('  desk0') for line in lines), 'systems desks are not servers')
+        self.assertIn('The systems desk that keeps access: desk01, at 10.20.9.1.', lines)
+        self.assertIn('Every other systems desk loses access to the servers: desk02.', lines)
         self.assertEqual(self.questions, ['Type yes to lock everyone out except desk01, or press Enter to stop: '])
 
     def test_a_pushed_server_is_shown_and_only_yes_goes_on(self):
@@ -281,7 +281,7 @@ class LockOutButtonShowsTheServers(unittest.TestCase):
     def test_with_no_lock_out_set_or_recorded_it_says_what_the_press_does_instead(self):
         self.press(reviewed_inventory(), '', 'yes', lock_out_recorded=False)
         self.assertNotIn('undoes the lock-out', self.output)
-        self.assertIn('No lock-out is set or recorded on this desk, so this press only applies normal access on every server', self.output)
+        self.assertIn('No lock-out is set or recorded on this systems desk, so this press only applies normal access on every server', self.output)
         self.assertEqual(self.questions, ['Type yes to apply normal access on every server again, or press Enter to stop: '])
 
 
@@ -365,7 +365,7 @@ class LockOutButtonPress(unittest.TestCase):
     def test_a_failed_pull_says_why_and_goes_on_with_the_repository_as_it_is(self):
         self.press(['yes'], pulled=(False, 'The pull of main from the main copy on util01 did not work '
                                            '(util01 did not answer within 30 seconds).'))
-        self.assertIn('did not answer within 30 seconds). The lock-out button goes on with the desk\'s copy as it is.', self.output)
+        self.assertIn('did not answer within 30 seconds). The lock-out button goes on with the systems desk\'s copy as it is.', self.output)
         self.assertEqual([event[0] for event in self.events], ['pull', 'question', 'mmx'])
 
     def test_enter_at_the_servers_question_leaves_mmx_unrun(self):
@@ -384,7 +384,7 @@ class LockOutButtonPress(unittest.TestCase):
         self.results = {'entries': [self.entry('util01', {'task': 'apply_the_mmhotline_triage_lockout', 'status': 'failed'})]}
         self.assertEqual(self.press(['yes'], mmx_exit_code=1), 1)
         self.assertIn('MMX ended with exit code 1. Read the result for every server above: a server where the undo failed '
-                      'is still locked out, so util01 and the other desks cannot reach it yet.', self.output)
+                      'is still locked out, so util01 and the other systems desks cannot reach it yet.', self.output)
         self.assertTrue(self.output.rstrip().endswith('you run sudo lock-everyone-out again.'), self.output)
         self.assertNotIn('a way in', self.output)
 
@@ -407,7 +407,7 @@ class LockOutButtonPress(unittest.TestCase):
             self.entry('desk01', {'task': 'record_that_the_lock_out_button_ran_on_this_desk', 'status': 'succeeded'},
                        {'task': 'revoke_cloudflare_access_sessions', 'status': 'failed', 'exit_code': 1})]}
         self.assertEqual(self.press(['yes'], mmx_exit_code=1), 1)
-        self.assertIn('Every server was locked out; only the revocation of Cloudflare Access sessions on this desk failed', self.output)
+        self.assertIn('Every server was locked out; only the revocation of Cloudflare Access sessions on this systems desk failed', self.output)
         self.assertIn('revoke their sessions at Cloudflare', self.output)
         self.assertNotIn('isolate it at the provider', self.output)
 
@@ -450,7 +450,7 @@ class LockOutButtonPress(unittest.TestCase):
 
 
 class PullIntoTheDesksCopy(unittest.TestCase):
-    """The pull that the desk review and the lock-out button share, on real
+    """The pull that the systems desk review and the lock-out button share, on real
     Git repositories: a bare repository stands in for the main copy on
     util01, and a clone of it for the coding agent's checkout."""
 
@@ -494,7 +494,7 @@ class PullIntoTheDesksCopy(unittest.TestCase):
         self.assertIn('Pulled main from the main copy on util01', said)
 
     def test_a_commit_only_in_the_checkout_is_not_pushed_main(self):
-        (self.checkout/'inventory.yml').write_text('committed on the desk, not pushed\n')
+        (self.checkout/'inventory.yml').write_text('committed on the systems desk, not pushed\n')
         self.run_git('commit', '--quiet', '-am', 'not pushed', cwd=self.checkout)
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
         self.assertTrue(pulled, said)
@@ -502,15 +502,15 @@ class PullIntoTheDesksCopy(unittest.TestCase):
 
     def test_before_util01_exists_the_checkouts_own_main_is_pushed_main(self):
         self.run_git('remote', 'remove', 'origin', cwd=self.checkout)
-        (self.checkout/'inventory.yml').write_text('only on the desk\n')
-        self.run_git('commit', '--quiet', '-am', 'the desk is the main copy', cwd=self.checkout)
+        (self.checkout/'inventory.yml').write_text('only on the systems desk\n')
+        self.run_git('commit', '--quiet', '-am', 'the systems desk is the main copy', cwd=self.checkout)
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(self.repository)
         self.assertTrue(pulled, said)
-        self.assertEqual((self.repository/'inventory.yml').read_text(), 'only on the desk\n')
+        self.assertEqual((self.repository/'inventory.yml').read_text(), 'only on the systems desk\n')
         self.assertIn('the main copy until util01 exists', said)
 
     def test_a_change_in_the_copy_never_runs_and_the_run_history_stays(self):
-        """Nobody edits the desk copy; whatever is in it, the review sees pushed main."""
+        """Nobody edits the systems desk copy; whatever is in it, the review sees pushed main."""
         (self.repository/'inventory.yml').write_text('a change nobody pushed\n')
         (self.repository/'unpushed.yml').write_text('x\n')
         (self.repository/'.mmx').mkdir()
@@ -529,7 +529,7 @@ class PullIntoTheDesksCopy(unittest.TestCase):
         self.assertEqual((self.repository/'inventory.yml').read_text(), 'one\n')
 
     def test_a_desk_without_a_copy_gets_one(self):
-        """A desk from an earlier Stack version ran its desk reviews in the person's checkout."""
+        """A systems desk from an earlier Stack version ran its systems desk reviews in the person's checkout."""
         missing = Path(self.directory.name)/'var/lib/systems-desk/systems_repository'
         pulled, said = DESK_REVIEW.pull_main_into_the_desks_copy(missing)
         self.assertTrue(pulled, said)
@@ -564,8 +564,8 @@ class PullIntoTheDesksCopy(unittest.TestCase):
 
     def test_a_missing_object_stops_the_pull_and_changes_nothing(self):
         self.run_git('remote', 'remove', 'origin', cwd=self.checkout)
-        (self.checkout/'inventory.yml').write_text('only on the desk\n')
-        self.run_git('commit', '--quiet', '-am', 'the desk is the main copy', cwd=self.checkout)
+        (self.checkout/'inventory.yml').write_text('only on the systems desk\n')
+        self.run_git('commit', '--quiet', '-am', 'the systems desk is the main copy', cwd=self.checkout)
         tree = subprocess.run(['git', 'rev-parse', 'HEAD^{tree}'], cwd=self.checkout, text=True, capture_output=True,
                               check=True).stdout.strip()
         (self.checkout/'.git/objects'/tree[:2]/tree[2:]).unlink()
@@ -609,7 +609,7 @@ class LockOutButtonReviewsTheKeysItLetsIn(unittest.TestCase):
     """The undo, the press after everyone_locked_out_except_desk is removed,
     installs root_ssh_public_keys and triage_ssh_public_key from the pulled
     settings on every server, so the lock-out button compares them with the keys the
-    last desk review recorded."""
+    last systems desk review recorded."""
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -639,7 +639,7 @@ class LockOutButtonReviewsTheKeysItLetsIn(unittest.TestCase):
         settings['vars']['root_ssh_public_keys'].reverse()
         self.press(settings, 'no answer is read')
         self.assertEqual(self.questions, [])
-        self.assertIn('The keys the lock-out button lets in are the same as at your last desk review (abc1234', self.output)
+        self.assertIn('The keys the lock-out button lets in are the same as at your last systems desk review (abc1234', self.output)
 
     def test_a_pushed_root_key_on_the_undo_is_shown_and_enter_stops(self):
         settings = reviewed_settings()
@@ -837,9 +837,9 @@ class EveryFileTheLockOutLoadsIsReviewed(unittest.TestCase):
 
 class EveryPressFirstChecksThatThisDeskKeepsItsAccess(unittest.TestCase):
     """Seen on test servers: an undo that installs keys without this
-    desk's own cuts this desk off partway, with the servers still locked.
+    systems desk's own cuts this systems desk off partway, with the servers still locked.
     So the first fleet stage of every press, the lock-out and the undo, runs
-    the check of tests/break_in_response_test.py on this desk, and stops the
+    the check of tests/break_in_response_test.py on this systems desk, and stops the
     run (on_node_failure: stop_run) before any fleet stage that changes a server."""
 
     def test_the_check_runs_first_in_the_lock_out_and_in_the_undo(self):
@@ -869,7 +869,7 @@ class EveryPressFirstChecksThatThisDeskKeepsItsAccess(unittest.TestCase):
                                   for argument in task.get('arguments', []))]
                 self.assertEqual(len(checks), 1, 'the first stage runs the check, in both states')
                 values = {argument['field']: argument.get('value') for argument in checks[0]['arguments']}
-                self.assertEqual(values.get('shell.env.DESK_THAT_KEEPS_ACCESS'), 'desk01', 'the check is about the desk that runs the press')
+                self.assertEqual(values.get('shell.env.DESK_THAT_KEEPS_ACCESS'), 'desk01', 'the check is about the systems desk that runs the press')
 
 
 def covered(path, paths):

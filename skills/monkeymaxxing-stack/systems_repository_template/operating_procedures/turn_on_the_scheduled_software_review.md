@@ -161,7 +161,7 @@ Read [the systems repository rules](../AGENTS.md#the-rules) first.
   `latest_software_review` stays `null`: `mmhotline triage-agent show`
   prints `Triage agent: not set up`. Set up the triage agent first:
   - its credential, `mmhotline_triage_agent_credential`, from step 7 of
-    [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md);
+    [chapter 4 (set up your accounts and lock your systems desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md);
   - its `triage_agent` section in `mmhotline_settings.yml`, from part 1 of
     [chapter 8 (check that alerts reach your phone and backups restore)](../initial_setup/08_check_that_alerts_reach_your_phone_and_backups_restore.md).
 

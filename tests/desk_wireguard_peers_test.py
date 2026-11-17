@@ -5,7 +5,7 @@
 
 The coding agent runs update-this-desks-wireguard-peers after a change to
 the inventory's servers. These tests run its own functions on inventories
-built like the template's, render the desk's real wg0 template with MMX, and
+built like the template's, render the systems desk's real wg0 template with MMX, and
 run the whole command against a stand-in wg and stand-in files.
 """
 import base64
@@ -61,10 +61,10 @@ def inventory(state='default'):
 # The stand-in inventory is JSON, which is YAML, so the tests need no YAML
 # library on this machine; the desk has python3-yaml.
 JSON_AS_YAML = types.SimpleNamespace(safe_load=json.loads, YAMLError=ValueError)
-LAPTOP_KEYS = {key('desk01-laptop'): 'the laptop desk01-laptop', key('desk01'): 'this desk'}
+LAPTOP_KEYS = {key('desk01-laptop'): 'the laptop desk01-laptop', key('desk01'): 'this systems desk'}
 # The addresses of the reviewed wg0.conf: the laptop peer's and this desk's.
 LAPTOP_ADDRESSES = {PEERS.ipaddress.IPv4Network('10.20.10.1/32'): 'the laptop desk01-laptop',
-                    PEERS.ipaddress.IPv4Network('10.20.9.1/32'): 'this desk'}
+                    PEERS.ipaddress.IPv4Network('10.20.9.1/32'): 'this systems desk'}
 
 
 class ServerPeers(unittest.TestCase):
@@ -108,13 +108,13 @@ class ServerPeers(unittest.TestCase):
             'a key that is not WireGuard\'s': (change('app001', 'wireguard_public_key', 'APP001KEY'), 'not a WireGuard public key'),
             'a key with a newline': (change('app001', 'wireguard_public_key', key('app001')[:-1] + '\n'), 'not a WireGuard public key'),
             'a private address outside the network': (change('app001', 'private_ip', '10.30.1.1'), 'outside vars.wireguard_network'),
-            'a private address in the desks\' block': (change('app001', 'private_ip', '10.20.9.7'), 'private_ip_ranges.systems_desks'),
+            'a private address in the systems desks\' block': (change('app001', 'private_ip', '10.20.9.7'), 'private_ip_ranges.systems_desks'),
             'a private address in the laptops\' block': (change('app001', 'private_ip', '10.20.10.1'),
                                                           'private_ip_ranges.systems_desk_laptops'),
             'a private address that is not one': (change('app001', 'private_ip', '10.20.1.1/16'), 'not an IPv4 address'),
             'a public address that is not IPv4': (change('app001', 'public_ipv4_address', '203.0.113.11:51820'), 'not an IPv4 address'),
             'a laptop\'s key': (change('app001', 'wireguard_public_key', key('desk01-laptop')), 'the WireGuard key of the laptop desk01-laptop'),
-            'this desk\'s key': (change('app001', 'wireguard_public_key', key('desk01')), 'the WireGuard key of this desk'),
+            'this systems desk\'s key': (change('app001', 'wireguard_public_key', key('desk01')), 'the WireGuard key of this systems desk'),
             'two servers with one key': (change('app002', 'wireguard_public_key', key('app001')), 'have one wireguard_public_key'),
             'two servers with one address': (change('app002', 'private_ip', '10.20.1.1'), 'have one private_ip'),
         }
@@ -128,7 +128,7 @@ class ServerPeers(unittest.TestCase):
                 self.assertTrue(str(stopped.exception).endswith('Nothing changed.'))
         # A push that also moves the inventory's blocks still cannot give a
         # server the laptop's or this desk's address from the reviewed wg0.
-        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this desk')):
+        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this systems desk')):
             with self.subTest(address=address):
                 servers = inventory()
                 servers['vars']['private_ip_ranges'].update(systems_desks='10.20.200.0/24', systems_desk_laptops='10.20.201.0/24')
@@ -144,7 +144,7 @@ class ServerPeers(unittest.TestCase):
 
 
 class DeskWireGuardFile(unittest.TestCase):
-    """The desk's wg0 file, rendered by MMX from the real template."""
+    """The systems desk's wg0 file, rendered by MMX from the real template."""
 
     @classmethod
     def setUpClass(cls):
@@ -297,7 +297,7 @@ class TheWholeCommand(unittest.TestCase):
     def test_the_laptop_and_desk_addresses_come_from_the_reviewed_wg0_not_the_push(self):
         # The pushed inventory moves the laptops' and desks' blocks and gives
         # app001 the laptop's, or this desk's, address in the reviewed wg0.conf.
-        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this desk')):
+        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this systems desk')):
             with self.subTest(address=address):
                 servers = inventory()
                 servers['vars']['private_ip_ranges'].update(systems_desks='10.20.200.0/24', systems_desk_laptops='10.20.201.0/24')
@@ -322,8 +322,8 @@ class TheWholeCommand(unittest.TestCase):
 
 
 class TheDeskPlaybooksForm(unittest.TestCase):
-    """--only-write-the-server-peers-file, which the desk playbook runs as
-    root before it rewrites wg0: on a desk from an earlier Stack version, wg0's
+    """--only-write-the-server-peers-file, which the systems desk playbook runs as
+    root before it rewrites wg0: on a systems desk from an earlier Stack version, wg0's
     file has no server-peers line and the peers file does not exist yet."""
 
     def setUp(self):
@@ -346,7 +346,7 @@ class TheDeskPlaybooksForm(unittest.TestCase):
         self.calls.append(arguments)
         if arguments[1:] == ['show', 'wg0', 'public-key']:
             return subprocess.CompletedProcess(arguments, 0, key('desk01') + '\n', '')
-        raise AssertionError('the desk playbook\'s form touched the running wg0: %s' % arguments)
+        raise AssertionError('the systems desk playbook\'s form touched the running wg0: %s' % arguments)
 
     def fetch(self):
         return 'abc123', self.inventory
@@ -395,7 +395,7 @@ class TheDeskPlaybooksForm(unittest.TestCase):
     def test_a_pushed_inventory_cannot_move_a_laptops_address_to_a_server(self):
         # The pushed inventory moves the laptops' block and gives app001 the
         # laptop's address; the reviewed wg0.conf still names the laptop's.
-        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this desk')):
+        for address, owner in (('10.20.10.1', 'the laptop desk01-laptop'), ('10.20.9.1', 'this systems desk')):
             with self.subTest(address=address):
                 servers = inventory()
                 servers['vars']['private_ip_ranges'].update(systems_desks='10.20.200.0/24', systems_desk_laptops='10.20.201.0/24')
@@ -413,7 +413,7 @@ class TheDeskPlaybooksForm(unittest.TestCase):
         self.inventory = json.dumps(servers)
         with self.assertRaises(PEERS.Stop) as stopped:
             self.press()
-        self.assertIn('the WireGuard key of this desk', str(stopped.exception))
+        self.assertIn('the WireGuard key of this systems desk', str(stopped.exception))
 
     def test_without_pushed_main_the_file_stays_as_it_is(self):
         def no_git_host():

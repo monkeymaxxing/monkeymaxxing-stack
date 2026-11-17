@@ -52,11 +52,11 @@ minutes_waited() { echo $(( ($(date +%s) - started) / 60 )); }
 while [ ! -f "$exit_file" ]; do
     now=$(date +%s)
     if [ ! -e "$log" ] && [ $((now - started)) -ge "$seconds_to_find_a_new_job" ]; then
-        printf 'No desk job named %s ran on this desk: %s does not exist. ls ~/runs lists the jobs.\n' "$name" "$log"
+        printf 'No systems desk job named %s ran on this systems desk: %s does not exist. ls ~/runs lists the jobs.\n' "$name" "$log"
         exit 66
     fi
     if [ $((now - started)) -ge $((at_most_minutes * 60)) ]; then
-        printf 'The desk job %s still runs after %s minutes. It carries on by itself; wait again with: wait-for-a-desk-job %s\n' \
+        printf 'The systems desk job %s still runs after %s minutes. It carries on by itself; wait again with: wait-for-a-desk-job %s\n' \
             "$name" "$at_most_minutes" "$name"
         exit 124
     fi
@@ -78,8 +78,8 @@ printf -- '--- The last lines of the log of %s:\n' "$name"
 ended_with=$(head -n 1 -- "$exit_file")
 if [[ "$ended_with" =~ ^[0-9]{1,3}$ ]] && [ "$ended_with" -le 255 ]; then
     # Not "failed": an MMX dryrun's exit code 2 means proposed changes.
-    printf 'The desk job %s ended with exit code %s. Its log is %s.\n' "$name" "$ended_with" "$log"
+    printf 'The systems desk job %s ended with exit code %s. Its log is %s.\n' "$name" "$ended_with" "$log"
     exit "$ended_with"
 fi
-printf 'The desk job %s ended without an exit code. Its exit file says: %s\n' "$name" "$ended_with"
+printf 'The systems desk job %s ended without an exit code. Its exit file says: %s\n' "$name" "$ended_with"
 exit 125

@@ -305,7 +305,7 @@ the person's. Then you push the changes and watch the first build.
 
    The servers' registry read token is a different token, made on the Git
    host's token screen in
-   [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
+   [chapter 4 (set up your accounts and lock your systems desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
    step 6, and kept in the vault as
    `container_registry_read_only_token`. A GHCR package is private by
    default, so the servers cannot pull without it.

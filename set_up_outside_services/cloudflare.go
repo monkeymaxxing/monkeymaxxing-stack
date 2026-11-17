@@ -455,7 +455,7 @@ func readCloudflareArguments(arguments []string, known []string, person string) 
 			i++
 			leaving = arguments[i]
 			if !unixUserNamePattern.MatchString(leaving) {
-				return nil, false, "", fmt.Errorf("--delete-tokens-of-person takes the leaving person's account name on their desk, vars.person_unix_username, such as alex: %w", errUsage)
+				return nil, false, "", fmt.Errorf("--delete-tokens-of-person takes the leaving person's account name on their systems desk, vars.person_unix_username, such as alex: %w", errUsage)
 			}
 			if leaving == person {
 				return nil, false, "", errors.New("--delete-tokens-of-person names you. A remaining team member runs it for the person who leaves")
@@ -686,7 +686,7 @@ func (e *environment) setUpCloudflare(link *cloudflareClient, settings systemSet
 
 	if statusPage.BucketName != "" {
 		e.say("")
-		e.say("Your own key for posting to the status page from this desk while util01 is down.")
+		e.say("Your own key for posting to the status page from this systems desk while util01 is down.")
 		if err := e.ensureStatusPagePostingKey(link, settings, accountID, statusPage.BucketName, ids); err != nil {
 			return cloudflareSetUp{}, err
 		}
@@ -877,16 +877,16 @@ func (e *environment) ensureDeskToken(link *cloudflareClient, settings systemSet
 		return nil, err
 	}
 	if !made {
-		e.say("  Your desk's token %q (ID %s) is in your token file and the API proxy already. Unchanged.", plan.TokenName, token.ID)
-		return &cloudflareClient{baseURL: e.cloudflareAPIURL, token: held, accountID: accountID, who: "your desk's Cloudflare token"}, nil
+		e.say("  Your systems desk's token %q (ID %s) is in your token file and the API proxy already. Unchanged.", plan.TokenName, token.ID)
+		return &cloudflareClient{baseURL: e.cloudflareAPIURL, token: held, accountID: accountID, who: "your systems desk's Cloudflare token"}, nil
 	}
-	e.say("  Made your desk's token %q (ID %s): %s.", plan.TokenName, token.ID, describePolicies(plan.Policies))
+	e.say("  Made your systems desk's token %q (ID %s): %s.", plan.TokenName, token.ID, describePolicies(plan.Policies))
 	e.say("  Saved it in the API proxy and in %s as %s.", path, deskTokenVariable)
 	if held != "" && heldID == "" {
 		e.say("  Your token file held an earlier Cloudflare token that is not an account token of account %s, such as a token you made yourself.", accountID)
 		e.say("  This command cannot delete it. Delete it on your profile's API Tokens page if it is yours: https://dash.cloudflare.com/profile/api-tokens")
 	}
-	return &cloudflareClient{baseURL: e.cloudflareAPIURL, token: token.Value, accountID: accountID, who: "your desk's Cloudflare token"}, nil
+	return &cloudflareClient{baseURL: e.cloudflareAPIURL, token: token.Value, accountID: accountID, who: "your systems desk's Cloudflare token"}, nil
 }
 
 // ensureStatusPagePostingKey makes the person's own R2 key for the status
@@ -1242,7 +1242,7 @@ func (e *environment) sayStagingServiceTokenState(settings systemSettings, exist
 		e.say("  Its values are already in your token file. Unchanged.")
 		return nil
 	}
-	e.say("  Cloudflare has the service token %q already, but this desk's token file lacks its values.", name)
+	e.say("  Cloudflare has the service token %q already, but this systems desk's token file lacks its values.", name)
 	e.say("  Its Client ID and Client Secret are in your password manager. Enter them with: set-up-outside-services personal-token staging-access")
 	return nil
 }

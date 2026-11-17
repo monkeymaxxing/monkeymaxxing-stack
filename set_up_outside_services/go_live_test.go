@@ -257,7 +257,7 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "One more key: so your servers can download your app.",
 		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Key for shop: STRIPE_API_KEY",
 		"Stripe takes your customers' card payments with it.", "1. Open  https://dashboard.stripe.com/apikeys", "Stripe accepted the key.", "Step 1 of 2: your recovery passphrase", "SAVE IT NOW.",
-		"[the screen is cleared]", "Step 2 of 2: your phone code", "Done.  Your phone code is ready.  Your coding agent locks your desk next."}
+		"[the screen is cleared]", "Step 2 of 2: your phone code", "Done.  Your phone code is ready.  Your coding agent locks your systems desk next."}
 	at := 0
 	for _, line := range order {
 		next := strings.Index(output[at:], line)
@@ -413,7 +413,7 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 	h.hidden = append(typed(h.addLinkToken(), masterKey, registryToken), h.theShownPassphrase)
 	h.visible = typed(masterKeyID)
 	h.phoneCode = func(string) error {
-		return errors.New("set-up-the-phone-code stopped (exit status 1), so the desk is not locked yet")
+		return errors.New("set-up-the-phone-code stopped (exit status 1), so the systems desk is not locked yet")
 	}
 	err := runGoLive(h.e)
 	if err == nil || !strings.Contains(err.Error(), "Go back to your coding agent") {
@@ -643,7 +643,7 @@ func TestTheDeskIsLockedOnlyWithTheRecordAndWithoutTheRootLoginFile(t *testing.T
 		os.Remove(locked)
 		os.Remove(beforeTheLock)
 		if c.record {
-			writeFile(t, locked, "This desk is locked.\n")
+			writeFile(t, locked, "This systems desk is locked.\n")
 		}
 		if c.rootLogin {
 			writeFile(t, beforeTheLock, "Match User root\n")
@@ -653,11 +653,11 @@ func TestTheDeskIsLockedOnlyWithTheRecordAndWithoutTheRootLoginFile(t *testing.T
 		}
 	}
 	e := &environment{deskIsLocked: func() bool { return true }}
-	if message := goLiveDoneMessage(e); !strings.HasPrefix(message, "\nDone.  Your desk is locked.") {
-		t.Errorf("a locked desk: %q", message)
+	if message := goLiveDoneMessage(e); !strings.HasPrefix(message, "\nDone.  Your systems desk is locked.") {
+		t.Errorf("a locked systems desk: %q", message)
 	}
 	e.deskIsLocked = func() bool { return false }
 	if message := goLiveDoneMessage(e); strings.Contains(message, "is locked") {
-		t.Errorf("a desk that is not locked yet: %q", message)
+		t.Errorf("a systems desk that is not locked yet: %q", message)
 	}
 }

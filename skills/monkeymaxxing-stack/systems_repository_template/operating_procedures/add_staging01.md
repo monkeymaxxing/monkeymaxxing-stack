@@ -111,7 +111,7 @@ explains each term.
    ```
 
    - `cloudflare` prints a link for a new link token, as in
-     [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
+     [chapter 4 (set up your accounts and lock your systems desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md),
      and makes the tunnel `example_systems-staging_apps` with its token in
      the vault as `staging_apps_cloudflare_tunnel_token`; each app's
      staging uploads bucket and its R2 key, in the vault with `staging_`

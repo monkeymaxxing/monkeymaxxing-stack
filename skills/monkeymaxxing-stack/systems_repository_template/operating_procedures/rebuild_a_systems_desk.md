@@ -10,7 +10,7 @@ desk is deleted at the provider.
 
 **Which desk this page rebuilds:** the desk whose keys are in the recovery
 bundle, `recovery_bundle.age`. That is the desk that ran chapter 4 (set up
-your accounts and lock your desk), usually `desk01`, and any desk this page
+your accounts and lock your systems desk), usually `desk01`, and any desk this page
 rebuilt from it. A desk added later for a teammate has its own keys, which
 the bundle does not hold. A teammate's lost desk is replaced with
 [Add or remove a team member](add_or_remove_a_team_member.md): remove the

@@ -76,8 +76,8 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
-   Then leave that window open. It shows when your desk is ready, about
-   10 minutes later, and goes on to the next questions by itself.
+   Then leave that window open. It shows when your systems desk, a small server of your own that
+   holds your keys, is ready, about 10 minutes later, and goes on to the next questions by itself.
    I carry on by myself meanwhile.
    ```
 
@@ -257,7 +257,8 @@ repository's name, including paths inside quoted SSH commands.
    **Tell the person,** once the provider accepted the request:
 
    ```text
-   I am building your desk now.  It takes about 10 minutes.
+   I am building your systems desk now, a small server of your own that holds your keys.
+   It takes about 10 minutes.
 
    You have nothing to do until then.  I tell you when it is ready.
    ```
@@ -612,4 +613,4 @@ could use the login too, as
 [chapter 2's container rule](02_get_your_app_ready_to_deploy.md#before-you-start)
 says. The login closes after one idle hour, and after ten hours at most.
 
-Next: [Chapter 4: Set up your accounts and lock your desk](04_set_up_your_accounts_and_lock_your_desk.md).
+Next: [Chapter 4: Set up your accounts and lock your systems desk](04_set_up_your_accounts_and_lock_your_desk.md).

@@ -271,7 +271,7 @@ nothing, unless the prices rose since chapter 1 (step 3).
    private `address`.
 
 6. **The shared root console password is ready.** `set-up-outside-services go-live`
-   in [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps)
+   in [chapter 4 (set up your accounts and lock your systems desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps)
    made the servers' shared root console password, saved only its hash in
    the vault as `shared_root_console_password_hash`, and put the password
    itself into the recovery bundle. Every server shares the one password.

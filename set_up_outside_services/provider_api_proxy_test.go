@@ -462,12 +462,12 @@ func TestProxyRefusesARequestThatWouldChangeTheDeskItself(t *testing.T) {
 	for _, c := range refused {
 		before := len(*received)
 		status, answer := send(c.method, c.path, c.body)
-		if status != http.StatusForbidden || !strings.Contains(answer, "this would change your desk itself; the desk is managed by its own guide") || len(*received) != before {
+		if status != http.StatusForbidden || !strings.Contains(answer, "this would change your systems desk itself; the systems desk is managed by its own guide") || len(*received) != before {
 			t.Errorf("%s: want a refusal and nothing sent on, got HTTP %d %q after %d requests", c.name, status, answer, len(*received)-before)
 		}
 	}
 	passed := []struct{ name, method, path, body string }{
-		{"a GET of the desk", "GET", "/servers/" + deskID, ""},
+		{"a GET of the systems desk", "GET", "/servers/" + deskID, ""},
 		{"a GET of the listing", "GET", "/servers?per_page=50", ""},
 		{"a delete of another server", "DELETE", "/servers/4242424243", ""},
 		{"a delete of a server whose ID only starts like the desk's", "DELETE", "/servers/" + deskID + "9", ""},
@@ -491,7 +491,7 @@ func TestProxyNeedsTheDesksServerID(t *testing.T) {
 	os.WriteFile(filepath.Join(directory, "desk-server-name"), nil, 0o600)
 	os.WriteFile(filepath.Join(directory, "provider-api-token"), []byte(`proxy_set_header Authorization "Bearer t";`+"\n"), 0o600)
 	err := runProviderAPIProxy([]string{"--provider-api-url", providerGuideAPIAddresses[0]})
-	if err == nil || !strings.Contains(err.Error(), "desk's own server ID") {
+	if err == nil || !strings.Contains(err.Error(), "systems desk's own server ID") {
 		t.Fatalf("got %v", err)
 	}
 }

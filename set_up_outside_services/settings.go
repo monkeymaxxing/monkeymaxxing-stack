@@ -177,7 +177,7 @@ func readSystemSettings(read func(name string) ([]byte, error)) (systemSettings,
 	var settings systemSettings
 	text, err := read(projectSettingsFile)
 	if errors.Is(err, os.ErrNotExist) {
-		return settings, fmt.Errorf("the desk's checkout of the systems repository, %s, has no %s. The desk's bootstrap makes it; ask your coding agent", codingAgentCheckout, projectSettingsFile)
+		return settings, fmt.Errorf("the systems desk's checkout of the systems repository, %s, has no %s. The systems desk's bootstrap makes it; ask your coding agent", codingAgentCheckout, projectSettingsFile)
 	}
 	if err != nil {
 		return settings, err
@@ -591,7 +591,7 @@ func deskTokenPlan(s systemSettings, accountID, person string) cloudflareCredent
 func statusPagePostingTokenPlan(s systemSettings, accountID, person, bucket string) cloudflareCredentialPlan {
 	return cloudflareCredentialPlan{
 		Purpose:   "your own key for posting to the status page",
-		Why:       "You post to the status page from this desk with it while util01 is down.",
+		Why:       "You post to the status page from this systems desk with it while util01 is down.",
 		TokenName: statusPagePostingTokenName(s, person),
 		Policies:  []tokenPolicyPlan{onBuckets(permissionR2BucketItemWrite, map[string]any{r2BucketResource(accountID, bucket): "*"})},
 		Form:      r2KeyForm,

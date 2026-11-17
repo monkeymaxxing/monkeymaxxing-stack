@@ -88,6 +88,11 @@ In every reply:
 - Ask before choosing a name the person will see, such as the app's
   address. Recommend the domain itself when the person named a domain.
 - When you list your changes, name every file that changed or is new.
+- Say "systems desk", never a bare "desk", and the first time in a reply
+  say what it is in the same sentence: "your systems desk, a small separate
+  server that holds your keys". Name a command's target the first time it
+  appears: "`ssh desk01-setup` logs in to your systems desk". Reason: a
+  newcomer reads "desk" as furniture.
 - When a run or command the person can see fails, your next reply starts
   with one plain sentence: what failed, whether anything is harmed, and
   what happens next. Never a wall of technical lines. Reason: the person
@@ -143,7 +148,7 @@ These six rules hold the system together. Follow all six rules during
 initial setup and every later operation. Introduce each rule when its
 first action comes, not all at once at the start, because the person has
 already chosen the stack and wants to get to work. Chapter 3 (make your server account and your systems desk) introduces the
-systems repository and the desk. Chapter 4 (set up your accounts and lock your desk)
+systems repository and the desk. Chapter 4 (set up your accounts and lock your systems desk)
 introduces the outside accounts, the vault, and the recovery passphrase. Chapter 7 (install everything on the production servers) introduces how
 the agent runs MMX on `util01` after pushing each change.
 Each chapter introduces the checklist's results as its checks pass. Keep each
@@ -297,7 +302,7 @@ and gets there one way: [Secrets in chapter 3 (make your server account and your
 - [Chapter 1: Answer two questions](systems_repository_template/initial_setup/01_answer_two_questions.md)
 - [Chapter 2: Get your app ready to deploy](systems_repository_template/initial_setup/02_get_your_app_ready_to_deploy.md)
 - [Chapter 3: Make your server account and your systems desk](systems_repository_template/initial_setup/03_make_your_server_account_and_your_systems_desk.md)
-- [Chapter 4: Set up your accounts and lock your desk](systems_repository_template/initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)
+- [Chapter 4: Set up your accounts and lock your systems desk](systems_repository_template/initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)
 - [Chapter 5: Put your site behind Cloudflare and lock your private pages](systems_repository_template/initial_setup/05_put_your_site_behind_cloudflare_and_lock_your_private_pages.md)
 - [Chapter 6: Create your three production servers: app, database, and tools](systems_repository_template/initial_setup/06_create_your_three_production_servers.md)
 - [Chapter 7: Install everything on the production servers](systems_repository_template/initial_setup/07_install_everything_on_the_production_servers.md)

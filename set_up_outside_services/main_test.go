@@ -526,12 +526,12 @@ func TestBackblazeRefusesTheTemplatesExampleBuckets(t *testing.T) {
 
 func TestTokenFileKeepsOtherLinesAndComments(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "acme_systems.env")
-	writeFile(t, path, "# This desk's token file\nexport MMX_VAULT_PASSWORD_FILE=\"$HOME/x\"\nexport CLOUDFLARE_API_TOKEN=''      # this person's Cloudflare API token\n")
+	writeFile(t, path, "# This systems desk's token file\nexport MMX_VAULT_PASSWORD_FILE=\"$HOME/x\"\nexport CLOUDFLARE_API_TOKEN=''      # this person's Cloudflare API token\n")
 	if err := updateTokenFile(path, map[string]string{"CLOUDFLARE_API_TOKEN": "abc_123-XYZ", "CLOUDFLARE_ACCOUNT_ID": testAccountID}); err != nil {
 		t.Fatal(err)
 	}
 	text, _ := os.ReadFile(path)
-	want := "# This desk's token file\nexport MMX_VAULT_PASSWORD_FILE=\"$HOME/x\"\nexport CLOUDFLARE_API_TOKEN='abc_123-XYZ'      # this person's Cloudflare API token\nexport CLOUDFLARE_ACCOUNT_ID='" + testAccountID + "'\n"
+	want := "# This systems desk's token file\nexport MMX_VAULT_PASSWORD_FILE=\"$HOME/x\"\nexport CLOUDFLARE_API_TOKEN='abc_123-XYZ'      # this person's Cloudflare API token\nexport CLOUDFLARE_ACCOUNT_ID='" + testAccountID + "'\n"
 	if string(text) != want {
 		t.Fatalf("got\n%s\nwant\n%s", text, want)
 	}

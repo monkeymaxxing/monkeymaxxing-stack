@@ -311,7 +311,7 @@ func (e *environment) hasOrigin() bool {
 // copy is elsewhere, and says where main now is, for the command's message.
 func (e *environment) pushMain() (string, error) {
 	if !e.hasOrigin() {
-		return "in the desk's checkout, the team's main copy until util01 exists", nil
+		return "in the systems desk's checkout, the team's main copy until util01 exists", nil
 	}
 	_, err := e.git("push", "--quiet", "origin", "HEAD:main")
 	return "to the main copy on util01", err

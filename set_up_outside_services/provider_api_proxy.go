@@ -284,7 +284,7 @@ func runProviderAPIProxy(arguments []string) error {
 	}
 	idText, err := os.ReadFile(filepath.Join(directory, deskServerIDCredentialName))
 	if err != nil || strings.TrimSpace(string(idText)) == "" {
-		return fmt.Errorf("%s must hold the desk's own server ID at the provider; record it as provider_server_id in the desk's entry of inventories/servers.yml", deskServerIDFile)
+		return fmt.Errorf("%s must hold the systems desk's own server ID at the provider; record it as provider_server_id in the systems desk's entry of inventories/servers.yml", deskServerIDFile)
 	}
 	providerProxy.deskServerID = strings.TrimSpace(string(idText))
 	nameText, err := os.ReadFile(filepath.Join(directory, deskServerNameCredentialName))
@@ -426,7 +426,7 @@ func (p *apiProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p.changesTheDeskItself(r, body) {
-		refuse(w, http.StatusForbidden, "this would change your desk itself; the desk is managed by its own guide")
+		refuse(w, http.StatusForbidden, "this would change your systems desk itself; the systems desk is managed by its own guide")
 		return
 	}
 	target := p.target(r.URL.EscapedPath())

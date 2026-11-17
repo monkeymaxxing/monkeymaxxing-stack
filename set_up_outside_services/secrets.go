@@ -227,7 +227,7 @@ func madeElsewhere(key string) string {
 	case strings.Contains(key, "_b2_"), strings.HasPrefix(key, "mmhotline_backup_"):
 		return "set-up-outside-services backblaze"
 	case key == "mmx_vault_passphrase":
-		return "the desk's bootstrap, in chapter 3"
+		return "the systems desk's bootstrap, in chapter 3"
 	case strings.HasPrefix(key, "database_moving_in_"):
 		return "Move a database into the Stack, only while a database moves in"
 	}
