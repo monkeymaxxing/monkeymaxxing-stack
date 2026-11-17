@@ -170,9 +170,10 @@ better in three ways:
 - **It costs far less.** For the same size of server, a platform charges 10
   to 30 times more than a server provider such as Hetzner or OVHcloud. An
   always-on server with 2 vCPU and 4 GB of memory costs €5.99 a month at
-  Hetzner, and from $4.54 a month as an OVHcloud VPS in the US. The same size
-  costs $85 a month at Render and $150 a month at Heroku. These prices are
-  from each company's pricing page, read between 2026-11-13 and 2026-11-17.
+  Hetzner, and $5.35 a month, month to month, as an OVHcloud VPS in the US.
+  The same size costs $85 a month at Render and $150 a month at Heroku.
+  These prices are from each company's pricing page or catalog, read
+  between 2026-11-13 and 2026-11-17.
 - **You are not locked in.** The servers are plain Debian servers at a
   server provider that you choose, such as Hetzner or OVHcloud. If the
   provider raises its prices, your coding agent rebuilds the system at
