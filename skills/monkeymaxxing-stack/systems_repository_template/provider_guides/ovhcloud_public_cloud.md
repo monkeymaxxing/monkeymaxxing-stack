@@ -147,8 +147,8 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
    The command asks for the Application Key, the Application Secret and the Consumer Key, each at a hidden
    prompt, checks them with a signed listing of the project's servers at OVHcloud, and only then writes
    `/etc/systems-desk/provider-api-signing-credential.json`, root:root, mode `0600`, restarts the API signing
-   proxy, checks the same listing through `http://127.0.0.1:8081/`, and saves the joined form in the person's
-   token file as `SERVER_PROVIDER_API_TOKEN`. When a check fails, the proxy keeps its old credential.
+   proxy, and checks the same listing through `http://127.0.0.1:8081/`. When a check fails, the proxy keeps its
+   old credential.
 
 ### The laptop key command
 
@@ -242,7 +242,7 @@ entry stays on the **API keys** page until the person deletes it there, so delet
 When the team moves its servers away from OVHcloud, the desk review that changes
 `systems_desk_provider_api_authentication` to `token_in_a_header` deletes
 `/etc/systems-desk/provider-api-signing-credential.json` from the desk, `personal-token server-provider` for
-the new provider replaces `SERVER_PROVIDER_API_TOKEN` in the token file, and `secrets --replace
+the new provider fills the API proxy's token file, and `secrets --replace
 util01_provider_api_token` replaces `util01`'s. Once OVHcloud holds no server of the system, the person deletes
 every application of the system on the **API keys** page: each person's and `util01`'s
 ([Move the servers to another provider](../operating_procedures/move_the_servers_to_another_provider.md), step 6).

@@ -177,7 +177,7 @@ func readSystemSettings(read func(name string) ([]byte, error)) (systemSettings,
 	var settings systemSettings
 	text, err := read(projectSettingsFile)
 	if errors.Is(err, os.ErrNotExist) {
-		return settings, fmt.Errorf("this directory has no %s. Run this command in your systems repository on this desk, such as ~/%s", projectSettingsFile, "example_systems")
+		return settings, fmt.Errorf("the desk's checkout of the systems repository, %s, has no %s. The desk's bootstrap makes it; ask your coding agent", codingAgentCheckout, projectSettingsFile)
 	}
 	if err != nil {
 		return settings, err

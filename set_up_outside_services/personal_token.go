@@ -18,13 +18,13 @@ import (
 	"time"
 )
 
-// A person's provider and Cloudflare tokens live in two places on the desk:
-// the person's token file, for the person's own commands, and the API token
+// A person's provider token lives in one place on the desk: the API token
 // proxy's file, which only root reads, for the coding agent's requests
-// through the proxy. One step updates both, after the new token passed a
-// check, so the old token keeps working until the new one is known to work.
-// The person types the provider token; set-up-outside-services cloudflare
-// makes the Cloudflare token.
+// through the proxy. The desk's bootstrap puts it there, and personal-token
+// server-provider replaces it, after the new token passed a check, so the
+// old token keeps working until the new one is known to work. The
+// Cloudflare token goes into the proxy and the person's token file; set-up-
+// outside-services cloudflare and go-live make it.
 
 const writeProxyFileCommand = "write-api-token-proxy-file"
 
@@ -160,9 +160,9 @@ func installServerProviderToken(e *environment, settings systemSettings, listing
 	}
 	e.say("Your server provider %s lets this desk create and list servers at the provider.", noun)
 	if signs {
-		e.say("It goes into your token file, for your own commands, and into the API proxy, which signs your coding agent's requests with it, so your coding agent uses it without reading it.")
+		e.say("It goes into the desk's API proxy, which signs your coding agent's requests with it, so your coding agent uses it without reading it.")
 	} else {
-		e.say("It goes into your token file, for your own commands, and into the API proxy, which adds it to your coding agent's requests, so your coding agent can use it without reading it.")
+		e.say("It goes into the desk's API proxy, which adds it to your coding agent's requests, so your coding agent uses it without reading it.")
 	}
 	e.say("This command checks it at %s%s, your provider guide's address.", apiURL, listingPath)
 	var token string
@@ -201,18 +201,7 @@ func installServerProviderToken(e *environment, settings systemSettings, listing
 	if err := e.writeProxyFile(request); err != nil {
 		return err
 	}
-	path := e.tokenFilePath(settings)
-	if err := updateTokenFile(path, map[string]string{"SERVER_PROVIDER_API_TOKEN": token}); err != nil {
-		return fmt.Errorf("the proxy has the new %s, but writing %s failed: %v. Run this command again", noun, path, err)
-	}
-	if signs && method.pastesAKeyFile {
-		e.say("Saved the key file's text, in base64 on one line, in %s as SERVER_PROVIDER_API_TOKEN.", path)
-	} else if signs {
-		e.say("Saved its %d values, joined with colons, in %s as SERVER_PROVIDER_API_TOKEN.", len(method.tokenParts), path)
-	} else {
-		e.say("Saved it in %s as SERVER_PROVIDER_API_TOKEN.", path)
-	}
-	e.say("Load the file again in open terminals: . %s", path)
+	e.say("Your coding agent uses the new %s from now on. Go back to your coding agent.", noun)
 	return nil
 }
 

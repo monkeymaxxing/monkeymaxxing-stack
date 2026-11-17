@@ -2,11 +2,12 @@
 // Monkeymaxxing Stack's setup on a systems desk: the buckets and keys at
 // Backblaze, the tokens and R2 keys at Cloudflare, the vault's other
 // secrets, the person's own tokens on the desk, and the recovery bundle. The
-// person runs it in their own desk terminal. It asks for each master
-// credential at a hidden prompt, keeps it in memory only, and saves each new
-// key straight into the systems repository's vault with `mmx secrets set`.
-// docs/design.md, "Account and secret setup from the systems desk", records
-// the design.
+// person runs it on the desk from the laptop, with a short SSH entry such as
+// ssh desk01-secrets. It asks for each master credential at a hidden
+// prompt, keeps it in memory only, and saves each new key straight into the
+// vault of the desk's checkout of the systems repository with `mmx secrets
+// set`. docs/design.md, "Account and secret setup from the systems desk",
+// records the design.
 package main
 
 import (
@@ -30,11 +31,14 @@ var version = "development"
 
 const usage = `set-up-outside-services sets up your system's accounts at Backblaze and
 Cloudflare, the vault's other secrets, your own tokens on this desk, and the
-recovery bundle. Run it in your own desk terminal. The first setup runs go-live
-through ssh desk01-setup. The other commands run in your systems repository,
-after loading your token file:
+recovery bundle. You start it from your laptop, plus a code from your phone:
+the first setup with ssh desk01-setup, new secrets with ssh desk01-secrets,
+and the other commands with ssh -t desk01, such as:
 
-  . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services backblaze
+  ssh -t desk01 set-up-outside-services backblaze
+
+Every command works in the desk's checkout of the systems repository,
+/home/coding-agent/systems_repository, from any folder.
 
 Commands:
   go-live                       The first setup, one screen at a time: Cloudflare, your
@@ -74,15 +78,14 @@ Commands:
                                 Delete, by name, the Cloudflare tokens this command made for a
                                 person who leaves the team. NAME is their desk account name.
   personal-token server-provider --server-listing-path PATH [--token-header NAME]
-                                Save your server provider token in your token file and in
-                                the desk's API proxy. PATH is the provider guide's
-                                server listing, such as servers for Hetzner Cloud. NAME is
-                                the guide's header for a provider without Authorization:
-                                Bearer, such as X-Auth-Token for Scaleway. For a provider
-                                whose requests are signed, such as OVHcloud or AWS, it asks
-                                for each value the provider's page gives, or at Google Cloud
-                                for the service account's key file, and fills the desk's API
-                                API proxy instead.
+                                Replace your server provider token in the desk's API proxy,
+                                such as after a rotation. PATH is the provider guide's server
+                                listing, such as servers for Hetzner Cloud. NAME is the
+                                guide's header for a provider without Authorization: Bearer,
+                                such as X-Auth-Token for Scaleway. For a provider whose
+                                requests are signed, such as OVHcloud or AWS, it asks for each
+                                value the provider's page gives, or at Google Cloud for the
+                                service account's key file.
   personal-token staging-access Save staging's Access service token, from your password manager,
                                 in your token file, on a desk where cloudflare did not make it.
   secrets [--replace KEY]       Save every vault secret the servers read that the vault lacks:
@@ -153,7 +156,6 @@ func (e *environment) dispatch(arguments []string) error {
 		if !stdinIsTerminal() {
 			return errNoTerminal
 		}
-		e.useTheCodingAgentsCheckout()
 		return e.withNoMoreArguments(arguments, runGoLive)
 	}
 	return fmt.Errorf("unknown command %q: %w", arguments[0], errUsage)
@@ -240,16 +242,10 @@ func newEnvironment(out io.Writer) (*environment, error) {
 			return nil, fmt.Errorf("this command runs only in the person's own account, never as %s. The person runs it in their own desk terminal, where its prompts keep every key away from the coding agent", name)
 		}
 	}
-	directory, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
 	e := &environment{
-		directory:                   directory,
 		home:                        current.HomeDir,
 		person:                      current.Username,
 		out:                         out,
-		vault:                       mmxVault{directory: directory},
 		prompt:                      readHiddenLine,
 		confirm:                     readVisibleLine,
 		b2AuthorizeURL:              b2AuthorizeURL,
@@ -260,7 +256,6 @@ func newEnvironment(out io.Writer) (*environment, error) {
 		runMMHotlineStatusPageSetUp: runMMHotlineStatusPageSetUp,
 		writeProxyFile:              writeProxyFileWithSudo,
 		clearScreen:                 clearTerminal,
-		git:                         gitInRepository(directory),
 		rdapBootstrapURL:            "https://data.iana.org/rdap/dns.json",
 		githubAPIURL:                "https://api.github.com",
 		containerRegistryURL:        "https://ghcr.io",
@@ -270,6 +265,7 @@ func newEnvironment(out io.Writer) (*environment, error) {
 		resultsFile:                 setupResultsFile,
 		writeResultsFile:            writeResultsFileWithSudo,
 	}
+	e.useTheCodingAgentsCheckout()
 	e.handleInterrupts()
 	return e, nil
 }
@@ -295,9 +291,10 @@ func (e *environment) quietly(work func() error) error {
 	return work()
 }
 
-// useTheCodingAgentsCheckout makes the command work in the desk's one
+// useTheCodingAgentsCheckout makes every command work in the desk's one
 // working copy of the systems repository, the coding agent's checkout,
-// where the desk's bootstrap made the vault: MMX runs as root with the
+// where the desk's bootstrap made the vault, whatever folder the command
+// starts in: MMX runs as root with the
 // desk's vault passphrase file, and git runs as coding-agent with the
 // production key's relay socket, so each commit is signed and every file
 // stays coding-agent's own. The person keeps no checkout on the desk.

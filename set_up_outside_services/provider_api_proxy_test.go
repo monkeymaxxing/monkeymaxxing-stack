@@ -226,14 +226,10 @@ func TestPersonalTokenForOVHcloudTakesThreeValuesChecksThemSignedAndFillsTheAPIP
 	if h.proxy["server-provider"] != ovhToken {
 		t.Fatalf("the root step got %q", h.proxy["server-provider"])
 	}
-	text, _ := os.ReadFile(h.e.tokenFilePath(systemSettings{projectSettings: projectSettings{ProjectName: "acme_systems"}}))
-	if !strings.Contains(string(text), "export SERVER_PROVIDER_API_TOKEN='"+ovhToken+"'") {
-		t.Fatalf("the token file lacks the joined token:\n%s", text)
-	}
 	h.requireNoSecretInOutput(ovhApplicationSecret, ovhConsumerKey)
 	// One word for OVHcloud's three values: credential, as its page and the guide say.
 	for _, want := range []string{"Your server provider credential lets", "The provider accepted the new credential:",
-		"Saved its 3 values, joined with colons, in "} {
+		"Your coding agent uses the new credential from now on."} {
 		if !strings.Contains(h.out.String(), want) {
 			t.Errorf("the output lacks %q:\n%s", want, h.out.String())
 		}

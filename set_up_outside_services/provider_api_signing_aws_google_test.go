@@ -332,11 +332,6 @@ func TestPersonalTokenForGoogleCloudTakesThePastedKeyFile(t *testing.T) {
 	if len(h.answers) != 0 || len(standIn.received) != 1 || h.proxy["server-provider"] != googleToken(keyFile) {
 		t.Fatalf("want the whole file read, one check and the base64 token for the proxy, got %d left and %d checks", len(h.answers), len(standIn.received))
 	}
-	text, _ := os.ReadFile(h.e.tokenFilePath(systemSettings{projectSettings: projectSettings{ProjectName: "acme_systems"}}))
-	if !strings.Contains(string(text), "export SERVER_PROVIDER_API_TOKEN='"+googleToken(keyFile)+"'") ||
-		!strings.Contains(h.out.String(), "Saved the key file's text, in base64 on one line") {
-		t.Fatalf("the token file lacks the key file in base64:\n%s\n%s", text, h.out)
-	}
 	h.requireNoSecretInOutput("PRIVATE KEY")
 
 	h.proxy = map[string]string{}

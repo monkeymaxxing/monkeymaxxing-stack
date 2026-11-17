@@ -102,8 +102,8 @@ each guide's "Credentials on the systems desk" says.
 
 - The bootstrap, and later `set-up-outside-services personal-token server-provider`
   when the person replaces the key, write
-  `/etc/systems-desk/provider-api-token.conf`, root:root, mode `0600`, and
-  the person's token file. The token file lives outside Git. Never give the
+  `/etc/systems-desk/provider-api-token.conf`, root:root, mode `0600`, which
+  only the API proxy reads. The token lives outside Git. Never give the
   real token to the coding agent.
 - The proxy listens on `http://127.0.0.1:8081/` and replaces the matching
   authentication header. Provider requests use the path relative to the

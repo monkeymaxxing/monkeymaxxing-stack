@@ -50,8 +50,8 @@ ID** and the **Secret access key**. `SERVER_PROVIDER_API_TOKEN` holds them joine
    The command asks for the Access key ID and the Secret access key, each at a hidden prompt, checks them with
    a signed listing of the region's servers, and only then writes
    `/etc/systems-desk/provider-api-signing-credential.json`, root:root, mode `0600`, restarts the API signing
-   proxy, checks the same listing through `http://127.0.0.1:8081/`, and saves the joined form in the person's
-   token file as `SERVER_PROVIDER_API_TOKEN`. When a check fails, the proxy keeps its old credential.
+   proxy, and checks the same listing through `http://127.0.0.1:8081/`. When a check fails, the proxy keeps its
+   old credential.
 
 ### The laptop key command
 

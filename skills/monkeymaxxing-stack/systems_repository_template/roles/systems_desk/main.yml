@@ -193,8 +193,9 @@ node_tasks:
       permissions_mode: "0700"
   # start_the_systems_repository below makes
   # /etc/systems-desk/vault-passphrase (root:servers-mmx 0640) at the
-  # bootstrap. set-up-outside-services (personal-token server-provider,
-  # and cloudflare for the desk's Cloudflare token) writes each
+  # bootstrap. set-up-outside-services (write-api-token-proxy-file at the
+  # bootstrap, personal-token server-provider for a new provider token, and
+  # go-live or cloudflare for the desk's Cloudflare token) writes each
   # *-api-token.conf (root:root 0600), restarts the API proxy, and
   # checks a request through it. Each token file contains only one line,
   # which the proxy reads: proxy_set_header Authorization "Bearer TOKEN";
@@ -526,7 +527,7 @@ node_tasks:
   # The desk keeps only the provider credential that its setting uses.
   # Reason: after a move to another provider, a working credential for the
   # account the team left would otherwise stay on the desk, unused and
-  # forgotten. The person's token file gets the new provider's token from
+  # forgotten. The API proxy gets the new provider's token from
   # set-up-outside-services personal-token server-provider.
   - id: remove_the_api_signing_credential_when_the_provider_takes_a_token_in_a_header
     when: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}

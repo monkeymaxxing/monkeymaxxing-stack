@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -167,7 +168,6 @@ func newHarness(t *testing.T, staging, uploads bool) *harness {
 		inventory = "groups:\n  staging_server:\n    nodes: [staging01]\n"
 	}
 	writeFile(t, filepath.Join(directory, inventoryFile), inventory)
-	t.Setenv("MMX_VAULT_PASSWORD_FILE", "/nonexistent/used-by-mmx-only")
 	h.e = &environment{
 		directory: directory, home: t.TempDir(), person: "alex", out: h.out, vault: h.vault,
 		prompt: func(label string) (string, error) {
@@ -217,6 +217,21 @@ func (h *harness) commitAll(message string) {
 	h.git(h.e.directory, "add", "-A")
 	h.git(h.e.directory, "commit", "--quiet", "-m", message)
 	h.git(h.e.directory, "push", "--quiet")
+}
+
+// gitInRepository runs git in a test's checkout, which signs with a key
+// file of its own instead of the desk's production key socket.
+func gitInRepository(directory string) func(arguments ...string) (string, error) {
+	return func(arguments ...string) (string, error) {
+		command := exec.Command("git", arguments...)
+		command.Dir = directory
+		var output, errorOutput bytes.Buffer
+		command.Stdout, command.Stderr = &output, &errorOutput
+		if err := command.Run(); err != nil {
+			return output.String(), fmt.Errorf("git %s failed: %s", strings.Join(arguments, " "), firstLine(errorOutput.String(), err))
+		}
+		return output.String(), nil
+	}
 }
 
 func writeFile(t *testing.T, path, text string) {
@@ -542,8 +557,11 @@ func TestPersonalTokenChecksTheNewTokenBeforeChangingAnything(t *testing.T) {
 	if err := runPersonalToken(h.e, []string{"server-provider", "--server-listing-path", "servers"}); err != nil {
 		t.Fatal(err)
 	}
-	if h.proxy["server-provider"] != providerToken || tokenFileValue(tokenFile, "SERVER_PROVIDER_API_TOKEN") != providerToken {
-		t.Fatal("one entry must reach both the proxy and the token file")
+	if h.proxy["server-provider"] != providerToken {
+		t.Fatal("the checked token must reach the API proxy")
+	}
+	if _, err := os.Stat(tokenFile); err == nil {
+		t.Fatal("the provider token lives only in the API proxy, never in the token file")
 	}
 	h.requireNoSecretInOutput(providerToken)
 }

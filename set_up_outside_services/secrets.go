@@ -21,9 +21,10 @@ import (
 // The secrets step walks every vault key that a person must type, because
 // only an outside company's website gives its value, and makes every
 // missing key that nobody needs to see. Then it commits and pushes the
-// vault itself, signed through the person's own agent socket. The person
-// runs it in their own desk terminal: the values pass only through the
-// hidden prompts and MMX's standard input, never through the coding agent.
+// vault itself, signed with the desk's production key, from the desk's
+// checkout of the systems repository. The person starts it from the laptop
+// with ssh desk01-secrets: the values pass only through the hidden prompts
+// and MMX's standard input, never through the coding agent.
 
 // secretKind says where a vault key's value comes from.
 type secretKind int

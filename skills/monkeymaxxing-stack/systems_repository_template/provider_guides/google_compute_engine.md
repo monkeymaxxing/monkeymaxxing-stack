@@ -73,9 +73,8 @@ the laptop.
    The command asks for the key file's whole text at one hidden prompt: in Cloud Shell the person runs
    `cat alex-systems-desk.json` and pastes everything from `{` to `}`. It checks the key with a listing of the
    project's servers, and only then writes `/etc/systems-desk/provider-api-signing-credential.json`, root:root,
-   mode `0600`, restarts the API proxy, checks the same listing through `http://127.0.0.1:8081/`, and
-   saves the key in base64 in the person's token file as `SERVER_PROVIDER_API_TOKEN`. When a check fails, the
-   proxy keeps its old credential. Then the person deletes the key file in Cloud Shell and on the laptop:
+   mode `0600`, restarts the API proxy, and checks the same listing through `http://127.0.0.1:8081/`. When a
+   check fails, the proxy keeps its old credential. Then the person deletes the key file in Cloud Shell and on the laptop:
    `rm alex-systems-desk.json`.
 
 ### The laptop key command

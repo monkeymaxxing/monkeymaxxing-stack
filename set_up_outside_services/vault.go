@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -147,9 +146,6 @@ type savedKeys struct {
 // prepareVaultCommit). It lists the keys after the pull, so the run sees the
 // team's vault.
 func (e *environment) beginVaultChange() (*savedKeys, error) {
-	if desk, _ := e.vault.(mmxVault); !desk.asRoot && os.Getenv("MMX_VAULT_PASSWORD_FILE") == "" && os.Getenv("MMX_VAULT_PASSWORD") == "" {
-		return nil, fmt.Errorf("MMX_VAULT_PASSWORD_FILE is not set, so MMX could not save the new keys. Load your token file first: . ~/.config/monkeymaxxing-stack/PROJECT_NAME.env && set-up-outside-services ...")
-	}
 	leftover, err := e.prepareVaultCommit()
 	if err != nil {
 		return nil, err
@@ -215,10 +211,6 @@ const vaultFile = "secrets_vault.age"
 // is committed by the next run; any other change stops the run.
 var filesThisCommandCommits = []string{vaultFile, recoveryBundleFile}
 
-// The person's private agent socket, which signs the vault commit with the
-// production key. The desk role makes it; a test leaves it unset.
-var personAgentSocket = "/run/desk-ssh-agent/private.sock"
-
 // gitAsTheCodingAgent runs git as coding-agent in its checkout on the desk,
 // as the coding agent's own logins run it (roles/systems_desk/files/sshd.conf):
 // the production key's relay socket signs each commit, and the coding
@@ -230,25 +222,6 @@ func gitAsTheCodingAgent(directory string) func(arguments ...string) (string, er
 		command := exec.Command("sudo", append([]string{"-n", "-u", "coding-agent", "env", "-C", directory,
 			"HOME=/home/coding-agent", "SSH_AUTH_SOCK=/run/desk-ssh-agent/socket",
 			"GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig", "git", "-c", "core.hooksPath=/dev/null"}, arguments...)...)
-		var output, errorOutput bytes.Buffer
-		command.Stdout, command.Stderr = &output, &errorOutput
-		if err := command.Run(); err != nil {
-			return output.String(), fmt.Errorf("git %s failed: %s", strings.Join(arguments, " "), firstLine(errorOutput.String(), err))
-		}
-		return output.String(), nil
-	}
-}
-
-// gitInRepository runs git in the systems repository, signing and pushing
-// through the person's own agent socket when it exists.
-func gitInRepository(directory string) func(arguments ...string) (string, error) {
-	return func(arguments ...string) (string, error) {
-		command := exec.Command("git", arguments...)
-		command.Dir = directory
-		command.Env = os.Environ()
-		if _, err := os.Stat(personAgentSocket); err == nil {
-			command.Env = append(command.Env, "SSH_AUTH_SOCK="+personAgentSocket)
-		}
 		var output, errorOutput bytes.Buffer
 		command.Stdout, command.Stderr = &output, &errorOutput
 		if err := command.Run(); err != nil {
