@@ -17,7 +17,6 @@ class ServersMmxTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         (self.root / 'systems_repository/.git').mkdir(parents=True)
-        (self.root / 'repository-remote').write_text('git@example.com:team/systems.git\n')
         binary = self.root / 'bin'
         binary.mkdir()
         (binary / 'git').write_text('#!/bin/sh\ncase "$*" in *rev-parse*) echo 0123456789abcdef;; esac\n')
@@ -28,7 +27,6 @@ class ServersMmxTests(unittest.TestCase):
         self.button = self.root / 'run-mmx-on-the-servers'
         self.button.write_text(BUTTON.read_text()
             .replace('/var/lib/servers-mmx', str(self.root))
-            .replace('/etc/systems-desk/repository-remote', str(self.root / 'repository-remote'))
             .replace('/etc/systems-desk/everyone-locked-out', str(self.root / 'everyone-locked-out'))
             .replace('export PATH=/usr/local/bin:/usr/bin:/bin', f'export PATH={binary}:/usr/bin:/bin')
             .replace('/usr/local/bin/mmx', str(binary / 'mmx')))
@@ -113,6 +111,58 @@ class ServersMmxTests(unittest.TestCase):
 
     def test_accepts_the_repository_inventory(self):
         self.assertEqual(self.invoke('nodes', '--inventory', 'servers').returncode, 0)
+
+
+
+class PushedMainFromTheDeskCheckout(unittest.TestCase):
+    """The button reads pushed main from the coding agent's checkout, with real Git."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull}
+        self.main_copy, self.checkout = self.root / 'main_copy.git', self.root / 'checkout'
+        self.git(self.root, 'init', '--quiet', '-b', 'main', str(self.checkout))
+        self.commit('pushed')
+        binary = self.root / 'bin'
+        binary.mkdir()
+        (binary / 'mmx').write_text('#!/bin/sh\ncat inventory.yml\n')
+        (binary / 'flock').write_text('#!/bin/sh\nexit 0\n')
+        for name in ['mmx', 'flock']:
+            (binary / name).chmod(0o755)
+        (self.root / 'servers-mmx').mkdir()
+        self.button = self.root / 'run-mmx-on-the-servers'
+        self.button.write_text(BUTTON.read_text()
+            .replace('/var/lib/servers-mmx', str(self.root / 'servers-mmx'))
+            .replace('/home/coding-agent/systems_repository', str(self.checkout))
+            .replace('/etc/systems-desk/everyone-locked-out', str(self.root / 'everyone-locked-out'))
+            .replace('export PATH=/usr/local/bin:/usr/bin:/bin', f'export PATH={binary}:/usr/bin:/bin:/usr/local/bin')
+            .replace('/usr/local/bin/mmx', str(binary / 'mmx')))
+
+    def git(self, cwd, *arguments):
+        subprocess.run(['git', '-c', 'user.name=A', '-c', 'user.email=a@example.com', '-c', 'commit.gpgsign=false', *arguments],
+                       cwd=cwd, check=True, capture_output=True, env=self.environment)
+
+    def commit(self, text):
+        (self.checkout / 'inventory.yml').write_text(text + '\n')
+        self.git(self.checkout, 'add', 'inventory.yml')
+        self.git(self.checkout, 'commit', '--quiet', '-m', text)
+
+    def run_the_button(self):
+        result = subprocess.run(['bash', str(self.button), 'version'], text=True, capture_output=True, env=self.environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.splitlines()[-1]
+
+    def test_before_util01_exists_the_checkouts_main_is_pushed_main(self):
+        self.assertEqual(self.run_the_button(), 'pushed')
+
+    def test_with_util01_as_origin_a_commit_only_on_the_desk_is_not_pushed_main(self):
+        self.git(self.root, 'init', '--quiet', '--bare', '-b', 'main', str(self.main_copy))
+        self.git(self.checkout, 'remote', 'add', 'origin', str(self.main_copy))
+        self.git(self.checkout, 'push', '--quiet', '-u', 'origin', 'main')
+        self.commit('committed on the desk, not pushed')
+        self.assertEqual(self.run_the_button(), 'pushed')
 
 
 if __name__ == '__main__':
