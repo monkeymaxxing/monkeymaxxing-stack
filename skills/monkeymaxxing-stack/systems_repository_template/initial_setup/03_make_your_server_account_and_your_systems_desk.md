@@ -197,7 +197,7 @@ repository's name, including paths inside quoted SSH commands.
    `ssh-keygen -t ed25519 -N '' -f ~/.ssh/desk01`. Leave the key's
    passphrase empty: the phone code supplies the second factor. Never
    reuse the app's Git key or a production key for desk login.
-   Run `doubleshell create-wireguard-key`. The command saves
+   Run `~/.local/bin/doubleshell create-wireguard-key`. The command saves
    `~/.config/doubleshell/wireguard_private_key` and prints the public key.
    Replace `desk01.vars.allowed_laptops` in `inventories/servers.yml` with
    the laptop's `laptop_name`, the printed `wireguard_public_key`,
@@ -221,10 +221,10 @@ repository's name, including paths inside quoted SSH commands.
    Save the printed public key in `desk01.vars.wireguard_public_key`:
 
    ```sh
+   # On the laptop, in ~/code/example_systems.
    set +x
    umask 077
-   desk_keys=$(doubleshell create-server-wireguard-key)
-   # On the laptop, in ~/code/example_systems.
+   desk_keys=$(~/.local/bin/doubleshell create-server-wireguard-key)
    # LAPTOP_WIREGUARD_PUBLIC_KEY: the public key that create-wireguard-key printed in step 1.
    laptop_public_key='LAPTOP_WIREGUARD_PUBLIC_KEY'
    printf '%s' "$desk_keys" | jq --arg laptop_public_key "$laptop_public_key" \
@@ -285,7 +285,7 @@ repository's name, including paths inside quoted SSH commands.
      ForwardAgent no
      UserKnownHostsFile ~/.ssh/desk01_known_hosts
      StrictHostKeyChecking yes
-     ProxyCommand doubleshell --wireguard-config ~/.config/doubleshell/desk01.conf proxy-ssh %h %p
+     ProxyCommand /Users/alex/.local/bin/doubleshell --wireguard-config ~/.config/doubleshell/desk01.conf proxy-ssh %h %p
 
    Host desk01 desk01-setup desk01-secrets desk01-review
      User alex
@@ -310,6 +310,10 @@ repository's name, including paths inside quoted SSH commands.
      RemoteCommand review-and-apply-the-systems-desk-settings
    ```
 
+   Write `ProxyCommand`'s doubleshell with the laptop's home folder written
+   out (`$HOME`), such as `/Users/alex/.local/bin/doubleshell`. Reason:
+   `~/.local/bin` is not on a Mac's path, and a full path runs the same
+   doubleshell in every shell.
    `desk01` is the person's own login. `desk01-agent` is your login, as
    `coding-agent`: one shared connection that later commands reuse. The
    other three each start one command for the person: `desk01-setup` in
@@ -376,7 +380,7 @@ repository's name, including paths inside quoted SSH commands.
 
    ```sh
    # On the laptop, in ~/code/example_systems:
-   mmx run systems_desk --var desk_name=desk01 --only-fleet-stages systems_desk --connection ssh_only
+   ~/.local/bin/mmx run systems_desk --var desk_name=desk01 --only-fleet-stages systems_desk --connection ssh_only
    ```
 
    The `systems_desk` stage runs alone because `util01` does not exist

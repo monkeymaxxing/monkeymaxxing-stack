@@ -491,7 +491,7 @@ domain at Cloudflare, its DNS records, and the lock.
 
    ```sh
    # On the laptop, in ~/example-setup/desk_bootstrap_copy:
-   mmx run systems_desk --var desk_name=desk01 --only-fleet-stages lock --connection ssh_only
+   ~/.local/bin/mmx run systems_desk --var desk_name=desk01 --only-fleet-stages lock --connection ssh_only
    ```
 
    Then remove the laptop's setup folder, which holds the bootstrap copy

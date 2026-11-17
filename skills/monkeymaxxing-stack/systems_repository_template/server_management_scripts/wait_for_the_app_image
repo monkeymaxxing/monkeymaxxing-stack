@@ -95,7 +95,7 @@ while :; do
             echo "$image is at the registry: it was built and pushed. This says nothing about whether the app's tests ran."
             exit 0;;
         refused)
-            echo "The registry does not let this laptop read $image without a login, so this command cannot tell whether it was built. That is not a sign that the build failed."
+            echo "The registry does not let this laptop read $image without a login, so this command cannot tell whether it was built. That is not a sign that the build failed. go-live's container_image_found (chapter 4) checks the image with the servers' registry login, and the deploy's image pull stops a deploy before any change when the image is missing."
             exit 3;;
     esac
     now=$(date +%s)

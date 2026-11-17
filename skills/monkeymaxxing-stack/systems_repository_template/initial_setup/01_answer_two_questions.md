@@ -283,10 +283,11 @@ the rules with this team's folders.
 
    **Tell the person:** one line, "I am installing mmx and doubleshell."
 
-   Run both tools by their full paths, `~/.local/bin/mmx` and
-   `~/.local/bin/doubleshell`, in this chapter and every later one, where
-   a command block says `mmx` or `doubleshell`. Never start a command with
-   `export PATH`: the approval's rules match the full paths only.
+   Run both tools by their full paths on the laptop, `~/.local/bin/mmx`
+   and `~/.local/bin/doubleshell`, as the laptop's command blocks do, also
+   where a step names a command in the text, such as `mmx validate`. Never
+   start a command with `export PATH`: the approval's rules match the full
+   paths only. On the desk and the servers, `mmx` is on the path.
 
    **Check:** `~/.local/bin/mmx version`, `~/.local/bin/doubleshell version`, `git --version`,
    `bash --version`, and `jq --version`.

@@ -284,7 +284,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   no lock, because a run in progress holds the lock. Failed work needs investigation and
   an agent-run retry.
 
-  Run `mmx validate` locally for uncommitted structural checks.
+  Run `~/.local/bin/mmx validate` locally for uncommitted structural checks.
   Use `sudo -n -u servers-mmx run-mmx-on-the-servers` on the desk for direct production commands,
   including previews, production playbooks, initial production setup, recovery,
   a changed vault passphrase, and `util01`'s reboot. Push before using the button.
@@ -492,7 +492,7 @@ You edit on the laptop, in your clone of the desk's repository,
 each change, because only the desk holds the production key that lets a push into the main copy.
 
 1. Bring the clone up to date: `git pull --ff-only` from the desk. Edit the
-   required files. Run `mmx validate` to check the local structure. Review
+   required files. Run `~/.local/bin/mmx validate` to check the local structure. Review
    the diff.
 2. Stage only the intended paths with `git add PATH`, then commit on a
    branch named for the change, such as `add-app002`:

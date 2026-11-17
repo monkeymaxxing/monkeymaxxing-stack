@@ -70,6 +70,24 @@ class TheGuideWaitsWithOneCommand(unittest.TestCase):
                     self.assertNotIn('code_script', block)
                     self.assertNotIn('podman manifest inspect', block)
 
+    def test_laptop_commands_run_mmx_and_doubleshell_by_full_path(self):
+        bare = re.compile(r'(^|[\s;&|(`$])(mmx|doubleshell)\s')
+        texts = [*self.guide_texts(), (T/'server_management_scripts/README.md', (T/'server_management_scripts/README.md').read_text()),
+                 (T.parent/'SKILL.md', (T.parent/'SKILL.md').read_text())]
+        for path, text in texts:
+            for block in re.findall(r'```(?:sh|bash)\n(.*?)```', text, re.S):
+                comments = ' '.join(line for line in block.splitlines() if line.strip().startswith('#'))
+                if 'On the laptop' not in comments:
+                    continue
+                for line in block.splitlines():
+                    if not line.strip().startswith('#'):
+                        with self.subTest(path=path.name, line=line.strip()[:80]):
+                            self.assertNotRegex(line, bare)
+            for block in re.findall(r'```sshconfig\n(.*?)```', text, re.S):
+                for command in re.findall(r'ProxyCommand (\S+)', block):
+                    with self.subTest(path=path.name, proxy_command=command):
+                        self.assertTrue(command.startswith('/'), command)
+
     def test_the_guide_names_the_new_commands(self):
         agents = (T/'AGENTS.md').read_text()
         self.assertIn('~/code/example_systems/ssh/open-the-desk-login CODE', agents)
