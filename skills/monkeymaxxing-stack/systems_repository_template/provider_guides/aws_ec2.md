@@ -43,7 +43,7 @@ ID** and the **Secret access key**. `SERVER_PROVIDER_API_TOKEN` holds them joine
 3. On the user's **Security credentials** tab, **Create access key**, use case **Command Line Interface
    (CLI)**. AWS shows the Secret access key once.
 4. AWS shows the Secret access key once, so the person types both values at once into the laptop key
-   command below. The bootstrap moves them to the desk.
+   command below. You move them to the desk right after the bootstrap.
 
 5. To replace the credential later, the person runs
    `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path '?Action=DescribeInstances&Version=2016-11-15'`.

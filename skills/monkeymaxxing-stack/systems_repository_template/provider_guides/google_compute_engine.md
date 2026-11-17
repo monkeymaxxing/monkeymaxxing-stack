@@ -66,7 +66,7 @@ the laptop.
    organization policy `iam.disableServiceAccountKeyCreation`, an administrator of the organization turns the
    policy off for this project first.
 3. The person downloads the key file from Cloud Shell (**More**, **Download**), and gives its path to the
-   laptop key command below. The bootstrap moves the key to the desk.
+   laptop key command below. You move the key to the desk right after the bootstrap.
 
 4. To replace the credential later, the person runs
    `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path 'projects/PROJECT_ID/aggregated/instances?maxResults=1'`.

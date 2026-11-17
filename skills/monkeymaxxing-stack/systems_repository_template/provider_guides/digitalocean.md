@@ -20,8 +20,8 @@ through the desk's API proxy, as
 says.
 
 Set `systems_desk_provider_api_url: https://api.digitalocean.com/v2/` in `mmx_project_settings.yml`, including the trailing slash.
-The person types the token on the laptop with the laptop key command below, and the bootstrap moves it to
-the desk. To replace the token later, the person runs
+The person types the token on the laptop with the laptop key command below, and you move it to
+the desk right after the bootstrap. To replace the token later, the person runs
 `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path droplets`.
 A server listing uses `http://127.0.0.1:8081/droplets`.
 

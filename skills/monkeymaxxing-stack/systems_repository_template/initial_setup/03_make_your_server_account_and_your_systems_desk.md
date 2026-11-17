@@ -326,22 +326,27 @@ repository's name, including paths inside quoted SSH commands.
 4. **Copy the repository and run the bootstrap.** Commit every setting of
    chapters 1 to 3 in the laptop's copy first. The bootstrap is the
    desk's whole setup, run as root from the laptop, before the lock. It
-   moves the provider key from `~/example-setup/provider-key` to the desk
-   over root SSH standard input and deletes the laptop file. It makes the
-   production key, the vault passphrase and the vault, makes the systems
-   repository and its signing, records the first desk review, and opens
-   your login, `coding-agent`. The bootstrap takes the commit author from
-   the laptop's `git config user.name` and `git config user.email`.
+   makes the production key, the vault passphrase and the vault, starts
+   the systems repository in your checkout on the desk,
+   `/home/coding-agent/systems_repository`, with its signing and its first
+   signed commit, records the first desk review, and opens your login,
+   `coding-agent`. The desk's own commits name `coding-agent on desk01` as
+   their author. Your later commits keep the author from the laptop's
+   `git config user.name` and `git config user.email`: `sign-and-publish`
+   only re-signs them.
 
-   The provider image does not have the `alex` account yet, so root writes
-   the copy, and the bootstrap makes it the person's own:
+   The provider image does not have the `coding-agent` account yet, so root
+   writes the copy, and the bootstrap makes it the coding agent's own.
+   Copy the files without the laptop's `.git`: the bootstrap starts the
+   desk's history with its own first commit, and stops on a copy that has
+   commits already.
 
    ```sh
-   # On the laptop, in ~/code:
+   # On the laptop, in ~/code/example_systems:
    # COPYFILE_DISABLE=1 stops a Mac's tar from adding ._ metadata files; Linux ignores it.
    # --warning=no-unknown-keyword keeps the desk's tar quiet about a Mac's file labels, which it skips anyway.
-   COPYFILE_DISABLE=1 tar -C ~/code -cf - example_systems |
-     ssh root@desk01 'mkdir -p /home/alex; tar --warning=no-unknown-keyword -C /home/alex -xf -'
+   COPYFILE_DISABLE=1 tar --exclude=./.git --exclude=./.mmx -cf - . |
+     ssh root@desk01 'mkdir -p /home/coding-agent/systems_repository && tar --warning=no-unknown-keyword -C /home/coding-agent/systems_repository -xf -'
    ```
 
    Then point only the laptop's own copy at the bootstrap connection. MMX
@@ -362,6 +367,30 @@ repository's name, including paths inside quoted SSH commands.
    minutes. Root SSH from the laptop stays open until the lock in
    chapter 4.
 
+   Right after the run, move the provider key to the desk's API proxy,
+   over the same root login, on standard input, and delete the laptop
+   file. MMX keeps every laptop file a run reads in the run's history, so
+   the bootstrap cannot do this itself. The person does nothing. Use the
+   provider guide's server listing path, here Hetzner Cloud's `servers`:
+
+   ```sh
+   # On the laptop, in ~/code/example_systems:
+   ssh -F ssh/desk01 root@10.20.9.1 set-up-outside-services write-api-token-proxy-file \
+     --api server-provider --server-listing-path servers < ~/example-setup/provider-key \
+     && rm ~/example-setup/provider-key
+   ```
+
+   At Scaleway, add `--token-header X-Auth-Token`. At a provider whose
+   requests the proxy signs (OVHcloud, AWS, Google Cloud), add
+   `--provider-api-authentication` with
+   `systems_desk_provider_api_authentication` and
+   `--provider-api-address` with `systems_desk_provider_api_url`. The key
+   file's line is already in the form the proxy reads, as
+   [The laptop key command](../provider_guides/README.md#the-laptop-key-command)
+   says. The command checks a listing through the proxy, and keeps the
+   laptop file when the check fails, so run it again after the cause is
+   fixed.
+
    **Tell the person while waiting:** nothing more. The screen of step 2
    said how long the build takes. When the build runs past 15 minutes,
    say in one line what the run is doing now and that the person still
@@ -375,9 +404,9 @@ repository's name, including paths inside quoted SSH commands.
    the job by itself. Wait two minutes and run the same command again.
    "node busy" again means the desk is still at work, so wait once more.
 
-   **Check:** the run printed `The desk is ready.`, the laptop file
-   `~/example-setup/provider-key` is gone, and
-   `ssh desk01-agent true` logs in as `coding-agent` with no code.
+   **Check:** the run printed `The desk is ready.`, the key's move
+   succeeded and the laptop file `~/example-setup/provider-key` is gone,
+   and `ssh desk01-agent true` logs in as `coding-agent` with no code.
 
 5. **The desk's key at the Git host.** The desk pushes the systems
    repository with its production key, so the Git host must know the key
@@ -426,8 +455,13 @@ repository's name, including paths inside quoted SSH commands.
    ssh desk01-agent 'git -C systems_repository ls-remote origin'
    ```
 
-   Once it answers, push `main` when the Git host has no `main` yet:
-   `ssh desk01-agent 'git -C systems_repository push origin main'`.
+   Once it answers, push the desk's first commit, once, before any
+   `sign-and-publish`:
+
+   ```sh
+   # On the laptop:
+   ssh desk01-agent 'cd systems_repository && git push -u origin main'
+   ```
 
    **Tell the person after:** no message, because chapter 4's first
    screen follows at once.
@@ -504,7 +538,7 @@ secret once, at a hidden prompt, and you never see one.
 | Secret | Where the secret is stored | How it gets there |
 | --- | --- | --- |
 | Every secret the servers use, listed below | The vault, `secrets_vault.age`, in the systems repository. Playbook key names come from `mmx secrets usage`. MMHotline's key names come from the `.secrets` references in `mmhotline_settings.yml` | In the first sitting, `set-up-outside-services go-live` (`ssh desk01-setup`): it asks for each key a website gives, makes every random one without a question, and commits and pushes the vault. Later, `set-up-outside-services secrets` (`ssh desk01-secrets`) asks for each key the vault still lacks. `--replace KEY` enters one key again, such as for a rotation: `ssh -t desk01 set-up-outside-services secrets --replace KEY` |
-| The person's own tokens: the provider credential, the desk's Cloudflare token, and the R2 key for posting to the status page while `util01` is down | The API proxy's root-only files and the person's own token file on the desk | The provider credential: the laptop key command of chapter 3, moved to the desk by the bootstrap. The Cloudflare tokens: `go-live` makes them |
+| The person's own tokens: the provider credential, the desk's Cloudflare token, and the R2 key for posting to the status page while `util01` is down | The API proxy's root-only files and the person's own token file on the desk | The provider credential: the laptop key command of chapter 3, which you move to the desk right after the bootstrap. The Cloudflare tokens: `go-live` makes them |
 | The recovery bundle: the vault passphrase, the production private key, the desk's WireGuard private key, the shared root console password, the phone code's emergency codes, and the provider, Cloudflare and Backblaze credentials | `recovery_bundle.age` in the systems repository, and a copy in the locked backup bucket at Backblaze, encrypted with the recovery passphrase | `go-live` makes it at the lock in chapter 4 |
 | The recovery passphrase, and every account's login and recovery codes | The team's password manager | The person saves each one when it is made |
 

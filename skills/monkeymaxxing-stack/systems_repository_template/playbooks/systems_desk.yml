@@ -7,9 +7,9 @@
 # It sets the desk up, starts the systems repository with its vault and
 # signing in /home/coding-agent/systems_repository, records the first desk
 # review, and ends with "The desk is ready." and the production public key.
-# Then the bootstrap moves the provider key that the person typed on the
-# laptop to the desk's API proxy, over the same root login on standard
-# input, and deletes the laptop file, with the provider guide's listing
+# Right after it, the coding agent moves the provider key that the person
+# typed on the laptop to the desk's API proxy, over the same root login on
+# standard input, and deletes the laptop file, with the provider guide's listing
 # path (and, at a provider whose requests the proxy signs,
 # --provider-api-authentication and --provider-api-address), and the desk's
 # private_ip for DESK_WIREGUARD_ADDRESS:

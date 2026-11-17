@@ -63,17 +63,31 @@ The script does five things, in order:
    `-H @-`.
 4. **The key file, `~/example-setup/provider-key`, mode `0600`,** written
    with `umask 077` so the file is private from its first byte. The file
-   holds one line in the form of `SERVER_PROVIDER_API_TOKEN` that the guide
-   names, such as the three OVHcloud values joined with colons.
+   holds one line in the form of `SERVER_PROVIDER_API_TOKEN`, as the
+   guide's "Key file line" names it: the token itself at most providers;
+   at OVHcloud the three values joined with colons,
+   `APPLICATION_KEY:APPLICATION_SECRET:CONSUMER_KEY`; at AWS the two
+   joined with a colon, `ACCESS_KEY_ID:SECRET_ACCESS_KEY`; at Google Cloud
+   the key file's text in base64 on one line, as `openssl base64 -A`
+   writes it. The desk's API proxy reads exactly this form.
 5. **One line to the person:** `Hetzner accepted the key.`, with the
    provider's name. The script never prints a value.
 
-The bootstrap in
-[chapter 3](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard)
-moves the key file to the desk, over root SSH standard input, and deletes
-the laptop file. In the first sitting `util01` uses the same key. A
-narrower key for `util01`, as each guide's `util01` section describes, is a
-later choice of the team.
+Right after the bootstrap in
+[chapter 3](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard),
+you move the key file to the desk's API proxy, over the bootstrap's root
+SSH, on standard input, and delete the laptop file. The bootstrap cannot
+do this itself: MMX keeps every laptop file a run reads in the run's
+history, and the key must not stay on the laptop. The person does
+nothing for it. The command is in `playbooks/systems_desk.yml`'s header;
+chapter 3, step 4 of "Create desk01 through WireGuard", gives it with the
+guide's values: the guide's server listing path, Scaleway's
+`--token-header X-Auth-Token`, and, at a provider whose requests the proxy
+signs, `--provider-api-authentication` and `--provider-api-address` from
+`systems_desk_provider_api_authentication` and
+`systems_desk_provider_api_url`. In the first sitting `util01` uses the
+same key. A narrower key for `util01`, as each guide's `util01` section
+describes, is a later choice of the team.
 
 ## Credentials on the systems desk
 
@@ -106,7 +120,8 @@ each guide's "Credentials on the systems desk" says.
   proxy, with the same ownership, first-boot, pagination, and deletion
   checks.
 - During the first desk's bootstrap, the laptop holds only the key file
-  of "The laptop key command", which the bootstrap deletes. Clear any
+  of "The laptop key command", which you delete when you move the key to
+  the desk. Clear any
   provider tool's saved login on the laptop after the desk works. Use environment-only authentication where
   supported, so no saved personal CLI context remains. The person may keep
   personal CLI credentials only in the person's protected desk account.

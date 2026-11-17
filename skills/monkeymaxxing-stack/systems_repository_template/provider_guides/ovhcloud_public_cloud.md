@@ -140,7 +140,7 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
    **Create keys**. Reason for Unlimited: the page's default is one day, and the proxy would stop working
    the next day. The person replaces the credential instead, below.
 4. OVHcloud shows the three values once, so the person types them at once into the laptop key command
-   below. The bootstrap moves them to the desk.
+   below. You move them to the desk right after the bootstrap.
 
 5. To replace the credential later, the person runs
    `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path cloud/project/PROJECT_ID/instance`.
