@@ -356,34 +356,49 @@ node_tasks:
   # the servers' WireGuard peers, the triage user's sudo rules, which the
   # undo restores, and MMHotline's settings, which the lock-out applies on
   # util01 without the triage agent.
-  - id: copy_the_reviewed_files_the_lock_out_installs_on_the_servers
-    loop:
-      - {source: ../every_server/files/wireguard_wg0.conf, path: roles/every_server/files/wireguard_wg0.conf}
-      - {source: ../every_server/files/sudoers_triage, path: roles/every_server/files/sudoers_triage}
-      - {source: ../util_server/files/sudoers_triage_mmwatchdog_fleet_readings, path: roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings}
-      - {source: ../../mmhotline_settings.yml, path: mmhotline_settings.yml}
-    as: copy
-    file:
-      path: "/usr/local/lib/systems-desk/lock-everyone-out/{{ .copy.path }}"
-      source: "{{ .copy.source }}"
-      owner: root
-      group: root
-      permissions_mode: "0600"
+  # A value filled in from a loop cannot hold `..` in a path (MMX refuses it),
+  # so each file is its own task with a written-out source.
+  - id: copy_the_reviewed_wireguard_settings_template
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/roles/every_server/files/wireguard_wg0.conf, source: ../every_server/files/wireguard_wg0.conf, owner: root, group: root, permissions_mode: "0600"}
+  - id: copy_the_reviewed_triage_sudo_rules
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/roles/every_server/files/sudoers_triage, source: ../every_server/files/sudoers_triage, owner: root, group: root, permissions_mode: "0600"}
+  - id: copy_the_reviewed_triage_fleet_readings_sudo_rules
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings, source: ../util_server/files/sudoers_triage_mmwatchdog_fleet_readings, owner: root, group: root, permissions_mode: "0600"}
+  - id: copy_the_reviewed_mmhotline_settings
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/mmhotline_settings.yml, source: ../../mmhotline_settings.yml, owner: root, group: root, permissions_mode: "0600"}
   # The evidence copy reads this desk's own logs as root, so it too runs
   # only as this reviewed copy, with the reviewed SSH settings beside it.
   - id: copy_the_reviewed_evidence_script
     file: {path: /usr/local/lib/systems-desk/lock-everyone-out/server_management_scripts/save_break_in_evidence.py, source: ../../server_management_scripts/save_break_in_evidence.py, owner: root, group: root, permissions_mode: "0600"}
-  - id: copy_the_reviewed_lock_out_roles_and_ssh_settings
-    loop:
-      - {source: ../everyone_locked_out, path: roles/everyone_locked_out}
-      - {source: ../systems_desk_lockout, path: roles/systems_desk_lockout}
-      # Works out each server's peers during the lock-out.
-      - {source: ../work_out_who_this_server_talks_to, path: roles/work_out_who_this_server_talks_to}
-      - {source: ../../ssh, path: ssh}
-    as: copy
+  - id: copy_the_reviewed_lock_out_role
     directory:
-      path: "/usr/local/lib/systems-desk/lock-everyone-out/{{ .copy.path }}"
-      source: "{{ .copy.source }}"
+      path: /usr/local/lib/systems-desk/lock-everyone-out/roles/everyone_locked_out
+      source: ../everyone_locked_out
+      also_delete_entries_not_in_source: true
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  - id: copy_the_reviewed_desk_lock_out_role
+    directory:
+      path: /usr/local/lib/systems-desk/lock-everyone-out/roles/systems_desk_lockout
+      source: ../systems_desk_lockout
+      also_delete_entries_not_in_source: true
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  # Works out each server's peers during the lock-out.
+  - id: copy_the_reviewed_peer_working_out_role
+    directory:
+      path: /usr/local/lib/systems-desk/lock-everyone-out/roles/work_out_who_this_server_talks_to
+      source: ../work_out_who_this_server_talks_to
+      also_delete_entries_not_in_source: true
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  - id: copy_the_reviewed_ssh_settings
+    directory:
+      path: /usr/local/lib/systems-desk/lock-everyone-out/ssh
+      source: ../../ssh
       also_delete_entries_not_in_source: true
       owner: root
       group: root

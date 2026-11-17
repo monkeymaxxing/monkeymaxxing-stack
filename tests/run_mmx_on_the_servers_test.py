@@ -103,7 +103,7 @@ class ServersMmxTests(unittest.TestCase):
     def test_refuses_the_vault_editor_and_the_passphrase_change(self):
         # mmx secrets edit opens vi on the decrypted vault, and vi's :! is a
         # shell as servers-mmx, which reads the vault passphrase file.
-        for action in ['edit', 'passwd']:
+        for action in ['edit', 'passwd', 'show', 'pipe-to']:
             with self.subTest(action=action):
                 result = self.invoke('secrets', action)
                 self.assertEqual(result.returncode, 64)

@@ -338,6 +338,8 @@ and run MMX on `util01` from the desk, normally with the `server_management_scri
 desk job when the run is long. A push alone changes no server. CI tests, builds, and pushes the app's images.
 Before `util01` exists and while `util01` is broken or rebuilt, run MMX
 on the systems desk through `sudo -n -u servers-mmx run-mmx-on-the-servers` with `--connection ssh_only`.
+On a server MMX has never reached, tell the person in one line that the first dryrun copies MMX's program there
+(over SSH, with no service and no open port), and before the first run that the run sets up MMX's HTTPS service on TCP port 7443.
 
 MMHotline runs `mmx` at the judged commit in the utility server's shared
 copy, under the shared lock. Before every run, MMHotline checks triage-key
