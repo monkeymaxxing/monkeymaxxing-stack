@@ -18,6 +18,7 @@ ExecStart=/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outs
 LoadCredential=provider-api-signing-credential:/etc/systems-desk/provider-api-signing-credential.json
 {{- end }}
 LoadCredential=desk-server-id:/etc/systems-desk/desk-server-id
+LoadCredential=desk-server-name:/etc/systems-desk/desk-server-name
 LoadCredential=cloudflare-api-token:/etc/systems-desk/cloudflare-api-token.conf
 DynamicUser=yes
 Restart=on-failure

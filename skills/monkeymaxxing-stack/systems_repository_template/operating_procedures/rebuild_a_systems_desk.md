@@ -157,8 +157,9 @@ inventory's real names and addresses, and the next unused desk name.
     file is ready. Clear the file at once, also after a refused request:
     `: > /tmp/desk02-first-boot.yml`.
     Record the new public address as `desk02.vars.public_ipv4_address`
-    and the returned `id` as `desk02.vars.provider_server_id`, and commit
-    them on the branch.
+    and the returned `id` as `desk02.vars.provider_server_id` (at OVHcloud
+    and Google Cloud, also the receipt's service or instance name as
+    `desk02.vars.provider_server_name`), and commit them on the branch.
     **Check:** the provider lists `desk02`, `desk02.vars.provider_server_id`
     holds its ID, and the first-boot file is empty.
 11. **Write the laptop's way in,** as chapter 3's step 3 says, with

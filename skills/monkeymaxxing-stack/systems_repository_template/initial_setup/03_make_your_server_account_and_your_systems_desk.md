@@ -245,7 +245,9 @@ repository's name, including paths inside quoted SSH commands.
    `/tmp/desk01-first-boot.yml` as first-boot data. Public SSH stays
    closed from first boot. Record the returned public address as
    `desk01.vars.public_ipv4_address` and the returned `id` as
-   `desk01.vars.provider_server_id`. Clear the private first-boot file at
+   `desk01.vars.provider_server_id`; at OVHcloud (a VPS) and Google Cloud,
+   also the order or create receipt's service or instance name as
+   `desk01.vars.provider_server_name`. Clear the private first-boot file at
    once after the provider accepts or refuses the request:
 
    ```sh

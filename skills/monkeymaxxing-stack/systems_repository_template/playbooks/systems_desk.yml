@@ -81,6 +81,7 @@ fleet_stages:
           systems_desk_laptop_addresses: "{{ .vars.private_ip_ranges.systems_desk_laptops }}"
           provider_api_url: "{{ .vars.systems_desk_provider_api_url }}"
           provider_server_id: "{{ .vars.provider_server_id }}"
+          provider_server_name: "{{ .vars.provider_server_name }}"
           provider_api_authentication: "{{ .vars.systems_desk_provider_api_authentication }}"
           mmx_release: "{{ .vars.stack_software.mmx }}"
           mmhotline_release: "{{ .vars.stack_software.mmhotline }}"

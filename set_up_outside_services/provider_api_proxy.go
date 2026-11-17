@@ -50,6 +50,11 @@ const (
 	// systemd's LoadCredential gives the proxy under this name.
 	deskServerIDFile           = "/etc/systems-desk/desk-server-id"
 	deskServerIDCredentialName = "desk-server-id"
+	// The desk's own name at the provider, which some providers put in the
+	// path instead of an ID (an OVHcloud VPS, a Google Cloud instance). The
+	// file may be empty: a name is checked only when recorded.
+	deskServerNameFile           = "/etc/systems-desk/desk-server-name"
+	deskServerNameCredentialName = "desk-server-name"
 	// The credential file, root:root 0600. systemd's LoadCredential gives the
 	// service a copy under this name that only the service's account reads.
 	signingCredentialFile = "/etc/systems-desk/provider-api-signing-credential.json"
@@ -282,6 +287,11 @@ func runProviderAPIProxy(arguments []string) error {
 		return fmt.Errorf("%s must hold the desk's own server ID at the provider; record it as provider_server_id in the desk's entry of inventories/servers.yml", deskServerIDFile)
 	}
 	providerProxy.deskServerID = strings.TrimSpace(string(idText))
+	nameText, err := os.ReadFile(filepath.Join(directory, deskServerNameCredentialName))
+	if err != nil {
+		return fmt.Errorf("%s must exist (empty when the provider names no server in a path)", deskServerNameFile)
+	}
+	providerProxy.deskServerName = strings.TrimSpace(string(nameText))
 	cloudflareSigner, err := readHeaderTokenSigner(filepath.Join(directory, cloudflareTokenCredentialName))
 	if err != nil {
 		return err
@@ -317,22 +327,32 @@ type apiProxy struct {
 	// deskServerID is the desk's own server ID at the provider; empty on the
 	// Cloudflare proxy, whose API has no servers.
 	deskServerID string
+	// deskServerName is the desk's own name at the provider, empty when not recorded.
+	deskServerName string
 }
 
 // changesTheDeskItself reports whether a request other than GET names the
-// desk's own server ID: as a path segment, or in the query or body (a JSON
-// body that names it, or any body that has it as a whole word). Reason: a
-// cleanup must never delete or rebuild the desk by mistake; the desk is
-// managed by its own guide.
+// desk's own server ID or provider-side name: as a path segment, or as a
+// whole word in the query or body (a JSON value, or a form value such as
+// AWS's InstanceId.1). Reason: a cleanup must never delete or rebuild the
+// desk by mistake; the desk is managed by its own guide.
 func (p *apiProxy) changesTheDeskItself(r *http.Request, body []byte) bool {
-	if p.deskServerID == "" || r.Method == http.MethodGet {
+	if r.Method == http.MethodGet {
 		return false
 	}
-	if slices.Contains(strings.Split(r.URL.Path, "/"), p.deskServerID) {
-		return true
+	for _, name := range []string{p.deskServerID, p.deskServerName} {
+		if name == "" {
+			continue
+		}
+		if slices.Contains(strings.Split(r.URL.Path, "/"), name) {
+			return true
+		}
+		whole := regexp.MustCompile(`(^|[^A-Za-z0-9_.-])` + regexp.QuoteMeta(name) + `($|[^A-Za-z0-9_.-])`)
+		if whole.MatchString(r.URL.RawQuery) || whole.Match(body) {
+			return true
+		}
 	}
-	whole := regexp.MustCompile(`(^|[^A-Za-z0-9_.-])` + regexp.QuoteMeta(p.deskServerID) + `($|[^A-Za-z0-9_.-])`)
-	return whole.MatchString(r.URL.RawQuery) || whole.Match(body)
+	return false
 }
 
 func newAPIProxy(credential signingCredential, addresses map[string]*regexp.Regexp, client *http.Client) (*apiProxy, error) {
