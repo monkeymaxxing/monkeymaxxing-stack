@@ -38,7 +38,7 @@ phone.
    **Check:** step 4's test alert checks this step, because only a phone
    signed in to the person's account receives the test.
 2. **Allow alerts to sound in Silent Mode** (Critical Alerts on iOS), as
-   [chapter 4 (sign up for the outside services the Stack uses)](../initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md#chapter-4-sign-up-for-the-outside-services-the-stack-uses)
+   [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#chapter-4-set-up-your-accounts-and-lock-your-desk)
    describes for the first phone.
    **Check:** step 5's test SOS rings the phone in Silent Mode. Step 5 runs
    only when the person is on call now. MMHotline's dashboard shows who

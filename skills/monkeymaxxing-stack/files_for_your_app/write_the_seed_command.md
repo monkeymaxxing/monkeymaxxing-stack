@@ -4,7 +4,7 @@ Developers need data to work with. On a laptop and on `staging01`, that
 data comes from the app's seed command, which fills an empty database with
 invented records. Seed data never comes from a copy of production. The
 requirement is checklist item `<app>_seed_command_fills_test_data`, and
-chapter 3 (get your app ready to deploy) gives the reasons. This page says how to build
+chapter 2 (get your app ready to deploy) gives the reasons. This page says how to build
 the seed command for any app. The coding agent writes the seed command in
 the app's repository, as a change the person reviews.
 

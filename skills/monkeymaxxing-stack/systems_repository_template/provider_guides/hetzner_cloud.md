@@ -13,8 +13,21 @@ through the desk's API proxy, as
 says.
 
 Set `systems_desk_provider_api_url: https://api.hetzner.cloud/v1/` in `mmx_project_settings.yml`, including the trailing slash.
-The person saves the token with `set-up-outside-services personal-token server-provider --server-listing-path servers`.
+The person types the token on the laptop with the laptop key command below, and the bootstrap moves it to
+the desk. To replace the token later, the person runs
+`ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path servers`.
 A server listing uses `http://127.0.0.1:8081/servers`.
+
+### The laptop key command
+
+The values for [The laptop key command](README.md#the-laptop-key-command):
+
+- **Script:** `~/example-setup/enter-the-hetzner-key`.
+- **Values:** one, the project's **API token**, Read & Write.
+- **Shape:** 64 letters and digits.
+- **Read-only call:** `GET https://api.hetzner.cloud/v1/servers?per_page=1` with `Authorization: Bearer TOKEN`. HTTP 200 accepts the token.
+- **Key file line:** the token.
+
 
 The CLI's credential store is `~/.config/hcloud/cli.toml`, unless `--config` selects another file.
 Check the [provider's configuration documentation](https://github.com/hetznercloud/cli/blob/main/docs/reference/manual/hcloud.md) for overridden paths.

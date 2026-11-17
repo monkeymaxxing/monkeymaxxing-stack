@@ -1,15 +1,17 @@
 # Chapter 0: Before you start: what we build and how long it takes
 
-**When:** first, before chapter 1, when the team has no systems repository yet.
+**When:** whenever the person asks what the setup builds, or how long it
+takes. The setup itself starts at chapter 1 with its first question, not
+with this map.
 
 **What this chapter does:** the person sees what the setup builds, from a
 web app and no servers to the system the initial setup builds: `app001`, `db01`, and
 `util01`, a systems desk per person, plus `staging01` and `app002` if the team chooses the fuller
-system in chapter 1. The person also sees the ten chapters and how long they take.
+system. The person also sees the chapters, the sittings, and how long they take.
 The first page of the [team's `README.md`](../README.md#what-the-monkeymaxxing-stack-builds)
 describes that system; this chapter's map follows the first page's words.
 
-**Who acts:** you, the coding agent, show the map and the time estimate.
+**Who acts:** you, the coding agent, show the map and the time estimate when asked.
 The person reads them and asks questions. Nothing changes on a server or an
 account, so this chapter has no numbered steps.
 
@@ -37,9 +39,9 @@ account, so this chapter has no numbered steps.
 
 ## The map
 
-Show this map and the time estimate. Then start chapter 1 (pick your web address and start the team's password manager) with its first
-question. The person has already chosen the stack, so the map gives the
-system in brief and the route. When the person asks for the whole
+Show this map and the time estimate only when the person asks. The person
+has already chosen the stack, so the map gives the system in brief and
+the route. When the person asks for the whole
 picture, show the first page of the team's `README.md`. Explain each tool
 further when the person first needs it.
 
@@ -53,12 +55,12 @@ further when the person first needs it.
 >   has an open web port.
 > - The smallest system has three production servers: the app server
 >   `app001`, the database server `db01`, and the utility server `util01`,
->   which runs MMX, MMWatchdog, and MMHotline. In chapter 1 you choose the
->   smallest system or the fuller system, which adds a second app server,
+>   which runs MMX, MMWatchdog, and MMHotline. The setup starts with the
+>   smallest system. You can choose the fuller system, which adds a second app server,
 >   `app002`, and a test server, `staging01`.
 > - Every change to the servers is a commit to your systems repository.
 >   I push the commit and start an MMX run on `util01`.
-> - You and I work from your systems desk, a small server of your own.
+> - I work on your laptop. I reach production only through your systems desk, a small server of your own that keeps the production key, the secrets, and your tokens locked away.
 > - MMWatchdog checks every server. MMHotline runs the triage agent, which
 >   investigates each problem and proposes a fix. Then MMHotline alerts the
 >   phone of the person on call. We test that alerts reach your phone.
@@ -79,37 +81,27 @@ further when the person first needs it.
 >   server work, the triage agent tells you when the app servers are busy,
 >   and I add one.
 >
-> You decide about money once, in chapter 6: I show you the prices of the
-> servers, and you set the limits for growth, such as the smallest and the
+> You decide about money once, in chapter 1: I show you the prices of the
+> servers, and you approve the limits for growth, such as the smallest and the
 > largest number of app servers. Inside your limits, servers are added and
 > removed without asking you, and you get a report of what each one costs.
 > I ask you only for something outside your limits.
 > You approve each change to your app.
 >
-> At each chapter, I will tell you what we do, why, and what I need from you.
-> These are the ten chapters:
+> The setup comes in sittings. The first sitting puts your app live, protected and backed up:
 >
-> 1. Chapter 1: Pick your web address and start the team's password manager. Your domain's
->    move to Cloudflare starts in chapter 1 (pick your web address and start the team's password manager), because the move is the slowest
->    wait.
-> 2. Chapter 2: Set up your laptop and your systems desk. Your systems repository and production keys stay on the desk.
-> 3. Chapter 3: Get your app ready to deploy. Prepare your app, so that later you only need to add a server to
->    handle more requests. Prepare tested app images, with optional CI.
-> 4. Chapter 4: Sign up for the outside services the Stack uses: Cloudflare, Backblaze B2, Pushover, the coding agent's provider, and
->    the container registry. Losing access to the server provider's or
->    Cloudflare's account leaves your backups safe at Backblaze B2.
-> 5. Chapter 5: Put your site behind Cloudflare and lock your private pages. Set up tunnels at Cloudflare, so that no server needs an
->    open web port. Put a sign-in in front of your private pages:
->    MMHotline's dashboard and, if you chose
->    `staging01`, the staging apps.
-> 6. Chapter 6: Create your three production servers: app, database, and tools, after you approve their prices and choose what the triage agent may do by itself.
-> 7. Chapter 7: Install everything on the production servers. From then on, your utility server applies
->    each change after your coding agent commits, pushes, and runs MMX.
-> 8. Chapter 8: Check that alerts reach your phone and backups restore.
-> 9. Chapter 9: Go live. Your app answers at your domain, and its first release goes
->    out the way every later release will.
-> 10. Chapter 10: Write down how to run your system. Save your operating guide in the systems repository's `README.md`:
->     your links, test results, and next steps.
+> 1. Chapter 1: Answer two questions: your domain and your server provider.
+> 2. Chapter 2: Get your app ready to deploy. You approve my changes to your app once.
+> 3. Chapter 3: Make your server account and your systems desk.
+> 4. Chapter 4: Set up your accounts and lock your desk: Cloudflare, your domain's registrar, Backblaze, one GitHub token, one recovery passphrase, and one phone code.
+> 5. Chapter 5: Put your site behind Cloudflare and lock your private pages.
+> 6. Chapter 6: Create your three production servers.
+> 7. Chapter 7: Install everything on the production servers.
+> 8. Chapter 8: Check that your backups restore.
+> 9. Chapter 9: Go live, and approve your app's first release.
+>
+> The second sitting adds phone alerts, the same day, in about 15 minutes.
+> Later short sittings add the triage agent, the status page for your customers, and chapter 10, your written operating guide.
 >
 > The smallest system has one app server and one database server. If
 > `app001` or `db01` fails, your site stops until the failed server is
@@ -138,32 +130,22 @@ check.
 
 **Tell the person, with the map:**
 
-> Plan for about one working day. Most of the initial setup needs you:
-> signing up at a few websites, answering questions, approving costs,
-> and reviewing changes to your app. Your longest stretch of work is
-> chapter 4 (sign up for the outside services the Stack uses), the accounts: about one to two hours. A company that reviews
-> new accounts can add a wait of its own. Chapter 2 (set up your laptop and your systems desk)
-> takes about 60 to 90 minutes, because it builds your systems desk.
-> Chapter 3 (get your app ready to deploy) takes 30 minutes if your app is
-> ready. If your app needs changes first, such as moving from SQLite to
-> PostgreSQL or its uploads to R2, chapter 3 can take days, and the day's
+> The first sitting takes a few hours. You are busy for about an hour of it:
+> answering two questions, approving changes to your app, signing up at four websites, and saving one passphrase.
+> If your app needs bigger changes first, such as moving from SQLite to
+> PostgreSQL or its uploads to R2, chapter 2 can take days, and the day's
 > plan moves with it.
 >
-> Two waits are long. I will tell you when the domain change and the first
-> server setup start and end:
+> Two waits are long, and you have nothing to do during them:
 >
 > - Your domain's move to Cloudflare takes from minutes to about a day,
->   and nothing speeds it up. Your registrar passes the change on, and
->   computers across the internet keep your domain's old address for a
->   while. The move starts at chapter 1 (pick your web address and start the team's password manager) and continues while I work
->   with you on the setup. Chapter 8 (check that alerts reach your phone and backups restore) and chapter 9 (go live) need the domain to show "Active"
->   at Cloudflare.
-> - The first server setup, at chapter 7 (install everything on the production servers), takes most of an hour. During most
->   of the first server setup, the servers install their waiting security
->   updates. Chapter 7 then waits for the first restore drill, up to an
->   hour, before it restarts the utility server (`util01`).
+>   and nothing speeds it up. The move starts in chapter 4, and I keep
+>   working meanwhile. Chapter 9 needs the move to be finished.
+> - The first server setup, in chapter 7, takes most of an hour, mostly
+>   for the servers' security updates. Your laptop may sleep: the work
+>   continues on your desk.
 >
-> When setup ends, your site is live, alerts reach your phone, and your
+> After the first two sittings, your site is live, alerts reach your phone, and your
 > backups are proven to restore. After the setup, your team has one
 > regular duty. Each week, one person and I do the weekly system review:
 > the week's alerts, the waiting updates, the restore drill's result, and
@@ -172,4 +154,4 @@ check.
 > optional, and some of them wake whoever is on call, so they wait for a
 > quiet time that you choose.
 
-Next: [Chapter 1: Pick your web address and start the team's password manager](01_pick_your_web_address_and_start_the_teams_password_manager.md).
+Next: [Chapter 1: Answer two questions](01_answer_two_questions.md).

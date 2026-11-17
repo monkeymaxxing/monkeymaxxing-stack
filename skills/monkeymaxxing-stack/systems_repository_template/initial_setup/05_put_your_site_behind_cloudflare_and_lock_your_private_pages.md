@@ -1,6 +1,6 @@
 # Chapter 5: Put your site behind Cloudflare and lock your private pages
 
-**When:** after chapter 4 (sign up for the outside services the Stack uses).
+**When:** after chapter 4 (set up your accounts and lock your desk).
 Complete steps 1 through 6 (host names, tunnels, DNS, Access, MMHotline's Access settings, and the Cache Rule) before chapter 7 (install everything on the production servers). The roles read the tunnel tokens, and MMHotline reads the
 Access settings.
 
@@ -9,9 +9,10 @@ to the servers through tunnels. Cloudflare Access, a sign-in, goes in front
 of the private pages, and a Cache Rule lets Cloudflare cache what each app
 marks as cacheable.
 
-**Who acts:** you, the coding agent, do every step from this systems desk,
-through Cloudflare's API. The person approves the alert dashboard's host
-name, opens the links, and signs in once, as each step's messages say.
+**Who acts:** you, the coding agent, do every step through Cloudflare's
+API, from the desk's API proxy. The person does nothing. The person's
+first sign-in at the private pages comes in the alerts sitting, in
+[chapter 8](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-each-person-on-call-signs-in-and-adds-a-phone).
 
 **Tell the person when the chapter starts:**
 
@@ -23,18 +24,14 @@ name, opens the links, and signs in once, as each step's messages say.
 > So no server needs an open web port, and a scan of the internet finds no web server of yours to attack.
 > Cloudflare also filters what comes in.
 > A sign-in, Cloudflare Access, goes in front of your private pages.
-> Your part is small: approve one web address, open the links I give you, and test the sign-in once.
+> You have nothing to do in this chapter.
 
 ## Before you start
 
-- **The messages to the person.** Each step says what to tell or ask the
-  person, in quote blocks: "Tell the person first" before the step, "Ask
-  the person" when the person must act or approve, and "Tell the person
-  after" with the result and its link. Say each message when its step
-  comes, in your own words, with the team's own names and links.
-- **Commands that source the person's token file,** `~/.config/monkeymaxxing-stack/example_systems.env`,
-  run only in the person's own desk terminal, as the secrets rule in
-  [The rules](../AGENTS.md#the-rules) says.
+- **The messages to the person.** You work alone in chapters 5 to 9, and
+  the person may be away. Give each step's message as one short line, such
+  as "I am adding your DNS records at Cloudflare.", and give the full text
+  only when the person asks. Use each step's links and names.
 - **Every Cloudflare request goes through the API proxy.** Use Cloudflare's
   API from this systems desk for the tunnels and DNS records, the Access
   applications and policies, and the cache rule. The coding agent sends
@@ -54,22 +51,17 @@ name, opens the links, and signs in once, as each step's messages say.
 1. **The private pages' host names:** set
    `util01_private_page_host_names` under `vars` in
    `mmx_project_settings.yml` before creating the Cloudflare resources.
-   Set `mmhotline` for MMHotline's dashboard, such as `ops.example.com`.
-   Propose only a name that is available: a name is available when the
-   domain has no DNS record for the name.
+   Set `mmhotline` for MMHotline's dashboard: `ops.example.com` by
+   default, with no question, when the domain has no DNS record for
+   `ops`. Otherwise pick the first free name of `ops2`, `alerts` and
+   `status-ops`. The team can change the name later with one setting.
 
-   **Ask the person:**
+   **Tell the person:**
 
-   > Your alert dashboard needs its own web address. I propose `ops.example.com`.
-   > Your domain has no DNS record for `ops.example.com`, so the name is free.
-   > Only your team can open the alert dashboard, after a sign-in.
-   > Do you want `ops.example.com`, or another name?
+   > Your alert dashboard will be at `ops.example.com`. Only your team can open it, after a sign-in.
 
-   **Tell the person after:** no message, because step 3 shows the
-   name's DNS record at Cloudflare.
-
-   **Check:** `util01_private_page_host_names.mmhotline` holds the name the
-   person approved, and the domain still has no DNS record for the name.
+   **Check:** `util01_private_page_host_names.mmhotline` holds the name,
+   and the domain still has no DNS record for the name.
 
 2. **Two tunnels, each locally managed.** The
    routes live in the systems repository's `cloudflared_config.yml`
@@ -80,8 +72,8 @@ name, opens the links, and signs in once, as each step's messages say.
    The templates read the host-name settings and need no edits during
    chapter 5 (put your site behind Cloudflare and lock your private pages).
 
-   `set-up-outside-services cloudflare`, in
-   [chapter 4 (sign up for the outside services the Stack uses)](04_sign_up_for_the_outside_services_the_stack_uses.md#chapter-4-sign-up-for-the-outside-services-the-stack-uses),
+   `set-up-outside-services go-live`, in
+   [chapter 4 (set up your accounts and lock your desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
    created each tunnel below through the API, with `"config_src": "local"`,
    and saved each tunnel's token in the vault. Find each tunnel's ID
    through the proxy, for the DNS records:
@@ -103,10 +95,8 @@ name, opens the links, and signs in once, as each step's messages say.
    **Ask the person,** only when a tunnel or its token is missing:
 
    > Cloudflare has no tunnel `example_systems-util01`, or your vault has no token for the tunnel.
-   > Please run this command in your own terminal on your systems desk, in the systems repository:
-   > `. ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services cloudflare`
-   > The command prints a link for a new link token, as in chapter 4, and makes only what is missing.
-   > Tell me when the command ends.
+   > Please type `ssh desk01-setup` in your terminal again, and type a code from your phone.
+   > The command shows only the Cloudflare screen again, and makes only what is missing.
 
    **Tell the person after:**
 
@@ -122,11 +112,10 @@ name, opens the links, and signs in once, as each step's messages say.
    The CNAME's content is the tunnel's `TUNNEL_ID.cfargotunnel.com`
    (`POST .../zones/ZONE_ID/dns_records` with `"proxied": true`).
    Never create the status page's DNS
-   record yourself: `set-up-outside-services cloudflare` created the
-   record in chapter 4, through `mmhotline status-page set-up`, and a rerun
-   creates the record when the domain was still Pending then.
-   [Chapter 8 (check that alerts reach your phone and backups restore)](08_check_that_alerts_reach_your_phone_and_backups_restore.md#chapter-8-check-that-alerts-reach-your-phone-and-backups-restore)
-   checks the status page.
+   record yourself: the status page's own sitting creates the record,
+   through `mmhotline status-page set-up`, as
+   [chapter 8, part 5](08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-5-the-status-page)
+   says.
 
    **Tell the person first:**
 
@@ -161,7 +150,7 @@ name, opens the links, and signs in once, as each step's messages say.
    emails a code to the address. A new Zero Trust organization has only
    the Cloudflare identity provider, which signs in people who have a
    Cloudflare account, and One-time PIN isn't added automatically, so
-   `set-up-outside-services cloudflare` added it in chapter 4 (sign up for the outside services the Stack uses).
+   `set-up-outside-services go-live` added it in chapter 4 (set up your accounts and lock your desk).
    Read each `type` in
    `GET .../accounts/ACCOUNT_ID/access/identity_providers` to check that
    the login method exists.
@@ -173,23 +162,15 @@ name, opens the links, and signs in once, as each step's messages say.
    > To sign in, a person types a company email address.
    > Access then emails a one-time code to the address, and the person types the code.
 
-   **Ask the person,** after the application exists:
-
-   > Please open https://ops.example.com and sign in with your company email address and the code that Cloudflare emails you.
-   > After the code, Cloudflare shows its error page "Error 1033".
-   > Error 1033 means that no server is connected to the dashboard's tunnel yet: `util01` connects in chapter 7.
-   > So the error is expected until chapter 7, and it shows that your sign-in passed.
-   > Tell me when you see it.
-
    **Tell the person after:**
 
-   > Your sign-in works. The Access application admits only addresses that end in `@example.com`: [Access applications](https://one.dash.cloudflare.com/?to=/:account/access/apps).
+   > Your alert dashboard admits only addresses that end in `@example.com`: [Access applications](https://one.dash.cloudflare.com/?to=/:account/access/apps).
 
-   **Check:** every Allow rule names the domain, and the person saw
-   Error 1033 after the code. Mark `company_email` as
-   `done` in `monkeymaxxing_stack_checklist.yml` after the item's
-   `verification` passes. The item's `verification` includes the person's
-   sign-in.
+   **Check:** every Allow rule names the domain, read through the API
+   proxy. `company_email` stays `open` until the person's first sign-in in
+   the alerts sitting, because the item's `verification` includes that
+   sign-in. A team without email at its domain adds it in the alerts
+   sitting too.
 
 5. **MMHotline's Access settings,** in `mmhotline_settings.yml`, which came
    with the template ([chapter 7 (install everything on the production servers)](07_install_everything_on_the_production_servers.md#chapter-7-install-everything-on-the-production-servers) fills in the rest):
@@ -256,8 +237,8 @@ name, opens the links, and signs in once, as each step's messages say.
 
 ## If something is different
 
-- **The proposed host name is in use** (step 1): the domain has a DNS
-  record for the name. Propose another name to the person.
+- **The host name `ops` is in use** (step 1): the domain has a DNS
+  record for the name. Step 1 picks the next free name.
 - **A policy names the GitHub organization** (step 4): the policy uses the
   `github` login method instead of One-time PIN; read each `type` in
   `GET .../accounts/ACCOUNT_ID/access/identity_providers` to check that
@@ -278,7 +259,7 @@ name, opens the links, and signs in once, as each step's messages say.
 ## Why the chapter works this way
 
 **Locally managed tunnels.** A tunnel made in Cloudflare's dashboard keeps
-its routes at Cloudflare instead, so `set-up-outside-services cloudflare`
+its routes at Cloudflare instead, so `set-up-outside-services go-live`
 made each tunnel through the API with `"config_src": "local"`. Then the
 routes live in the systems repository's `cloudflared_config.yml`
 templates, and a rebuilt server gets the routes from Git.
@@ -292,17 +273,12 @@ decides whose address Access believes, so a token in the API token
 proxy that could add one would let a mistake admit anyone. The command
 adds One-time PIN with a short-lived token that it deletes at once.
 
-**Error 1033 before chapter 7.** Error 1033 means that Cloudflare finds
-no running `cloudflared` for the tunnel
-([Cloudflare Tunnel troubleshooting](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/troubleshoot-tunnels/common-errors/)).
-Access checks the sign-in first, so the error page proves the sign-in.
-
 **MMHotline checks the sign-in too.** MMHotline uses
 `cloudflare_access.team_domain` and `cloudflare_access.audience_tag` to
 check each person's Access sign-in itself, so a request that reaches
 `util01` without Cloudflare Access's sign-in gets no dashboard.
 
 **The laptop holds no production credential.** The laptop receives no Cloudflare administration token, production vault passphrase, or production SSH key.
-Systems-side Access checks run from the desk.
+Every Cloudflare request goes through the desk's API proxy.
 
 Next: [Chapter 6: Create your three production servers: app, database, and tools](06_create_your_three_production_servers.md).

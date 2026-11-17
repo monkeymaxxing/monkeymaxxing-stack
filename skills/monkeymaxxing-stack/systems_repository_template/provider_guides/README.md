@@ -37,6 +37,44 @@ the provider.
 For another provider, use the provider's current documentation and follow
 the [provider script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts).
 
+## The laptop key command
+
+Before the desk exists, the person types the provider key on the laptop,
+once. The Stack ships no program for this step. You write a small Bash
+script from the rule below, with the selected guide's values from its own
+"The laptop key command" section. The script is
+`~/example-setup/enter-the-hetzner-key`: `example` is the company's name in
+lowercase with hyphens, and `hetzner` is the provider's short name. The
+script must work with the Bash that the laptop has, Bash 3.2 on a Mac.
+
+The script does five things, in order:
+
+1. **A hidden prompt for each value,** with `read -rs`, named as the
+   provider's page names the value, such as `Hetzner API token (hidden): `.
+   It removes spaces, line breaks and quotes that came with a paste.
+2. **A shape check of each value,** with the guide's shape, before any
+   request. A wrong shape prints what the value must look like, such as
+   "The token has 64 letters and digits. Copy it again.", and asks again.
+3. **One read-only API call** with the values: the guide's listing
+   request. A refusal prints the provider's own reason and asks again. The
+   script sends each value only in the request's header or signature,
+   never on a command line, so other programs cannot read it in the
+   process list: `curl` reads the header from standard input with
+   `-H @-`.
+4. **The key file, `~/example-setup/provider-key`, mode `0600`,** written
+   with `umask 077` so the file is private from its first byte. The file
+   holds one line in the form of `SERVER_PROVIDER_API_TOKEN` that the guide
+   names, such as the three OVHcloud values joined with colons.
+5. **One line to the person:** `Hetzner accepted the key.`, with the
+   provider's name. The script never prints a value.
+
+The bootstrap in
+[chapter 3](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard)
+moves the key file to the desk, over root SSH standard input, and deletes
+the laptop file. In the first sitting `util01` uses the same key. A
+narrower key for `util01`, as each guide's `util01` section describes, is a
+later choice of the team.
+
 ## Credentials on the systems desk
 
 The person owns the provider token. The coding agent runs as `coding-agent`
@@ -48,7 +86,8 @@ listing's path, and the provider CLI's credential store. At OVHcloud, AWS EC2
 and Google Compute Engine the API proxy signs the requests with the credential instead, as
 each guide's "Credentials on the systems desk" says.
 
-- `set-up-outside-services personal-token server-provider` writes
+- The bootstrap, and later `set-up-outside-services personal-token server-provider`
+  when the person replaces the key, write
   `/etc/systems-desk/provider-api-token.conf`, root:root, mode `0600`, and
   the person's token file. The token file lives outside Git. Never give the
   real token to the coding agent.
@@ -66,8 +105,9 @@ each guide's "Credentials on the systems desk" says.
   or account-owned restore jobs. Run coding-agent operations through the
   proxy, with the same ownership, first-boot, pagination, and deletion
   checks.
-- During first-desk bootstrap, record and clear every laptop credential
-  file after the desk works. Use environment-only authentication where
+- During the first desk's bootstrap, the laptop holds only the key file
+  of "The laptop key command", which the bootstrap deletes. Clear any
+  provider tool's saved login on the laptop after the desk works. Use environment-only authentication where
   supported, so no saved personal CLI context remains. The person may keep
   personal CLI credentials only in the person's protected desk account.
   `util01` keeps separate account-owned restore credentials.

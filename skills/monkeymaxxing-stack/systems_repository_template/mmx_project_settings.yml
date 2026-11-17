@@ -743,7 +743,7 @@ vars:
       download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.1.0/mmhotline-0.1.0-linux-amd64.tar.gz
       sha256: "60fefbc099d1f4696e70199ea4257b968b1c8b126fde10f2e068919140d80660"
     # The Stack's command for the account and secret setup on the systems
-    # desk (initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md).
+    # desk (initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
     # Its release is the Stack version's, built reproducibly by the Stack
     # repository's set_up_outside_services/build_release_archive.sh, which
     # writes this pin.

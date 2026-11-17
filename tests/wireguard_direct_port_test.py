@@ -142,7 +142,7 @@ class DirectPort(unittest.TestCase):
         renderer = T/'server_management_scripts/render_server_first_boot'
         key = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
         peer = 'PFHMlKh61wvN0/mEnwE2mCdTk3PCQmr/u0lh3F8JkT0='
-        # Chapter 2's desk data: only the laptop, without an endpoint.
+        # Chapter 3's desk data: only the laptop, without an endpoint.
         settings = dict(private_key=key, private_ip='10.20.9.1', peers=[dict(public_key=peer, allowed_ips=['10.20.10.1/32'])])
         result = subprocess.run(['bash', str(renderer)], input=json.dumps(settings), text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -176,7 +176,7 @@ class DirectPort(unittest.TestCase):
         # doubleshell refuses PersistentKeepalive in [Peer] (doubleshell config.go,
         # "unsupported setting"), so the laptop's file must not carry it until
         # doubleshell supports it.
-        text = (T/'initial_setup/02_set_up_the_laptop_and_the_systems_desk.md').read_text()
+        text = (T/'initial_setup/03_make_your_server_account_and_your_systems_desk.md').read_text()
         line = next(l for l in text.splitlines() if "printf '[Interface]" in l)
         self.assertIn('Endpoint = %s:443', line)
         self.assertNotIn('PersistentKeepalive', line)

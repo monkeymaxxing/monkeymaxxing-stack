@@ -26,7 +26,7 @@
 #
 # The build file is Containerfile. For an app with a Dockerfile, rename it,
 # or change `--file Containerfile` below. Either file must start with
-# `ARG RELEASE` (chapter 3 of the setup checks this).
+# `ARG RELEASE` (chapter 2 of the setup checks this).
 
 name: test_build_and_push_the_app_image
 

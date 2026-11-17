@@ -51,7 +51,7 @@ What you see on the home page:
 ## The settings for your systems repository
 
 The systems repository is the repository that the stack's coding agent
-writes for a team's servers. At chapter 3 (get your app ready to deploy), set the following values in the
+writes for a team's servers. At chapter 2 (get your app ready to deploy), set the following values in the
 systems repository's `mmx_project_settings.yml`:
 
 ```yaml

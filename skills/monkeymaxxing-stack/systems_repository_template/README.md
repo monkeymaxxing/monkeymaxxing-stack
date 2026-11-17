@@ -311,15 +311,17 @@ server provider.
 
 ## Start or resume work
 
-Log in to your systems desk and run `start-the-coding-agent`. Then give
-your coding agent your request, for example:
+Open your coding agent on your laptop, and give it your request, for
+example:
 
 > What is the next necessary step?
 
 Your coding agent explains each action, checks the current state, and
 follows the operating procedure for the job. Never paste a secret into the
-conversation. Your coding agent tells you where to type each secret, such
-as your own terminal or the password manager.
+conversation. Your coding agent tells you where to type each secret: a
+hidden prompt of a short command, such as `ssh desk01-secrets`. When your
+coding agent needs your desk, it asks for one code from your phone, in the
+chat.
 
 [`AGENTS.md`](AGENTS.md) holds your coding agent's rules and lists the
 files of this repository. `git log` is the system's history, because every
@@ -354,7 +356,7 @@ person's own contact methods on MMHotline's page.
 | Replace a failed server | "app001 stopped. Examine the effect on the site and prepare a replacement." | [Replace a server](operating_procedures/replace_a_server.md) |
 | Recover missing data | "A change removed database rows. Give the recovery procedure." | [Recover missing rows](operating_procedures/recover_rows_lost_to_a_bad_change.md) |
 | Review the system | "Do the weekly system review." | [Weekly review](operating_procedures/do_the_weekly_system_review.md) |
-| Respond to a break-in | "Someone broke in. Find out how, and give me the response." Run `sudo lock-everyone-out` in your own terminal on your desk only when your coding agent shows that the case is one the page names. | [Respond to a break-in](operating_procedures/respond_to_a_break_in.md) |
+| Respond to a break-in | "Someone broke in. Find out how, and give me the response." Type `ssh -t desk01 sudo lock-everyone-out` on your laptop only when your coding agent shows that the case is one the page names. | [Respond to a break-in](operating_procedures/respond_to_a_break_in.md) |
 
 To release to production without the question for your approval, set
 `production_releases_wait_for_a_persons_approval` to `false` in
@@ -433,14 +435,15 @@ whether a trigger arrived.
 
 ## Looking after your systems desk
 
-You manage your desk with `review-and-apply-the-systems-desk-settings`, in
-your own terminal on the desk. When the desk's settings changed since your
-last review, the command shows each change and runs only after you type
-`yes`. Your coding agent explains each change first.
+You manage your desk with `ssh desk01-review` on your laptop, plus a
+phone code. When the desk's settings changed since your last review, the
+command shows each change and runs only after you type `yes`. Your coding
+agent explains each change first.
 
-Keep the recovery items that
-[chapter 2 (set up your laptop and your systems desk)](initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#recovery-items-and-laptop-cleanup)
-lists in the team's password manager. If you lose your phone, your laptop,
+Keep the recovery passphrase that
+[chapter 4 (set up your accounts and lock your desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#steps)
+showed you in the team's password manager. It opens the recovery bundle,
+which holds every item a lost desk needs. If you lose your phone, your laptop,
 or your desk, tell your coding agent. The operating procedures are
 [Recover from a lost phone](operating_procedures/recover_from_a_lost_phone.md),
 [Recover from a lost or stolen laptop](operating_procedures/recover_from_a_lost_or_stolen_laptop.md),

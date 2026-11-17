@@ -132,7 +132,7 @@ systems repository:
      exits 0: the vault defines every key the new files read, except those
      the command marks "secret key not needed with the selected inventory".
      For each key it lists as `not defined`, the person adds the key and
-     pushes the vault, as [Secrets in chapter 2 (set up your laptop and your systems desk)](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#secrets) says.
+     pushes the vault, as [Secrets in chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#secrets) says.
    - The apps' files from the stack:
      `git -C STACK_REPOSITORY diff --stat OLD_COMMIT NEW_COMMIT -- skills/monkeymaxxing-stack/files_for_your_app`
      lists changed app files, such as `pg_with_multiple_database_servers.mjs`.

@@ -65,20 +65,11 @@ the laptop.
    ([Sizes, network and quotas](#sizes-network-and-quotas)) needs both. When the key's creation is refused because of the
    organization policy `iam.disableServiceAccountKeyCreation`, an administrator of the organization turns the
    policy off for this project first.
-3. During the first desk's bootstrap (chapter 2), the person puts the key into the laptop's temporary token
-   file, in the person's own laptop terminal, after downloading the key file from Cloud Shell (**More**,
-   **Download**):
+3. The person downloads the key file from Cloud Shell (**More**, **Download**), and gives its path to the
+   laptop key command below. The bootstrap moves the key to the desk.
 
-   ```sh
-   export SERVER_PROVIDER_API_TOKEN="$(openssl base64 -A < ~/Downloads/alex-systems-desk.json)"
-   ```
-
-4. On the desk, the person runs, in the person's own terminal, in the systems repository:
-
-   ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services personal-token server-provider --server-listing-path 'projects/PROJECT_ID/aggregated/instances?maxResults=1'
-   ```
-
+4. To replace the credential later, the person runs
+   `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path 'projects/PROJECT_ID/aggregated/instances?maxResults=1'`.
    The command asks for the key file's whole text at one hidden prompt: in Cloud Shell the person runs
    `cat alex-systems-desk.json` and pastes everything from `{` to `}`. It checks the key with a listing of the
    project's servers, and only then writes `/etc/systems-desk/provider-api-signing-credential.json`, root:root,
@@ -86,6 +77,17 @@ the laptop.
    saves the key in base64 in the person's token file as `SERVER_PROVIDER_API_TOKEN`. When a check fails, the
    proxy keeps its old credential. Then the person deletes the key file in Cloud Shell and on the laptop:
    `rm alex-systems-desk.json`.
+
+### The laptop key command
+
+The values for [The laptop key command](README.md#the-laptop-key-command):
+
+- **Script:** `~/example-setup/enter-the-google-key`.
+- **Values:** one, the service account's **key file**. A key file is many lines long, so the script asks for the downloaded file's path, such as `~/Downloads/alex-systems-desk.json`, which is not a secret, instead of a hidden paste. After the key file is saved, the script deletes the downloaded file and says so.
+- **Shape:** JSON with `"type": "service_account"`, a `private_key` and a `client_email`.
+- **Read-only call:** a listing of the project's servers, with the guide's `google_instances` function below, and the key in the script's memory only.
+- **Key file line:** the key file's text in base64, on one line, as `openssl base64 -A` writes it.
+
 
 The proxy forwards each request only to Compute Engine's address and the price catalog's, refuses a whole
 address in place of a path, and a path with `..`, and passes a redirect back without following it. It sends

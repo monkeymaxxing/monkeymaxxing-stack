@@ -185,7 +185,7 @@ for example in `util01`'s own `every_server` stage.
 If the fault stops the run before the new MMX release reaches `util01`:
 
 1. Install the new release on a systems desk, following the
-   [systems desk installation instructions in chapter 2: Set up your laptop and your systems desk](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#chapter-2-set-up-your-laptop-and-your-systems-desk).
+   [systems desk installation instructions in chapter 2: Set up your laptop and your systems desk](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#chapter-3-make-your-server-account-and-your-systems-desk).
 2. Run once from the systems desk:
    `sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only`.
    **Check:** the run passes.

@@ -46,7 +46,7 @@ For the first app that keeps uploads, prepare the bucket, keys, and settings in 
    **Check:** `git log -1` in the person's repository on the desk shows
    the settings' commit.
 2. **The person runs `set-up-outside-services backblaze`**, in the person's
-   own desk terminal, as [chapter 4 (sign up for the outside services the Stack uses)](../initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md#chapter-4-sign-up-for-the-outside-services-the-stack-uses)
+   own desk terminal, as [chapter 4 (set up your accounts and lock your desk)](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#chapter-4-set-up-your-accounts-and-lock-your-desk)
    describes. The command:
    - creates the uploads' bucket, locked for the lock length in
      `backups.lock_backups_against_deletion_for_days`, with the lifecycle

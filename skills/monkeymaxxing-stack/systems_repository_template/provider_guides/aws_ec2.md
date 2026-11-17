@@ -42,26 +42,27 @@ ID** and the **Secret access key**. `SERVER_PROVIDER_API_TOKEN` holds them joine
    the keys below, and the account holds nothing but this system.
 3. On the user's **Security credentials** tab, **Create access key**, use case **Command Line Interface
    (CLI)**. AWS shows the Secret access key once.
-4. During the first desk's bootstrap (chapter 2), the person puts the two values into the laptop's temporary
-   token file, in the person's own laptop terminal:
+4. AWS shows the Secret access key once, so the person types both values at once into the laptop key
+   command below. The bootstrap moves them to the desk.
 
-   ```sh
-   export AWS_ACCESS_KEY_ID=''
-   export AWS_SECRET_ACCESS_KEY=''
-   export SERVER_PROVIDER_API_TOKEN="$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY"
-   ```
-
-5. On the desk, the person runs, in the person's own terminal, in the systems repository:
-
-   ```sh
-   . ~/.config/monkeymaxxing-stack/example_systems.env && set-up-outside-services personal-token server-provider --server-listing-path '?Action=DescribeInstances&Version=2016-11-15'
-   ```
-
+5. To replace the credential later, the person runs
+   `ssh -t desk01 set-up-outside-services personal-token server-provider --server-listing-path '?Action=DescribeInstances&Version=2016-11-15'`.
    The command asks for the Access key ID and the Secret access key, each at a hidden prompt, checks them with
    a signed listing of the region's servers, and only then writes
    `/etc/systems-desk/provider-api-signing-credential.json`, root:root, mode `0600`, restarts the API signing
    proxy, checks the same listing through `http://127.0.0.1:8081/`, and saves the joined form in the person's
    token file as `SERVER_PROVIDER_API_TOKEN`. When a check fails, the proxy keeps its old credential.
+
+### The laptop key command
+
+The values for [The laptop key command](README.md#the-laptop-key-command):
+
+- **Script:** `~/example-setup/enter-the-aws-key`.
+- **Values:** two, in this order: **Access key ID**, **Secret access key**.
+- **Shape:** `AKIA` followed by 16 capital letters and digits, then 40 characters of letters, digits, `/` and `+`.
+- **Read-only call:** a signed `DescribeInstances` in the system's region, with the guide's `aws_ec2_request` function below, and the two values in the script's memory only.
+- **Key file line:** `ACCESS_KEY_ID:SECRET_ACCESS_KEY`.
+
 
 The proxy forwards each request only to the address in the credential file, refuses a whole address in place
 of a path, and a path with `..`, and passes a redirect back without following it.

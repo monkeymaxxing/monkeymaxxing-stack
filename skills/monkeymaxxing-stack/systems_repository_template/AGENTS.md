@@ -6,8 +6,8 @@ and incident reports. `talking_with_the_team.md` holds the Plain English
 rules, the technical terms, and example messages.
 
 This repository is the company's whole production system: its servers,
-settings, deploys, and fixes. Every coding agent reads `AGENTS.md` first,
-on a team systems desk and during triage. MMHotline runs the triage agent on
+settings, deploys, and fixes. Every coding agent reads `AGENTS.md` first:
+the team's coding agent on a person's laptop, and the triage agent. MMHotline runs the triage agent on
 `util01` when an alert arrives. The system follows the Monkeymaxxing Stack,
 at the version that `stack_version` in `monkeymaxxing_stack_checklist.yml`
 names.
@@ -57,7 +57,7 @@ Access.
 | `talking_with_the_team.md` | The Plain English rules, how to talk with the team before, during, and after a step, example messages, and the technical terms |
 | `AGENTS.md` | This file: the rules for every coding agent, and which operating procedure to follow when |
 | `triage_agent_rules.md` | The triage agent's rules, which it reads in full |
-| `initial_setup/` | The ten numbered setup steps, done once in order. The `initial_setup/` files record how the system was set up |
+| `initial_setup/` | The setup chapters, done once in order: chapters 1 to 9 are the first sitting, which puts the app live. Alerts, the triage agent, the status page and chapter 10 come in later sittings. The `initial_setup/` files record how the system was set up |
 | `operating_procedures/` | One file per operating procedure: its steps and its verification, upgrading to a new stack version and assessing the running system included |
 | `CLAUDE.md` | One line, `@AGENTS.md`, so Claude Code reads `AGENTS.md` |
 | `monkeymaxxing_stack_checklist.yml` | Every item of the stack: done, open, or deviated, and why; and, in their own section, the growth and improvement items with their triggers |
@@ -103,19 +103,68 @@ the private network settings.
 
 `.mmx/`, which Git ignores, holds MMX's run history on each machine.
 
-Each person works on a systems desk, such as `desk01`. The laptop keeps app work
-and reaches only the person's desk through doubleshell and a phone-code SSH login.
-The systems coding agent always runs as `coding-agent` in `/home/coding-agent/systems_repository`.
-The person starts the coding agent with `start-the-coding-agent`, which starts it as `coding-agent` in the checkout.
-`systems_desk_coding_agent` in `mmx_project_settings.yml` picks Claude Code or Codex; the desk review installs it.
-The coding agent uses `/run/desk-ssh-agent/socket` for production SSH and signed Git commits.
-The production private key stays in the person's protected home.
-Use `ssh -F ssh/config root@10.20.1.1` from the coding agent's checkout to inspect `app001`.
-Reach a service that listens only on a server's loopback address through an SSH port forward,
-such as `ssh -F ssh/config -L 8480:127.0.0.1:8480 root@10.20.0.1` for MMHotline's pages on `util01`.
-The desk uses kernel `wg0`; no doubleshell inventory connection is required on the desk.
-Production servers peer with systems desks, including when `util01` is lost.
-Only the desk knows the laptop's keys and address.
+### Your login on the desk
+
+You are the team's coding agent, on the person's laptop. There is no coding
+agent on the desk. Each person has a systems desk, such as `desk01`: a small
+server that is a locked key box. The desk holds the production private key,
+the vault passphrase, and the person's provider and Cloudflare tokens. You use
+them through the desk, and you can never copy them. The laptop reaches only
+the person's desk, through doubleshell and WireGuard.
+
+You reach the desk through one SSH entry on the laptop, `desk01-agent`, as the
+desk's `coding-agent` user. The entry keeps one shared connection open, so one
+phone code opens a working session, and every later command reuses the
+connection. The desk closes the connection after one hour unused
+(`coding_agent_login_idle_minutes` in `mmx_project_settings.yml`) and after ten
+hours at most (`coding_agent_login_longest_hours`). Both are settings, with
+their reasons beside them.
+
+When the connection is closed, `ssh -O check desk01-agent` says so. Ask the
+person for one code in the chat, in one short message:
+
+```text
+I need one code from your phone to work on your desk.
+
+Type the 6 digits here.
+```
+
+When the person just typed a code for something else, add the line
+`WAIT FOR A NEW CODE.  The code you just typed works only once.`, in bold
+capitals, before the last line. Then open the connection with the code:
+
+```sh
+# On the laptop. CODE: the 6 digits the person typed.
+code_script=$(mktemp) && printf '#!/bin/sh\necho %s\n' CODE > "$code_script" && chmod 700 "$code_script"
+SSH_ASKPASS="$code_script" SSH_ASKPASS_REQUIRE=force ssh desk01-agent true < /dev/null
+rm -f "$code_script"
+```
+
+A code works once and for 30 seconds, so a refused code needs a new one.
+Five wrong codes within ten minutes lock the laptop out for five minutes
+(`phone_code_lockout` in `mmx_project_settings.yml`).
+
+Every command block in this repository that says "This systems desk, as the
+coding agent" runs through that connection: `ssh desk01-agent 'COMMAND'`,
+from the laptop. The desk's checkout of the systems repository is
+`/home/coding-agent/systems_repository`, `systems_repository` from your
+login, and the servers' SSH settings work from there. For example, to
+inspect `app001`:
+`ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.1.1 uptime'`.
+The desk uses `/run/desk-ssh-agent/socket` for production SSH and signs
+commits with the production key through that socket.
+Reach a service that listens only on a server's loopback address through an
+SSH port forward on the desk, such as
+`ssh -F ssh/config -L 8480:127.0.0.1:8480 root@10.20.0.1` for MMHotline's
+pages on `util01`.
+The desk uses kernel `wg0`; no doubleshell inventory connection is required on
+the desk. Production servers peer with systems desks, including when `util01`
+is lost. Only the desk knows the laptop's keys and address.
+
+The person logs in to the desk only for a few things, each one short command
+on the laptop plus one phone code: `ssh desk01-secrets` for a new secret,
+`ssh desk01-review` for a change to the desk itself, and the lock-out
+button, `ssh -t desk01 sudo lock-everyone-out`.
 
 The desk's WireGuard peers for the servers follow pushed `main` through `sudo -n update-this-desks-wireguard-peers`,
 which takes no arguments and needs nothing from the person. Run it after you push a change that adds, replaces or
@@ -127,24 +176,30 @@ At the start of a session, first pull and look for commits waiting for review
 Reason: the command takes the servers' keys and addresses from pushed `main`, so a commit from outside the team
 that changes a server's key or address would point the desk at another machine.
 
-The coding agent's direct MMX button is `sudo -n -u servers-mmx run-mmx-on-the-servers`.
+Your direct MMX button, on the desk, is `sudo -n -u servers-mmx run-mmx-on-the-servers`.
 The button works from its own execution checkout at the **pushed `main` commit**.
-The button never sees uncommitted or unpushed edits in the coding agent's checkout.
+The button never sees uncommitted or unpushed edits.
 Production and staging are in scope. The desk itself is outside the button's scope.
 Provider API calls use `http://127.0.0.1:8081/`; Cloudflare calls use `http://127.0.0.1:8082/`.
 The API proxy adds the person's token on both ports; for a provider whose API needs each request signed or a token made
 from a key, such as OVHcloud, AWS or Google Cloud, it signs the request on `8081` instead. Never read the person's token files.
 
-The person manages the desk from the person's repository, in the person's own terminal:
+The person manages the desk with one command on the laptop, plus a phone
+code:
 
 ```sh
-review-and-apply-the-systems-desk-settings
+ssh desk01-review
 ```
+
+`ssh desk01-review` runs `review-and-apply-the-systems-desk-settings` on the
+desk, as the person.
 
 The command runs `playbooks/systems_desk.yml` as root. It first compares what the desk playbook would do
 with the person's last desk review: unchanged, it runs at once; changed, it shows the changes
 and runs only after the person types `yes`. The record of the reviewed run is root-only on the desk.
 You cannot answer the question, and you never ask the person to answer it without reading the changes.
+The setup recorded the first desk review itself. For each later review, give the person a short plain
+summary of what changes and why, before the person types `yes`.
 When your pushed change touches the desk playbook, tell the person which change the desk review will show,
 and explain each change before the person types `yes`.
 Reason: the desk playbook applies pushed `main` as root, beside the person's production key, phone-code secret
@@ -273,13 +328,12 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   an agent-run retry.
 
   Run `mmx validate` locally for uncommitted structural checks.
-  Use `sudo -n -u servers-mmx run-mmx-on-the-servers` for direct production commands,
+  Use `sudo -n -u servers-mmx run-mmx-on-the-servers` on the desk for direct production commands,
   including previews, production playbooks, initial production setup, recovery,
   a changed vault passphrase, and `util01`'s reboot. Push before using the button.
-  MMX refuses a preview or run on a server where another MMX job is running; the desk's button does not wait for `util01`'s lock. Run the button only when no run holds `util01`'s lock (the helper names the holder). If a deploy still switches a live port in between, the `app_server` role stops with "the live port changed" before it changes anything. The person enters personal
-  secrets and edits the vault in the person's terminal; the coding agent never sources personal files.
+  MMX refuses a preview or run on a server where another MMX job is running; the desk's button does not wait for `util01`'s lock. Run the button only when no run holds `util01`'s lock (the helper names the holder). If a deploy still switches a live port in between, the `app_server` role stops with "the live port changed" before it changes anything. The person enters
+  secrets with `set-up-outside-services` on the desk, which commits and pushes the vault. You never read the person's files.
   Do not edit the vault through `run-mmx-on-the-servers secrets`: the next button invocation resets its execution checkout.
-  Commit and push `secrets_vault.age` from the person's repository before applying the changed vault.
 
   Reason: one controller keeps run history together. The matching commit
   prevents a helper run from applying files the agent did not review.
@@ -291,7 +345,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   lock-out harms more than it helps, because the lock-out cuts off the people and agents that the team needs.
   When the person asks for a lock-out, prepare and push the one-line commit `everyone_locked_out_except_desk: DESK`
   under the top-level `vars` of `inventories/servers.yml`, with the person's desk, then give the person the command
-  `sudo lock-everyone-out`, the lock-out button, to run in their own terminal on that desk. To undo it, push the commit
+  `ssh -t desk01 sudo lock-everyone-out`, the lock-out button, to type on the laptop with a phone code. To undo it, push the commit
   that removes the line, and give the person the same command. The lock-out button runs the lock-out
   programs that the person's last desk review installed, never pushed `main`'s, so a change you
   push to the lock-out reaches the lock-out button only after the person reviews it in a desk review.
@@ -307,9 +361,9 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   Starting a scheduled job now, such as the restore drill or the uploads
   copy, and powering a server off for a test are actions, not changes.
   The operating procedures perform the scheduled-job starts and test
-  power-offs over SSH. The person's own steps on a systems desk in setup
-  and recovery (token files, phone enrollment, restored keys) are the
-  other exception; each procedure names them.
+  power-offs over SSH. The person's own commands on a systems desk in setup
+  and recovery (`set-up-outside-services`, the phone code, restored keys)
+  are the other exception; each procedure names them.
 
   Start the restore drill over SSH because `./server_management_scripts/run_mmx_on_util01 run-command` would
   make the drill wait forever. `./server_management_scripts/run_mmx_on_util01 run-command` holds `util01`'s
@@ -334,47 +388,41 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   replacement server is prepared.
 - **Every configured production secret lives in the vault,** `secrets_vault.age`,
   MMHotline's included: never in another file of this repository, a commit
-  message, an image, or a log. The person adds a secret, in the person's
-  own desk terminal, with `mmx secrets add-random KEY`, or `mmx secrets set KEY`,
-  which reads the secret's value at a hidden prompt or from a pipe, after
-  `. ~/.config/monkeymaxxing-stack/example_systems.env &&`, which gives
-  MMX the vault passphrase; then the person commits and pushes
-  `secrets_vault.age`. You give the person the exact command. The buckets' and Cloudflare's keys come from
-  `set-up-outside-services`, which the person runs in their own desk terminal
-  ([chapter 4 (sign up for the outside services the Stack uses)](initial_setup/04_sign_up_for_the_outside_services_the_stack_uses.md)),
-  and `set-up-outside-services secrets` saves every other missing key in one
-  guided step and commits and pushes the vault. Point the person to it
-  before giving single `mmx secrets` commands.
-  [Secrets in chapter 2](initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#secrets)
-  lists every secret, where it lives, and the exact command for each kind,
-  `--replace` for a key the vault has already included.
+  message, an image, or a log. The person types each secret once, at a hidden
+  prompt of `set-up-outside-services` on the desk, never in the chat. In the
+  first sitting, `ssh desk01-setup` asks for each key a website gives and makes
+  every random key itself
+  ([chapter 4 (set up your accounts and lock your desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)).
+  Later, give the person `ssh desk01-secrets`: it asks for each key the vault
+  still lacks, at a hidden prompt, makes the random ones, and commits and
+  pushes the vault. To enter one key again, such as for a rotation, give the
+  person `ssh -t desk01 set-up-outside-services secrets --replace KEY`.
+  [Secrets in chapter 3](initial_setup/03_make_your_server_account_and_your_systems_desk.md#secrets)
+  lists every secret and where it lives.
 
-  The coding agent never opens or prints the vault's contents: no
+  You never open or print the vault's contents: no
   `mmx secrets edit`, no playbook or `run-command` that prints a secret,
   and no reading of a rendered secret file on a server, such as an app's
-  env file in `/etc/<app>/`. To learn which keys exist or are missing, the
-  coding agent runs `secrets list-keys` and `secrets usage` through its
-  button, which holds the vault passphrase and shows key names only:
-  `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`. The
-  button reads pushed `main`, so push the files that read a new key, and
-  have the person push the vault, before the check. `secrets usage`
-  exits 1 while any key is `not defined`, and it lists the keys of parts
-  this system leaves off too, such as `staging_` keys without `staging01`:
-  read the list, not the exit code. A plain
-  `mmx secrets ...` in the coding agent's checkout stops with "vault
-  passphrase required" (exit 4): the passphrase file is the person's,
-  named by the person's token file, and the button's. The person edits the vault, and
-  checks an edit with `mmx secrets diff-keys` before committing it, in
-  the person's own terminal.
-  Reason: the coding agent's provider stores the conversation, so a secret
-  the coding agent reads leaves the team's control. An app secret's key is the app's name
-  and the variable's name, such as `shop_SECRET_KEY_BASE`. A person's own
-  tokens, such as their provider and Cloudflare API tokens, live only in
-  the person's private desk token file, `~/.config/monkeymaxxing-stack/example_systems.env`.
-  Logins to the provider, Cloudflare, and B2 live in the team's password
-  manager, along with **break-glass access**, the emergency ways in when
-  the usual ways fail. The checklist item `provider_console_and_backup_mmhotline_logins` lists the
-  emergency ways in.
+  env file in `/etc/<app>/`. To learn which keys exist or are missing, run
+  `secrets list-keys` and `secrets usage` through your button, which holds
+  the vault passphrase and shows key names only:
+  `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`.
+  The button reads pushed `main`, so push the files that read a new key
+  before the check. `secrets usage` exits 1 while any key is `not defined`,
+  and it lists the keys of parts this system leaves off too, such as
+  `staging_` keys without `staging01`: read the list, not the exit code.
+  Reason: your provider stores the conversation, so a secret you read
+  leaves the team's control. An app secret's key is the app's name and the
+  variable's name, such as `shop_SECRET_KEY_BASE`. A person's own tokens,
+  such as their provider and Cloudflare API tokens, live only on the
+  person's desk, in files only the API proxy and the person read. The
+  recovery bundle, `recovery_bundle.age`, holds every item a lost desk
+  needs, encrypted with the recovery passphrase in the team's password
+  manager. Logins to the provider, Cloudflare, and B2 live in the team's
+  password manager, along with **break-glass access**, the emergency ways
+  in when the usual ways fail. The checklist item
+  `provider_console_and_backup_mmhotline_logins` lists the emergency ways
+  in.
 - **MMHotline owns triage approval and execution.** MMHotline runs `mmx`
   at the judged commit in `/var/lib/mmhotline/systems_repository`, using
   `/var/lib/mmhotline/systems_repository.lock`. The helper and
@@ -394,7 +442,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   a log instruction from becoming an unreviewed server-setting change.
 - **What the triage agent may do without a person** is the team's one
   answer, `what_the_triage_agent_may_do_without_a_person` in
-  `mmx_project_settings.yml` (chapter 6 asks it): `every_fix_waits_for_a_person`,
+  `mmx_project_settings.yml` (the triage agent's sitting asks it): `every_fix_waits_for_a_person`,
   `routine_fixes`, or `routine_fixes_and_server_work`. With the third,
   the triage agent replaces a failed server of the pools that
   `triage_agent_server_work` lists, with `replace_failed_servers` (the
@@ -419,24 +467,23 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   person asks, commit, and run `every_server`; MMHotline's rules, the
   reboot check and `util01`'s two load checks follow it.
 - **CI is the recommended way to test, build, and push the app image.**
-  CI builds on a clean machine, and the desk holds no credential that can
-  publish an image. The ready file is
+  CI builds on a clean machine, and no password that can publish an image
+  sits on the desk. The ready file is
   `files_for_your_app/test_build_and_push_the_app_image.yml` (GitHub
   Actions). CI needs no server SSH key or vault passphrase; it logs in to
-  the registry with a short-lived or publish-only token. A team without CI
-  tests and builds on the systems desk only inside a container (see the
-  next rule). In both cases the coding agent records the image tag,
-  commits, pushes, and runs `deploy`. The desk's clone of the app is
-  read-only (a read-only deploy key), for reading the code.
-- **The coding agent never runs the app's install, test or build commands
-  on the desk itself, only inside a container.** Run them with `podman` as
-  `coding-agent`, never with `--network host`, never with `/run` or a home
-  directory mounted, and mounting only the app's clone, such as
-  `podman run --rm -v "$PWD":/app:Z -w /app IMAGE npm test`. Reason: those
-  commands run code from the app's packages. Code from a poisoned package,
-  run on the desk, could reach the desk's SSH socket and its API proxies at
-  `127.0.0.1:8081` and `127.0.0.1:8082`. A test on real servers proved a rootless
-  container reaches neither.
+  the registry with a short-lived or publish-only token. You work on the
+  app in the app's folder on the laptop, show the person each change, and
+  push it with the person's own Git login after the person approves. Then
+  you record the image tag in the systems repository, commit, push, and run
+  `deploy`.
+- **Run the app's install, test and build commands only inside a
+  container on the laptop.** Run them with `podman` or `docker`, mounting
+  only the app's folder, such as
+  `podman run --rm -v "$PWD":/app -w /app IMAGE npm test`. Never run them
+  on the desk. Reason: those commands run code from the app's packages, and
+  a poisoned package on the laptop could use your open desk login, as
+  [chapter 2](initial_setup/02_get_your_app_ready_to_deploy.md#before-you-start)
+  says.
 - **A server's name never changes, and "primary" is a state.** After a
   failover, `db02` may be the primary and `db01` a replica; nothing is
   renamed.
@@ -458,7 +505,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   they are: uploaded files in R2, backups in B2, and the temporary
   `restore01` during a restore drill or a recovery. A laptop and
   `staging01` get invented test data from the app's seed command
-  ([chapter 3 (get your app ready to deploy)](initial_setup/03_get_your_app_ready_to_deploy.md#chapter-3-get-your-app-ready-to-deploy)
+  ([chapter 2 (get your app ready to deploy)](initial_setup/02_get_your_app_ready_to_deploy.md#chapter-2-get-your-app-ready-to-deploy)
   says how to write it). When a bug needs particular records, such as an
   account with no orders, add invented records like them to the seed
   command or to a test, and add a test that checks the bug stays fixed.
@@ -482,28 +529,39 @@ Use one branch, `main`, including when the team has only one person.
 Pushed means ready to run: a run applies everything on `main`.
 Reason: every desk must agree which settings the next run applies.
 
-1. Edit the required files in `/home/coding-agent/systems_repository` on `main`.
-   Run `mmx validate` to check the local structure. Review the diff.
-2. Stage only the intended paths with `git add PATH`, then `git commit -m "Describe the change and reason"`.
-   The desk's SSH socket signs the commit.
-3. Run the fixed synchronization snippet:
+You edit on the laptop, in your clone of the desk's repository,
+`~/code/example_systems`, cloned with
+`git clone desk01-agent:systems_repository`. The desk signs and publishes
+each change, because only the desk holds the production key.
+
+1. Bring the clone up to date: `git pull --ff-only` from the desk. Edit the
+   required files. Run `mmx validate` to check the local structure. Review
+   the diff.
+2. Stage only the intended paths with `git add PATH`, then commit on a
+   branch named for the change, such as `add-app002`:
+   `git switch -c add-app002 && git commit -m "Describe the change and reason"`.
+   The laptop's commit is unsigned. The desk signs it in step 4.
+3. Push the branch to the desk: `git push origin add-app002`.
+4. Publish the branch on the desk:
 
    ```sh
-   before=$(git rev-parse HEAD)
-   git pull --rebase
-   git log --oneline "$before"..HEAD
+   # On the laptop:
+   ssh desk01-agent sign-and-publish add-app002
    ```
 
-   Show the person any incoming commits before running MMX. Say nothing when no commits arrived.
-   When commits arrived, also look for commits waiting for review, as
-   "Review each commit waiting for review before any run" in
-   [The rules](#the-rules) says.
-   On a conflict, run `git rebase --abort` and tell the person which files conflicted.
-   Never resolve a rebase conflict yourself. Stop before pushing or running MMX.
-4. Run `git push origin main`. If Git refuses the push because `main` moved,
-   repeat step 3. Never force a push.
+   `sign-and-publish` rebases the branch onto `main` on the desk, signing
+   each commit with the production key, moves `main` forward, pushes `main`
+   to the Git host, and deletes the branch. It prints the commits that
+   arrived at `main` from elsewhere, if any. Show the person any incoming
+   commits before running MMX. Say nothing when no commits arrived. When
+   commits arrived, also look for commits waiting for review, as "Review
+   each commit waiting for review before any run" in [The rules](#the-rules)
+   says. On a conflict, `sign-and-publish` changes nothing and names the
+   files: tell the person which files conflicted. Never resolve a conflict
+   yourself. Stop before running MMX. Then `git switch main && git pull --ff-only`
+   in the clone, and delete the local branch.
 5. For configuration, preview the pushed commit with
-   `sudo -n -u servers-mmx run-mmx-on-the-servers dryrun every_server --connection ssh_only` while `util01` runs nothing.
+   `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers dryrun every_server --connection ssh_only` while `util01` runs nothing.
    Exit 0 means no change; 2 means proposed changes; 3 means incomplete preview;
    1 means failed work; 4 means command error. Until the first restore drill has passed,
    every preview exits 2 for `start_the_restore_drill_in_the_background` alone. An MMX
@@ -512,14 +570,29 @@ Reason: every desk must agree which settings the next run applies.
    released Stack version. Read each unchecked task's reason.
    Proceed only when each unchecked task depends on an earlier task in the planned run.
 6. Run the procedure on `util01`, for example
-   `./server_management_scripts/run_mmx_on_util01 run every_server`.
+   `ssh desk01-agent 'cd systems_repository && git pull --ff-only && ./server_management_scripts/run_mmx_on_util01 run every_server'`.
    Before `util01` exists or while `util01` is broken, use
-   `sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only`.
+   `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only`.
    Read the result before verifying the outcome.
    Reason: a push records settings; the explicit run applies settings.
    A documentation-only commit needs no server run.
 7. Verify the procedure's result. Update the checklist and README when the operation changes links, duties, or tested protections.
-   Commit the results, repeat step 3, and push. Report the outcome using [Talking with the team](talking_with_the_team.md).
+   Commit the results, and publish them with steps 2 to 4. Report the outcome using [Talking with the team](talking_with_the_team.md).
+
+**A run longer than a few minutes is a desk job,** so the laptop may sleep
+and the connection may close without stopping the run. Start the run with
+`systemd-run --user`, with a log file and an exit file named after the run:
+
+```sh
+# On the laptop. NAME: the run's name, such as every-server-2026-11-17-1405.
+ssh desk01-agent 'mkdir -p ~/runs && systemd-run --user --unit=NAME --collect bash -c "cd ~/systems_repository && sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only > ~/runs/NAME.log 2>&1; echo \$? > ~/runs/NAME.exit"'
+```
+
+Read `~/runs/NAME.log` for progress. The run is over when
+`~/runs/NAME.exit` exists, and the file holds the run's exit code. After a
+closed connection, ask the person for one code, as "Your login on the desk"
+says, then read the two files. Never start a run again only because the
+connection closed: read the exit file first.
 
 To update MMHotline's dashboard after a checklist-only change, run
 `./server_management_scripts/run_mmx_on_util01 validate`.

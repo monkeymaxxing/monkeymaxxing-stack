@@ -81,12 +81,12 @@ Tell the person what they will do on websites and in the password manager:
    **Check:** the clone holds the systems repository's files, such as
    `inventories/servers.yml`.
 3. **Prepare the temporary tools and provider access:** follow
-   [chapter 2 (set up your laptop and your systems desk)](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md)'s
+   [chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md)'s
    "Prepare the laptop and provider account".
-   In chapter 2's commands from here on, use `desk03` in place of
+   In chapter 3's commands from here on, use `desk03` in place of
    `desk01`, `10.20.9.2` in place of `10.20.9.1`, and the laptop's own
    address, `10.20.10.2`, in place of `10.20.10.1`.
-   **Check:** the checks in chapter 2's "Prepare the laptop and provider
+   **Check:** the checks in chapter 3's "Prepare the laptop and provider
    account".
 4. **The laptop's coding agent renames the lost desk's entry** in
    `inventories/servers.yml` from `desk02` to `desk03`, in `nodes` and in
@@ -159,18 +159,18 @@ Tell the person what they will do on websites and in the password manager:
 
    **Check:** the block prints no error, and `/tmp/desk03-first-boot.yml`
    holds the first-boot data for step 9.
-9. **Create the replacement desk:** create Debian 13 with chapter 2's step 2, from
+9. **Create the replacement desk:** create Debian 13 with chapter 3's step 2, from
    `/tmp/desk03-first-boot.yml`, in a location different from production.
    Record the returned public address as `desk03.vars.public_ipv4_address`.
    **Check:** the provider returns the new desk's public address.
 10. **Clear the first-boot file at once:**
-    `: > /tmp/desk03-first-boot.yml`. As chapter 2 says, clear the file
+    `: > /tmp/desk03-first-boot.yml`. As chapter 3 says, clear the file
     after a failed create request too.
     **Check:** none, because the command only empties the file.
 11. **The laptop's coding agent writes the laptop's connection to the
     replacement:**
     `~/.config/doubleshell/desk03.conf` and the laptop's `Host desk03`
-    entry, as chapter 2's step 3 does, with the lost desk's
+    entry, as chapter 3's step 3 does, with the lost desk's
     `wireguard_public_key`, the new public address, and
     `UserKnownHostsFile ~/.ssh/desk03_known_hosts`.
     **Check:** step 12's first command connects.
@@ -195,10 +195,10 @@ Tell the person what they will do on websites and in the password manager:
 
 ## Set up the replacement desk
 
-13. **Bootstrap:** run chapter 2's step 4 with `desk_name=desk03`.
-    **Check:** chapter 2's step 4 lists how the bootstrap run can end and
+13. **Bootstrap:** run chapter 3's step 4 with `desk_name=desk03`.
+    **Check:** chapter 3's step 4 lists how the bootstrap run can end and
     what to do for each ending.
-14. **Set up the phone code,** as chapter 2's step 5 says: the person logs
+14. **Set up the phone code,** as chapter 3's step 5 says: the person logs
     in with `ssh desk03`, runs `set-up-the-phone-code`, and saves the
     confirmed secret in the password manager.
     **Check:** `set-up-the-phone-code` says "Your phone code is ready.",
@@ -280,7 +280,7 @@ Tell the person what they will do on websites and in the password manager:
 
     The command sees that the repository at the Git host has commits, so
     it joins it, as
-    [chapter 2's "Finish the systems repository on the desk"](../initial_setup/02_set_up_the_laptop_and_the_systems_desk.md#finish-the-systems-repository-on-the-desk)
+    [chapter 3's "Finish the systems repository on the desk"](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard)
     describes. It keeps the laptop copy's edits in `git stash`.
     **Check:** the command names `main`'s newest commit and its signer,
     `blair on desk03`. The person compares the commit with step 19's ID.
@@ -300,7 +300,7 @@ Tell the person what they will do on websites and in the password manager:
     apply.
     **Check:** the command goes on to the coding agent's checkout and ends
     without "Stopped:".
-23. **The person brings the provider token to the desk,** as chapter 2's
+23. **The person brings the provider token to the desk,** as chapter 3's
     "Bring the provider token to the desk" says.
     **Check:** `set-up-outside-services` checks the token with the
     provider's server listing, and saves only a token that passed.
@@ -376,9 +376,9 @@ Tell the person what they will do on websites and in the password manager:
     and `git -C ~/example_systems stash drop`.
     **Check:** `git -C ~/example_systems stash list` no longer shows the
     entry "Changes before joining main at …" that step 20 made.
-31. **Complete chapter 2's laptop cleanup,** including temporary
+31. **Complete chapter 3's laptop cleanup,** including temporary
     provider-tool credential stores.
-    **Check:** the checks in chapter 2's "Recovery items and laptop
+    **Check:** the checks in chapter 3's "Recovery items and laptop
     cleanup".
 32. **Record the recovery in `systems_desk_recovery`,** in the checklist,
     `monkeymaxxing_stack_checklist.yml`.

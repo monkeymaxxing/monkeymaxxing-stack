@@ -320,7 +320,7 @@ items:
       test or build tools of its own (tests and builds run in containers).
       The details of the desk's login protections, such as the refusal of a
       reused code, are in the optional check of the system's protections.
-    waits_for: chapter 2 (set up your laptop and your systems desk), then chapter 7 (install everything on the production servers) for monitoring enrollment, then the real access and cleanup checks
+    waits_for: chapter 3 (make your server account and your systems desk), then chapter 7 (install everything on the production servers) for monitoring enrollment, then the real access and cleanup checks
 
   - id: systems_desk_recovery_items_saved
     title: The recovery items are in the team password manager
