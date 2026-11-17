@@ -120,7 +120,8 @@ the first five answers below on real servers:
   only from your team's systems desks and from the utility server. An
   intruder in your app cannot delete or change the stored backups.
 - **Recorded.** Every change to the servers is a commit to your systems
-  repository, a Git repository at your own Git host. Your coding agent can
+  repository, a Git repository on your own utility server, with a backup
+  at your Git host. Your coding agent can
   build the servers again from the systems repository and the backups.
 - **Scalable.** The system grows by tested procedures that your coding
   agent follows, such as "Add an app server". Each procedure waits for its

@@ -497,8 +497,9 @@ does, and no chapter needs a fact or an account from a later one.
   Chapter 1 (answer two questions) also starts the domain's move to Cloudflare, the slowest wait of
   the day, which needs the password manager and the Cloudflare account
   first.
-- Chapter 3 (make your server account and your systems desk) gives the systems repository its home at the Git host, because
-  chapter 2 (get your app ready to deploy) records image tags in the repository.
+- Chapter 3 (make your server account and your systems desk) makes the systems repository's private backup at the
+  Git host, and the desk's checkout becomes the team's main copy until chapter 7 moves it to `util01`
+  ([The main copy of the systems repository](#the-main-copy-of-the-systems-repository)).
 - Chapter 2 (get your app ready to deploy) only names the app's R2 bucket. Chapter 4 (set up your accounts and lock your desk) creates the app's R2 bucket
   as part of setting up the accounts at other companies. Chapter 4 also makes
   the status page's bucket and R2 key, so every key of the Cloudflare account
@@ -660,6 +661,37 @@ settings. Documentation-only commits need no MMX run.
 
 Reason: the team's coding agent owns each change and verifies the result.
 A Git host cannot start a server change merely by accepting a push.
+
+### The main copy of the systems repository
+
+The team's main copy of the systems repository is a bare repository on `util01`,
+`systems_repository.main_copy_path_on_util01`, owned by root and closed to every other user. Desks push to it and
+pull from it as root over WireGuard, and `util01`'s `mmhotline` user as `root@127.0.0.1`, with the keys in
+`root_ssh_public_keys`. So the same list decides who has root on the servers and who can change the repository,
+and no desk or server key is registered at the Git host. A separate Git account on `util01` would protect nothing,
+because every key that could push already has root there, and it would be shut out with the rest during a lock-out.
+The repository refuses a force push and a branch deletion (`receive.denyNonFastForwards`,
+`receive.denyDeletes`), and keeps a reflog of every change to `main` (`core.logAllRefUpdates`). With `util01`'s
+sshd journal, which names each root login's key, the reflog says which key pushed each change.
+
+Before `util01` exists, the first desk's checkout is the main copy: it has no `origin`, `sign-and-publish` ends at
+the fast-forward of its `main`, and the vault commands commit there. The `util_server` role makes the empty bare
+repository, MMHotline's clone step skips it while it is empty, and the desk pushes `main` to it after the first run
+and makes it `origin` (chapter 7). The desk's own readers, the button, the WireGuard peers command, the desk review
+and the lock-out button, read pushed `main` from the coding agent's checkout, `origin/main` when it has an origin
+and its own `main` before, so they work before `util01` exists and while it is lost; the desk review and the
+lock-out button first fetch `origin` into the checkout as the coding agent. The WireGuard peers command must read
+the checkout, not `util01`: a rebuilt `util01`'s new WireGuard key is what lets the desk reach it.
+
+The Git host keeps a private backup, `systems_repository.backup_url_at_the_git_host`, which the laptop's coding
+agent pushes with the person's own login. Nothing reads from it, so a break-in at the Git host reaches no server.
+A refused backup push shows commits made at the Git host; a restore from it, only when every other copy is gone,
+first checks the Git host's push activity.
+
+The one accepted loss: when `util01` is lost, commits that only `util01` had since a desk last pulled, such as the
+triage agent's newest notes or a server replacement's inventory commit, are lost with it. The rebuilt `util01`
+gets `main` from a desk. Reason: the case is rare, and a failing run or a leftover server makes the gap visible, so
+no mechanism copies `util01`'s commits elsewhere.
 
 ### Where each command runs
 
@@ -1208,7 +1240,7 @@ commands, real Git, and real `mmx validate`.
   from its first boot, so a desk reaches it after
   `update-this-desks-wireguard-peers`.
 - **The commit comes from the playbook's own clone,** a `git clone --local`
-  of `util01`'s copy with `origin` set to the Git host, at `origin/main`,
+  of `util01`'s copy with `origin` set to the main copy on `util01`, at `origin/main`,
   never in `/var/lib/mmhotline/systems_repository`, which MMHotline keeps
   at the judged commit. The inventory edit replaces the failed node's
   block with the new one, with `server_type` and `location`, and the name
@@ -2182,10 +2214,9 @@ vars:
   triage_ssh_public_key: ssh-ed25519 AAAA... util01, the triage agent
   util01_private_page_host_names:           # each behind Cloudflare Access, through util01's own tunnel
     mmhotline: ops.example.com
-  systems_repository:                       # where util01 clones, pulls, and pushes
-    ssh_url: git@github.com:example/systems.git
-    git_host_ssh_known_hosts_lines:
-      - github.com ssh-ed25519 AAAA...
+  systems_repository:                       # the main copy on util01, and the backup at the Git host
+    main_copy_path_on_util01: /var/lib/systems_repository.git   # the team's main copy, root-owned, on util01
+    backup_url_at_the_git_host: https://github.com/example/example_systems.git   # pushed from the laptop, never read
   stack_software:                           # releases from outside the distribution, each pinned
     mmx: {version: "0.1.0", download_url: "...", sha256: "..."}
     mmwatchdog: {version: "0.1.0", download_url: "...", sha256: "..."}
@@ -4035,8 +4066,9 @@ node tasks in the playbook,** for two reasons:
 The early install has everything it needs: `every_server` set up the
 WireGuard address; `util_server` made the `mmhotline` user, group, and
 home, installed the triage agent, and attempted the systems repository's
-clone. The clone happens once the Git host accepts the SSH key of the
-`mmhotline` Linux account on `util01`. The alert listener needs no systems
+clone. The clone happens once a desk pushed `main` to the main copy on
+`util01`, and root there accepts the SSH key of the `mmhotline` Linux
+account. The alert listener needs no systems
 repository clone, but the restore drill waits for the clone.
 The `mmhotline` stage writes Litestream's backup settings and restores
 MMHotline's own SQLite database before the install can start it, then
@@ -5714,7 +5746,7 @@ the lock-out button shares the pull but goes on without it.
 ### The desk bootstrap: the agent writes, the person runs one command
 
 The laptop's coding agent writes every final value of the systems repository before the copy to the
-desk: the project, the schedule, the Git host and its verified keys, the provider address, and
+desk: the project, the schedule, the backup address at the Git host, the provider address, and
 `desk01`'s keys and addresses. Only the bootstrap connection differs, and only in the laptop's own copy,
 which the chapter clears: MMX reads how it connects from the inventory and `ssh/desk01`, not from
 `--var`, so the laptop's copy points `desk01` at its WireGuard address and laptop key while the desk's
@@ -5729,10 +5761,10 @@ the production key through the person's private socket, which the coding agent n
 person new to servers typing a dozen Git and file commands by hand is a dozen chances for a wrong setting.
 
 A desk that joins a team's existing repository, a new member's or a rebuilt one, runs the same command. It needs
-no option: an empty repository at the Git host is a new team's, and a `main` there, which always holds the vault,
+no option: an empty main copy is a new team's, and a `main` there, which always holds the vault,
 is one to join; a rerun on the first desk after its push takes the joining form too, so only an empty repository
 ever gets a new vault passphrase. Before anything from the fetched `main` is used, the command checks that it is
-this team's repository (`project_name` and `systems_repository.ssh_url`), that it lists this desk in
+this team's repository (`project_name`), that it lists this desk in
 `systems_desks` with this desk's production key in `root_ssh_public_keys` and `production_ssh_public_key`, and
 that its newest commit is signed by a key in that `root_ssh_public_keys`, as `util01` checks before its timers
 run a commit. It names the commit and its signer, which the person compares with what the team member who pushed
@@ -5759,7 +5791,7 @@ is rebuilt, each other desk's file follows at that desk's next desk review, whic
 procedures ask for. The command's own check of a fetched `main` does not read this file: it checks `main` against
 the keys in `main` itself, before anything from it is trusted.
 The person's own steps that remain are the ones only the person can do: scanning the phone code,
-creating the empty repository and registering the deploy key at the Git host, pasting the provider token,
+pasting the provider token,
 approving the first desk review, and starting the coding agent with the person's subscription.
 After inventory changes, the coding agent's `sudo -n update-this-desks-wireguard-peers` refreshes the desk's server peers in `wg0`.
 

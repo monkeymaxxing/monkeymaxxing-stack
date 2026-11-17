@@ -97,7 +97,9 @@ The contracts below state the required outcomes for changes to the stack.
   The laptop clears temporary bootstrap files and retains app work and desk-only login configuration.
   Phone, laptop, desk, and status-posting recovery procedures name the required independent account access.
   A lost laptop's recovery replaces the personal provider token the laptop held during setup. A person's leaving
-  deletes the departing desk's write deploy key at the Git host.
+  removes the departing desk's key from `root_ssh_public_keys`, which also ends its push rights to the main copy of
+  the systems repository on `util01`. No desk or server key is registered at the Git host, which keeps only a backup
+  that the laptop pushes and nothing reads.
   The person's provider token goes only to a provider guide's API address. Shown recovery values are cleared
   from the desk terminal, and the person checks the laptop's terminal or Rex for a copy.
   Production servers retain account-owned tokens; only a person's desk holds personal tokens.
