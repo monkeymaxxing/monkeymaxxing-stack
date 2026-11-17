@@ -391,7 +391,7 @@ using the term in the team's documentation.
 | Caddy | The web server on each app server. Caddy takes the requests from the tunnel and spreads the requests over the app's web containers on every app server. |
 | Container image | The app, packaged with the software it needs, so it runs the same everywhere. |
 | Image tag | The name of one image version. In the Monkeymaxxing Stack, the image tag is the full app commit (40 hexadecimal characters) that the image was built from. |
-| CI | The Git host's automated service. CI, which the Stack recommends, runs the app's tests, builds the container image, and pushes the image to a registry. The coding agent deploys the image. Without CI, the coding agent tests and builds inside a container on the systems desk, and pushes the image. |
+| CI | The Git host's automated service. CI, which the Stack recommends, runs the app's tests, builds the container image, and pushes the image to a registry. The coding agent deploys the image. Without CI, the coding agent tests and builds inside a container on the laptop, and pushes the image with the person's registry login. |
 | Registry | The service that stores the app's container images, such as GitHub's. |
 | Release or deploy | Putting a new app version live. util01 starts the new version beside the old version on the environment's app servers. util01 switches the requests after the new version's health check passes. |
 | Worker | A running copy of the app's program that handles requests or background tasks. |

@@ -160,7 +160,7 @@ receiving requests until MMX applies the setting in step 4.
       `mmwatchdog check-now tunnel_connector_and_caddy` exits 0.
       Tell the person on call: `util01`'s fleet hub warns when a
       load-balancer server goes silent.
-   2. On the systems desk, ask each app's health URL at its public host name
+   2. On the laptop, ask each app's health URL at its public host name
       1,200 times, once a second, which takes 20 minutes or a little more,
       long enough to cover both shut-downs and restarts below,
       counting the answers by status, such as

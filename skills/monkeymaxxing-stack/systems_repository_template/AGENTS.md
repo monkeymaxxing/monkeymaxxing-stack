@@ -118,7 +118,18 @@ phone code opens a working session, and every later command reuses the
 connection. The desk closes the connection after one hour unused
 (`coding_agent_login_idle_minutes` in `mmx_project_settings.yml`) and after ten
 hours at most (`coding_agent_login_longest_hours`). Both are settings, with
-their reasons beside them.
+their reasons beside them. A command that prints nothing and reads nothing
+for the idle hour is closed too.
+
+Everything you start in the login ends with the login: a program you leave
+running, in the background or in your own systemd, stops when the
+connection closes. A run that must outlive the login is a desk job
+([Making a change](#making-a-change)). Your account on the desk reaches
+only the desk itself and the servers over WireGuard: run a request to a
+public address, such as an app's health URL at its public host name, on
+the laptop. Reason: while the login is open, any program on the laptop can
+use it, and nothing it starts may keep your powers after the login ends,
+or send what it reaches to an outside host.
 
 When the connection is closed, `ssh -O check desk01-agent` says so. Ask the
 person for one code in the chat, in one short message:
@@ -519,27 +530,35 @@ each change, because only the desk holds the production key that lets a push int
    Commit the results, and publish them with steps 2 to 4. Report the outcome using [Talking with the team](talking_with_the_team.md).
 
 **A run longer than a few minutes is a desk job,** so the laptop may sleep
-and the connection may close without stopping the run. Start the run with
-`systemd-run --user`, with a log file and an exit file named after the run:
+and the connection may close without stopping the run. Start it with
+`sudo -n start-a-desk-job NAME -- COMMAND ARGUMENTS`, where NAME names the
+run, in lowercase letters, digits and `-`:
 
 ```sh
 # On the laptop. NAME: the run's name, such as every-server-2026-11-17-1405.
-ssh desk01-agent 'mkdir -p ~/runs && systemd-run --user --unit=NAME --collect bash -c "cd ~/systems_repository && sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only > ~/runs/NAME.log 2>&1; echo \$? > ~/runs/NAME.exit"'
+ssh desk01-agent 'cd systems_repository && git pull --ff-only && sudo -n start-a-desk-job NAME -- run-mmx-on-the-servers run every_server --connection ssh_only'
 ```
 
-A desk job does not get the two values sshd sets for your logins, because
-`systemd-run --user` starts it in your own systemd, not in the login. A
-job that pushes with Git, such as a `git push` from your checkout, passes
-both, right after `systemd-run --user`
-(`publish-branch-to-main` sets them itself):
-`-E SSH_AUTH_SOCK=/run/desk-ssh-agent/socket -E GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig`.
-Without them, Git cannot reach the main copy on `util01`.
+A desk job runs one of these, and the command refuses anything else:
 
-Read `~/runs/NAME.log` for progress. The run is over when
-`~/runs/NAME.exit` exists, and the file holds the run's exit code. After a
-closed connection, ask the person for one code, as "Your login on the desk"
-says, then read the two files. Never start a run again only because the
-connection closed: read the exit file first.
+- `run-mmx-on-the-servers` with `run`, `dryrun`, `resume` or `run-command`
+  and its usual arguments: your MMX button, as `servers-mmx`.
+- `run_mmx_on_util01` with `run`, `dryrun`, `resume` or `run-command`
+  and its usual arguments: `./server_management_scripts/run_mmx_on_util01`
+  from the desk's checkout. Pull first, as the helper needs.
+- `publish-branch-to-main BRANCH`.
+
+Run every other command, such as `status`, `results` or `validate`, in
+your login. The job writes its output to `~/runs/NAME.log`. The job is over
+when `~/runs/NAME.exit` exists; the file holds the run's exit code, or a
+line that starts with `stopped:` when the desk ended the job. The desk ends
+a desk job after `coding_agent_login_longest_hours` (ten hours). After a
+closed connection, ask the person for one code, as "Your login on the
+desk" says, then read the two files. Never start a run again only because
+the connection closed: read the exit file first. A name that was used
+before is refused, so give each run a new name.
+Reason: the desk runs only the Stack's own runs after your login ends, so
+a program on the laptop cannot leave a job behind that keeps your powers.
 
 To update MMHotline's dashboard after a checklist-only change, run
 `./server_management_scripts/run_mmx_on_util01 validate`.

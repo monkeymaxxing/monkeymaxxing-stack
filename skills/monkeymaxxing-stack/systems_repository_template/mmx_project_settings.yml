@@ -124,10 +124,18 @@ vars:
   #   coding_agent_login_idle_minutes: after this many minutes with no
   #     command. Reason for 60: a lunch break or a short sleep of the laptop
   #     keeps the login, and a laptop left alone loses it within the hour.
+  #     The desk also closes any SSH command on it that sends and receives
+  #     nothing this long, the person's and the desk review's included
+  #     (roles/systems_desk/files/sshd.conf says why). The minimum is 30,
+  #     and the desk review refuses less: a desk review's quietest task, the
+  #     first security updates, may take 30 minutes, and a shorter time
+  #     would cut the desk review off.
   #   coding_agent_login_longest_hours: after this many hours, used or not.
   #     Reason for 10: one working day, so each day starts with a new code.
+  #     A desk job (start-a-desk-job) also ends after this many hours, so
+  #     nothing the coding agent starts outlives the longest login.
   # The next command after either end needs one new phone code. Both are
-  # whole numbers of at least 1.
+  # whole numbers: the idle minutes 30 or more, the longest hours 1 or more.
   coding_agent_login_idle_minutes: 60
   coding_agent_login_longest_hours: 10
   # The public-address checks (MMWatchdog's public_sites check group on

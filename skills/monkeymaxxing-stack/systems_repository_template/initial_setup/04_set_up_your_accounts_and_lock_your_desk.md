@@ -185,7 +185,7 @@ domain at Cloudflare, its DNS records, and the lock.
      (step 7's check), as "Making a change" in
      [`AGENTS.md`](../AGENTS.md#making-a-change) says. Reason: `go-live`
      saves keys in the vault of the desk's checkout and commits them only
-     later, and `sign-and-publish` refuses a checkout with changes that
+     later, and `publish-branch-to-main` refuses a checkout with changes that
      are not committed.
    - Check the scan's records through the proxy at
      `http://127.0.0.1:8082/` on the desk. Read the current records with
@@ -448,7 +448,7 @@ domain at Cloudflare, its DNS records, and the lock.
    **Check:** the results file shows the recovery passphrase and the phone
    code done and `finished: true`, and `main` in the desk's checkout holds
    `recovery_bundle.age`. Then publish the settings you committed in
-   steps 3 to 6 with `sign-and-publish`.
+   steps 3 to 6 with `publish-branch-to-main`.
 
    **Push the first backup to the Git host,** from the laptop, with the
    person's own Git login, as "The main copy and the backup at the Git host" in

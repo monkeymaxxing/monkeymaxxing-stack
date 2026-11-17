@@ -302,9 +302,11 @@ coding agent, from the first unknown session on.
   records and Access policies with the team's records.
 - **The registry:** the servers deploy each image by its tag, and pull an image only when the server lacks it.
   So an image that the intruder pushed under an existing tag reaches only a new or replaced server.
-  Replace the [registry credentials](rotate_a_secret.md#the-container-registry-token). Compare the registry's tags
-  with `deployed_image_tags` in `inventories/servers.yml`. Build the image again from the reviewed source, push the image
-  under a new tag, and deploy the new tag, before a server is added or replaced.
+  Replace the [registry credentials](rotate_a_secret.md#the-container-registry-token). Compare the registry's tags,
+  on the registry's package page that the person opens signed in, or with `gh` when it is signed in on the laptop,
+  with `deployed_image_tags` in `inventories/servers.yml`. Build the image again from the reviewed source, in CI or,
+  without CI, in a container on the laptop, push the image under a new tag, and deploy the new tag, before a server is
+  added or replaced.
 - **The password manager or the identity provider** holds the recovery logins and the recovery passphrase, which
   opens the recovery bundle: the first desk's production and WireGuard keys, and the vault passphrase. So every kept credential is suspect: go to
   [The lock-out: only for these cases](#the-lock-out-only-for-these-cases). The person changes the master password

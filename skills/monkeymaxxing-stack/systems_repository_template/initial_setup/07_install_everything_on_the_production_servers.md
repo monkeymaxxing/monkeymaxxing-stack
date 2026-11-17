@@ -30,7 +30,7 @@ chapter.
   give the full text only when the person asks. Use each step's links and
   names.
 - **Every run of more than a few minutes is a desk job,** with
-  `systemd-run --user`, a log file and an exit file, as "Making a change"
+  `sudo -n start-a-desk-job`, a log file and an exit file, as "Making a change"
   in [`AGENTS.md`](../AGENTS.md#making-a-change) says. So the laptop may
   sleep during the runs.
 - **Every MMX run in this chapter uses the systems desk's button,**
@@ -242,7 +242,7 @@ chapter.
 
    The desk logs in to `util01` as root with its production key, and
    trusts the host key that chapter 6 committed in `ssh/known_hosts`. From
-   now on `sign-and-publish` pushes there, the desk's commands read pushed
+   now on `publish-branch-to-main` pushes there, the desk's commands read pushed
    `main` as the checkout last fetched it from there, and MMHotline's copy on `util01` clones from it in
    run 2. The laptop's clone keeps the desk as its `origin`.
 
@@ -267,7 +267,7 @@ chapter.
    - **The triage agent's key,** from `util_server/ssh_key_of_the_triage_agent`,
      as `triage_ssh_public_key`: it logs in as the read-only `triage` user.
 
-   Commit and publish with `sign-and-publish`, which now pushes to the
+   Commit and publish with `publish-branch-to-main`, which now pushes to the
    main copy on `util01`.
 
    **Tell the person after:** no message, because the next step starts

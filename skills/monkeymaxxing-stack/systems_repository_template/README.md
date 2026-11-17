@@ -455,5 +455,6 @@ Your laptop still holds the credentials for your app's code, such as your
 Git login. If a program you do not trust ran on your laptop, follow the
 laptop procedure above: it replaces those credentials and your desk. The
 credential that publishes your app's image is not on the laptop: it is
-GitHub's own short-lived token inside your CI, or, for a team without CI, a
-login on your systems desk.
+GitHub's own short-lived token inside your CI, or, for a team without CI,
+your own registry login, which the coding agent uses on your laptop only
+for that push.

@@ -1,0 +1,85 @@
+#!/bin/bash
+# Starts one of the Stack's own long runs as a desk job, which keeps running
+# after the coding agent's login ends. The coding agent runs, on the desk:
+#     sudo -n start-a-desk-job NAME -- COMMAND ARGUMENTS
+# It starts only these runs:
+#     run-mmx-on-the-servers MMX_COMMAND ...  the MMX button, as servers-mmx
+#     run_mmx_on_util01 MMX_COMMAND ...       server_management_scripts/run_mmx_on_util01
+#                                             in the desk's checkout, as coding-agent
+#     publish-branch-to-main BRANCH           as coding-agent
+# MMX_COMMAND is run, dryrun, resume or run-command; the shorter MMX
+# commands run in the login. Anything else is refused, and nothing starts.
+# The job is a root-owned systemd unit, desk-job-NAME.service. It writes
+# its output to /home/coding-agent/runs/NAME.log, and, when it ends, its
+# exit code to /home/coding-agent/runs/NAME.exit. The desk stops a job that
+# runs longer than coding_agent_login_longest_hours.
+# Reason: the coding agent's own processes end with its login (no
+# lingering; logind ends the login's processes), so a program on the laptop
+# cannot leave behind a job that keeps the coding agent's powers. Only
+# these runs outlive the login, and none outlives the longest login.
+# The unit runs this file again as coding-agent, with --run-the-job and
+# --record-the-end; both refuse to run as root.
+set -euo pipefail
+export PATH=/usr/local/bin:/usr/bin:/bin
+runs=/home/coding-agent/runs
+# coding_agent_login_longest_hours in mmx_project_settings.yml.
+longest_hours={{ .inputs.coding_agent_login_longest_hours }}
+refuse() { printf '%s Nothing started.\n' "$1" >&2; exit 64; }
+mmx_commands='run, dryrun, resume or run-command'
+is_a_long_mmx_command() { case "${1:-}" in run|dryrun|resume|run-command) return 0;; *) return 1;; esac; }
+
+case "${1:-}" in
+    --run-the-job)
+        [ "$(id -u)" != 0 ] || refuse 'start-a-desk-job --run-the-job runs only inside a desk job.'
+        name=$2; shift 2
+        mkdir -p -- "$runs"
+        exec "$@" > "$runs/$name.log" 2>&1 < /dev/null;;
+    --record-the-end)
+        [ "$(id -u)" != 0 ] || refuse 'start-a-desk-job --record-the-end runs only inside a desk job.'
+        name=$2
+        # systemd sets these for ExecStopPost.
+        if [ "${EXIT_CODE:-}" = exited ]; then
+            printf '%s\n' "$EXIT_STATUS" > "$runs/$name.exit"
+        else
+            printf 'stopped: the desk ended the job (%s, %s %s). A job runs %s hours at most.\n' \
+                "${SERVICE_RESULT:-unknown}" "${EXIT_CODE:-}" "${EXIT_STATUS:-}" "$longest_hours" > "$runs/$name.exit"
+        fi
+        exit 0;;
+esac
+
+usage='Usage: sudo -n start-a-desk-job NAME -- COMMAND ARGUMENTS, where COMMAND is run-mmx-on-the-servers, run_mmx_on_util01 or publish-branch-to-main.'
+[ "$#" -ge 3 ] && [ "$2" = -- ] || refuse "$usage"
+name=$1; command=$3; shift 3
+[[ "$name" =~ ^[a-z0-9][a-z0-9_-]{0,63}$ ]] ||
+    refuse "The job name $name may hold only lowercase letters, digits, - and _, such as every-server-2026-11-17-1405."
+case "$command" in
+    run-mmx-on-the-servers)
+        is_a_long_mmx_command "${1:-}" ||
+            refuse "run-mmx-on-the-servers starts as a desk job only with $mmx_commands first; run other MMX commands in your login."
+        program=(sudo -n -u servers-mmx /usr/local/bin/run-mmx-on-the-servers "$@");;
+    run_mmx_on_util01)
+        is_a_long_mmx_command "${1:-}" ||
+            refuse "run_mmx_on_util01 starts as a desk job only with $mmx_commands first; run other MMX commands in your login."
+        program=(/home/coding-agent/systems_repository/server_management_scripts/run_mmx_on_util01 "$@");;
+    publish-branch-to-main)
+        [ "$#" = 1 ] && [[ "$1" != -* ]] ||
+            refuse 'publish-branch-to-main takes one argument as a desk job: the branch you pushed.'
+        program=(/usr/local/bin/publish-branch-to-main "$1");;
+    *)
+        refuse "start-a-desk-job starts only run-mmx-on-the-servers, run_mmx_on_util01 and publish-branch-to-main, by those names, not $command.";;
+esac
+for file in "$runs/$name.log" "$runs/$name.exit"; do
+    [ ! -e "$file" ] && [ ! -L "$file" ] ||
+        refuse "A desk job named $name already ran: read $runs/$name.log and $runs/$name.exit, or choose a new name."
+done
+unit=desk-job-$name
+systemd-run --quiet --collect --unit="$unit" --description="Desk job $name: $command" \
+    --uid=coding-agent --gid=coding-agent --working-directory=/home/coding-agent \
+    --setenv=SSH_AUTH_SOCK=/run/desk-ssh-agent/socket \
+    --setenv=GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig \
+    --property=RuntimeMaxSec="${longest_hours}h" \
+    --property="ExecStopPost=/usr/local/bin/start-a-desk-job --record-the-end $name" \
+    -- /usr/local/bin/start-a-desk-job --run-the-job "$name" "${program[@]}" ||
+    refuse "systemd did not start $unit (a job with that name may be running: systemctl status $unit)."
+printf 'Started the desk job %s. Read %s/%s.log for progress; the job is over when %s/%s.exit exists.\n' \
+    "$name" "$runs" "$name" "$runs" "$name"
