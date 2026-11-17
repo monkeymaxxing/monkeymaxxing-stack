@@ -315,7 +315,6 @@ items:
       the person's loopback self-management works; the desk reports to
       MMWatchdog; the laptop's temporary repository, MMX, provider token,
       provider CLI credentials, and first-boot payload are cleared;
-      the desk has a read-only clone of the app with its own read-only deploy key;
       without CI, the desk also has a registry publishing login, and no app
       test or build tools of its own (tests and builds run in containers).
       The details of the desk's login protections, such as the refusal of a
@@ -392,8 +391,8 @@ items:
     part: setup
     protects_against: losing the system's history and settings, and app servers that pull images with a token that could also push
     verification: >-
-      the systems repository and each app's repository are private on the
-      Git host; the person sees on the Git host's token page, such as
+      the systems repository's backup and each app's repository are private
+      on the Git host, and the backup holds main of the main copy on util01; the person sees on the Git host's token page, such as
       https://github.com/settings/tokens, that the servers' registry token
       has read:packages and no other scope, so it cannot push; and the first
       every_server run in chapter 7 pulled each app's image on app001 with
@@ -962,8 +961,7 @@ items:
       manager, vault access, and their MMHotline person and contact methods
       (their entry in mmhotline_settings.yml's people, and their own contact
       methods on MMHotline's page); and the offboarding checklist reversed
-      each step for a person, deleted the departing desk's write deploy key on the
-      systems repository at the Git host, deleted the departing desk by verified provider ID,
+      each step for a person, deleted the departing desk by verified provider ID,
       revoked personal tokens, and removed the departing desk's peers
       in the SSH-key removal commit, rotated the secrets the person could
       read and the shared root console password, and changed the vault

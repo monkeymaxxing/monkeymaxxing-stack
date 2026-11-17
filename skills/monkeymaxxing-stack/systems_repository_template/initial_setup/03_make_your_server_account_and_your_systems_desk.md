@@ -8,13 +8,14 @@ provider and one key there. You build the person's systems desk,
 `desk01`, with that key: a small server of the person's own, in another
 location than production. The desk is a locked key box. It holds the
 production key, the vault and the person's tokens. You use them through
-the desk, and you can never copy them. At the end, the desk's key is
-registered at the Git host.
+the desk, and you can never copy them. At the end, the desk's checkout
+is the team's main copy of the systems repository, until `util01` holds
+it from chapter 7 on.
 
-**Who acts:** the person makes the provider account, types the key into
-one short command on the laptop, and adds one key at the Git host. You do
-everything else: the laptop's keys and SSH settings, the systems
-repository at the Git host, the desk, and its whole setup.
+**Who acts:** the person makes the provider account and types the key
+into one short command on the laptop. You do everything else: the
+laptop's keys and SSH settings, the private backup repository at the Git
+host, the desk, and its whole setup.
 
 **Tell the person when the chapter starts:** no separate message. The
 account screen of step 1 is the opening.
@@ -82,9 +83,14 @@ account screen of step 1 is the opening.
 
    **Check:** `~/example-setup/provider-key` exists, mode `0600`.
 
-2. **The systems repository at the Git host.** Make an empty private
-   repository, `example_systems`, at the app's Git host and owner from
-   chapter 2. With `gh` signed in:
+2. **The backup repository at the Git host.** The team's main copy of
+   the systems repository lives on the team's own machines: the desk's
+   checkout first, then `util01` from chapter 7. The Git host keeps a
+   private backup copy, which you push from the laptop with the person's
+   own login ("The main copy and the backup at the Git host" in
+   [`AGENTS.md`](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host)). Make an empty
+   private repository, `example_systems`, at the app's Git host and owner
+   from chapter 2. With `gh` signed in:
 
    ```sh
    # On the laptop:
@@ -95,29 +101,24 @@ account screen of step 1 is the opening.
    already filled in:
 
    ```text
-   One more page: a private home for your systems repository at GitHub.
+   One more page: a private backup of your systems repository at GitHub.
 
    Do this now:
      1. Open  https://github.com/new?owner=OWNER&name=example_systems&visibility=private
      2. Press  Create repository.
    ```
 
-   The deploy key check, in step 5 of "Create desk01 through WireGuard",
-   proves later that the repository exists.
-
-   Set `systems_repository.ssh_url` in `mmx_project_settings.yml`, such
-   as `git@github.com:OWNER/example_systems.git`, and
-   `git_host_ssh_known_hosts_lines` to the Git host's published SSH host
-   keys, such as
-   [GitHub's SSH key fingerprints](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints).
-   Never take them from `ssh-keyscan` alone. Remove the example `util01`
-   key from `root_ssh_public_keys` until chapter 7 registers the real key.
+   Set `systems_repository.backup_url_at_the_git_host` in
+   `mmx_project_settings.yml`, such as
+   `https://github.com/OWNER/example_systems.git`. No key of the desk or
+   of a server goes to the Git host. Remove the example `util01` key from
+   `root_ssh_public_keys` until chapter 7 registers the real key.
 
    **Tell the person:** no message with `gh`. You made the repository.
 
-   **Check:** with `gh`, `gh repo view OWNER/example_systems --json visibility`
-   says `PRIVATE`. Without `gh`, step 5 of "Create desk01 through
-   WireGuard" checks the repository.
+   **Check:** `gh repo view OWNER/example_systems --json visibility` says
+   `PRIVATE`. Without `gh`, the first backup push in chapter 4 checks the
+   repository.
 
 3. **The provider scripts and the locations.** Write the provider scripts
    into `server_management_scripts/` of the laptop's copy, from the guide
@@ -396,10 +397,10 @@ repository's name, including paths inside quoted SSH commands.
    say in one line what the run is doing now and that the person still
    has nothing to do.
 
-   **Tell the person after:** step 5's screen.
+   **Tell the person after:** chapter 4's first screen.
 
    The run's normal end prints `The desk is ready.` and the production
-   public key for the Git host. When the run ends with an error such as
+   public key. When the run ends with an error such as
    "node busy with job …" or a lost connection, the desk carries on with
    the job by itself. Wait two minutes and run the same command again.
    "node busy" again means the desk is still at work, so wait once more.
@@ -407,66 +408,6 @@ repository's name, including paths inside quoted SSH commands.
    **Check:** the run printed `The desk is ready.`, the key's move
    succeeded and the laptop file `~/example-setup/provider-key` is gone,
    and `ssh desk01-agent true` logs in as `coding-agent` with no code.
-
-5. **The desk's key at the Git host.** The desk pushes the systems
-   repository with its production key, so the Git host must know the key
-   as a deploy key with write access. Never add the key with `gh`: GitHub
-   deletes a deploy key when the login that added it is revoked, so the
-   desk would lose its access later without a sign.
-
-   First check that the repository's owner allows deploy keys. A personal
-   account always allows them. For an organization, with `gh`, read
-   `gh api orgs/OWNER --jq .deploy_keys_enabled_for_repositories`.
-   When the answer is `false`, or when you cannot tell, keep the screen's
-   "If GitHub says" lines.
-
-   **Ask the person,** with the key from the bootstrap's end, on its own
-   line:
-
-   ```text
-   Your desk is built.  One key for GitHub, so your desk can save your systems repository there.
-
-   What this is for:
-     Your desk saves every change to your servers in your systems repository at GitHub.
-     GitHub lets the desk in with this key.
-
-   Do this now:
-     1. Open  https://github.com/OWNER/example_systems/settings/keys/new
-     2. Title:  desk01
-     3. Key:  paste this line.
-
-          ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyOnlyForThisGuideXXXXXXXXXXXXXXX desk01
-
-     4. Tick  Allow write access.
-     5. Press  Add key.
-
-   If GitHub says deploy keys are disabled:
-     Open  https://github.com/organizations/OWNER/settings/deploy_keys
-     Choose  Enabled,  press  Save,  then go back to step 1.
-
-   I see the key from here as soon as you press Add key.
-   ```
-
-   Check every 20 seconds, from the desk, that the key opens the
-   repository:
-
-   ```sh
-   # On the laptop:
-   ssh desk01-agent 'git -C systems_repository ls-remote origin'
-   ```
-
-   Once it answers, push the desk's first commit, once, before any
-   `sign-and-publish`:
-
-   ```sh
-   # On the laptop:
-   ssh desk01-agent 'cd systems_repository && git push -u origin main'
-   ```
-
-   **Tell the person after:** no message, because chapter 4's first
-   screen follows at once.
-
-   **Check:** the Git host shows the first commit on `main`, signed.
 
 ## Update the desk's production peers
 
@@ -590,8 +531,8 @@ already, so storing the passphrase inside the vault exposes nothing.
 - **A provider network overlaps `vars.wireguard_network`** ("The provider
   account", step 3): choose a free private /16 and update every inventory
   address together.
-- **The systems repository at the Git host has commits** ("Create desk01
-  through WireGuard", step 4), as for a new team member's desk
+- **The team's systems repository already exists on `util01`** ("Create
+  desk01 through WireGuard", step 4), as for a new team member's desk
   ([Add or remove a team member](../operating_procedures/add_or_remove_a_team_member.md))
   or a rebuilt desk
   ([Rebuild a systems desk](../operating_procedures/rebuild_a_systems_desk.md)):
@@ -613,9 +554,12 @@ A team can make a narrower second key for `util01` later.
 still works, so you do every desk step yourself. The lock in chapter 4
 closes root SSH and adds the phone code.
 
-**The person adds the deploy key on GitHub's page.** A deploy key added
-with `gh` disappears when that `gh` login is revoked. A key the person
-adds on the page stays.
+**No key at the Git host for the desk or the servers.** The team's main
+copy of the systems repository is on the team's own machines, and the
+desk and `util01` reach it with the root SSH they already have. So the
+person registers no deploy key, and a break-in at the Git host reaches no
+server. The Git host keeps a backup that the laptop pushes with the
+person's own login, and nothing reads from it.
 
 **Git 2.34 or later.** Git 2.34 is fixed: it is the first Git release that
 makes and checks commits signed with an SSH key, which the systems

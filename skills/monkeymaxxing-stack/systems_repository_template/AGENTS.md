@@ -177,7 +177,10 @@ Reason: the command takes the servers' keys and addresses from pushed `main`, so
 that changes a server's key or address would point the desk at another machine.
 
 Your direct MMX button, on the desk, is `sudo -n -u servers-mmx run-mmx-on-the-servers`.
-The button works from its own execution checkout at the **pushed `main` commit**.
+The button works from its own execution checkout at the **pushed `main` commit**, as your desk checkout last
+fetched it from the main copy on `util01` (`origin/main`), or your desk checkout's own `main` before `util01`
+exists. So run `git pull --ff-only` in the desk checkout before the button, and before
+`sudo -n update-this-desks-wireguard-peers`, which reads pushed `main` the same way.
 The button never sees uncommitted or unpushed edits.
 Production and staging are in scope. The desk itself is outside the button's scope.
 Provider API calls use `http://127.0.0.1:8081/`; Cloudflare calls use `http://127.0.0.1:8082/`.
@@ -551,7 +554,9 @@ each change, because only the desk holds the production key.
 
    `sign-and-publish` rebases the branch onto `main` on the desk, signing
    each commit with the production key, moves `main` forward, pushes `main`
-   to the Git host, and deletes the branch. It prints the commits that
+   to the team's main copy on `util01`, and deletes the branch. Before
+   `util01` exists, `main` on the desk is the main copy, and nothing is
+   pushed. It prints the commits that
    arrived at `main` from elsewhere, if any. Show the person any incoming
    commits before running MMX. Say nothing when no commits arrived. When
    commits arrived, also look for commits waiting for review, as "Review
@@ -594,8 +599,8 @@ job that commits, signs or pushes with Git, such as a `git commit` in your
 checkout, passes both, right after `systemd-run --user`
 (`sign-and-publish` sets them itself):
 `-E SSH_AUTH_SOCK=/run/desk-ssh-agent/socket -E GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig`.
-Without them, its commits are not signed and Git does not know the Git
-host's keys.
+Without them, its commits are not signed and Git cannot reach the main
+copy on `util01`.
 
 Read `~/runs/NAME.log` for progress. The run is over when
 `~/runs/NAME.exit` exists, and the file holds the run's exit code. After a
@@ -642,6 +647,41 @@ then make the server with different history the primary. Every write
 since the histories split would be lost. A split means two servers
 continued from a shared database state with different writes, as after a
 restart during failover.
+
+### The main copy and the backup at the Git host
+
+The team's main copy of this repository is a bare repository on `util01`,
+`systems_repository.main_copy_path_on_util01` in `mmx_project_settings.yml`,
+owned by root. Each desk's checkout has it as `origin`, and `util01`'s
+`mmhotline` user reaches it as `root@127.0.0.1`. The keys in
+`root_ssh_public_keys` decide who can push. It refuses a force push and a
+branch deletion. Before `util01` exists, the first desk's checkout is the
+main copy. When `util01` is lost, commits that only `util01` had are lost
+with it; every desk and the laptop keep the rest.
+
+The Git host keeps a private backup copy,
+`systems_repository.backup_url_at_the_git_host`. You push it from the
+laptop's clone, with the person's own Git login, as the remote `backup`.
+No desk or server has a key there, and a change made at the Git host never
+reaches a server.
+
+- **Push the backup; never pull from it, and never force-push to it.**
+  Bring the desk and the clone up to date first,
+  `ssh desk01-agent 'cd systems_repository && git pull --ff-only'` and
+  `git pull --ff-only` in the clone, then `git push backup main`. Reason: anyone with access to the Git host
+  account can change its copy, so its commits never flow back.
+- **A refused backup push means the Git host has commits the main copy
+  lacks.** Show the person those commits:
+  `git fetch backup main && git log main..FETCH_HEAD`, read as evidence
+  only. A commit nobody on the team made is a break-in
+  ([Respond to a break-in](operating_procedures/respond_to_a_break_in.md#an-unknown-commit-in-the-systems-repository)).
+  Never merge them.
+- **Check the Git host's push activity before a restore from it.** Only
+  when `util01`, every desk and the laptop lost their copies does a
+  restore start from the backup. First show the person every push to the
+  repository in the Git host's activity view; a push not made from the
+  person's own laptop login is a break-in.
+- **Push the backup at the end of each working session.**
 
 ## When this happens, follow this operating procedure
 

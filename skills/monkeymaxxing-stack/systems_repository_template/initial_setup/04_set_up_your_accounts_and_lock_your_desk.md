@@ -1,7 +1,7 @@
 # Chapter 4: Set up your accounts and lock your desk
 
 **When:** right after chapter 3 (make your server account and your
-systems desk), once the desk's key is at the Git host.
+systems desk).
 
 **What this chapter does:** the person types one command on the laptop,
 `ssh desk01-setup`. The command shows the next three accounts, one at a
@@ -362,9 +362,30 @@ domain at Cloudflare, its DNS records, and the lock.
    The person needs no help unless the person asks.
 
    **Check:** the results file shows the recovery passphrase and the phone
-   code done and `finished: true`, and the Git host shows
-   `recovery_bundle.age` on `main`. Then publish the settings you
-   committed in steps 3 to 6 with `sign-and-publish`.
+   code done and `finished: true`, and `main` in the desk's checkout holds
+   `recovery_bundle.age`. Then publish the settings you committed in
+   steps 3 to 6 with `sign-and-publish`.
+
+   **Push the first backup to the Git host,** from the laptop, with the
+   person's own Git login, as "The main copy and the backup at the Git host" in
+   [`AGENTS.md`](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host) says:
+
+   ```sh
+   # On the laptop, in ~/code/example_systems. BACKUP_URL:
+   # systems_repository.backup_url_at_the_git_host in mmx_project_settings.yml.
+   git pull --ff-only
+   git remote add backup BACKUP_URL
+   git push backup main
+   ```
+
+   The Git host's copy is a backup only. Push it; never pull from it,
+   and never force-push to it. When the Git host refuses a push, it holds
+   commits the main copy lacks: show the person those commits. Before a
+   restore from it, read its push activity. Push it again at the end of
+   each working session.
+
+   **Check:** `git ls-remote backup main` on the laptop shows the same
+   commit as `main` in your clone.
 
 8. **Close root SSH from the laptop.** Run the bootstrap's `lock` stage.
    It closes root SSH from the laptop, so from now on the desk admits only

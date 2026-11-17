@@ -134,8 +134,9 @@ exception with its rule, and give its reason.
    with a link that is already filled in. The person does only what needs
    the person: sign up on a website, approve money or terms, type a secret
    once at a hidden prompt that checks it with the company, save a login,
-   and scan a QR code. Never add the desk's deploy key with `gh`: the Git
-   host deletes it when that login is revoked.
+   and scan a QR code. The team's main copy of the systems repository is
+   on `util01`, so no desk or server key goes to the Git host: it keeps a
+   backup that you push from the laptop with the person's own login.
 
    Every screen for the person has four parts: a title that names the
    company and what it is for, "What this is for:", "Do this now:" with

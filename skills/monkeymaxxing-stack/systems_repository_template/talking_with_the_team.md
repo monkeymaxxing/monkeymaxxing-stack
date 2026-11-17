@@ -328,12 +328,12 @@ using the term in the team's documentation.
 | Desk that keeps access | During a lock-out, the one desk named in `everyone_locked_out_except_desk`: the desk where the person ran the lock-out button. The person and the coding agent keep working there; every other desk and `util01` lose access at the servers. |
 | Provider console | The server's screen and keyboard on the server provider's website. It works without SSH and WireGuard, so the person can log in there as root with the shared root console password from the password manager and repair them. |
 | Self-management key | The separate root-owned SSH key used only when the person runs MMX against the desk's loopback address. |
-| Systems repository | The files that hold the server settings and the encrypted secrets. The systems repository does not hold the app's code. Git records the systems repository's history, and the Git host keeps a copy. |
+| Systems repository | The files that hold the server settings and the encrypted secrets. The systems repository does not hold the app's code. Git records the systems repository's history. The team's main copy is on `util01`, and the Git host keeps a backup copy. |
 | App's repository | The files that hold the app's code and tests. |
 | Stack's repository | The source of the Monkeymaxxing Stack's instructions and of the example system that the systems repository is copied from. The stack's repository never changes the team's system by itself. |
 | Git | A program that records changes to files. |
 | Commit | A saved change in Git history. |
-| Push | An upload of saved commits to the Git host. |
+| Push | An upload of saved commits to another copy of the repository, such as the main copy on `util01` or the backup at the Git host. |
 | Git host | The service that keeps a copy of a Git repository, such as GitHub. |
 | Vault | The encrypted file that holds configured production secrets. A long, random passphrase opens the vault file, `secrets_vault.age`. |
 | API | A company's way of taking commands from a program instead of clicks on its website. I can use the API from the person's systems desk to set things up exactly and repeatably. |

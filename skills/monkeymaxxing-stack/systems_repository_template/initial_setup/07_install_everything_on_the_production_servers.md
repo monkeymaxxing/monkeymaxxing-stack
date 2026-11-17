@@ -12,8 +12,8 @@ fixes that need a reboot. The first backup and the first restore drill
 start by themselves.
 
 **Who acts:** you, the coding agent, write the settings and run MMX on the
-desk, each long run as a desk job. The person adds `util01`'s key at the
-Git host (step 3).
+desk, each long run as a desk job. The person does nothing in this
+chapter.
 
 **Tell the person when the chapter starts:**
 
@@ -208,9 +208,10 @@ Git host (step 3).
    the utility server's two SSH keys. The SSH private keys stay on `util01`.
    Then the stage `mmhotline` restores MMHotline's database when its backup
    holds one, writes its settings file, and starts it, so the fleet hub's
-   alerts have somewhere to go from the start. The remaining stages wait
-   until run 2 (configure every server) installs the utility server's SSH keys and the Git host
-   accepts `util01`'s deploy key.
+   alerts have somewhere to go from the start. `util_server` also makes
+   the team's main copy of the systems repository on `util01`, empty. The
+   remaining stages wait until run 2 (configure every server) installs the
+   utility server's SSH keys, and the desk has pushed `main` to the main copy.
 
    **Tell the person first:**
 
@@ -224,23 +225,36 @@ Git host (step 3).
    **Tell the person after:**
 
    > `util01` is ready, and MMHotline, your alert dashboard, runs on `util01`.
-   > Before the second run, `util01` needs a key at your Git host.
 
    **Check:** run 1's summary shows every task passed.
 
-3. **The public keys run 1 (prepare the utility server) made,** from
+3. **Make `util01` the home of the main copy, then record the keys run 1
+   made.** Until now the desk's
+   checkout was the team's main copy of the systems repository. Push
+   `main` to the empty bare repository that run 1 made on `util01`, and
+   make it the checkout's `origin`, with `util01`'s `private_ip` and
+   `systems_repository.main_copy_path_on_util01`:
+
+   ```sh
+   # On the laptop:
+   ssh desk01-agent 'cd systems_repository && git remote add origin root@10.20.0.1:/var/lib/systems_repository.git && git push --quiet -u origin main'
+   ```
+
+   The desk logs in to `util01` as root with its production key, and
+   trusts the host key that chapter 6 committed in `ssh/known_hosts`. From
+   now on `sign-and-publish` pushes there, the desk's commands read pushed
+   `main` as the checkout last fetched it from there, and MMHotline's copy on `util01` clones from it in
+   run 2. The laptop's clone keeps the desk as its `origin`.
+
+   Then record **the public keys run 1 (prepare the utility server) made,** from
    `sudo -n -u servers-mmx run-mmx-on-the-servers results --node NAME --json`, each the
    `public_key` of a task:
    - **`util01`'s `mmhotline` user's key,** from
      `util_server/ssh_key_of_the_mmhotline_user` (fleet stage
      `util_server`): `util01` runs MMX with it, logs in to every server
-     with it, and pushes to the Git host with it.
+     with it, and pushes to the main copy on `util01` with it, as root.
      Add the `mmhotline` user's public key to `root_ssh_public_keys` in
      `mmx_project_settings.yml`, with the comment `util01, the mmhotline user`.
-     Ask the person to add the public key at the Git host as a deploy key
-     on the systems repository, with write access, on the screen below.
-     Do not use `gh repo deploy-key add`, because a key added by `gh`
-     disappears when the `gh` login is revoked.
 
      Register the `mmhotline` user's public key at the provider yourself,
      through the API proxy, `http://127.0.0.1:8081/`, as the desk's
@@ -253,38 +267,15 @@ Git host (step 3).
    - **The triage agent's key,** from `util_server/ssh_key_of_the_triage_agent`,
      as `triage_ssh_public_key`: it logs in as the read-only `triage` user.
 
-   Commit and push.
+   Commit and publish with `sign-and-publish`, which now pushes to the
+   main copy on `util01`.
 
-   **Ask the person:**
+   **Tell the person after:** no message, because the next step starts
+   with the second run.
 
-   ```text
-   One more key for GitHub: so util01, your tools server, can save its own changes.
-
-   What this is for:
-     util01 runs your system's tools.  It reads your systems repository and saves its own changes there.
-
-   Do this now:
-     1. Open  https://github.com/OWNER/example_systems/settings/keys/new
-     2. Title:  util01
-     3. Key:  paste this line.
-
-          ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleUtil01KeyOnlyForThisGuideXXXXXXX util01, the mmhotline user
-
-     4. Tick  Allow write access.
-     5. Press  Add key.
-
-   I see the key from here as soon as you press Add key.
-   ```
-
-   Check every 20 seconds from `util01` that the key opens the repository:
-   `ssh -F ssh/config root@10.20.0.1 'sudo -u mmhotline git ls-remote SSH_URL'`,
-   with `systems_repository.ssh_url`.
-
-   **Tell the person after:** no message, because step 4 starts with the
-   second run.
-
-   **Check:** the Git host accepts `util01`'s key with write access, and
-   the key registered at the provider equals the utility key.
+   **Check:** `ssh desk01-agent 'cd systems_repository && git ls-remote origin main'`
+   shows the same commit as `git rev-parse main` there, and the key
+   registered at the provider equals the utility key.
 
 4. **Run 2 (configure every server):** repeat run 1 (prepare the utility server)'s `sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only`
    command without the `--only-fleet-stages` flag and the flag's stage list.

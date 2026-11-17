@@ -198,7 +198,7 @@ and when.
    > Your guide and checklist are saved, and MMHotline's dashboard shows the final checklist: [MMHotline's link].
 
    **Check:** `operating_handover_saved` is `done` after its verification
-   passed, and the push reached the Git host.
+   passed, and the push reached the main copy on `util01`.
 
 ## If something is different
 

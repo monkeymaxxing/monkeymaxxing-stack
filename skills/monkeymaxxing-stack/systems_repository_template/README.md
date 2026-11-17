@@ -343,7 +343,7 @@ person's own contact methods on MMHotline's page.
 | MMX run history | Ask the agent to read `mmx results` on `util01` |
 | Public status page | Not recorded yet |
 | App repository and image build, with CI | Not recorded yet |
-| This systems repository at the Git host | Not recorded yet |
+| This systems repository's backup at the Git host | Not recorded yet |
 | Detailed results and outstanding checks | [System checklist](monkeymaxxing_stack_checklist.yml) |
 
 ## Common requests
