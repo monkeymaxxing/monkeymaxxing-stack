@@ -39,7 +39,7 @@ func (h *harness) requirePushedVaultCommit(command string) {
 	if h.git(h.e.directory, "status", "--porcelain") != "" {
 		h.t.Fatalf("the run left changes that are not committed")
 	}
-	if strings.Contains(h.out.String(), "git add") || !strings.Contains(h.out.String(), "Committed and pushed the vault as signed commit") {
+	if strings.Contains(h.out.String(), "git add") || !strings.Contains(h.out.String(), "published to the main copy on util01") {
 		h.t.Fatalf("the output does not say the vault was pushed, or still tells the person to push:\n%s", h.out)
 	}
 }

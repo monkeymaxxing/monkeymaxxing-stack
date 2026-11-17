@@ -291,15 +291,18 @@ func (e *environment) prepareVaultCommit() (leftover bool, err error) {
 	if len(others) > 0 {
 		return false, fmt.Errorf("this repository has changes that are not committed: %s. This command commits only the vault, so commit or undo those first, then run it again", strings.Join(others, ", "))
 	}
-	if _, err := e.git("fetch", "--quiet", "origin", "main"); err != nil {
-		return false, err
-	}
-	ahead, err := e.git("rev-list", "--count", "origin/main..HEAD")
-	if err != nil {
-		return false, err
-	}
-	if strings.TrimSpace(ahead) != "0" {
-		return false, fmt.Errorf("this repository has %s commits that are not pushed yet. This command pushes only the vault, so push those first (git push origin main), then run it again", strings.TrimSpace(ahead))
+	origin := e.hasOrigin()
+	if origin {
+		if _, err := e.git("fetch", "--quiet", "origin", "main"); err != nil {
+			return false, err
+		}
+		ahead, err := e.git("rev-list", "--count", "origin/main..HEAD")
+		if err != nil {
+			return false, err
+		}
+		if strings.TrimSpace(ahead) != "0" {
+			return false, fmt.Errorf("this repository has %s commits that are not pushed yet. This command pushes only the vault, so push those first (git push origin main), then run it again", strings.TrimSpace(ahead))
+		}
 	}
 	if vaultChanged {
 		if _, err := e.commitFiles("Save the vault changes left uncommitted", ours...); err != nil {
@@ -307,11 +310,33 @@ func (e *environment) prepareVaultCommit() (leftover bool, err error) {
 		}
 		e.say("Committed the vault changes an earlier run or edit left uncommitted.")
 	}
+	if !origin {
+		return vaultChanged, nil
+	}
 	if _, err := e.git("pull", "--rebase", "--quiet", "origin", "main"); err != nil {
 		_, _ = e.git("rebase", "--abort")
 		return false, fmt.Errorf("%v. Nothing changed in the vault. Pull the team's main by hand (git pull --rebase origin main), then run this command again", err)
 	}
 	return vaultChanged, nil
+}
+
+// hasOrigin says whether the checkout has an origin, the team's main copy
+// of the systems repository on util01. Before util01 exists the desk's
+// checkout has none: it is the main copy itself, so a command commits there
+// and fetches and pushes nothing.
+func (e *environment) hasOrigin() bool {
+	_, err := e.git("remote", "get-url", "origin")
+	return err == nil
+}
+
+// pushMain pushes the checkout's commits to the main copy, when the main
+// copy is elsewhere, and says where main now is, for the command's message.
+func (e *environment) pushMain() (string, error) {
+	if !e.hasOrigin() {
+		return "in the desk's checkout, the team's main copy until util01 exists", nil
+	}
+	_, err := e.git("push", "--quiet", "origin", "HEAD:main")
+	return "to the main copy on util01", err
 }
 
 // commitFiles commits files, signed, and returns the commit's short hash.
@@ -347,15 +372,17 @@ func (e *environment) finishVaultChange(v *savedKeys, command string) error {
 	if err == nil && len(v.made) > 0 {
 		commit, err = e.commitFiles(fmt.Sprintf("Add %d vault keys with %s\n\nKeys: %s", len(v.made), command, strings.Join(v.made, ", ")), vaultFile)
 	}
+	where := ""
 	if err == nil {
-		if _, pushErr := e.git("push", "--quiet", "origin", "HEAD:main"); pushErr != nil {
+		var pushErr error
+		if where, pushErr = e.pushMain(); pushErr != nil {
 			err = fmt.Errorf("%v. The commit %s is saved here", pushErr, commit)
 		}
 	}
 	if err != nil {
 		return fmt.Errorf("%v. The vault holds the new keys; fix the cause and run %s again, which commits and pushes them", err, command)
 	}
-	e.say("Committed and pushed the vault as signed commit %s, so the servers' next run gets the new keys.", commit)
+	e.say("Committed the vault as signed commit %s, published %s, so the servers' next run gets the new keys.", commit, where)
 	return nil
 }
 

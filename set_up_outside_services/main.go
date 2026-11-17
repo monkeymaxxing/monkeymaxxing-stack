@@ -91,8 +91,9 @@ Commands:
                                 for your password manager, and random ones nobody needs to see.
                                 --replace KEY enters one again.
                                 go-live, backblaze, cloudflare and secrets each commit and push
-                                the vault, signed, and refuse a repository with other changes
-                                not pushed.
+                                the vault, signed, to the main copy on util01, and refuse a
+                                repository with other changes not pushed. Before util01
+                                exists, the desk's checkout is the main copy: they commit there.
   version                       Print this program's version.
 `
 

@@ -453,3 +453,22 @@ func TestSecretsAsksWhichTriageCredentialTypeAndGivesEachTypesSource(t *testing.
 		h.requireNoSecretInOutput()
 	}
 }
+
+// Before util01 exists the desk's checkout has no origin: it is the team's
+// main copy, so the vault is committed there, signed, and nothing is pushed.
+func TestSecretsCommitsInTheCheckoutWhileItIsTheMainCopy(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.vault.referenced = []string{"pg_auto_failover_replication_password"}
+	run, _ := h.signedSecretsRepository()
+	run(h.e.directory, "remote", "remove", "origin")
+	h.answerSecrets(nil, nil)
+	if err := runSecrets(h.e, nil); err != nil {
+		t.Fatalf("secrets: %v\n%s", err, h.out)
+	}
+	if commit := run(h.e.directory, "cat-file", "commit", "HEAD"); !strings.Contains(commit, "\ngpgsig ") || !strings.Contains(commit, "Add 1 vault keys with set-up-outside-services secrets") {
+		t.Fatalf("the checkout's main is not the signed vault commit:\n%s", commit)
+	}
+	if !strings.Contains(h.out.String(), "the team's main copy until util01 exists") {
+		t.Fatalf("the output does not say where main is:\n%s", h.out)
+	}
+}

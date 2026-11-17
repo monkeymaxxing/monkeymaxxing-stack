@@ -216,7 +216,7 @@ func (g *goLive) commitAndPushTheBundle() error {
 				return err
 			}
 		}
-		_, err = e.git("push", "--quiet", "origin", "HEAD:main")
+		_, err = e.pushMain()
 		return err
 	})
 }
