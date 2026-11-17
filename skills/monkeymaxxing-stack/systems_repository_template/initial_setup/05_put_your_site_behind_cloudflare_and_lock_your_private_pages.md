@@ -284,4 +284,4 @@ check each person's Access sign-in itself, so a request that reaches
 **The laptop holds no production credential.** The laptop receives no Cloudflare administration token, production vault passphrase, or production SSH key.
 Every Cloudflare request goes through the desk's API proxy.
 
-Next: [Chapter 6: Create your three production servers: app, database, and tools](06_create_your_three_production_servers.md).
+Next, in the same reply, as the skill's "Now and next" rule says: [Chapter 6: Create your three production servers: app, database, and tools](06_create_your_three_production_servers.md).

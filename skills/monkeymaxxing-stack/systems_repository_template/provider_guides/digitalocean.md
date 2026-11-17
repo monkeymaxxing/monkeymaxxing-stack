@@ -89,7 +89,7 @@ token by its name; `util01`'s token keeps working.
 
 Put the function, with the value above it, at the top of each script, after `#!/bin/bash` and
 `set -euo pipefail`. It goes through the API proxy where `SERVER_PROVIDER_API_TOKEN` is empty (the
-coding agent on a desk) and sends the token itself where it is set (`util01`'s jobs, and the person's own
+coding agent's runs through a systems desk) and sends the token itself where it is set (`util01`'s jobs, and the person's own
 terminal during the first desk's bootstrap). It works in Debian's `bash` and in macOS's `bash` 3.2.
 
 ```bash

@@ -53,8 +53,17 @@ account screen of step 1 is the opening.
 
    **Ask the person:** the screen below, first and whole in your reply's
    text, with the guide's own website steps. At OVHcloud, steps 4 and 5
-   become the guide's prefilled createToken link, and the command asks
-   for the three values.
+   become the guide's project step and its key page, with the page's own
+   field names; the command asks for the project's ID first, then shows
+   the filled-in key link, then asks for the three values. At OVHcloud,
+   and wherever the systems desk's price is shown after the key, the
+   screen's last three lines become:
+
+   ```text
+   Then leave that window open.
+   After the key, I show you the systems desk's price.  Nothing is ordered before your yes.
+   I wait here until the key is in.
+   ```
 
    ```text
    Account 1 of 4: Hetzner (your servers)
@@ -130,12 +139,19 @@ account screen of step 1 is the opening.
 
    Do this now:
      1. Open  https://github.com/new?owner=OWNER&name=example_systems&visibility=private
+        It names the repository  OWNER/example_systems.
      2. Press  Create repository.
+     3. If you gave it another name or owner, tell me the name.  Otherwise you need not tell me anything.
    ```
 
    Set `systems_repository.backup_url_at_the_git_host` in
-   `mmx_project_settings.yml`, such as
-   `https://github.com/OWNER/example_systems.git`. No key of the desk or
+   `mmx_project_settings.yml` only to an address that `gh` made or the
+   person saw on this screen, such as
+   `https://github.com/OWNER/example_systems.git`, with the name the
+   person gave instead when the person changed it. Never write an
+   address the person did not see or confirm. Reason: a backup address
+   that names a repository nobody made fails at the first backup push, in
+   chapter 4, far from its cause. No key of the desk or
    of a server goes to the Git host. Remove the example `util01` key from
    `root_ssh_public_keys` until chapter 7 registers the real key.
 
@@ -489,8 +505,9 @@ repository's name, including paths inside quoted SSH commands.
    peer it added, changed or removed, or "No change". The desk's laptops
    keep their peers, and open sessions keep working.
 
-   Each other desk's coding agent runs the same command at the start of
-   its session, and whenever SSH to a server times out. A server without a
+   The coding agent of each other systems desk, on that person's laptop,
+   runs the same command on that systems desk at the start of its
+   session, and whenever SSH to a server times out. A server without a
    `wireguard_public_key` yet is left out. When the inventory gives a
    server a value a server must not have, such as a laptop's key or an
    address in the desks' or the laptops' block, the command names the
@@ -593,10 +610,17 @@ already, so storing the passphrase inside the vault exposes nothing.
   Cloud: the guide's steps go into the account screen, and the project's
   ID is not a secret. Read the ID with the provider's API once the key
   works, or from the page the guide names, and never ask the person to
-  copy it when the key can read it.
+  copy it when the key can read it. At OVHcloud the key's own link needs
+  the ID, so the key command asks for it first: never write a separate
+  command for the ID.
 - **A provider network overlaps `vars.wireguard_network`** ("The provider
   account", step 3): choose a free private /16 and update every inventory
   address together.
+- **The person makes a new provider key,** such as when the first key
+  expires: give the same key command again. It stops the older copy that
+  still waits, and once the desk is ordered it only saves the key, as
+  [The laptop key command](../provider_guides/README.md#the-laptop-key-command)
+  says. Never ask the person to press Ctrl+C or to close a window.
 - **The team's systems repository already exists on `util01`** ("Create
   desk01 through WireGuard", step 4), as for a new team member's desk
   ([Add or remove a team member](../operating_procedures/add_or_remove_a_team_member.md))
@@ -647,4 +671,4 @@ could use the login too, as
 [chapter 2's container rule](02_get_your_app_ready_to_deploy.md#before-you-start)
 says. The login closes after one idle hour, and after ten hours at most.
 
-Next: [Chapter 4: Set up your accounts and lock your systems desk](04_set_up_your_accounts_and_lock_your_desk.md).
+Next, in the same reply, as the skill's "Now and next" rule says: [Chapter 4: Set up your accounts and lock your systems desk](04_set_up_your_accounts_and_lock_your_desk.md).

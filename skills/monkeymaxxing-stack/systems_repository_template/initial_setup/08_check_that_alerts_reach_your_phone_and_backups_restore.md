@@ -238,10 +238,13 @@ You do the rest. It takes about 15 minutes.
    > 1. The app's token: open https://pushover.net/apps, then Example alerts, and copy its API Token/Key.
    > 2. The group's key: open https://pushover.net/groups, then Example on call, and copy its group key.
    >
-   > Tell me when it says it committed the vault.
+   > I carry on by myself when both keys are saved. You need not tell me.
 
    The command saves each key in the vault, and commits and publishes the
-   vault itself.
+   vault itself. Wait on that result, as
+   [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
+   says: run `secrets usage` every 10 seconds, for at most 9 minutes,
+   until both keys show as defined.
 
    **Check:** `secrets usage` shows both keys as defined.
 
@@ -543,7 +546,12 @@ command on the desk, looks at the page, and resolves one test notice.
     **Ask the person,** only when R2 is off:
 
     > Your status page lives in Cloudflare's file storage, R2. It costs nothing up to 10 GB a month.
-    > Please open https://dash.cloudflare.com/?to=/:account/r2/overview and finish the checkout there. It asks for a card. Tell me when the page shows R2's overview.
+    > Please open https://dash.cloudflare.com/?to=/:account/r2/overview and finish the checkout there. It asks for a card. I carry on by myself when R2 is on.
+
+    Wait on the same R2 request every 10 seconds, for at most 9 minutes,
+    until it answers, as
+    [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
+    says, and never ask the person to say "done".
 
     **Check:** the setting is pushed, and the R2 request answers.
 
@@ -563,7 +571,10 @@ command on the desk, looks at the page, and resolves one test notice.
     > `ssh -t desk01 set-up-outside-services cloudflare`
     >
     > It shows a link. Open it, press Continue to summary, then Create Token, and paste the token at its prompt.
-    > It makes only what is missing. Tell me when it says it committed the vault.
+    > It makes only what is missing. I carry on by myself when the keys are saved.
+
+    Wait on `secrets usage` every 10 seconds, for at most 9 minutes,
+    until both R2 vault keys show as defined.
 
     **Check:** the page's bucket is in the R2 bucket list, and
     `secrets usage` shows both R2 vault keys as defined.
@@ -666,5 +677,6 @@ recovery time, not the time to recover the whole site.
 account, so the page works while every server is down, and the desk can
 post with the person's own R2 key while `util01` is down.
 
-Next, in the first part of the setup: [Chapter 9: Go live](09_go_live.md), once
-part 1's checks passed.
+Next, in the same reply once part 1's checks passed, as the skill's "Now
+and next" rule says: [Chapter 9: Go live](09_go_live.md), still in the
+first part of the setup.

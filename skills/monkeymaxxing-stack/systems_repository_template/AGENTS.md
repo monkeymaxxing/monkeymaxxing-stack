@@ -477,9 +477,10 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
 
 ### The two windows agree
 
-The person sees the chat and their own terminal. The person never sees
-a tool call's description or summary. Two windows that disagree cost
-the person a refused tool call and a question.
+The person reads the chat and their own terminal. A tool call's
+description and command scroll past, and its output is folded away, so
+the person does not read instructions there. Two windows that disagree
+cost the person a refused tool call and a question.
 
 - Before you send the person to their own terminal, write in the chat
   reply, as plain text, the exact command to type and what they will
@@ -490,6 +491,10 @@ the person a refused tool call and a question.
   file a laptop script writes. Never wait a fixed time on something you
   cannot see. Keep each wait within the command's own bound, and say in
   one line what you wait for before each one.
+- Never ask the person to say "done" for a result your wait reads: the
+  key file, `desk-ready`, `wait-for-the-setup`, or a job's exit. Ask for
+  "done" only when nothing you can read shows the result, such as a step
+  only on a website, and say so in the step.
 - When a wait ends with a stop, say at once, in one plain sentence, what
   stopped and what happens next. `wait-for-the-setup` prints the
   stop's reason, also when `go-live` refused before its first screen.

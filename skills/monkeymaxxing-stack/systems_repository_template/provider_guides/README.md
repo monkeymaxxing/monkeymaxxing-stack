@@ -47,11 +47,34 @@ script from the rule below, with the selected guide's values from its own
 lowercase with hyphens, and `hetzner` is the provider's short name. The
 script must work with the Bash that the laptop has, Bash 3.2 on a Mac.
 
-The script does six things, in order:
+The script first does two checks:
 
-1. **A hidden prompt for each value,** with `read -rs`, named as the
-   provider's page names the value, such as `Hetzner API token (hidden): `.
-   It removes spaces, line breaks and quotes that came with a paste.
+- **It stops an older copy of itself that still waits.** Each copy writes
+  its process ID to `~/example-setup/key-command.pid`. When that process
+  still runs and is this script, the new copy stops it and prints one
+  line: `Stopped the older key command that was still waiting.` Reason:
+  a person who makes a new key opens the command again, and the older
+  copy holds its window with nothing to say; a person cannot be expected
+  to know Ctrl+C.
+- **It knows when the systems desk already exists:** when
+  `~/example-setup/desk-ordered` or `~/example-setup/desk-ready` is
+  there. Then it asks for the key and checks it as below, saves it,
+  prints `Key saved.  Your systems desk already exists.` and ends,
+  with no wait and no `ssh desk01-setup`. You then move the new key to
+  the desk as for the first key, below; once the desk's API proxy holds
+  a key, the person replaces it with the guide's `personal-token`
+  command instead. It never runs `ssh desk01-setup`, so the setup never
+  starts a second time. Reason: a second key entry must not say again
+  that the desk is being ordered or built, and an older waiting window
+  once carried on into the setup by itself after the desk existed.
+
+Then the script does six things, in order:
+
+1. **A prompt for each value,** named as the provider's page names the
+   value, such as `Hetzner API token (hidden): `. A value the guide marks
+   as not secret, such as OVHcloud's project ID, comes first, at a
+   visible prompt; every key value is hidden, with `read -rs`. It removes
+   spaces, line breaks and quotes that came with a paste.
 2. **A shape check of each value,** with the guide's shape, before any
    request. A wrong shape prints what the value must look like, such as
    "The token has 64 letters and digits. Copy it again.", and asks again.

@@ -166,6 +166,18 @@ answers.
      that it comes later and has a fee. Reason: a paid service that
      appears in the middle of a part feels like a trick. Chapter 6 reads the prices
      again with the API.
+   - **Growth, as money:** from `growth_limits` in the template's
+     `mmx_project_settings.yml` and the same prices, work out the most
+     the servers may add by themselves without asking the person: for
+     each pool, the servers above the first system's count, up to
+     `largest_number_of_servers`, each at the price of the pool's
+     largest type in `server_types`. With the template's limits, that is
+     3 more app servers and 1 more database server, so N is 4 and M is 2.
+     Add the jobs and load-balancer servers that the limits allow on a
+     second line, "Later pools, only when their operating procedure adds
+     them", with their cost. Round X up. Reason: "limits on growth" means
+     nothing to a newcomer, and a monthly sum the person approved is no
+     surprise on the bill.
 
    **Ask the person:**
 
@@ -189,7 +201,12 @@ answers.
 
    I will also install two small tools in your home folder: mmx and doubleshell.
 
-   "go" also approves a weekly test that your backups restore, and limits on how far your servers grow by themselves.
+   "go" also approves a weekly test that your backups restore.
+   Your servers may grow by themselves to at most 4 app servers and 2 database servers,
+   up to about €65 a month more, without asking you.
+
+   Nothing is bought until chapter 3 orders your systems desk and chapter 6 creates your servers.
+   Your "go" approves those prices.
 
    Tell me what to change, or say "go".
    ```
@@ -271,6 +288,18 @@ answers.
      as `1Password`, from the screen. The account screens of chapters 3
      and 4 name it.
    - `desk01.vars.person_unix_username` in `inventories/servers.yml`.
+   - The example person's name in the example keys: in place of `alex`,
+     write the person's desk name in the key comment `alex on desk01`,
+     in `desk01.vars.production_ssh_public_key` of
+     `inventories/servers.yml` and in `root_ssh_public_keys` of
+     `mmx_project_settings.yml`, such as `sam on desk01`. In
+     `desk01.vars.allowed_laptops`, write the laptop's short host name as
+     `laptop_name` in place of `work-laptop`, and `USER@HOST` in place of
+     the key comment `alex@work-laptop`. The keys themselves stay the
+     template's until chapter 3 writes the real ones: chapter 3 replaces
+     `allowed_laptops`, and the systems desk's start replaces every key
+     that ends in ` on desk01`. Reason: a stranger's name in the person's
+     files reads as someone else's access.
    - `status_page_host_name` under `vars` in `mmx_project_settings.yml`,
      and `util01_private_page_host_names.mmhotline` beside it, from the
      screen's two names. The person's sign-in email goes into
@@ -288,14 +317,26 @@ answers.
    The servers' production location and the desk's location go into the
    settings that chapter 3 and chapter 6 name.
 
-   **Tell the person:** no message, because chapter 2 starts at once.
+   **Tell the person:** the chapter's result in at most three lines,
+   then chapter 2's opening line in the same reply, as the skill's "Now
+   and next" rule says. Never end the reply after the result: the person
+   cannot tell whether to wait or to type "go on". For example:
+
+   > Your two tools are installed, and your systems repository is on this laptop at `~/code/example_systems`. Nothing is bought yet.
+   >
+   > I am reading your app's code, to see what it needs to run on your servers.
+   >
+   > Now: reading your app. Next for you: nothing. I carry on.
 
    **Check:** `~/code/example_systems` holds the template with the values
    above, and `mmx validate` passes there. `mmx validate` does not catch a
    value that is still the template's example, and `go-live` refuses one.
    Search the systems repository with your search tool for `example.com`,
-   `example.invalid` and `example-`. Replace each one that this chapter
-   owns, the status page and alerts page names, now. The others belong to
+   `example.invalid` and `example-`, and search `inventories/servers.yml`
+   and `mmx_project_settings.yml` for `alex` and `work-laptop`. Replace
+   each one that this chapter owns now: the status page and alerts page
+   names, and the example person in the key comments `alex on desk01`
+   and `alex@work-laptop`. The guides' example commands keep `alex`. The others belong to
    later chapters, which fill each before a step needs it: the app's
    address in chapter 2, the bucket names in chapter 3, the Cloudflare
    account and the registry account in chapter 4, and the example person
@@ -337,4 +378,4 @@ one operating procedure.
 The region line says how to change the place, because a team with users far
 away gets slower pages from servers near the laptop.
 
-Next: [Chapter 2: Get your app ready to deploy](02_get_your_app_ready_to_deploy.md).
+Next, in the same reply, as the skill's "Now and next" rule says: [Chapter 2: Get your app ready to deploy](02_get_your_app_ready_to_deploy.md).

@@ -323,19 +323,24 @@ the person's. Then you push the changes and watch the first build.
    both `REPLACE` steps filled in.
 
 7. **Show every change, once, and push.** Show the screen below. Give
-   each change one line that says what it does and why, then the diff,
-   such as "Uploads go to R2, so a new app server has every picture."
-   Explain a term the person needs for a change, such as the primary
-   database server or R2, in the same line. Name every file that changed
-   or is new: compare your list with `git status --short` in the app's
-   folder, so a file such as `README.md` is not left out.
+   each changed or new file one line that says what changes in it and
+   why, in the person's words, such as "`src/uploads.js`: uploads go to
+   R2, so a new app server has every picture." Never paste the diff:
+   Claude Code already showed each edit, and the person can say "show"
+   to see one file's change. Explain a term the person needs for a
+   change, such as the primary database server or R2, in the same line.
+   Name every file that changed or is new: compare your list with
+   `git status --short` in the app's folder, so a file such as
+   `README.md` is not left out.
 
    **Ask the person:**
 
    ```text
    Your app needs 4 small changes to run on the servers.  Here they are.
 
-     [the diff]
+     [one line per changed file: the file, what changes, and why]
+
+   Say "show" and a file's name to see its whole change.
 
    Tests: I did not run your app's tests.  This laptop has no podman or docker,
    and I run your app's code only in a container.  CI builds the app next.
@@ -378,6 +383,10 @@ the person's. Then you push the changes and watch the first build.
    > Your changes are on `main`, and CI is building your app's first image.
    > Building an image changes no server. Chapter 9 puts your app live.
 
+   Then, in the same reply, start chapter 3 with its account screen, as
+   the skill's "Now and next" rule says. Never end the reply with
+   "chapter 3 is next".
+
    **Check:** the push succeeded, and `deployed_image_tags` holds the
    pushed commit's full ID. With `gh`, the run is green and names
    `linux/amd64`. Without `gh`, chapter 4 checks the image.
@@ -387,7 +396,7 @@ the person's. Then you push the changes and watch the first build.
    a separate data store that holds waiting background jobs, differs from
    the stack's requirement to keep the queue in Postgres.
 
-   **Tell the person:** one line in step 7's screen, above the diff, such
+   **Tell the person:** one line in step 7's screen, above the file lines, such
    as "Your app keeps its waiting jobs in Redis. The Stack keeps them in
    Postgres. I record the difference in the checklist." So the person
    reads every difference before the one "yes".
@@ -485,4 +494,4 @@ for the person's approval by default
 production servers" in [The rules](../AGENTS.md#the-rules) gives the
 whole rule and its reasons.
 
-Next: [Chapter 3: Make your server account and your systems desk](03_make_your_server_account_and_your_systems_desk.md).
+Next, in the same reply, as the skill's "Now and next" rule says: [Chapter 3: Make your server account and your systems desk](03_make_your_server_account_and_your_systems_desk.md).

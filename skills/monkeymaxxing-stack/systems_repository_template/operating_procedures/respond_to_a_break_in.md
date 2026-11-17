@@ -339,7 +339,7 @@ after leaving, go to [The lock-out: only for these cases](#the-lock-out-only-for
 
 **Do this now, when the facts match one of the three cases below:**
 
-1. For a desk with no signs ([Check a desk for signs](#check-a-desk-for-signs)), that desk's coding agent publishes
+1. For a desk with no signs ([Check a desk for signs](#check-a-desk-for-signs)), the coding agent that works through that desk publishes
    the one-line commit `everyone_locked_out_except_desk: desk01`, with that desk's name, under the top-level `vars`
    of `inventories/servers.yml`.
 2. You run the lock-out button for that desk, on its laptop:

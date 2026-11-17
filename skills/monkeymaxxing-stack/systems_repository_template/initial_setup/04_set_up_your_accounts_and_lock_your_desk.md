@@ -613,4 +613,4 @@ laptop key alone opens the desk, so you do the whole desk setup yourself.
 **WAIT FOR A NEW CODE.** Each code works once, for the person and for you
 alike, because both logins share one phone-code secret.
 
-Next: [Chapter 5: Put your site behind Cloudflare and lock your private pages](05_put_your_site_behind_cloudflare_and_lock_your_private_pages.md).
+Next, in the same reply, as the skill's "Now and next" rule says: [Chapter 5: Put your site behind Cloudflare and lock your private pages](05_put_your_site_behind_cloudflare_and_lock_your_private_pages.md).

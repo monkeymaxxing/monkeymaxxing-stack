@@ -573,4 +573,4 @@ lock. Nobody changes a server by hand, because an unrecorded change
 leaves the saved settings out of date and a later run can undo the
 change.
 
-Next: [Chapter 8: Check that alerts reach your phone and backups restore](08_check_that_alerts_reach_your_phone_and_backups_restore.md).
+Next, in the same reply, as the skill's "Now and next" rule says: [Chapter 8: Check that alerts reach your phone and backups restore](08_check_that_alerts_reach_your_phone_and_backups_restore.md).

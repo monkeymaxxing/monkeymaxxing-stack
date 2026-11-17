@@ -76,13 +76,45 @@ present the whole chapter before its first action.
 
 In every reply:
 
-- Put each screen the person acts on in your own reply, whole. The person
-  never sees your commands or their output. When you then wait for the
-  person's result, put the screen first and whole in the reply's text,
-  then start the wait: Claude Code shows text before a long command
-  starts. The chapters give each wait, its time limit and what to say when
-  the limit passes. An agent that does not show its text before a command
-  ends its reply with the screen instead, and the person says "done".
+- **Now and next, at the end of every reply.** The last lines say what
+  you are doing now and what the person does next, such as "Now: I am
+  building your systems desk, about 10 minutes. Next for you: nothing. I
+  carry on." When the person has nothing to do, say "Nothing. I carry
+  on." A chapter's end is not a stop: give the chapter's result in at
+  most three lines and start the next chapter in the same reply. Stop
+  only for an answer, an approval or a step that only the person can
+  do, and say which. Reason: a reply that ends with a summary and no
+  next step leaves the person unsure whether to wait or to type "go on".
+- **Start each reply with the one line the person most needs:** the
+  result, the question, or what you do now. Keep your own text to about
+  15 lines, and put the rest behind an offer, such as 'Say "show" to see
+  the full change.' A screen from a chapter keeps its own length.
+  Reason: a long reply hides the line the person must act on.
+- **Never paste a file, a diff, a log or a command's output into your
+  reply.** Say what changed in one line per file, in the person's words,
+  such as "`mmx_project_settings.yml`: your domain and the backup times."
+  Claude Code shows each edit and command by itself: before a burst of
+  them, say in one line what they are and that the person need not read
+  them, such as "I am writing your settings now; you need not read the
+  edits."
+- **The person sees each tool call:** its command, and its description in
+  Claude Code's permission question. Write each description as a plain
+  sentence for the person, such as "Check that your systems repository's
+  settings are valid". A tool call's lines scroll past and its output is
+  folded away, so a screen or a question never goes only there.
+- Put each screen the person acts on in your own reply, whole. When you
+  then wait for the person's result, put the screen first and whole in
+  the reply's text, then start the wait: Claude Code shows text before a
+  long command starts. The chapters give each wait, its time limit and
+  what to say when the limit passes. Never ask the person to say "done"
+  for a result your wait reads. Only an agent that does not show its text
+  before a command ends its reply with the screen instead, and asks the
+  person to say "done": that agent has no wait running to read the
+  result.
+- **Never say you showed, checked or ordered something unless the
+  conversation or a command's output shows it.** Reason: "the price I
+  showed you" with no price shown, or "building your systems desk"
+  before an order, makes the person doubt every other line.
 - Confirm each answer the person gives in your next reply, one line each,
   and use it from then on.
 - Ask before choosing a name the person will see, such as the app's
@@ -93,10 +125,15 @@ In every reply:
   server that holds your keys". Name a command's target the first time it
   appears: "`ssh desk01-setup` logs in to your systems desk". Reason: a
   newcomer reads "desk" as furniture.
-- When a run or command the person can see fails, your next reply starts
-  with one plain sentence: what failed, whether anything is harmed, and
-  what happens next. Never a wall of technical lines. Reason: the person
-  cannot read them and fears the worst.
+- After each failed command the person can see, say in one line what
+  failed and whether it matters, also when you expected the failure, such
+  as "The check found no Debian 13 image yet; that is expected, and I try
+  the newer list." Before a retry, say what changes. When a run fails,
+  your next reply starts with that line: what failed, whether anything is
+  harmed, and what happens next. Never a wall of technical lines. Reason:
+  Claude Code marks each failed command, the person cannot read the
+  technical lines, and a failure with no word, or a retry with no reason,
+  makes the person fear the worst.
 - Never skip a screen or approval you promised, and never promise a later
   approval that the chapter does not give. Reason: a promise that
   does not come makes the person lose trust.
@@ -146,8 +183,9 @@ and what they will see in the chat reply itself, and while they work
 there, wait only on a result you can read. Read the whole rule in the
 template's
 [`AGENTS.md`, "The two windows agree"](systems_repository_template/AGENTS.md#the-two-windows-agree)
-before chapter 1's first command. Reason: the person never sees a tool
-call's description or summary.
+before chapter 1's first command. Reason: a tool call's description and
+command scroll past, and its output is folded away, so the person reads
+only the chat reply.
 
 ## What the stack is
 

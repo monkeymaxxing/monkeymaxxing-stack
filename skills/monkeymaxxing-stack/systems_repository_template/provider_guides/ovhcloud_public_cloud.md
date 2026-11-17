@@ -48,28 +48,58 @@ How you make a VPS, through the API proxy with the person's credential and
 after the person approves the price:
 
 1. Pick a datacenter with stock, from the same stock request.
-   Order it with the order cart: `POST /order/cart`, then
+   Before the first cart request, say on the screen: "Building a cart
+   buys nothing. I order only after your yes." Build the order cart:
+   `POST /order/cart`, then
    `POST /order/cart/CART_ID/vps` with the plan, such as `vps-2027-model1`,
    the cart's required configuration, and the plan's required options:
    the Standard automated backup (`automatedBackup`), the operating system
    (`os`) and the storage (`storage`), as the public catalog's
-   `addonFamilies` mark them `mandatory`; then
-   `POST /order/cart/CART_ID/checkout`. The first month's backup is free.
-   If checkout cannot pay
+   `addonFamilies` mark them `mandatory`. Read the cart's total with
+   `GET /order/cart/CART_ID/checkout`, which orders nothing, and show the
+   person the order: the plan, the datacenter, the first month's total
+   with tax, and the price of each later month. Only after the person's
+   yes, read the total again and send `POST /order/cart/CART_ID/checkout`
+   when it is unchanged; when it changed, stop and show the new total.
+   Build the whole cart in one command, so a failed option is never
+   added twice. The first month's backup is free. If checkout cannot pay
    by API, the person places the same order in the console.
-2. Rebuild it with `POST /vps/NAME/rebuild`: the newest Debian 13
+2. Wait until the new VPS runs no task of its own: `GET /vps/NAME/tasks`
+   lists the task IDs, and `GET /vps/NAME/tasks/ID` gives each one's
+   `state`. Wait, for at most 20 minutes, until no task is `todo`,
+   `doing`, `waitingAck`, `blocked` or `paused`, and say in one line that
+   the new server still installs itself. Reason: OVHcloud refused the
+   rebuild with HTTP 403 while a new VPS ran its first install task, on
+   a real order on 2026-11-17.
+3. Rebuild it with `POST /vps/NAME/rebuild`: the newest Debian 13
    `imageId`, the desk's `publicSshKey`, `doNotSendPassword: true`, and a
    `postInstallScript`. That script runs once, as a shell script, after the
    install, so it cannot be the first-boot data itself, which is
-   cloud-init's settings. The script saves the first-boot data as
-   cloud-init's local data, `/var/lib/cloud/seed/nocloud/user-data` with an
-   empty `meta-data` beside it, and runs `cloud-init clean --reboot`, so
-   cloud-init applies the data at the next boot as on a Public Cloud
-   instance.
-3. Until that reboot, public SSH accepts only the desk's key, with no
+   cloud-init's settings. The script writes the same public key to
+   `/root/.ssh/authorized_keys` (directory `0700`, file `0600`), saves the
+   first-boot data as cloud-init's local data,
+   `/var/lib/cloud/seed/nocloud/user-data` with an empty `meta-data`
+   beside it, and runs `cloud-init clean --reboot`, so cloud-init applies
+   the data at the next boot as on a Public Cloud instance. Reason for the
+   root key: OVHcloud puts `publicSshKey` on the `debian` account only,
+   and the local data holds no key, so root had none and the bootstrap's
+   root login was refused (a real VPS, 2026-11-17).
+4. Until that reboot, public SSH accepts only the desk's key, with no
    password. Check on the first VPS that after the reboot public TCP 22 is
    closed and the server has joined WireGuard. Then record the server in
    the inventory as usual.
+5. Wait for the new server's login over WireGuard with a check that says
+   what it waits for, never a bare timer. For the systems desk, say in one
+   line "I wait for your systems desk to finish its first start and open
+   its private network, up to 15 minutes", then try `ssh root@desk01 true`
+   every 20 seconds, and print each try's result.
+6. Before the first MMX run on a new VPS, such as the systems desk's
+   bootstrap, wait for the server's own package updates: over that
+   login, run `cloud-init status --wait`, then wait until
+   `systemctl is-active apt-daily.service apt-daily-upgrade.service`
+   shows neither as `active` or `activating`, for at most 10 minutes, and
+   say in one line that the server still installs its own updates. Reason: a fresh VPS's `unattended-upgrades` held the package
+   lock, and the bootstrap failed once on it (a real VPS, 2026-11-17).
 
 **The desk stays outside production's location,** so a production
 outage leaves the team's tools working. When the desk's location has no
@@ -126,12 +156,12 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
    two-step codes in the team's password manager. The whole team uses this one account; each person makes
    their own credential in it, named after them.
 2. The person creates the Public Cloud project: in OVHcloud's Control Panel, **Public Cloud**, then
-   **Create a project**. The coding agent asks the person for the project's ID, the 32 letters and digits
-   under the project's name. The ID is not a secret. When the person cannot paste it into the chat, give the
-   person a terminal prompt for it, as the skill's reply rules say. The coding agent writes it at the top of each
-   provider script as `ovhcloud_project_id`.
-3. The coding agent gives the person the link below, with the site's page from the table and the
-   project's ID in place of `PROJECT_ID`. The link fills in the access rules: everything inside the one
+   **Create a project**. The project's ID is the 32 letters and digits under the project's name. The ID is
+   not a secret. The laptop key command asks for it first, at a visible prompt, and saves it in
+   `~/example-setup/ovhcloud-project-id`; never write a separate command for the ID. The coding agent
+   writes it at the top of each provider script as `ovhcloud_project_id`.
+3. The key command then prints the link below, with the site's page from the table and the project's ID
+   in place of `PROJECT_ID`. The link fills in the access rules: everything inside the one
    project, plus ordering, rebuilding and ending VPS servers (`/order/cart` and `/vps`), and nothing else
    in the account. The laptop uses the same credential to make the first desk.
 
@@ -141,10 +171,11 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
 
    The createToken page has its own sign-in form and ignores a browser that is already signed in to the
    Control Panel, so the person types the OVHcloud login and password on that page.
-   On the page the person logs in, sets **Application name** to `example_systems: alex's systems desk`,
-   with the person's desk account name in place of `alex`, **Application description** to
+   On the page the person logs in, sets **Script name** to `example_systems: alex's systems desk`,
+   with the person's desk account name in place of `alex`, **Script description** to
    `The systems desk creates, lists and deletes servers`, and **Validity** to **Unlimited**, and presses
-   **Create keys**. Reason for Unlimited: the page's default is one day, and the proxy would stop working
+   **Create keys**. The page calls them **Script name** and **Script description** (checked on
+   OVHcloud US's page, 2026-11-17). Reason for Unlimited: the page's default is one day, and the proxy would stop working
    the next day. The person replaces the credential instead, below.
 4. OVHcloud shows the three values once, so the person types them at once into the laptop key command
    below. You move them to the desk right after the bootstrap.
@@ -162,7 +193,10 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
 The values for [The laptop key command](README.md#the-laptop-key-command):
 
 - **Script:** `~/example-setup/enter-the-ovhcloud-key`.
-- **Values:** three, in this order: **Application Key**, **Application Secret**, **Consumer Key**.
+- **Values:** first the project's ID, which is not secret, at a visible prompt, with the shape 32 letters
+  and digits; the command saves it in `~/example-setup/ovhcloud-project-id` and prints the key link of
+  "The person's credential", step 3, filled in with it. Then three hidden values, in this order:
+  **Application Key**, **Application Secret**, **Consumer Key**.
 - **Shape:** 16, 32 and 32 letters and digits.
 - **Read-only call:** a signed `GET cloud/project/PROJECT_ID/instance`, with the guide's `ovhcloud_request` function below, and the three values in the script's memory only.
 - **Key file line:** `APPLICATION_KEY:APPLICATION_SECRET:CONSUMER_KEY`.
@@ -188,7 +222,7 @@ https://api.us.ovhcloud.com/createToken/?GET=/cloud/project/PROJECT_ID/*&POST=/c
 ```
 
 On that page too the person types the OVHcloud login and password, because the page ignores a signed-in
-browser. **Application name** `example_systems: util01 creates and deletes servers`, **Validity** **Unlimited**.
+browser. **Script name** `example_systems: util01 creates and deletes servers`, **Validity** **Unlimited**.
 `set-up-outside-services secrets` asks for its three values, each at a hidden prompt, and saves the joined
 form in the vault as `util01_provider_api_token`. The restore drill and the leftover check already give that
 key to the scripts as `SERVER_PROVIDER_API_TOKEN`, so `util01` needs no other setting and no program beyond

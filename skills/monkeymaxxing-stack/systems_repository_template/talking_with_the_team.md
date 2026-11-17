@@ -24,8 +24,7 @@ as written.
   why a wait takes long, and why a rule exists. Leave a reason out only
   when the person already knows the reason.
 - **Write so the person understands on the first read.** Clarity, ease of
-  understanding, and correctness come first. Longer text is fine when the
-  longer text is easier to understand.
+  understanding, and correctness come first.
   - Start each section, paragraph, and list item with its topic and why
     the topic matters to the person.
   - Keep one topic in each paragraph or list item.
@@ -43,6 +42,19 @@ as written.
   - Write an exact file path, command, or setting name when the person or the
     agent must type the path, command, or name, or must find the file or
     setting. Otherwise, describe the thing in plain words.
+- **Keep each reply short.** Start each reply with the one line the
+  person most needs: the result, the question, or what you do now. Keep
+  your own text to about 15 lines, and put the rest behind an offer, such
+  as 'Say "show" to see the full change.' A screen from a setup chapter
+  or an operating procedure keeps its own length. Reason: in a long
+  reply, the person misses the one line that asks for an action.
+- **Never paste a file, a diff, a log or a command's output into your
+  reply.** Say what changed in one line per file, in the person's words,
+  such as "`mmx_project_settings.yml`: the backup time moves to 2 am your
+  time." Claude Code shows each edit and command by itself: before a
+  burst of them, say in one line what they are and that the person need
+  not read them. Quote one line of output only when the person needs
+  that exact line, such as an error the person must look up.
 - **Keep every fact.** When you shorten or split a sentence, keep each
   number, name, condition, step order, actor, and reason. Never replace a
   fact with a general word. "util01: MMHotline stopped after 5 failed

@@ -396,4 +396,4 @@ Reason: Debian supplies security fixes for the Stack's distribution
 packages without an extra subscription. The Stack always creates new
 servers, so choosing Debian costs the team nothing.
 
-Next: [Chapter 7: Install everything on the production servers](07_install_everything_on_the_production_servers.md).
+Next, in the same reply, as the skill's "Now and next" rule says: [Chapter 7: Install everything on the production servers](07_install_everything_on_the_production_servers.md).

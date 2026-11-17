@@ -183,9 +183,11 @@ network. WireGuard's port is the only port that a server opens to the
 internet. A lost laptop, a lost phone, and a lost systems desk each have an
 operating procedure.
 
-Three coding agents have three jobs. The coding agent on your laptop, if you
-use a coding agent there, works on your app's code. The coding agent on your
-systems desk does the systems work. The triage agent is a separate coding agent that
+Two coding agents have two jobs. Your coding agent runs on your laptop and
+does both the app work and the systems work. For the systems work, it acts
+through your systems desk, with its own login there (`ssh desk01-agent`),
+and never copies the keys the systems desk holds. No coding agent runs on
+the systems desk. The triage agent is a separate coding agent that
 MMHotline runs on `util01` for each alert.
 
 ## How you hear about a problem
