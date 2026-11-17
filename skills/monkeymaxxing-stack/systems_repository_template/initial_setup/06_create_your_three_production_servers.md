@@ -12,7 +12,7 @@ limits with "go" in chapter 1.
 
 **Who acts:** you, the coding agent, do every step through the desk: the
 team's scripts reach the provider through the API proxy. The person does
-nothing, unless the prices rose since chapter 1 (step 2).
+nothing, unless the prices rose since chapter 1 (step 3).
 
 **Tell the person when the chapter starts:**
 
