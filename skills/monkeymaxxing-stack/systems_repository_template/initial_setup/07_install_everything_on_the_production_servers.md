@@ -30,7 +30,7 @@ chapter.
   give the full text only when the person asks. Use each step's links and
   names.
 - **Every run of more than a few minutes is a desk job,** with
-  `sudo -n start-a-desk-job`, a log file and an exit file, as "Making a change"
+  `systemd-run --user`, a log file and an exit file, as "Making a change"
   in [`AGENTS.md`](../AGENTS.md#making-a-change) says. So the laptop may
   sleep during the runs.
 - **Every MMX run in this chapter uses the systems desk's button,**

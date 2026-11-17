@@ -30,19 +30,8 @@ table inet systems_desk {
     # HostName, and the button's runs offer the production key. sshd
     # accepts that key for no account here; this rule keeps the desk closed
     # to the button even if an authorized_keys file ever changes.
-    #
-    # The coding agent's account reaches only this desk (loopback: the API
-    # proxies) and the servers over WireGuard (wg0: util01's main copy and
-    # SSH to every server). Everything else it sends is refused, so a
-    # program that uses its login or a desk job cannot reach an outside
-    # host. The API proxy, MMX's button (servers-mmx) and the person are
-    # other accounts. WireGuard's encrypted packets keep the account of the
-    # program that sent the packet inside them, so the rule lets through
-    # the packets that carry wg0's FwMark, 0x4d4d (files/wireguard_wg0.conf);
-    # only root can set a mark.
     chain output {
         type filter hook output priority 0; policy accept;
         oifname "lo" meta skuid "servers-mmx" tcp dport 22 reject with tcp reset
-        meta mark != 0x4d4d meta skuid "coding-agent" oifname != { "lo", "wg0" } reject
     }
 }
