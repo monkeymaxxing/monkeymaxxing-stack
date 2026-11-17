@@ -353,6 +353,7 @@ laptop terminal:
 # On the laptop, in your own terminal:
 cd ~/code/example_systems
 # MMX has no command that prints one value: this editor setting prints the one item and changes nothing.
+# When MMX has a one-value command, such as `mmx secrets show`, use it here instead.
 bundle_item() {
   EDITOR="awk -v key=$1 '\$0 ~ \"^\" key \":\" {on=1; v=substr(\$0, length(key)+3); if (v !~ /^[|]/) {gsub(/^\"|\"\$/, \"\", v); print v; on=0}; next} on && /^[^ ]/ {on=0} on {sub(/^  /, \"\"); print}'" \
     mmx secrets edit --vault recovery_bundle.age | grep -v '^Saved encrypted vault: '

@@ -391,9 +391,11 @@ from Cloudflare's R2 file storage, or from the uploads' backups in B2.
 The rebuild needs your team's access to the server provider, Cloudflare,
 Backblaze B2, the Git host, and the container registry that holds the app
 images. The vault passphrase opens `secrets_vault.age`, which holds the B2
-access keys and the backup passphrases. Keep the account logins, the
-recovery codes, the vault passphrase, and copies of the backup passphrases
-in the team's password manager.
+access keys and the backup passphrases. The recovery bundle,
+`recovery_bundle.age`, holds the vault passphrase and a copy of the
+backup passphrase and the backups' read-only key. Keep the account logins,
+the recovery codes and the recovery passphrase that opens the bundle in
+the team's password manager.
 
 A Cloudflare outage also stops the public status page.
 

@@ -612,6 +612,7 @@ work=$(mktemp -d)
 cp /home/coding-agent/systems_repository/secrets_vault.age "$work/"
 sudo install -o "$USER" -m 0600 /etc/systems-desk/vault-passphrase "$work/vault-passphrase"
 # MMX has no command that prints one value: this editor setting prints the one item and changes nothing.
+# When MMX has a one-value command, such as `mmx secrets show`, use it here instead.
 EDITOR="awk -F': ' '\$1 == \"pgbackrest_repository_cipher_passphrase\" {v=\$2; gsub(/^\"|\"\$/, \"\", v); print v}'" \
   MMX_VAULT_PASSWORD_FILE="$work/vault-passphrase" mmx secrets edit --vault "$work/secrets_vault.age" | head -n 1 |
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass stdin \
