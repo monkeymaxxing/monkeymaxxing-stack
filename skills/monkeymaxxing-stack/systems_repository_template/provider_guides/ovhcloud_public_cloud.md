@@ -40,13 +40,18 @@ Two things to know about a VPS:
 How you make a VPS, through the API proxy with the person's credential and
 after the person approves the price:
 
-1. Order it with the order cart: `POST /order/cart`, then
+1. Pick a datacenter with stock. The public, credential-free
+   `GET /vps/order/rule/datacenter?ovhSubsidiary=US&planCode=PLAN` lists
+   each datacenter as available or out of stock; the US has two,
+   `US-EAST-VA` and `US-WEST-OR`.
+   Order it with the order cart: `POST /order/cart`, then
    `POST /order/cart/CART_ID/vps` with the plan, such as `vps-2027-model1`,
    the cart's required configuration, and the plan's required options:
    the Standard automated backup (`automatedBackup`), the operating system
    (`os`) and the storage (`storage`), as the public catalog's
    `addonFamilies` mark them `mandatory`; then
-   `POST /order/cart/CART_ID/checkout`. If checkout cannot pay
+   `POST /order/cart/CART_ID/checkout`. The first month's backup is free.
+   If checkout cannot pay
    by API, the person places the same order in the console.
 2. Rebuild it with `POST /vps/NAME/rebuild`: the newest Debian 13
    `imageId`, the desk's `publicSshKey`, `doNotSendPassword: true`, and a
@@ -61,6 +66,14 @@ after the person approves the price:
    password. Check on the first VPS that after the reboot public TCP 22 is
    closed and the server has joined WireGuard. Then record the server in
    the inventory as usual.
+
+**The desk stays outside production's location,** so a production
+outage leaves the team's tools working. When that location has no VPS in
+stock, make the desk a Public Cloud `d2-4` there, billed by the hour, and
+move it to a VPS with
+[Rebuild a systems desk](../operating_procedures/rebuild_a_systems_desk.md)
+once stock returns. Never put the desk in production's location to save
+money.
 
 Your provider scripts keep creating Public Cloud instances, because the
 servers they create are temporary. When `create_a_server_at_the_provider`
@@ -253,7 +266,9 @@ command -v sha1sum >/dev/null || sha1sum() { shasum -a 1; }   # macOS, during th
 # ovhcloud_request METHOD PATH [BODY_FILE]
 # Sends one request to PATH under the API address, such as
 # "cloud/project/$ovhcloud_project_id/instance", prints the answer's body,
-# and fails on an answer that is not 2xx, without printing the body.
+# and fails on an answer that is not 2xx, without printing the body, except
+# for an order (order/...): its error names the cause, such as no stock, and
+# holds no secret.
 ovhcloud_request() {
   local method=$1 path=$2 body_file=${3:-} body='' url timestamp signature answer http_status_code
   local -a body_arguments=()
@@ -284,7 +299,11 @@ ovhcloud_request() {
   fi
   case "$http_status_code" in
     2??) cat -- "$answer"; rm -f -- "$answer" ;;
-    *) printf 'OVHcloud answered %s %s with HTTP %s (body withheld)\n' "$method" "$path" "$http_status_code" >&2
+    *) if [[ "$path" == order/* ]]; then
+         printf 'OVHcloud answered %s %s with HTTP %s: %s\n' "$method" "$path" "$http_status_code" "$(head -c 500 -- "$answer")" >&2
+       else
+         printf 'OVHcloud answered %s %s with HTTP %s (body withheld)\n' "$method" "$path" "$http_status_code" >&2
+       fi
        rm -f -- "$answer"; return 1 ;;
   esac
 }
