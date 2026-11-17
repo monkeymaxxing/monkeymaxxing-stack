@@ -57,7 +57,7 @@ without the memory check.
      from `vars.apps`:
 
      ```sh
-     # On the laptop, only for a team with no CI:
+     # On the laptop, only for a team with no CI (docker manifest inspect with docker):
      podman manifest inspect IMAGE_NAME:FULL_APP_COMMIT_ID
      ```
 

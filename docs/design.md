@@ -5611,6 +5611,9 @@ CI. WireGuard's encrypted packets keep the account of the program whose
 packet they carry, so `wg0` marks them (`FwMark = 0x4d4d`) and the rule lets
 the mark through; only root can set a mark. The API proxy, the MMX button's
 `servers-mmx` and the person are other accounts, outside the rule.
+Open point (2026-11-17): `servers-mmx` has no output limit; measure what
+MMX's controller reaches, then extend the rule. It is on the Stack's to-do
+list, "Not in this version's template yet" in `skills/monkeymaxxing-stack/SKILL.md`.
 
 **Edits on the laptop, publishing on the desk.** The agent clones the
 desk's checkout, `git clone desk01-agent:systems_repository`, edits with

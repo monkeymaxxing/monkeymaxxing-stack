@@ -305,7 +305,7 @@ nothing, unless the prices rose since chapter 1 (step 3).
    > Your three servers and their keys are saved in your systems repository.
    > Next, in chapter 7, MMX installs everything on the servers.
 
-   **Check:** `git status` shows nothing to commit, and `sign-and-publish`
+   **Check:** `git status` shows nothing to commit, and `publish-branch-to-main`
    published the commit on the desk's `main`.
 
 ## If something is different

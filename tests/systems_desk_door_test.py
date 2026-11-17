@@ -209,6 +209,19 @@ class TheDeskDoor(unittest.TestCase):
         # A desk job ends after the same hours (files/start-a-desk-job).
         self.assertIn('\nlongest_hours=8\n', rendered(changed, 'install_the_desk_job_command'))
 
+    def test_idle_minutes_below_30_are_refused_with_the_reason(self):
+        # A desk review's first security updates may be quiet for 30 minutes,
+        # and ChannelTimeout closes any command quiet for the idle minutes.
+        def sshd_file(minutes):
+            tasks = explain([('  coding_agent_login_idle_minutes: 60\n', '  coding_agent_login_idle_minutes: %d\n' % minutes)])
+            return [task for _, task in tasks if task['path'].endswith('/write_the_desk_sshd_policy')][0]['rendered_templates'][0]
+        self.assertIn('ChannelTimeout session:*=30m', sshd_file(30)['text'])
+        refused = sshd_file(29)
+        self.assertNotIn('text', refused)
+        self.assertIn('coding_agent_login_idle_minutes is 29', refused['not_rendered_because'])
+        self.assertIn('below the minimum of 30', refused['not_rendered_because'])
+        self.assertIn('cut a desk review off', refused['not_rendered_because'])
+
     def test_the_firewall_lets_through_the_mark_that_wg0_puts_on_its_packets(self):
         # Otherwise the coding agent's own packets inside wg0 are refused on
         # the outside interface, and it reaches no server.

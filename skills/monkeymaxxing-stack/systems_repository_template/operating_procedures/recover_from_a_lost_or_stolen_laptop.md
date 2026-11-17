@@ -102,7 +102,9 @@ explains each term.
    pushed it, as
    [An unknown commit in the systems repository](respond_to_a_break_in.md#an-unknown-commit-in-the-systems-repository)
    says. Also compare the registry's list of image
-   tags with `deployed_image_tags` in `inventories/servers.yml`.
+   tags, on the registry's package page that the person opens signed in,
+   or with `gh` when it is signed in, with `deployed_image_tags` in
+   `inventories/servers.yml`.
    **Check:** every commit and image tag is known. Each unknown commit or
    tag goes to the person before anything else, as
    [Respond to a break-in](respond_to_a_break_in.md) says.

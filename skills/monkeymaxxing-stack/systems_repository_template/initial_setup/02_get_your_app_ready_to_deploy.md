@@ -397,7 +397,8 @@ the person's. Then you push the changes and watch the first build.
   The setup then waits, and the day's plan moves with it.
 - **The person names "no CI"** (step 6): test and build in a container
   on the laptop, with `podman build --platform linux/amd64 --build-arg RELEASE="$image_tag" --tag "$IMAGE_NAME:$image_tag" .`
-  from a clean checkout, with `image_tag=$(git rev-parse HEAD)`. Push with
+  (or `docker build` with the same options, whichever the laptop has for
+  the tests above) from a clean checkout, with `image_tag=$(git rev-parse HEAD)`. Push with
   the person's own registry login on the laptop. The servers still use
   only the read-only token of chapter 4.
 - **Another CI service** (step 6): it follows the same six steps. Only the

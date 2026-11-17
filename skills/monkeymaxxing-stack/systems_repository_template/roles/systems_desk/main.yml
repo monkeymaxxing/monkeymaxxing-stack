@@ -37,12 +37,10 @@ node_tasks:
     assert:
       that:
         all:
-          - {number_at_least: ["{{ .inputs.coding_agent_login_idle_minutes }}", 1]}
           - {number_at_least: ["{{ .inputs.coding_agent_login_longest_hours }}", 1]}
       message: >-
-        coding_agent_login_idle_minutes is {{ .inputs.coding_agent_login_idle_minutes }} and
         coding_agent_login_longest_hours is {{ .inputs.coding_agent_login_longest_hours }}
-        in mmx_project_settings.yml. Each must be a whole number of at least 1. Nothing changed.
+        in mmx_project_settings.yml. It must be a whole number of at least 1. Nothing changed.
   - id: check_the_systems_desk_provider_api_authentication_setting
     assert:
       that:

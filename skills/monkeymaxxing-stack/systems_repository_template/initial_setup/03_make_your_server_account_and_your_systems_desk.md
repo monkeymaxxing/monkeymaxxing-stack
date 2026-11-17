@@ -345,12 +345,12 @@ repository's name, including paths inside quoted SSH commands.
    desk's whole setup, run as root from the laptop, before the lock. It
    makes the production key, the vault passphrase and the vault, starts
    the systems repository in your checkout on the desk,
-   `/home/coding-agent/systems_repository`, with its signing and its first
-   signed commit, records the first desk review, and opens your login,
+   `/home/coding-agent/systems_repository`, with its first commit,
+   records the first desk review, and opens your login,
    `coding-agent`. The desk's own commits name `coding-agent on desk01` as
    their author. Your later commits keep the author from the laptop's
-   `git config user.name` and `git config user.email`: `sign-and-publish`
-   only re-signs them.
+   `git config user.name` and `git config user.email`:
+   `publish-branch-to-main` keeps them as they are.
 
    The provider image does not have the `coding-agent` account yet, so root
    writes the copy, and the bootstrap makes it the coding agent's own.
