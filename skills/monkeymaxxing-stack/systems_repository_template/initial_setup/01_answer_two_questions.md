@@ -174,6 +174,8 @@ It lets me do these without asking each time:
 
 It also blocks two commands that change files out of your sight.  I change files with my editor, so you see each change.
 
+These questions catch clumsy mistakes, not me: anything that changes your live servers still goes through your systems desk.
+
 I work through your systems desk and never copy your keys.
 
 Until now, Claude Code may have asked you a few times already, such as to read this setup's instructions.
