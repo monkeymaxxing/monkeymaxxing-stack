@@ -192,11 +192,30 @@ class TheDeskDoor(unittest.TestCase):
         self.assertEqual(self.login(self.locked(changed), 'coding-agent', LAPTOP)['unusedconnectiontimeout'], ['2700'])
         self.assertEqual(self.login(self.locked(), 'alex', LAPTOP)['unusedconnectiontimeout'], ['none'])
 
+    def test_an_idle_command_is_closed_after_the_same_setting(self):
+        # Top level, for every login: Debian 13's sshd ignores a Match block's
+        # ChannelTimeout after the login, and a command's channel is
+        # session:command, which "session" alone does not match.
+        for user, address in (('coding-agent', LAPTOP), ('alex', LAPTOP), ('root', '127.0.0.1')):
+            self.assertEqual(self.login(self.locked(), user, address)['channeltimeout'], ['session:*=60m'])
+        changed = explain([('  coding_agent_login_idle_minutes: 60\n', '  coding_agent_login_idle_minutes: 45\n')])
+        self.assertEqual(self.login(self.locked(changed), 'coding-agent', LAPTOP)['channeltimeout'], ['session:*=45m'])
+
     def test_the_longest_login_follows_its_setting(self):
         changed = explain([('  coding_agent_login_longest_hours: 10\n', '  coding_agent_login_longest_hours: 8\n')])
         job = [task for _, task in changed if task['path'].endswith('/end_the_coding_agents_long_logins')][0]
         values = {argument['field']: argument.get('value') for argument in job['arguments']}
         self.assertEqual(str(values['systemd_scheduled_job.env.LONGEST_HOURS']), '8')
+        # A desk job ends after the same hours (files/start-a-desk-job).
+        self.assertIn('\nlongest_hours=8\n', rendered(changed, 'install_the_desk_job_command'))
+
+    def test_the_firewall_lets_through_the_mark_that_wg0_puts_on_its_packets(self):
+        # Otherwise the coding agent's own packets inside wg0 are refused on
+        # the outside interface, and it reaches no server.
+        import re
+        mark = re.search(r'^FwMark = (0x[0-9a-f]+)$', (FILES/'wireguard_wg0.conf').read_text(), re.M).group(1)
+        firewall = rendered(self.tasks, 'write_the_desk_firewall')
+        self.assertIn('meta mark != %s meta skuid "coding-agent" oifname != { "lo", "wg0" } reject' % mark, firewall)
 
     def test_both_accounts_read_the_one_root_owned_phone_code(self):
         lines = [line.split() for line in (FILES/'sshd_pam').read_text().splitlines() if 'pam_google_authenticator' in line

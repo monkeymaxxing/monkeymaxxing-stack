@@ -49,15 +49,15 @@ without the memory check.
      The desk has no registry login to check with, and needs none (see
      [Why the desk does not check the registry](#why-the-desk-does-not-check-the-registry)).
    - **Without CI:** run the app's tests and the build only inside a
-     container, as `coding-agent`, with `podman` and chapter 2's commands:
-     never the app's own tools on the desk, never `--network host`, and
-     never `/run` or a home directory mounted. Push the image with the
-     desk's publishing login. Use the full app commit ID as the tag. Then
-     check that the registry holds it, with `image` of the app from
-     `vars.apps`:
+     container on the laptop, with `podman` or `docker` and chapter 2's
+     commands, from a clean checkout: never `--network host`, and never a
+     home directory mounted. Push the image with the person's own registry
+     login on the laptop. Use the full app commit ID as the tag. Then check
+     that the registry holds it, on the laptop, with `image` of the app
+     from `vars.apps`:
 
      ```sh
-     # This systems desk, as the coding agent, only for a team with no CI:
+     # On the laptop, only for a team with no CI:
      podman manifest inspect IMAGE_NAME:FULL_APP_COMMIT_ID
      ```
 

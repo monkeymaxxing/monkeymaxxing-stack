@@ -315,8 +315,8 @@ items:
       the person's loopback self-management works; the desk reports to
       MMWatchdog; the laptop's temporary repository, MMX, provider token,
       provider CLI credentials, and first-boot payload are cleared;
-      without CI, the desk also has a registry publishing login, and no app
-      test or build tools of its own (tests and builds run in containers).
+      the desk has no registry publishing login and no app test or build
+      tools (without CI, tests and builds run in containers on the laptop).
       The details of the desk's login protections, such as the refusal of a
       reused code, are in the optional check of the system's protections.
     waits_for: chapter 3 (make your server account and your systems desk), then chapter 7 (install everything on the production servers) for monitoring enrollment, then the real access and cleanup checks
@@ -856,7 +856,7 @@ items:
     protects_against: a required build service or a build credential that reaches servers
     verification: >-
       the image was tested, built, and pushed either by CI or, without CI, by
-      the coding agent inside a container on the systems desk; the coding agent recorded the image
+      the coding agent inside a container on the laptop; the coding agent recorded the image
       tag, committed, pushed, deployed with MMX, and verified the live app;
       any CI has registry access but no server SSH key, vault passphrase,
       or systems-repository write credential.

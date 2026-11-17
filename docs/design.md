@@ -1488,7 +1488,8 @@ The Stack has no commit check of its own beside MMHotline's. Reason: one
 place that decides serves every runner, and two checks could disagree.
 
 CI is optional. When a team has CI, CI tests, builds, and pushes an image.
-Without CI, the coding agent tests, builds, and pushes the image. In either
+Without CI, the coding agent tests, builds, and pushes the image on the
+laptop, in a container, with the person's registry login. In either
 case, the coding agent updates the image tag, commits, pushes, and deploys.
 CI needs registry access, never server SSH keys or the vault passphrase.
 
@@ -5563,13 +5564,53 @@ template), and a timer ends a login older than
 reasons. Reason for the desk and not the laptop: a changed laptop setting
 cannot lengthen them. A laptop that sleeps less than the idle hour needs
 nothing; after a longer sleep the agent asks for one new code.
+`ChannelTimeout session:*` closes a command that sends and receives
+nothing for the same idle minutes, so one idle command, such as
+`ssh desk01-agent sleep 1d`, cannot hold the login open. It applies to
+every SSH login on the desk: Debian 13's sshd (OpenSSH 10.0p2) applies a
+`ChannelTimeout` written in a `Match` block only before the login, never to
+its commands, and labels a command's channel `session:command`, which a
+plain `session` does not match.
+
+**Nothing the agent starts outlives its login.** `coding-agent`'s systemd
+user session does not linger, logind ends the processes of its login when
+the login ends (`KillUserProcesses` for `coding-agent` alone), cron refuses
+its jobs, and the longest-login timer ends its user session with
+`loginctl terminate-user`. Reason: an open login is any laptop program's
+for a moment, and a job it leaves behind, such as an SSH tunnel to an
+outside host, would otherwise keep the relay socket, the API proxies and
+the sudo rules with no phone code (security review finding H4).
 
 **Long runs are desk jobs.** A run longer than a few minutes starts with
-`systemd-run --user` as `coding-agent`, with a log file and an exit file
-named after the run. It keeps running when the connection closes, and the
-agent reads the two files later. Reason: nothing on the desk needs
-resuming, so no terminal-session program runs there; the agent's
-conversation lives on the laptop, where the agent already keeps it.
+`sudo -n start-a-desk-job NAME -- COMMAND ARGUMENTS`. The command starts
+only the Stack's own long runs, by name and with their arguments checked:
+the MMX button with `run`, `dryrun`, `resume` or `run-command`, as
+`servers-mmx`; `run_mmx_on_util01` with the same, as `coding-agent`; and
+`publish-branch-to-main BRANCH`. It refuses anything else, a path, a shell,
+extra arguments, and a job name that is not plain lowercase letters,
+digits, `-` and `_`. Each job is a root-owned transient unit,
+`desk-job-NAME.service`, outside the login, which writes
+`~coding-agent/runs/NAME.log` and, when it ends, `NAME.exit` with the exit
+code or a `stopped:` line. The unit writes both files as `coding-agent`,
+never as root, so a link the agent planted there cannot make root write
+elsewhere. The desk ends a job after `coding_agent_login_longest_hours`
+(`RuntimeMaxSec`). Reason for the limit: `run_mmx_on_util01` runs from the
+agent's checkout, which the agent can change, so the limit bounds what any
+desk job can keep doing after the login ends. Reason for desk jobs at all:
+nothing on the desk needs resuming, so no terminal-session program runs
+there; the agent's conversation lives on the laptop, where the agent
+already keeps it.
+
+**The agent's account reaches only the desk and WireGuard.** The desk
+firewall's output chain refuses every packet of `coding-agent` that leaves
+by an interface other than loopback and `wg0`. That leaves what the agent
+needs on the desk: the API proxies on loopback, and `util01`'s main copy
+and SSH to every server over `wg0`. Requests to public addresses, such as
+an app's health URL, run on the laptop, and so do app image builds without
+CI. WireGuard's encrypted packets keep the account of the program whose
+packet they carry, so `wg0` marks them (`FwMark = 0x4d4d`) and the rule lets
+the mark through; only root can set a mark. The API proxy, the MMX button's
+`servers-mmx` and the person are other accounts, outside the rule.
 
 **Edits on the laptop, publishing on the desk.** The agent clones the
 desk's checkout, `git clone desk01-agent:systems_repository`, edits with
@@ -5583,8 +5624,10 @@ nothing. The laptop pushes the Git host's backup with the person's own login.
 vault passphrase and the person's tokens stay on the desk, and the agent
 uses them without copying them. While the shared login is open, any
 program on the laptop could use it too. That is the main risk of this
-design, and the reason for the idle hour, the ten-hour limit, and the guide's
-rule to run the app's install and test commands in a container.
+design, and the reason for the idle hour, the ten-hour limit, the end of
+everything the login started, the firewall rule for the agent's account,
+and the guide's rule to run the app's install and test commands in a
+container on the laptop.
 
 ## Naming
 
@@ -6021,7 +6064,6 @@ including the passphrase needed by the MMX execution account.
 Committed playbooks leave a Git record; ad hoc MMX commands leave MMX history.
 Direct SSH commands are not automatically recorded in Git or MMX history.
 Malware controlling the laptop while the coding agent's shared login is open can act through that login.
-Without CI, the desk holds the registry publishing credential for builds and releases.
 Reason: the desk reduces lasting personal-key theft; the desk does not remove authority required for production work.
 
 ### Several people

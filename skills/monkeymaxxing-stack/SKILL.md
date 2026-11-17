@@ -295,7 +295,7 @@ Follow the systems repository's [rules](systems_repository_template/AGENTS.md#th
 On the laptop, edit in your clone of the desk's repository, validate, commit on a branch, push the branch to the desk,
 and run `sign-and-publish` on the desk, which signs the commits and pushes `main`. Report incoming commits, then preview
 and run MMX on `util01` from the desk, normally with the `server_management_scripts/run_mmx_on_util01` helper, as a
-desk job when the run is long. A push alone changes no server. CI tests, builds, and pushes the app's images.
+desk job (`sudo -n start-a-desk-job`) when the run is long. A push alone changes no server. CI tests, builds, and pushes the app's images.
 Before `util01` exists and while `util01` is broken or rebuilt, run MMX
 on the systems desk through `sudo -n -u servers-mmx run-mmx-on-the-servers` with `--connection ssh_only`.
 
