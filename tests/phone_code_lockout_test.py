@@ -96,6 +96,25 @@ class Rendered(unittest.TestCase):
             self.assertIn('log_file_path: /var/log/fail2ban.log', lockout_group)
             self.assertIn(f'alert_severity: {severity}\n', lockout_group)
 
+    def test_a_wrong_code_counts_for_the_person_and_for_coding_agent(self):
+        # coding-agent logs in with the same laptop key and phone code, so a
+        # thief with the laptop guesses as either account; both count.
+        import re
+        values = self.lockout()
+        filter_line = [line for line in self.render('roles/systems_desk/files/phone_code_filter.conf', **values).splitlines()
+                       if line.startswith('failregex = ')][0]
+        # fail2ban's prefix is the journal's own; the rest is the message.
+        message = filter_line.split('%(__prefix_line)s', 1)[1].replace('<HOST>', r'(?P<host>\S+)')
+        watchdog = re.search(r"fail_when_a_new_line_matches_regex: '(.*Authentication failure.*)'",
+                             self.render('mmwatchdog_checks/systems_desks.yml', **values)).group(1)
+        for user, counted in (('alex', True), ('coding-agent', True), ('alexander', False), ('root', False)):
+            line = 'error: PAM: Authentication failure for %s from 10.20.10.1' % user
+            with self.subTest(user=user):
+                self.assertEqual(bool(re.match('^' + message, line)), counted)
+                self.assertEqual(bool(re.match(watchdog, line)), counted)
+                if counted:
+                    self.assertEqual(re.match('^' + message, line).group('host'), '10.20.10.1')
+
     def test_first_login_says_the_lockout_once(self):
         script = self.render('roles/systems_desk/files/set-up-the-phone-code', **self.lockout(lockout_minutes=7))
         self.assertEqual(script.count('lock that laptop out'), 1)

@@ -5828,6 +5828,8 @@ The desk installs GnuPG, so the coding agent prints a vendor's apt signing key's
 `phone_code_lockout` in `mmx_project_settings.yml` sets the lockout: by default, 5 failed attempts within ten minutes ban the laptop address for 5 minutes.
 Reason: five tries keep a typist from locking themselves out, and five minutes lets a lockout end quickly while a thief still gets few guesses an hour.
 One wrong code is an `info` alert; the lockout sends one alert with `alert_severity_when_a_laptop_is_locked_out` (`info`, `warn`, or `sos`; `sos` wakes the person on call).
+The ban and the alert count wrong codes for the person and for `coding-agent` alike.
+Reason: both log in with the laptop key and the one phone code, so a thief with the laptop can guess as either.
 Debian's ordinary sshd jail and OpenSSH source penalties are disabled.
 Reason: the documented ban rule must own the refusal timing.
 A typo, reused code, and rate limit show the same authentication refusal; a ban shows connection refused.

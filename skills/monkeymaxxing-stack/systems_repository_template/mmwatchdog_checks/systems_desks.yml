@@ -25,8 +25,9 @@ check_groups:
       no_failed_phone_code_logins:
         log_lines:
           journal_of_systemd_unit: ssh.service
-          # The same PAM rejection as the phone-code fail2ban filter.
-          fail_when_a_new_line_matches_regex: '^error: PAM: Authentication failure for {{ .inputs.person_unix_username }} from [^ ]+\s*$'
+          # The same PAM rejection as the phone-code fail2ban filter, for the
+          # person and for coding-agent, which share the laptop key and code.
+          fail_when_a_new_line_matches_regex: '^error: PAM: Authentication failure for (?:{{ .inputs.person_unix_username }}|coding-agent) from [^ ]+\s*$'
         # One wrong code is usually a typo, so it is only an info alert.
         # A lockout has its own alert, below.
         alert_severity: info
