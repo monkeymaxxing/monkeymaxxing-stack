@@ -42,8 +42,11 @@ after the person approves the price:
 
 1. Order it with the order cart: `POST /order/cart`, then
    `POST /order/cart/CART_ID/vps` with the plan, such as `vps-2027-model1`,
-   the cart's required configuration, the Standard automated-backup
-   option, then `POST /order/cart/CART_ID/checkout`. If checkout cannot pay
+   the cart's required configuration, and the plan's required options:
+   the Standard automated backup (`automatedBackup`), the operating system
+   (`os`) and the storage (`storage`), as the public catalog's
+   `addonFamilies` mark them `mandatory`; then
+   `POST /order/cart/CART_ID/checkout`. If checkout cannot pay
    by API, the person places the same order in the console.
 2. Rebuild it with `POST /vps/NAME/rebuild`: the newest Debian 13
    `imageId`, the desk's `publicSshKey`, `doNotSendPassword: true`, and a
