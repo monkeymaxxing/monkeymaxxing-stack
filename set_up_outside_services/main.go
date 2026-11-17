@@ -203,6 +203,8 @@ type environment struct {
 	// sudo; setUpThePhoneCode runs the desk's phone-code setup as root.
 	readRootFile      func(path string) ([]byte, error)
 	setUpThePhoneCode func(emergencyCodesPath string) error
+	// deskIsLocked says the desk playbook's lock stage ran on this desk.
+	deskIsLocked func() bool
 	// resultsFile is go-live's results file; writeResultsFile writes it.
 	resultsFile      string
 	writeResultsFile func(content []byte) error
@@ -262,6 +264,7 @@ func newEnvironment(out io.Writer) (*environment, error) {
 		stripeAPIURL:                "https://api.stripe.com",
 		readRootFile:                readRootFileWithSudo,
 		setUpThePhoneCode:           setUpThePhoneCodeWithSudo,
+		deskIsLocked:                func() bool { return deskIsLockedAt(deskLockedFile, deskRootLoginBeforeTheLockFile) },
 		resultsFile:                 setupResultsFile,
 		writeResultsFile:            writeResultsFileWithSudo,
 	}

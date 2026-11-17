@@ -149,6 +149,8 @@ func newGoLiveHarness(t *testing.T, dnssec bool) *goLiveHarness {
 		return os.WriteFile(path, []byte(emergencyCodes+"\n"), 0o600)
 	}
 	h.e.setUpThePhoneCode = func(path string) error { return h.phoneCode(path) }
+	// The lock stage runs after go-live, in the coding agent's step.
+	h.e.deskIsLocked = func() bool { return false }
 	h.e.resultsFile = filepath.Join(t.TempDir(), "setup_results.json")
 	h.e.writeResultsFile = func(content []byte) error {
 		var results setupResults
@@ -249,7 +251,7 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "One more key: so your servers can download your app.",
 		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Key for shop: STRIPE_API_KEY",
 		"Stripe takes your customers' card payments with it.", "1. Open  https://dashboard.stripe.com/apikeys", "Stripe accepted the key.", "Step 1 of 2: your recovery passphrase", "SAVE IT NOW.",
-		"[the screen is cleared]", "Step 2 of 2: your phone code", "Done.  Your desk is locked."}
+		"[the screen is cleared]", "Step 2 of 2: your phone code", "Done.  Your phone code is ready.  Your coding agent locks your desk next."}
 	at := 0
 	for _, line := range order {
 		next := strings.Index(output[at:], line)
@@ -621,5 +623,35 @@ func TestGoLiveAsksWhenTheBackblazeAccountIsInAnotherRegion(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// go-live says the desk is locked only when the lock stage ran: the lock's
+// record exists and root's login from the laptop is closed.
+func TestTheDeskIsLockedOnlyWithTheRecordAndWithoutTheRootLoginFile(t *testing.T) {
+	directory := t.TempDir()
+	locked, beforeTheLock := filepath.Join(directory, "locked"), filepath.Join(directory, "root-login-before-the-lock.conf")
+	for _, c := range []struct {
+		record, rootLogin, want bool
+	}{{false, true, false}, {true, true, false}, {false, false, false}, {true, false, true}} {
+		os.Remove(locked)
+		os.Remove(beforeTheLock)
+		if c.record {
+			writeFile(t, locked, "This desk is locked.\n")
+		}
+		if c.rootLogin {
+			writeFile(t, beforeTheLock, "Match User root\n")
+		}
+		if got := deskIsLockedAt(locked, beforeTheLock); got != c.want {
+			t.Errorf("record %v, root login file %v: locked %v, want %v", c.record, c.rootLogin, got, c.want)
+		}
+	}
+	e := &environment{deskIsLocked: func() bool { return true }}
+	if message := goLiveDoneMessage(e); !strings.HasPrefix(message, "\nDone.  Your desk is locked.") {
+		t.Errorf("a locked desk: %q", message)
+	}
+	e.deskIsLocked = func() bool { return false }
+	if message := goLiveDoneMessage(e); strings.Contains(message, "is locked") {
+		t.Errorf("a desk that is not locked yet: %q", message)
 	}
 }

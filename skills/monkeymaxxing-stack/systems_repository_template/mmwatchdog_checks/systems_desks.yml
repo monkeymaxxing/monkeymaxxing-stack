@@ -60,3 +60,24 @@ check_groups:
         file:
           path: /etc/systems-desk/phone-code
         alert_severity: warn
+
+  # The lock: the desk playbook's lock stage writes /etc/systems-desk/locked
+  # and deletes the file that lets root in from a laptop with the laptop key
+  # alone. Until then the laptop key is root on the desk, with no phone code.
+  # warn, as for the phone code: the coding agent runs the lock stage in the
+  # initial setup, and a desk that stays unlocked needs a person by day.
+  desk_lock:
+    check_every: 10s
+    time_limit_per_run: 5s
+    alert_after_failing_for: 0s
+    recovered_after_healthy_for: 0s
+    checks:
+      the_desk_is_locked:
+        file:
+          path: /etc/systems-desk/locked
+        alert_severity: warn
+      root_login_from_a_laptop_is_closed:
+        file:
+          path: /etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf
+          must_not_exist: true
+        alert_severity: warn

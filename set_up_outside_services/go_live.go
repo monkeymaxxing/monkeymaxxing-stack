@@ -138,8 +138,35 @@ func runGoLive(e *environment) error {
 	if err := g.writeResults(); err != nil {
 		return err
 	}
-	e.show("\nDone.  Your desk is locked.\n\nGo back to your coding agent.")
+	e.show(goLiveDoneMessage(e))
 	return nil
+}
+
+// The lock stage of playbooks/systems_desk.yml writes deskLockedFile and
+// deletes deskRootLoginBeforeTheLockFile, which admits root from a laptop
+// with the laptop key alone.
+const (
+	deskLockedFile                 = "/etc/systems-desk/locked"
+	deskRootLoginBeforeTheLockFile = "/etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf"
+)
+
+// deskIsLockedAt says the lock stage ran: its record exists and root's
+// login from a laptop is closed.
+func deskIsLockedAt(lockedFile, rootLoginBeforeTheLockFile string) bool {
+	_, record := os.Stat(lockedFile)
+	_, rootLogin := os.Stat(rootLoginBeforeTheLockFile)
+	return record == nil && errors.Is(rootLogin, os.ErrNotExist)
+}
+
+// goLiveDoneMessage is go-live's last screen. It says the desk is locked
+// only when it is. Reason: at a first go-live the coding agent runs the
+// lock stage afterwards, and until then the laptop key alone is root on
+// the desk.
+func goLiveDoneMessage(e *environment) string {
+	if e.deskIsLocked() {
+		return "\nDone.  Your desk is locked.\n\nGo back to your coding agent."
+	}
+	return "\nDone.  Your phone code is ready.  Your coding agent locks your desk next.\n\nGo back to your coding agent."
 }
 
 // prepare checks everything the screens need before the first one, so the

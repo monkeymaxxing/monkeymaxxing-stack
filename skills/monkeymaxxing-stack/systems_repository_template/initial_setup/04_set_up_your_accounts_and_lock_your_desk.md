@@ -424,10 +424,16 @@ domain at Cloudflare, its DNS records, and the lock.
    The command ends:
 
    ```text
-   Done.  Your desk is locked.
+   Done.  Your phone code is ready.  Your coding agent locks your desk next.
 
    Go back to your coding agent.
    ```
+
+   It says "Done.  Your desk is locked." instead only when the lock has
+   run: `/etc/systems-desk/locked` exists, and
+   `/etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf`,
+   which lets root in from the laptop with the laptop key alone, is gone.
+   In this first setup that happens in step 8.
 
    The command puts the recovery bundle, `recovery_bundle.age`, into the
    systems repository, and a copy into the locked backup bucket. It holds

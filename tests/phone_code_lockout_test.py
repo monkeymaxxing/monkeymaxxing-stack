@@ -115,6 +115,15 @@ class Rendered(unittest.TestCase):
                 if counted:
                     self.assertEqual(re.match('^' + message, line).group('host'), '10.20.10.1')
 
+    def test_the_desk_checks_alert_while_the_desk_is_not_locked(self):
+        checks = self.render('mmwatchdog_checks/systems_desks.yml', **self.lockout())
+        lock = checks.split('\n  desk_lock:\n', 1)[1]
+        self.assertIn('      the_desk_is_locked:\n        file:\n          path: /etc/systems-desk/locked\n'
+                      '        alert_severity: warn\n', lock)
+        self.assertIn('      root_login_from_a_laptop_is_closed:\n        file:\n'
+                      '          path: /etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf\n'
+                      '          must_not_exist: true\n        alert_severity: warn\n', lock)
+
     def test_first_login_says_the_lockout_once(self):
         script = self.render('roles/systems_desk/files/set-up-the-phone-code', **self.lockout(lockout_minutes=7))
         self.assertEqual(script.count('lock that laptop out'), 1)
