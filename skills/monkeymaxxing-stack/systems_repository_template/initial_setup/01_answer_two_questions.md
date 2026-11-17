@@ -244,7 +244,7 @@ the rules.
    pins, never a newer one: download
    `doubleshell-VERSION-PLATFORM.tar.gz` for the laptop's platform from
    the folder of the pin's `download_url`, such as
-   `doubleshell-0.1.1-macos-arm64.tar.gz`, check its SHA-256 against
+   `doubleshell-0.1.2-macos-arm64.tar.gz`, check its SHA-256 against
    `laptop_archive_sha256` for that platform, and copy the binary to
    `~/.local/bin`, as
    [doubleshell installation](https://github.com/monkeymaxxing/doubleshell#install)
