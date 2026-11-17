@@ -5606,8 +5606,9 @@ uses them without copying them. The idle hour and the ten-hour limit exist
 so a login does not stay open on a laptop that is lost, stolen or left
 unattended. The guide's rule to run the app's install and test commands in a
 container on the laptop keeps the app's own commands away from the open login
-by mistake. A laptop the person does not trust is outside what the desk
-protects ("The systems desk", below).
+by mistake. A live attacker on the laptop during an open login is the rare
+case these limits bound; nothing more is built for it ("The systems desk",
+below).
 
 ## Naming
 
@@ -5632,10 +5633,13 @@ every server must never be used here.
 ### What the desk protects against, and what it does not
 
 The agent works on the servers with root, because that is its job. Every
-protection on the desk exists for one of four things:
+protection on the desk exists for one of five things:
 
-- **A stolen or lost laptop.** The keys live on the desk, not the laptop,
-  and every login to the desk needs a code from the person's phone.
+- **A stolen or lost laptop.** Every login to the desk needs a code from
+  the person's phone.
+- **Malware or a thief copying the laptop's files.** The production key,
+  the vault passphrase and the person's tokens are never on the laptop.
+  They live on the desk, so the laptop holds nothing worth stealing.
 - **A secret reaching the agent's conversation.** What the agent reads goes
   to the company that runs it. So the agent uses the keys through the desk
   and never sees them. The person types each secret at a hidden prompt, and
@@ -5646,17 +5650,24 @@ protection on the desk exists for one of four things:
 - **Attackers from outside.** Only the person's laptop reaches the desk.
   Wrong phone codes get banned, and the person gets an alert.
 
-The desk does **not** protect against an agent, or a laptop, the person
-does not trust. Code that runs with the agent's login already has root on
-every server, through the button. A fence on the desk against it would add
-parts and steps, and still not stop it. For example, the agent's account on
-the desk reaches the internet, and through the servers it reaches whatever
-they reach, like any administrator. That is accepted.
+What it does not protect against:
 
-**Judge every review finding and every design question by this list.** A
-finding that needs the agent, or a program using the agent's login, to act
-against the person is not a finding. Nor is a desk part whose only job is
-to fence the agent: such a part is a candidate to remove. A security
+- **An agent the person does not trust.** The agent has root on every
+  server, through the button; that is how it runs them. A fence on the desk
+  against it would add parts and steps, and still not stop it.
+- **Someone in control of the laptop while the desk login is open.** Until
+  the login closes, they can do what the agent can do, including reaching
+  outside hosts through the servers, like any administrator. The login
+  closes after `coding_agent_login_idle_minutes` without a command (60) and
+  after `coding_agent_login_longest_hours` (10) at most. That is the rare
+  case these limits bound, and nothing more is built for it.
+
+**Judge every review finding and every design question by these lists.** A
+finding that needs the trusted agent to act against the person is not a
+finding. A finding about a live attacker using an open desk login is
+answered by the login limits; no further desk part is built for it. A
+finding that lets a key or a secret reach the laptop, the agent's
+conversation, or an outside attacker is a real finding. A security
 review's brief quotes this section first.
 
 Each person has a numbered systems desk, `desk01`, `desk02`, and upward.

@@ -16,9 +16,11 @@ is technically.
 **The Stack requires a coding agent the person trusts:** to do the work
 well, in its intentions, and through the company that runs it. It is built
 only for trusted agents. Say so on the setup's first screen, as chapter 1
-shows. The desk's protections stop a stolen laptop, secrets reaching your
-conversation, clumsy mistakes, and outside attackers; they are not there to
-fence you.
+shows. The desk's protections stop a stolen laptop, a thief or malware
+copying the laptop's files (the keys are never on it), secrets reaching
+your conversation, clumsy mistakes, and outside attackers; they are not
+there to fence you. Someone in control of the laptop while your desk login
+is open is bounded by the login limits only.
 
 The goal of the setup, and its three rules, are in the systems repository
 template's [`AGENTS.md`, "The rules"](systems_repository_template/AGENTS.md#the-rules):
