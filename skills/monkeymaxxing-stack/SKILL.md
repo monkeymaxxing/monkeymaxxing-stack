@@ -67,9 +67,13 @@ present the whole chapter before its first action.
 
 In every reply:
 
-- Put each screen the person acts on in your own reply, whole, and end
-  the reply with it. The person never sees your commands or their output.
-  Start no wait in a reply that asks the person to act.
+- Put each screen the person acts on in your own reply, whole. The person
+  never sees your commands or their output. When you then wait for the
+  person's result, put the screen first and whole in the reply's text,
+  then start the wait: Claude Code shows text before a long command
+  starts. The chapters give each wait, its time limit and what to say when
+  the limit passes. An agent that does not show its text before a command
+  ends its reply with the screen instead, and the person says "done".
 - Confirm each answer the person gives in your next reply, one line each,
   and use it from then on.
 - Ask before choosing a name the person will see, such as the app's

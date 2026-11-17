@@ -170,6 +170,9 @@ func (g *goLive) prepare() error {
 	if g.results.Finished {
 		return nil
 	}
+	// A new run has not stopped yet; the coding agent waits for finished or
+	// stopped_with, so an earlier run's reason must not end its wait.
+	g.results.StoppedWith = ""
 	if g.providerCredential, err = g.readProviderCredential(); err != nil {
 		return err
 	}

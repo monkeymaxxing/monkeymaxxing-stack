@@ -32,9 +32,8 @@ domain at Cloudflare, its DNS records, and the lock.
   `not_started`, and `stopped_with`, the reason a run stopped. Its
   `for_the_coding_agent` block holds values that are not secrets, which
   you write into the settings or check. The file never holds a secret.
-  The person is in the command, not in the chat, so read the file each
-  time the person comes back to you, with a question or when the command
-  is done:
+  Wait for the file as step 2 says, and read it again each time the
+  person writes to you:
 
   ```sh
   # On the laptop:
@@ -86,14 +85,45 @@ domain at Cloudflare, its DNS records, and the lock.
      ssh desk01-setup
 
    It shows the next 3 accounts, one at a time.
-   When it says  Go back to your coding agent,  tell me "done" here.
+   I carry on by myself when it is done.
    Ask me here at any time if a step is unclear.
    ```
 
-   End your reply with the screen, and start no wait in the same reply.
+   Put the screen first and whole in your reply's text. Then, in the same
+   turn, wait on the desk until `go-live` finishes or stops. Give the
+   command the longest time your agent allows a command, 10 minutes in
+   Claude Code:
 
-   **Check:** when the person comes back, the results file shows that
-   `go-live` started.
+   ```sh
+   # On the laptop. Waits up to 9 minutes for go-live to finish or stop.
+   ssh desk01-agent 'f=/var/lib/monkeymaxxing-stack/setup_results.json; start=$(date +%s)
+     for i in $(seq 108); do
+       [ -f "$f" ] && [ "$(stat -c %Y "$f")" -ge "$start" ] && grep -qE "\"finished\": true|\"stopped_with\":" "$f" && break
+       sleep 5
+     done
+     cat "$f"'
+   ```
+
+   The wait counts only a results file written after it started, and a
+   new `go-live` run drops the earlier run's `stopped_with`. Reason for 9
+   minutes: the loop ends by itself before Claude Code's 10-minute limit
+   stops the command, and a question the person types meanwhile waits 9
+   minutes at most. The wait is one more session on your shared login, and
+   the person's `ssh desk01-setup` is a separate login, so neither blocks
+   the other. Both go through the same doubleshell tunnel, which serves
+   several connections at once.
+
+   When `finished` is true, carry on with the steps below without being
+   told. With `stopped_with`, tell the person the reason in plain words and
+   what to do. When the limit passed, read the file, do the work of each
+   step that is done, such as step 3's, then say in one line that you are
+   still waiting and that the person can type anything here when the
+   command is done, and end the reply. At the person's next message, read
+   the file, and wait again while `go-live` still runs. An agent that does
+   not show its text before a command ends its reply with the screen and
+   "When it says  Go back to your coding agent,  tell me "done" here."
+
+   **Check:** the results file shows that `go-live` started.
 
 3. **Cloudflare.** The command shows:
 
@@ -164,7 +194,7 @@ domain at Cloudflare, its DNS records, and the lock.
      record that the scan missed. The MX records come first, because
      without them the company's email stops arriving.
 
-   **Tell the person,** when the person comes back: one line about each
+   **Tell the person,** when your wait ends: one line about each
    piece of work, such as "Cloudflare accepted your token. I checked your
    domain's DNS records at Cloudflare."
 

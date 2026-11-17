@@ -431,10 +431,16 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 	}
 
 	h.transcript.Reset()
+	writes := len(h.results)
 	h.phoneCode = func(path string) error { return os.WriteFile(path, []byte(emergencyCodes), 0o600) }
 	h.hidden, h.visible = typed(masterKey), typed(masterKeyID)
 	if err := runGoLive(h.e); err != nil {
 		t.Fatalf("rerun: %v\n%s", err, h.transcript)
+	}
+	// The coding agent waits for finished or stopped_with, so a rerun's
+	// first write drops the earlier run's reason.
+	if rerun := h.results[writes]; rerun.StoppedWith != "" {
+		t.Errorf("the rerun's first results still say it stopped: %q", rerun.StoppedWith)
 	}
 	output := h.transcript.String()
 	for _, screen := range []string{"Account 2 of 4", "Account 3 of 4", "Account 4 of 4", "Get Started Free", "One more key", "Step 1 of 2"} {

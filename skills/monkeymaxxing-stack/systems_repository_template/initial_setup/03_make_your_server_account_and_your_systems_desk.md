@@ -51,10 +51,10 @@ account screen of step 1 is the opening.
    `mmx_project_settings.yml`, as the guide says, including the trailing
    slash.
 
-   **Ask the person:** the screen below, whole, in your own reply, with
-   the guide's own website steps. End the reply with the screen. At
-   OVHcloud, steps 4 and 5 become the guide's prefilled createToken
-   link, and the command asks for the three values.
+   **Ask the person:** the screen below, first and whole in your reply's
+   text, with the guide's own website steps. At OVHcloud, steps 4 and 5
+   become the guide's prefilled createToken link, and the command asks
+   for the three values.
 
    ```text
    Account 1 of 4: Hetzner (your servers)
@@ -76,14 +76,28 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
-   When it says  Hetzner accepted the key,  tell me "done" here.
+   I carry on by myself when it is done.
    ```
 
-   Start no wait for the key file in the same reply: the person reads
-   the steps in your reply, and cannot ask you anything while you wait.
-   When the person says "done", check that the key file,
-   `~/example-setup/provider-key`, exists and is mode `0600`. Never print
-   the file.
+   Then, in the same turn, wait for the key file. Give the command the
+   longest time your agent allows a command, 10 minutes in Claude Code:
+
+   ```sh
+   # On the laptop. Waits up to 9 minutes for the key file.
+   for i in $(seq 108); do [ -f ~/example-setup/provider-key ] && break; sleep 5; done
+   ls -l ~/example-setup/provider-key
+   ```
+
+   Reason for 9 minutes: the loop ends by itself before Claude Code's
+   10-minute limit stops the command, so you get a clear answer, and a
+   question the person types meanwhile waits 9 minutes at most.
+   When the file is there, carry on without being told. When the limit
+   passed, say in one line that you are still waiting and that the person
+   can type anything here when the key command is done, and end the
+   reply. At the person's next message, look for the file, and wait again
+   when it is not there yet. Never print the file. An agent that does
+   not show its text before a command ends its reply with the screen and
+   "When it says  Hetzner accepted the key,  tell me "done" here."
 
    **Check:** `~/example-setup/provider-key` exists, mode `0600`.
 
