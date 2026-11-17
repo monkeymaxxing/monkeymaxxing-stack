@@ -610,7 +610,8 @@ The person performs personal-token changes in the person's own terminal.
   Update each person's private passphrase file; the next `review-and-apply-the-systems-desk-settings --only-fleet-stages systems_desk` installs it as the desk's `/etc/systems-desk/vault-passphrase`.
   The button needs the new passphrase before the first direct run updates `util01`.
 - Production SSH key: generate the replacement on the desk, add the new public key beside the old public key
-  in `root_ssh_public_keys`, and register the new public key at the Git host and provider.
+  in `root_ssh_public_keys`, and register the new public key at the provider. The run that applies
+  `root_ssh_public_keys` also lets the new key push to the main copy on `util01`.
   Update the desk's inventory `vars.production_ssh_public_key` to the replacement public key.
   During containment, first load both keys into the person's private SSH agent, because locked servers admit only the mapped key.
   Apply `every_server` before removing the old public key. Restart the desk's SSH agent to load the replacement.

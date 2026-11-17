@@ -138,8 +138,9 @@ user's home, `/var/lib/mmhotline`, and attempted to clone the systems
 repository.
 
 MMHotline's alert listener needs no clone.
-The restore drill waits until the Git host accepts the `mmhotline` user's
-SSH key and the systems repository clone exists on `util01`.
+The restore drill waits until a desk pushed `main` to the main copy on
+`util01`, root there accepts the `mmhotline` user's SSH key, and the
+systems repository clone exists on `util01`.
 
 Before installation, the `mmhotline` stage restores MMHotline's SQLite
 database from Litestream's backup, only when `/var/lib/mmhotline/mmhotline.db`

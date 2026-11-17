@@ -80,9 +80,9 @@ person's own desk terminal, as the secrets rule in
    Reason: the new desk takes the team's `main` as root in its first desk review, and checks first that main lists
    the desk and that its newest commit is signed by a desk; the commit ID from a colleague is what the new person
    compares it with.
-5. **The new person finishes the repository on the new desk.** At the Git host, register the new desk's production
-   public key on the systems repository as a deploy key with write access (the person or an existing member,
-   whoever administers the repository). Then, in the new person's own desk terminal:
+5. **The new person finishes the repository on the new desk.** The new desk reaches the team's main copy on `util01`
+   as root with its production key, which step 4's run let in; no key goes to the Git host. In the new person's own
+   desk terminal:
 
    ```sh
    cd ~/example_systems
@@ -130,21 +130,18 @@ person's own desk terminal, as the secrets rule in
 ### Leaving
 
 1. **Remove the departing person's password-manager, Cloudflare Access, and Git-host access.**
-   At the Git host, also delete the departing desk's deploy key on the systems repository: the key whose public key
-   is the departing desk's `production_ssh_public_key` in `inventories/servers.yml`.
-   Reason: a deploy key belongs to the repository, not to the person's account, so removing the person leaves the key able
-   to push to `main`, which the buttons and `util01` run. A copy of the desk's production key can outlive the desk.
    First hand over, in MMHotline's dashboard, any incident the person has claimed and any on-call shift the person has taken,
    because MMHotline refuses removal while those duties remain.
    Then remove the person from MMHotline's `people` and on-call rotation.
-   **Check:** the repository's list of deploy keys no longer shows the
-   departing desk's key.
+   **Check:** the departing person no longer appears at the Git host or in MMHotline's `people`.
 2. **Remove the departing desk from the repository.** Remove the departing desk's production public key from `root_ssh_public_keys`.
    Remove the departing desk from `nodes` and `groups.systems_desks.nodes` and remove the departing desk's `ssh/deskNN` and known-host entry.
    A remaining member commits, synchronizes, pushes, and runs `every_server` on every production and staging server.
    Then each remaining member runs `review-and-apply-the-systems-desk-settings` in their own desk terminal, so their
    lock-out button and their Git no longer know the departing desk's key.
-   **Check:** verify the departing desk's WireGuard peer and SSH public key are absent on every server.
+   Reason: `root_ssh_public_keys` also decides who can push to the team's main copy on `util01`, so the run on
+   `util01` takes the departing desk's push rights too. A copy of the desk's production key can outlive the desk.
+   **Check:** verify the departing desk's WireGuard peer and SSH public key are absent on every server, `util01` included.
 3. **Delete the departing person's desk and tokens.** Delete the departing person's desk by verified provider ID.
    Revoke the departing person's provider and coding-agent credentials.
    A remaining member deletes the departing person's Cloudflare tokens, the desk token and the status-page posting key,

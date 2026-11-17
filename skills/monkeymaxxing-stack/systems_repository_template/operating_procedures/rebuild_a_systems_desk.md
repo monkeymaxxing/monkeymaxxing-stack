@@ -9,8 +9,7 @@ place, and then the lost desk is deleted at the provider.
 
 **Who acts:**
 
-- **The person** signs in at the Git host's, the provider's and
-  Cloudflare's websites, copies keys from the password manager, and runs
+- **The person** signs in at the provider's and Cloudflare's websites, copies keys from the password manager, and runs
   the desk steps that this page marks "in the person's own terminal".
   The person runs
   [Create the replacement desk from the laptop](#create-the-replacement-desk-from-the-laptop)'s
@@ -34,8 +33,9 @@ inventory's real names and addresses.
 
 ## Before you start
 
-- **The provider account, systems Git repository, and password manager
-  must remain reachable without the lost desk.**
+- **The provider account, `util01`, and the password manager must remain
+  reachable without the lost desk.** `util01` holds the team's main copy of
+  the systems repository, and the replacement fetches `main` from it.
 - **App and database servers keep running while the desk is
   unavailable.**
 - **If `util01` also failed,** [post to the status page](post_to_the_status_page.md#when-the-desk-is-also-lost)
@@ -51,10 +51,6 @@ person's repository that `main`.
 
 Tell the person what they will do on websites and in the password manager:
 
-- At the Git host's website, in step 1, they sign in and add the laptop's
-  temporary read-only deploy key. In step 15, if the Git host no longer
-  lets the restored production key in, they add it again as a deploy key
-  with write access. In step 29, they remove the temporary key.
 - In the password manager, they copy the lost desk's WireGuard private key
   (step 8) and the production private key (step 15), and save the new
   phone-code secret (step 14). They paste the vault passphrase in step 21.
@@ -72,14 +68,18 @@ Tell the person what they will do on websites and in the password manager:
 
 ## Create the replacement desk from the laptop
 
-1. **Register a temporary deploy key.** The person signs in to the Git host
-   with the login in the password manager, and registers a temporary
-   laptop key as a read-only deploy key on the systems repository.
-   **Check:** step 2's clone works with the temporary key.
-2. **Clone the repository** into `~/code/example_systems` on a trusted
-   laptop.
+1. **Use the laptop's clone** of the lost desk's repository,
+   `~/code/example_systems`. It is a starting copy only: the replacement
+   fetches the team's `main` from `util01` in step 17.
    **Check:** the clone holds the systems repository's files, such as
    `inventories/servers.yml`.
+2. **Only when the laptop has no clone, clone the backup at the Git host**
+   into `~/code/example_systems`, with the person's own Git login, from
+   `systems_repository.backup_url_at_the_git_host`. First show the person
+   the Git host's push activity, as "The main copy and the backup at the
+   Git host" in [`AGENTS.md`](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host) says.
+   **Check:** every push in the activity came from the person's own
+   laptop login, and the clone holds `inventories/servers.yml`.
 3. **Prepare the temporary tools and provider access:** follow
    [chapter 3 (make your server account and your systems desk)](../initial_setup/03_make_your_server_account_and_your_systems_desk.md)'s
    "Prepare the laptop and provider account".
@@ -218,8 +218,8 @@ Tell the person what they will do on websites and in the password manager:
     ```
 
     Reason: the bootstrap made a temporary production key. The agent must
-    hold the restored key, which the servers and the Git host already know
-    as the lost desk's. `/etc/systems-desk/production_key.pub` names that
+    hold the restored key, which the servers and `util01`'s main copy
+    already let in as the lost desk's. `/etc/systems-desk/production_key.pub` names that
     key for Git, signing and the coding agent's buttons. The next desk
     review writes the same file from the restored key.
     The person performs these restorations in the person's own terminal.
@@ -227,9 +227,7 @@ Tell the person what they will do on websites and in the password manager:
     **Check:** `SSH_AUTH_SOCK=/run/desk-ssh-agent/private.sock ssh-add -l`,
     run as the person, lists one key, with the fingerprint that
     `ssh-keygen -l -f /etc/systems-desk/production_key.pub` prints. The
-    restarted `desk-ssh-agent` loads `~/.ssh/production_key`. If the Git
-    host no longer lets the restored key in, register it again as a deploy
-    key with write access.
+    restarted `desk-ssh-agent` loads `~/.ssh/production_key`.
 16. **The person writes the bootstrap copy's changes to a file** the coding
     agent can read, in their own desk terminal. The bootstrap copy in the
     person's repository holds the changes of steps 4 to 6 and step 12,
@@ -240,11 +238,26 @@ Tell the person what they will do on websites and in the password manager:
     ```
 
     **Check:** step 18's `git apply` reads the file.
-17. **The replacement's coding agent updates the desk's peers:** in its
-    checkout, it runs `sudo -n update-this-desks-wireguard-peers`, which
-    gives the desk its server peers from pushed `main`.
-    **Check:** the command prints the commit it used and each peer it
-    added, changed or removed, or "No change".
+17. **The replacement's coding agent updates the desk's peers, then
+    fetches `main` from `util01`:** in its checkout, it runs
+    `sudo -n update-this-desks-wireguard-peers`, which gives the desk its
+    server peers, `util01` included, from the checkout. Then it makes the
+    main copy on `util01` the checkout's `origin` and brings `main` to it:
+
+    ```sh
+    # coding-agent, in /home/coding-agent/systems_repository:
+    git remote add origin root@10.20.0.1:/var/lib/systems_repository.git
+    git fetch origin && git reset --hard origin/main && git branch --set-upstream-to=origin/main main
+    sudo -n update-this-desks-wireguard-peers
+    ```
+
+    `util01` lets the desk in because the restored production key is in
+    `root_ssh_public_keys`, and the desk trusts `util01`'s host key from
+    `ssh/known_hosts`. The reset drops the laptop copy's files; step 18
+    applies the rebuild's changes again from the patch.
+    **Check:** each peers command prints the commit it used and each peer
+    it added, changed or removed, or "No change", and `git status` says
+    `main` is up to date with `origin/main`.
 18. **The coding agent sets its Git author to the person's name and email,
     applies the changes, and checks them:**
 
@@ -262,7 +275,8 @@ Tell the person what they will do on websites and in the password manager:
     else before committing. When `git apply` reports a conflict, `main`
     changed the same lines since the laptop's clone: the coding agent
     makes the change of steps 4 to 6 in that file by hand.
-19. **The coding agent commits, synchronizes and pushes the changes** as
+19. **The coding agent commits, synchronizes and pushes the changes** to
+    the main copy on `util01`, as
     [Making a change](../AGENTS.md#making-a-change) says. The coding agent
     tells the person the pushed commit's full ID.
     Reason: `set-up-the-systems-repository` takes the team's `main` only
@@ -278,8 +292,8 @@ Tell the person what they will do on websites and in the password manager:
     set-up-the-systems-repository --author-name "Blair Example" --author-email blair@example.com
     ```
 
-    The command sees that the repository at the Git host has commits, so
-    it joins it, as
+    The command sees that the main copy on `util01` has commits, so it
+    joins it, as
     [chapter 3's "Finish the systems repository on the desk"](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard)
     describes. It keeps the laptop copy's edits in `git stash`.
     **Check:** the command names `main`'s newest commit and its signer,
@@ -366,21 +380,17 @@ Tell the person what they will do on websites and in the password manager:
     with that ID, through the API proxy. Skip this step when a fresh provider listing no longer
     shows the old desk.
     **Check:** the ID is absent from a fresh provider listing.
-29. **Remove the laptop's temporary read-only deploy key** at the Git
-    host.
-    **Check:** the Git host's deploy-key page no longer lists the
-    temporary key.
-30. **Remove the patch file and the kept edits on the desk,** in the
+29. **Remove the patch file and the kept edits on the desk,** in the
     person's own terminal: `/tmp/desk03-rebuild.patch` and the bootstrap
     copy's edits that step 20 kept, with `rm /tmp/desk03-rebuild.patch`
     and `git -C ~/example_systems stash drop`.
     **Check:** `git -C ~/example_systems stash list` no longer shows the
     entry "Changes before joining main at …" that step 20 made.
-31. **Complete chapter 3's laptop cleanup,** including temporary
+30. **Complete chapter 3's laptop cleanup,** including temporary
     provider-tool credential stores.
     **Check:** the checks in chapter 3's "Recovery items and laptop
     cleanup".
-32. **Record the recovery in `systems_desk_recovery`,** in the checklist,
+31. **Record the recovery in `systems_desk_recovery`,** in the checklist,
     `monkeymaxxing_stack_checklist.yml`.
     **Check:** none, because the record is the last step.
 

@@ -32,6 +32,13 @@ an open SOS when step 3 asks.
     acceptance.
   - Use steps 7–8 of [Add a server](add_a_server.md) within rebuild
     step 8, for the reboot and verification.
+- **The team's main copy of the systems repository was on the lost
+  `util01`.** The desk's checkout becomes the main copy until step 4
+  pushes `main` to the new `util01`. Commits that only the lost `util01`
+  had, such as the triage agent's newest notes or a server replacement's
+  inventory commit, are gone; a failing run or a leftover server shows
+  such a gap
+  ([The main copy and the backup at the Git host](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host)).
 - **A push alone changes no server.** Apply each configuration change as
   [Making a change](../AGENTS.md#making-a-change) says: run `every_server`
   or the playbook the step names.
@@ -61,6 +68,9 @@ an open SOS when step 3 asks.
    or the old `util01` was already gone.
 2. **Prepare the new `util01` on the systems desk,** following steps 2 to 4 of
    [Add a server](add_a_server.md), with the utility-server exceptions below.
+   - First make the desk's checkout the main copy again, so
+     `sign-and-publish` publishes without the lost `util01`:
+     `ssh desk01-agent 'cd systems_repository && git remote remove origin'`.
    - Run `wg genkey` and pipe the private key to `wg pubkey`.
      Hold the pair only in memory.
    - Render first-boot data with util01's existing private address and every
@@ -72,17 +82,19 @@ an open SOS when step 3 asks.
      `location` to the create script's, and replace
      `wireguard_public_key` with the setup-generated public key.
    - Trust the new SSH host key over wg0, as shared step 4 shows.
-   - Commit and push the inventory and host key. Skip shared step 3's
+   - Commit the inventory and host key, and publish them with
+     `sign-and-publish`. Skip shared step 3's
      utility-server run: the new `util01` is not configured yet.
 
    Reason: systems desk access reaches the new utility server directly. A
    utility-server self-peer or the lost server's private key is unnecessary.
-   **Check:** shared step 4's SSH connection over wg0 succeeds, and the
-   push holds the new inventory values and host-key line.
+   **Check:** shared step 4's SSH connection over wg0 succeeds, and `main`
+   on the desk holds the new inventory values and host-key line.
 3. **Configure the new `util01`:** run
    `sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only --limit util_server`
    from the systems desk. MMX reuses the first-boot WireGuard key and creates
-   the new `mmhotline` and triage SSH keys.
+   the new `mmhotline` and triage SSH keys, and the empty main copy of the
+   systems repository.
    Remaining servers still know the old utility key until steps 6 and 7
    apply the replacement utility peer and SSH keys from the systems desk.
    Tell the person on call what to expect from the restored MMHotline, as
@@ -103,7 +115,22 @@ an open SOS when step 3 asks.
    does not have.) Then open MMHotline's page and check that each
    person on the schedule still has a contact method listed (each person
    added those, such as a Pushover user key, after the first install).
-4. **Replace the old utility SSH keys.** Read the SSH public keys with
+4. **Push `main` to the new `util01`, then replace the old utility SSH
+   keys.** Make the new main copy the checkout's `origin` again, as chapter
+   7's step 3 does:
+
+   ```sh
+   # On the laptop:
+   ssh desk01-agent 'cd systems_repository && git remote add origin root@10.20.0.1:/var/lib/systems_repository.git && git push --quiet -u origin main'
+   ```
+
+   Each other desk of the team trusts the old `util01`'s host key, so its
+   pull fails with a changed host key. On each such desk, its coding agent
+   puts the new `util01` line of `ssh/known_hosts` into its checkout by
+   hand from this desk's commit, pulls with `git pull --ff-only`, and
+   drops the hand edit if the pull keeps it changed.
+
+   Then read the SSH public keys with
    `sudo -n -u servers-mmx run-mmx-on-the-servers results --node util01 --json`.
    Replace the old utility SSH keys with each task's `public_key`:
 
@@ -113,8 +140,7 @@ an open SOS when step 3 asks.
    - `util_server/ssh_key_of_the_triage_agent`. The two SSH tasks are in fleet stage `util_server`.
      Set `triage_ssh_public_key` in `mmx_project_settings.yml`.
 
-   Replace the systems repository's deploy key at the Git host with the
-   new `mmhotline` user's public key, with write access. Commit.
+   Commit, and publish with `sign-and-publish`.
    Then register the new `mmhotline` user's public key at the server
    provider under the name `util01, the mmhotline user`.
    Every new server and each week's `restore01` start with the public key
@@ -123,7 +149,8 @@ an open SOS when step 3 asks.
    servers, including each week's `restore01`.
    Replace the old registered key with the command or request the
    [provider guide](../provider_guides/) gives.
-   **Check:** the registered public key equals the new utility key.
+   **Check:** `git ls-remote origin main` on the desk shows the desk's
+   `main`, and the registered public key equals the new utility key.
 5. **Find the database primary.** The new failover monitor knows no
    database server. Each database server must register again in the
    database server's own `database_server` stage.
@@ -143,7 +170,7 @@ an open SOS when step 3 asks.
    `database_server` stages. The `every_server` stage gives the primary
    the new `util01`'s keys. The `database_server` stage registers the
    primary with the new monitor.
-   Commit and push step 4's key changes before the run.
+   Step 4 published its key changes before the run.
 
    ```sh
    sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only --only-fleet-stages every_server,database_server --limit db02

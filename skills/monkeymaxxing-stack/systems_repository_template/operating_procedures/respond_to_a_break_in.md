@@ -252,14 +252,22 @@ ordinary change itself.
    Reason: with the template's setting, the triage agent may still approve the commit. After the revert, a run of
    `main` applies nothing of the unknown change.
    **Check:** `git show` of the revert removes every line of the unknown commit.
-3. **Revoke the identity that pushed.** The person finds the identity in the Git host's audit log. At the Git host,
-   the person ends that identity's sessions, personal tokens, SSH keys, deploy keys and app authorizations, and
-   disables untrusted CI and publishing credentials, as the Git host row of
-   ["At each company's website"](#1-lock-everyone-out) says.
-   When the identity is the team's own Git host account, the person first recovers the account: a new password and
-   second factor, and every session ended. Then the person does the whole Git host row for every member.
-   Reason: a copied token remains usable until the issuing company revokes the token.
-   **Check:** the Git host lists only the team's sessions, keys and tokens.
+3. **Find the key that pushed, and revoke it.** Only a key in `root_ssh_public_keys` can push to the main copy on
+   `util01`, as root. On `util01`, the main copy's reflog gives the time of each change to `main`, and sshd's journal
+   gives the key that logged in as root at that time, by its fingerprint and source address:
+
+   ```sh
+   ssh -F ssh/config root@10.20.0.1 'git -C /var/lib/systems_repository.git reflog show --date=iso refs/heads/main | head -20'
+   ssh -F ssh/config root@10.20.0.1 'journalctl -u ssh --since "2026-11-17 10:00" --until "2026-11-17 10:10" | grep "Accepted publickey for root"'
+   ```
+
+   Match the fingerprint with `ssh-keygen -l` of each key in `root_ssh_public_keys`: its comment names the desk, such
+   as `alex on desk01`, or `util01, the mmhotline user`. That desk or `util01` is suspect: go to
+   [The lock-out: only for these cases](#the-lock-out-only-for-these-cases).
+   A commit that came only through the backup at the Git host never reached a server; it shows as a refused backup
+   push. For it, the person does the Git host row of ["At each company's website"](#1-lock-everyone-out).
+   Reason: whoever holds that key has root on every server, so the key goes, not only the commit.
+   **Check:** the reflog's change and a journal line name the same time, and the key is known.
 4. **After the revert is on `main`, mark the unknown commit reviewed:**
    `./server_management_scripts/run_mmx_on_util01 commit-reviews mark-reviewed --commit-id COMMIT`.
    Reason: MMHotline trusts `main` only up to the commit before the first waiting commit. A commit on top, the
@@ -284,7 +292,8 @@ whether a run applied the commit.
 
 When a key in `root_ssh_public_keys` signed the unknown commit, a desk's key or `util01`'s key made the commit.
 Then the desk or `util01` is suspect: go to [The lock-out: only for these cases](#the-lock-out-only-for-these-cases).
-Keep `a_person` until the Git host shows only the team's identities. Then the team chooses the setting again.
+Keep `a_person` until the key that pushed is out of `root_ssh_public_keys` on every server. Then the team chooses the
+setting again.
 
 ## An unknown session at a company
 
@@ -453,8 +462,8 @@ says. When this desk shows signs:
    **Check:** the list shows `everyone_locked_out_except_desk` as you expect, and every server is one you know.
    If a server is not one you know, press Enter: nothing changes. Ask your coding agent where the server came from,
    and to remove it from `inventories/servers.yml` and push, before you run the lock-out button again.
-   Reason: the lock-out connects every server with the servers the inventory names, so a server that an outside
-   attacker pushed to your Git host would join the private network through the lock-out itself.
+   Reason: the lock-out connects every server with the servers the inventory names, so a server that an intruder
+   pushed to the main copy on `util01` would join the private network through the lock-out itself.
 4. **Type `yes`, then read the last lines.**
    **Check:** they end with how to undo the lock-out. A line that starts "MMX ended with exit code"
    names what failed: [step 1](#1-lock-everyone-out) says what to do.
@@ -499,9 +508,9 @@ A failed Cloudflare revocation is reported after local containment. Complete tha
 
 ### What the lock-out button does, in order
 
-1. It pulls `main` from the Git host as you, with `git pull --ff-only origin main`. When the pull does not work,
-   because the Git host does not answer or your repository has changes in the way, the lock-out button says so in
-   one sentence and goes on with your repository as it is. Reason: a break-in must not wait for the Git host.
+1. It pulls `main` from the main copy on `util01` into the desk's own copy, through your coding agent's checkout.
+   When the pull does not work, because `util01` does not answer, the lock-out button says so in one sentence and goes
+   on with the desk's copy as it is. Reason: a break-in must not wait for `util01`.
    Then check that the list below shows `everyone_locked_out_except_desk` as you expect.
 2. It shows every server of the inventory, one line each, with its pool, its private address and its public
    address; then the desk that keeps access and the desks that lose access; and asks you to type `yes`.
@@ -513,7 +522,7 @@ A failed Cloudflare revocation is reported after local containment. Complete tha
    It takes only data from the pulled repository: the inventory, the servers' host keys, the settings and the vault.
    When the pulled repository changes one of those reviewed files, the lock-out button names the file and uses the
    reviewed copy. After the incident, run `review-and-apply-the-systems-desk-settings` and read the change before you approve it.
-   Reason: an outside attacker who can push to your Git host must not get root on your desk, or on every server,
+   Reason: an intruder who can push to the main copy on `util01` must not get root on your desk, or on every server,
    through the lock-out; a pushed change to a lock-out program reaches root only through your desk review.
    The lock-out button stops before changing anything when a node's `ssh_config` in the inventory is not one of the
    reviewed SSH settings files.
@@ -545,7 +554,7 @@ not the way in; this step says what to do next, and why.
 
    | Company | What the person ends |
    | --- | --- |
-   | Git host | Other members' sessions, personal tokens, SSH keys, deploy keys and app authorizations. The suspect desk's deploy key. Disable untrusted CI and publishing credentials. |
+   | Git host | Other members' sessions, personal tokens, SSH keys and app authorizations. Disable untrusted CI and publishing credentials. The Git host holds the app's code and the systems repository's backup; no desk or server key is there. |
    | Cloudflare | Other members' account sessions and API tokens, and the suspect desk's desk token and posting key. Remove other people's Access admission, revoke Access sessions, and revoke exposed staging service tokens. |
    | Server provider | Other members' sessions, API tokens, console access and registered provisioning keys, and the suspect desk's provider token. |
    | Registry | Other members' sessions and publishing tokens. Preserve the running servers' pull identity until step 4 replaces that identity. |
@@ -767,7 +776,7 @@ The undo lets in, on every server, each key in `root_ssh_public_keys` as root an
 from `mmx_project_settings.yml`. So the lock-out button compares those keys with the ones your last desk review recorded.
 When they match, it goes on. When a key was added or removed, it shows each one, with its comment and its fingerprint
 as `ssh-keygen -l` shows it, and asks you a second time.
-Reason: anyone who can push to your Git host could add a key, and the undo would let that key in as root on every server.
+Reason: anyone who can push to the main copy on `util01` could add a key, and the undo would let that key in as root on every server.
 Other desks start fresh SSH sessions to the servers. Company-side revocations need fresh credentials and sign-ins at each company.
 
 ## When your own desk was the way in
@@ -776,7 +785,7 @@ Other desks start fresh SSH sessions to the servers. Company-side revocations ne
 process on your desk that nobody started.
 
 **What the intruder can reach:** everything that your desk reaches. That is root on every server, `util01` included,
-and your desk's production SSH key, WireGuard key, provider token, Cloudflare tokens and Git deploy key. `util01`
+and your desk's production SSH key, WireGuard key, provider token and Cloudflare tokens. `util01`
 runs each commit that your desk's key signed. So a desk that was the way in counts as an unknown root login, one of
 the lock-out cases.
 
@@ -805,8 +814,8 @@ The old desk is deleted at the end, in both orders.
    **Check:** the button's last lines on the teammate's desk say how to undo the lock-out.
 2. **Snapshot and power off your desk at the provider,** and record the snapshot and server IDs, as step 1's item 3 says.
    **Check:** the provider shows the snapshot, and your desk powered off.
-3. **Revoke your desk's tokens and Git deploy key** at each company, as the table in step 1's item 2 says for the
-   suspect desk: the provider token, the Cloudflare desk token and posting key, and the deploy key at the Git host.
+3. **Revoke your desk's tokens** at each company, as the table in step 1's item 2 says for the suspect desk: the
+   provider token, and the Cloudflare desk token and posting key.
    **Check:** each company lists none of your desk's tokens or keys.
 4. **The teammate continues with steps 1 to 3** from the teammate's desk.
    **Check:** the checks of those steps.
@@ -819,14 +828,15 @@ The old desk is deleted at the end, in both orders.
    `root_ssh_public_keys`. The coding agent pushes the commit, but does not run `every_server` for the new key.
    Reason: during the lock-out, the servers admit only the desk that keeps access. The undo lets the new key in.
    **Check:** the diff adds the new key and removes only the old desk's key.
-7. **Finish the new desk,** as step 5 of Add or remove a team member says, with the commit ID from the teammate.
-   The new desk joins during the lock-out; it reaches no server until the undo.
-   **Check:** the checks of that step.
-8. **The teammate runs `review-and-apply-the-systems-desk-settings`, continues with step 4, then undoes the
+7. **The teammate runs `review-and-apply-the-systems-desk-settings`, continues with step 4, then undoes the
    lock-out,** as [Undo a lock-out](#undo-a-lock-out) says. Reason: the undo connects only with SSH settings files
    that a desk review installed, and the new desk's `ssh/` file is new.
    **Check:** the desk review shows the new desk's key added and the old desk's key removed, and the undo then says
-   the keys are the same as at the last desk review. From the new desk, `ssh -F ssh/config root@10.20.1.1 true` works.
+   the keys are the same as at the last desk review.
+8. **Finish the new desk,** as step 5 of Add or remove a team member says, with the commit ID from the teammate.
+   Reason for after the undo: the new desk fetches `main` from the main copy on `util01`, and during the lock-out
+   `util01` admits only the desk that keeps access.
+   **Check:** the checks of that step, and from the new desk, `ssh -F ssh/config root@10.20.1.1 true` works.
 9. **Delete the old desk** by the old desk's verified provider ID, as
    [Find the old desk at the provider](rebuild_a_systems_desk.md#find-the-old-desk-at-the-provider) and step 28 of
    Rebuild a systems desk say. Then remove the old desk's entry, its `ssh/` settings file and its known-host lines,
@@ -847,7 +857,6 @@ that desk, so only that desk can run the undo.
 2. **Save the evidence,** as [2. Save the evidence](#2-save-the-evidence) says, on your desk.
    **Check:** the checks of step 2.
 3. **Revoke your desk's provider token and Cloudflare desk token and posting key** at each company.
-   Keep the desk's Git deploy key until item 9. Reason: your old desk still pushes two commits and runs the undo.
    **Check:** each company lists none of the revoked tokens.
 4. **Snapshot and power off your desk at the provider,** and record the snapshot and server IDs.
    Power the desk on again only for items 6 and 7.
@@ -875,7 +884,7 @@ that desk, so only that desk can run the undo.
    **Check:** the join shows `main` at the undo commit; if `main` is past it, stop: someone pushed after the undo, and
    your coding agent reviews that commit with you first. From the new desk, `ssh -F ssh/config root@10.20.1.1 true`
    works, and `ssh -F ssh/config root@10.20.1.1 cat /root/.ssh/authorized_keys` no longer shows the old desk's key.
-9. **Delete the old desk and its Git deploy key, then continue with step 4 from the new desk,** as item 9 of
+9. **Delete the old desk, then continue with step 4 from the new desk,** as item 9 of
    "With a teammate" says. `util01` is suspect, because your old desk had root on `util01`: step 4's item 3
    rebuilds `util01`.
    **Check:** a fresh provider listing no longer shows the old desk, and the checks of step 4.
