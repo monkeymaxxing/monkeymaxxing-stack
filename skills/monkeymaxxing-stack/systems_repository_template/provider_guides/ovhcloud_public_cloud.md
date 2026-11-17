@@ -46,11 +46,18 @@ after the person approves the price:
    option, then `POST /order/cart/CART_ID/checkout`. If checkout cannot pay
    by API, the person places the same order in the console.
 2. Rebuild it with `POST /vps/NAME/rebuild`: the newest Debian 13
-   `imageId`, the desk's `publicSshKey`, `doNotSendPassword: true`, and the
-   server's first-boot data as `postInstallScript`.
-3. Check, on the first VPS, that the first-boot data closed public TCP 22
-   before SSH accepted a connection, as it does on a Public Cloud instance.
-   Then record the server in the inventory as usual.
+   `imageId`, the desk's `publicSshKey`, `doNotSendPassword: true`, and a
+   `postInstallScript`. That script runs once, as a shell script, after the
+   install, so it cannot be the first-boot data itself, which is
+   cloud-init's settings. The script saves the first-boot data as
+   cloud-init's local data, `/var/lib/cloud/seed/nocloud/user-data` with an
+   empty `meta-data` beside it, and runs `cloud-init clean --reboot`, so
+   cloud-init applies the data at the next boot as on a Public Cloud
+   instance.
+3. Until that reboot, public SSH accepts only the desk's key, with no
+   password. Check on the first VPS that after the reboot public TCP 22 is
+   closed and the server has joined WireGuard. Then record the server in
+   the inventory as usual.
 
 Your provider scripts keep creating Public Cloud instances, because the
 servers they create are temporary. When `create_a_server_at_the_provider`
@@ -102,10 +109,11 @@ Public Cloud project. `SERVER_PROVIDER_API_TOKEN` holds the three values joined 
    provider script as `ovhcloud_project_id`.
 3. The coding agent gives the person the link below, with the site's page from the table and the
    project's ID in place of `PROJECT_ID`. The link fills in the access rules: everything inside the one
-   project, nothing else in the account.
+   project, plus ordering, rebuilding and ending VPS servers (`/order/cart` and `/vps`), and nothing else
+   in the account. The laptop uses the same credential to make the first desk.
 
    ```text
-   https://api.us.ovhcloud.com/createToken/?GET=/cloud/project/PROJECT_ID&GET=/cloud/project/PROJECT_ID/*&POST=/cloud/project/PROJECT_ID/*&PUT=/cloud/project/PROJECT_ID/*&DELETE=/cloud/project/PROJECT_ID/*
+   https://api.us.ovhcloud.com/createToken/?GET=/cloud/project/PROJECT_ID&GET=/cloud/project/PROJECT_ID/*&POST=/cloud/project/PROJECT_ID/*&PUT=/cloud/project/PROJECT_ID/*&DELETE=/cloud/project/PROJECT_ID/*&GET=/order/cart/*&POST=/order/cart&POST=/order/cart/*&GET=/vps&GET=/vps/*&POST=/vps/*
    ```
 
    The createToken page has its own sign-in form and ignores a browser that is already signed in to the
