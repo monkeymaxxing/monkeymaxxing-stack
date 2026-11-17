@@ -46,8 +46,8 @@ instructions, "you" is you, the coding agent, and the person is "the
 person".
 
 For a new system, start [chapter 1 (answer two questions)](systems_repository_template/initial_setup/01_answer_two_questions.md)
-with [its one approval](systems_repository_template/initial_setup/01_answer_two_questions.md#first-one-approval-for-the-setups-commands),
-so the person approves the setup's commands once instead of at every step,
+with [its trust line and auto mode line](systems_repository_template/initial_setup/01_answer_two_questions.md#first-the-trust-line-and-auto-mode),
+so the person runs you in auto mode instead of approving every step,
 then its first question. The person has already chosen the stack, so do
 not explain the whole project first. [Chapter 0](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
 holds the map, for when the person asks.
@@ -138,21 +138,6 @@ Share detail from a step's instructions only when the person needs the
 detail for an action or asks for detail. The reasons a person may ask
 about are in **Why the chapter works this way**.
 Keep every required check and safety condition.
-
-## One plain command per tool call
-
-On the laptop, run one plain command per tool call, from the setup's
-first command on: no `&&`, `||`, `;` or `|` chains, no `cd` before
-another command, no shell variables, loops or heredoc scripts, and your
-own read, edit and search tools in place of `cat`, `sed`, `awk` or
-`python`. Read the whole rule, with what to do when a step needs a pipe
-or a script, in the template's
-[`AGENTS.md`, "One plain command per tool call"](systems_repository_template/AGENTS.md#one-plain-command-per-tool-call)
-before chapter 1's first command. Reason: Claude Code asks the person
-again for each part of a chained or scripted command that it cannot
-match, so one plain command keeps the person's questions to what
-[chapter 1's one approval](systems_repository_template/initial_setup/01_answer_two_questions.md#first-one-approval-for-the-setups-commands)
-lists.
 
 ## What the stack is
 

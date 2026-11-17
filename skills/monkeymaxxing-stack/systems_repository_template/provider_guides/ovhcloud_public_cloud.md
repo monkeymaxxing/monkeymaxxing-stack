@@ -548,7 +548,7 @@ Then the public catalog, straight from the API address, with `ovhSubsidiary=US` 
 account's country, such as `FR`, `DE`, `GB` or `CA`, for the others:
 
 ```sh
-# On the laptop, one command per tool call; after the setup, save into coding_agent_scratch/ instead:
+# On the laptop:
 curl -sS --create-dirs -o ~/example-setup/ovhcloud-cloud-catalog.json 'https://api.us.ovhcloud.com/1.0/order/catalog/public/cloud?ovhSubsidiary=US'
 jq --arg plan HOURLY_PLAN_CODE '.addons[] | select(.planCode == $plan) | {planCode, invoiceName, pricings: [.pricings[] | {price, intervalUnit, capacities, description}]}' ~/example-setup/ovhcloud-cloud-catalog.json
 ```

@@ -11,8 +11,8 @@ install two tools and start the systems repository on the laptop.
 **Who acts:** the person answers two questions and says "go". You work
 out every other value from the laptop and the domain, and do the rest.
 
-**Tell the person when the chapter starts:** the first question. The one
-approval below comes in the next reply, with the second question.
+**Tell the person when the chapter starts:** the trust line and the auto
+mode line below, then the first question.
 
 Chapters 1 to 9 are the first part of the setup, "go live". The first part ends
 with the app live, protected and backed up. Phone alerts are the alerts part of
@@ -38,124 +38,20 @@ holds the map of the whole system, for when the person asks.
   time, such as "I am adding your domain at Cloudflare." Explain more
   only when the person asks.
 - **Command blocks.** Every command block in the initial setup files
-  starts with a comment that says where it runs. Run each line of a block
-  as its own tool call, and a block that is a script as [`AGENTS.md`, "One plain command per tool call"](../AGENTS.md#one-plain-command-per-tool-call)
-  says.
+  starts with a comment that says where it runs.
 - **Commits.** Commit each chapter's changes to the systems repository as
   you go, with a message that says what changed and why. Before the desk
   exists, the commits stay in the laptop's copy. From chapter 4 on, follow
   the systems repository's [`AGENTS.md`, "Making a change"](../AGENTS.md#making-a-change).
 
-## First: one approval for the setup's commands
+## First: the trust line and auto mode
 
-Your coding agent's program asks the person before each new command, file
-change, or web page, such as Claude Code's "Do you want to proceed?". The
-setup runs about a hundred commands, so ask for one approval at the start
-instead.
+Your coding agent's program may ask the person before each new command,
+file change, or web page, such as Claude Code's "Do you want to proceed?".
+The setup runs about a hundred commands, so ask the person at the very
+start to run you in the agent's auto mode.
 
-In Claude Code, write the rules below into
-`.claude/settings.local.json` in the app's folder, where the person
-started you. Claude Code reads the file at once, with no restart, and asks
-the person once before it writes the file, because the file is Claude
-Code's own setting. That question is the one approval. Use the local file,
-not `.claude/settings.json`: the local file stays on this laptop and never
-goes into the app's code. Never commit it.
-
-The rules name exact folders, never a wildcard folder, so write the file
-after the person names the domain, in the same reply as the second
-question: the company name comes from the domain, and the folders from the
-company name, as step 3 and step 5 say. Replace in the example:
-
-- `/Users/alex` with the laptop's home folder, written out (`$HOME`), in
-  `additionalDirectories`.
-- `example_systems` with the systems repository's name, and `example-setup`
-  with the company name in lowercase with hyphens followed by `-setup`.
-- The skill's folder, the folder that holds `SKILL.md`. Add its real path
-  too when the skill is installed as a link.
-
-When the person changes the company name at "go", write the file again
-with the new folders; Claude Code asks once more. Read web pages, such as
-the provider's price page, with `curl --create-dirs -o ~/example-setup/NAME URL`,
-then your read tool.
-
-```json
-{
-  "permissions": {
-    "additionalDirectories": [
-      "/Users/alex/code/example_systems",
-      "/Users/alex/example-setup",
-      "/Users/alex/.claude/skills/monkeymaxxing-stack"
-    ],
-    "allow": [
-      "Bash(~/.local/bin/mmx *)",
-      "Bash(~/.local/bin/doubleshell *)",
-      "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(ssh desk01-agent *)",
-      "Bash(ssh root@desk01 *)",
-      "Bash(ssh -o StrictHostKeyChecking=accept-new root@desk01 *)",
-      "Bash(~/code/example_systems/ssh/open-the-desk-login *)",
-      "Bash(~/code/example_systems/server_management_scripts/*)",
-      "Bash(~/code/example_systems/coding_agent_scratch/*)",
-      "Bash(ssh-keygen *)",
-      "Bash(curl *)",
-      "Bash(jq *)",
-      "Bash(dig *)",
-      "Bash(readlink /etc/localtime)",
-      "Bash(timedatectl show *)",
-      "Bash(tar *)",
-      "Bash(shasum *)",
-      "Bash(sha256sum *)",
-      "Bash(openssl *)",
-      "Bash(podman run *)",
-      "Bash(podman build *)",
-      "Bash(docker run *)",
-      "Bash(docker build *)",
-      "Bash(mkdir *)",
-      "Bash(cp *)",
-      "Bash(mv *)",
-      "Bash(ln *)",
-      "Bash(chmod +x ~/example-setup/*)",
-      "Bash(chmod +x ~/code/example_systems/coding_agent_scratch/*)",
-      "Edit(./**)",
-      "Edit(~/code/example_systems/**)",
-      "Edit(~/example-setup/**)",
-      "Edit(~/.ssh/config)",
-      "Edit(~/.config/doubleshell/**)"
-    ],
-    "deny": [
-      "Bash(sed -i *)",
-      "Bash(perl -i *)"
-    ]
-  }
-}
-```
-
-`additionalDirectories` lets you read the systems repository, the setup
-folder and the skill without a question. `Edit` rules cover every tool
-that writes a file, in the app's folder, the systems repository with its
-`coding_agent_scratch/` folder for your own scripts, and the setup folder.
-A rule matches the command as you write it, so write each command as the
-rules name it: `~/.local/bin/mmx`, never `mmx`; a script by its full path
-from `~/`; and one plain command per tool call, as
-[`AGENTS.md`, "One plain command per tool call"](../AGENTS.md#one-plain-command-per-tool-call)
-says. A command that starts with a variable, such as `COPYFILE_DISABLE=1 tar`
-or `export PATH=...`, asks, and so does any part of a chain that no rule
-matches. A few commands still ask, and `rm` always asks: the person approves
-each one as it comes. Never add `Bash(*)`, a rule for `rm`, `python3`,
-`bash`, `sh`, `sed`, `awk`, `perl`, `env` or a loop, or a folder outside
-the three above, and never turn off the questions with a mode that skips
-them all. Reason: a wildcard in an `rm` rule also matches a second path,
-such as `~/`, and a rule for a program that runs any script allows every
-command.
-
-The two `deny` rules refuse `sed -i` and `perl -i` without a question,
-also inside a longer command: change files with your Edit and Write tools
-instead, so the person can see each change. Reason: a refusal costs the
-person nothing, and an edit by your own tools shows the person the change.
-
-**Tell the person first,** in the reply after the domain answer, before
-you write the file:
+**Tell the person first,** in your first reply, before the first question:
 
 ```text
 USE ONLY A CODING AGENT YOU TRUST.  It will have full control of your servers.
@@ -164,35 +60,17 @@ Trust means three things: it does the work well, it means you well, and you trus
 the company that runs it, because your work passes through that company.
 An agent you would not trust with your servers should never be used here.
 
-Before I start: one approval, so I do not ask "allow?" at every step.
-
-I add one list to this folder, in  .claude/settings.local.json.
-It lets me do these without asking each time:
-  - run the setup's tools: mmx, doubleshell, git, ssh to your systems desk (a small server of your own that holds your keys), curl, and a few more
-  - change files in this app's folder, and in the systems folder I make,  ~/code/example_systems
-  - add your systems desk to your SSH settings,  ~/.ssh/config
-
-It also blocks two commands that change files out of your sight.  I change files with my editor, so you see each change.
-
-These questions catch clumsy mistakes, not me: anything that changes your live servers still goes through your systems desk.
-
-I work through your systems desk and never copy your keys.
-
-Until now, Claude Code may have asked you a few times already, such as to read this setup's instructions.
-It asks once more now, to write the list.  After that, only a few commands still ask, such as deleting a file.
-The list stays on this laptop.  It never goes into your app's code.
-
-Claude Code now asks you once.  Choose  Yes.
+Run me in auto mode for this setup, so I don't stop to ask before each step.
+In Claude Code: press Shift+Tab until it shows "auto mode on".
+Reason: the Stack needs a coding agent you trust, and anything that changes your live servers still goes through your systems desk and a `yes` you type.
 ```
 
-Then write the file. After the person's approval, ask the second
-question in the same reply.
+Then ask question 1 in the same reply. When the person's agent is not
+Claude Code, say in one line how to use that agent's own auto mode, or
+that it has none. Never write a permission list into the app's folder.
 
-With another coding agent, use its own way to approve the setup's
-commands once, and say plainly what it allows.
-
-**Check:** the person chose Yes, and `.claude/settings.local.json` holds
-the rules with this team's folders.
+**Check:** you showed the screen, and recorded the domain once the person
+answers.
 
 ## Steps
 
@@ -210,7 +88,7 @@ the rules with this team's folders.
 
 2. **The server provider.** Read the [provider guides](../provider_guides/README.md).
 
-   **Ask the person,** in the reply with the one approval, after it:
+   **Ask the person,** in your second reply:
 
    ```text
    2. Which company should run your servers?
@@ -345,9 +223,7 @@ the rules with this team's folders.
 
    Run both tools by their full paths on the laptop, `~/.local/bin/mmx`
    and `~/.local/bin/doubleshell`, as the laptop's command blocks do, also
-   where a step names a command in the text, such as `mmx validate`. Never
-   start a command with `export PATH`: the approval's rules match the full
-   paths only. On the desk and the servers, `mmx` is on the path.
+   where a step names a command in the text, such as `mmx validate`. On the desk and the servers, `mmx` is on the path.
 
    **Check:** `~/.local/bin/mmx version`, `~/.local/bin/doubleshell version`, `git --version`,
    `bash --version`, and `jq --version`.
@@ -359,7 +235,7 @@ the rules with this team's folders.
    `example_systems`.
 
    ```sh
-   # On the laptop, one command per tool call. Replace TEMPLATE_DIRECTORY with the directory's path:
+   # On the laptop. Replace TEMPLATE_DIRECTORY with the directory's path:
    mkdir -p ~/code
    cp -R TEMPLATE_DIRECTORY ~/code/example_systems
    git init -b main ~/code/example_systems
