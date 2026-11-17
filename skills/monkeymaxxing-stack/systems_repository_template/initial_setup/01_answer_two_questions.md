@@ -106,6 +106,8 @@ holds the map of the whole system, for when the person asks.
 
    I will also install two small tools in your home folder: mmx and doubleshell.
 
+   "go" also approves a weekly test that your backups restore, and limits on how far your servers grow by themselves.
+
    Tell me what to change, or say "go".
    ```
 

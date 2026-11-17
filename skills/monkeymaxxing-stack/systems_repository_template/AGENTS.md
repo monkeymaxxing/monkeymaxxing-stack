@@ -588,6 +588,15 @@ and the connection may close without stopping the run. Start the run with
 ssh desk01-agent 'mkdir -p ~/runs && systemd-run --user --unit=NAME --collect bash -c "cd ~/systems_repository && sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only > ~/runs/NAME.log 2>&1; echo \$? > ~/runs/NAME.exit"'
 ```
 
+A desk job does not get the two values sshd sets for your logins, because
+`systemd-run --user` starts it in your own systemd, not in the login. A
+job that commits, signs or pushes with Git, such as a `git commit` in your
+checkout, passes both, right after `systemd-run --user`
+(`sign-and-publish` sets them itself):
+`-E SSH_AUTH_SOCK=/run/desk-ssh-agent/socket -E GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig`.
+Without them, its commits are not signed and Git does not know the Git
+host's keys.
+
 Read `~/runs/NAME.log` for progress. The run is over when
 `~/runs/NAME.exit` exists, and the file holds the run's exit code. After a
 closed connection, ask the person for one code, as "Your login on the desk"

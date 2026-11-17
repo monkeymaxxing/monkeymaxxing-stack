@@ -111,6 +111,21 @@ domain at Cloudflare, its DNS records, and the lock.
      Cloudflare token (hidden):
    ```
 
+   When an app keeps uploaded files, the screen has one more step before
+   the link: turn on R2, where the app keeps its uploads, with R2's price,
+   from the command's own lines:
+
+   ```text
+     4. Turn on R2, where your app keeps its uploaded files:
+          https://dash.cloudflare.com/?to=/:account/r2/overview
+        Finish the checkout there.  It asks for a card.
+        It costs nothing up to 10 GB of files a month.
+        Above that:  $0.015 for each GB a month,
+                     $4.50 for each million file writes after the first million,
+                     $0.36 for each million file reads after the first 10 million.
+        Downloads to your users cost nothing.
+   ```
+
    The link is the one the command prints, with the team's own token
    name. The command checks the token and prints `Cloudflare accepted the
    token.` The link token can only make tokens. With it, the command makes
@@ -120,16 +135,21 @@ domain at Cloudflare, its DNS records, and the lock.
    tunnels `example_systems-apps` and `example_systems-util01` with their
    tokens in the vault, makes the servers' Cloudflare keys (the table in
    [chapter 5](05_put_your_site_behind_cloudflare_and_lock_your_private_pages.md#steps)),
-   and adds One-time PIN, Access's login method that emails a code. Then
-   it deletes the link token. R2 stays off in the first sitting, so the
-   command makes no uploads bucket and no status page.
+   and adds One-time PIN, Access's login method that emails a code. When
+   an app keeps uploaded files, it waits until R2 is on, saying so, and
+   then makes the app's uploads bucket and its key in the same run. Then
+   it deletes the link token. The status page waits for its own sitting.
 
    When the results file shows the step `cloudflare` done:
 
    - Write `cloudflare_account_id` from `for_the_coding_agent` into
      `vars.cloudflare_account_id` in `mmx_project_settings.yml`, and
-     publish the change, as "Making a change" in
-     [`AGENTS.md`](../AGENTS.md#making-a-change) says.
+     commit it in your clone. Publish it once `go-live` has finished
+     (step 7's check), as "Making a change" in
+     [`AGENTS.md`](../AGENTS.md#making-a-change) says. Reason: `go-live`
+     saves keys in the vault of the desk's checkout and commits them only
+     later, and `sign-and-publish` refuses a checkout with changes that
+     are not committed.
    - Check the scan's records through the proxy at
      `http://127.0.0.1:8082/` on the desk. Read the current records with
      `dig` against the old nameservers, for the domain itself, `www`, the
@@ -142,7 +162,7 @@ domain at Cloudflare, its DNS records, and the lock.
    your token. I am checking your domain's DNS records at Cloudflare."
 
    **Check:** the step `cloudflare` is `done`, and
-   `vars.cloudflare_account_id` is published.
+   `vars.cloudflare_account_id` is committed in your clone.
 
 4. **The domain's registrar.** The command reads the domain's registrar
    and its DNSSEC state from the registry's RDAP service, and shows the
@@ -248,7 +268,8 @@ domain at Cloudflare, its DNS records, and the lock.
    The command reads the app's image at the registry with the token, and
    prints `GitHub accepted the token.` Write
    `container_registry_read_only_username` from `for_the_coding_agent`
-   into `mmx_project_settings.yml`, and publish it.
+   into `mmx_project_settings.yml`, and commit it in your clone, to
+   publish once `go-live` has finished, as in step 3.
    `container_image_found` says whether CI has built the first image yet.
    With `no, not built yet`, check CI before chapter 7, with `gh run watch`
    when `gh` is signed in.
@@ -301,9 +322,25 @@ domain at Cloudflare, its DNS records, and the lock.
 
      [QR code]
 
+     Or type this key into the app instead:  [the key]
+
      3. Type the 6 digits your phone shows.
 
      Code:
+   ```
+
+   After a wrong code, the command says so and asks again:
+
+   ```text
+     That code did not match.  Type the 6 digits your phone shows now.
+     If every code fails, check that your phone sets its clock automatically.
+   ```
+
+   Once a code matches, it clears the screen and says:
+
+   ```text
+   Your phone code is ready. From now on each new login to this desk needs your laptop AND a code from your phone.
+   Each code works once. 5 wrong codes within ten minutes lock that laptop out of the desk for 5 minutes.
    ```
 
    The command ends:
@@ -325,7 +362,9 @@ domain at Cloudflare, its DNS records, and the lock.
    The person needs no help unless the person asks.
 
    **Check:** the results file shows the recovery passphrase and the phone
-   code done, and the Git host shows `recovery_bundle.age` on `main`.
+   code done and `finished: true`, and the Git host shows
+   `recovery_bundle.age` on `main`. Then publish the settings you
+   committed in steps 3 to 6 with `sign-and-publish`.
 
 8. **Close root SSH from the laptop.** Run the bootstrap's `lock` stage.
    It closes root SSH from the laptop, so from now on the desk admits only
@@ -387,14 +426,11 @@ domain at Cloudflare, its DNS records, and the lock.
 - **The team has no domain yet** (step 3): after the Cloudflare screen,
   the person registers the domain at Cloudflare, at the price Cloudflare
   shows. The registrar screen is skipped.
-- **An app keeps uploaded files** (step 3): R2 stores them, and R2 stays
-  off in the first sitting, because Cloudflare asks for a payment approval
-  on its website before R2 turns on. The results file's `cloudflare_r2`
-  says so. The app's uploads bucket and its keys come from a later
-  `set-up-outside-services cloudflare` run, after the person approves the
-  payment on R2's page, `https://dash.cloudflare.com/?to=/:account/r2/overview`.
-  Tell the person this in one line, and say what it means for the app
-  until then.
+- **An app keeps uploaded files** (step 3): R2 stores them. The
+  Cloudflare screen's extra step turns R2 on, with its price, because
+  Cloudflare asks for a card on its website before R2 turns on. When the
+  person pasted the token before R2 was on, the command shows R2's page
+  again and waits for Enter, then makes the uploads bucket and its key.
 - **Cloudflare, Backblaze or GitHub refuses a value** (steps 3, 5 and 6):
   the command shows the service's reason and asks again. Nothing else is
   needed.
