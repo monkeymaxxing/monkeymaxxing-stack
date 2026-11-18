@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Your customer portal</title>
+<h1>Your records</h1><form method="post" action="/logout"><button>Log out</button></form>
+<ul><li><form method="post" action="/records/1/update"><label>Title <input name="title" value="Passport" maxlength="200" required></label><label>Description <textarea name="description">Line one
+Line two</textarea></label><button>Save</button></form><form method="post" action="/records/1/delete"><button>Delete Passport</button></form></li><li><form method="post" action="/records/2/update"><label>Title <input name="title" value="Lease" maxlength="200" required></label><label>Description <textarea name="description"></textarea></label><button>Save</button></form><form method="post" action="/records/2/delete"><button>Delete Lease</button></form></li></ul>
+<h2>Add a record</h2><form method="post" action="/records"><label>Title <input name="title" maxlength="200" required></label><label>Description <textarea name="description"></textarea></label><button>Add record</button></form>
+<h2>Upload a private document</h2><form method="post" action="/documents" enctype="multipart/form-data"><label>File, up to 5 MiB <input name="file" type="file" required></label><button>Upload</button></form>
+<ul><li><a href="/documents/7">Download scan.pdf</a></li></ul>
+<h2>Reports</h2><form method="post" action="/reports"><button>Request record-count report</button></form>
+<ul><li>Report 3: <pre>Total records: 2
+&lt;done&gt; &amp; &#34;ok&#34;</pre></li><li>Report 4: Waiting for a worker. Refresh to check completion.</li></ul></html>

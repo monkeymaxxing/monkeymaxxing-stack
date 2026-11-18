@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
-	"html/template"
 	"io/fs"
 	"log"
 	"net"
@@ -15,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -150,7 +149,7 @@ func (pages *webPages) showHomePage(w http.ResponseWriter, r *http.Request) {
 		page.DatabaseProblem = err.Error()
 		status = http.StatusServiceUnavailable
 	}
-	render(w, status, "home", page)
+	render(w, status, homePageHTML(page))
 }
 
 // readDatabase records the page view and reads the rows the home page shows.
@@ -263,12 +262,12 @@ type cachedPage struct {
 // the copy lasts, every reload shows the same time and server.
 func (pages *webPages) showCachedPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	render(w, http.StatusOK, "cached", cachedPage{
+	render(w, http.StatusOK, cachedPageHTML(cachedPage{
 		Release:           release,
 		StylesheetPath:    "/assets/" + stylesheetFileName,
 		AppServerHostName: pages.hostName,
 		RenderedAt:        formatTime(time.Now()),
-	})
+	}))
 }
 
 // checkHealth is the health URL, /up. It answers 200 only when this web
@@ -330,15 +329,12 @@ func formatTime(moment time.Time) string {
 	return moment.UTC().Format("2006-01-02 15:04:05 UTC")
 }
 
-//go:embed pages.html
-var pagesHTML string
+//go:generate go tool templ generate
 
-var pageTemplates = template.Must(template.New("pages").Parse(pagesHTML))
-
-func render(w http.ResponseWriter, status int, pageName string, data any) {
+func render(w http.ResponseWriter, status int, page templ.Component) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := pageTemplates.ExecuteTemplate(w, pageName, data); err != nil {
-		log.Printf("web: rendering the %s page: %v", pageName, err)
+	if err := page.Render(context.Background(), w); err != nil {
+		log.Printf("web: rendering a page: %v", err)
 	}
 }

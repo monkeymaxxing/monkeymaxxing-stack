@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who answered this page</title>
+<link rel="stylesheet" href="/assets/stylesheet-0123456789abcdef.css">
+</head>
+<body>
+<h1>Who answered this page</h1>
+<dl>
+  <dt>App server</dt>
+  <dd>app001</dd>
+  <dt>The request arrived on</dt>
+  <dd>10.20.1.5 (app001)</dd>
+  <dt>Release</dt>
+  <dd>abc1234</dd>
+  <dt>Database server</dt>
+  <dd>10.20.2.1 (db01), the primary: the app connects only to the one that accepts writes</dd>
+  <dt>Page views so far</dt>
+  <dd>42, counted on 10.20.2.2 (db02), a replica</dd>
+</dl>
+
+
+<h2>Newest jobs</h2>
+<form method="post" action="/jobs"><button>Add a job</button></form>
+<table>
+  <tr><th>Job</th><th>Added</th><th>Finished</th></tr>
+  <tr><td>12</td><td>2026-01-02 03:04:05 UTC on app001</td><td>2026-01-02 03:04:09 UTC on app002</td></tr>
+  <tr><td>11</td><td>2026-01-02 03:00:00 UTC on app002</td><td>not yet</td></tr>
+</table>
+
+<h2>Newest page views</h2>
+<table>
+  <tr><th>Viewed</th><th>App server</th><th>Database server</th></tr>
+  <tr><td>2026-01-02 03:04:05 UTC</td><td>app001</td><td>10.20.2.1 (db01)</td></tr>
+  <tr><td>2026-01-02 03:04:01 UTC</td><td>app002</td><td>10.20.2.1 (db01)</td></tr>
+</table>
+
+<p><a href="/cached">A page that Cloudflare may cache</a></p>
+</body>
+</html>
