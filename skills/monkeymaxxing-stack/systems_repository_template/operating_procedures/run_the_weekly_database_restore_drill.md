@@ -105,8 +105,18 @@ waits to run again. The next drill also refuses a leftover server.
   `cleanup_failure_reason`. The drill fails its service, and does not run
   again: remove the leftover as
   [Remove a leftover restore server](#remove-a-leftover-restore-server) says.
-- **The drill failed.** A failure gives `attempt_dir` for recovery. Read
-  the journal for the cause.
+- **The drill failed.** A failure gives `attempt_dir` for recovery. Name
+  the cause only from the drill's own record: the journal's line
+  `restore drill failed at fleet stage ...` names the failed fleet stage
+  of `restore_database` and its error, and
+  `ATTEMPT_DIR/restore_result.json` holds the whole run, where the
+  failed stage's entry has `"status": "failed"`. When no fleet stage of
+  the restore failed, the journal says so, and the lines above it give
+  the cause, such as a failed create of `restore01` or a failed uploads
+  check. Lines in which SSH tries
+  `restore01` again while the new server boots are normal, not a cause.
+  Reason: a coding agent that read only those SSH lines once called a
+  failed check query "a slow boot".
 
 The success marker changes only after restore, queries, uploaded-file
 checks, and cleanup pass. MMWatchdog warns when the success marker is

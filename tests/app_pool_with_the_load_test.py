@@ -292,7 +292,10 @@ class TheChecksOnUtil01(unittest.TestCase):
         playbook = (T/'playbooks/every_server.yml').read_text()
         stages = re.findall(r'(?m)^  - id: (\S+)', playbook)
         new_stage = 'install_the_waiting_security_updates_on_new_servers'
-        self.assertEqual(stages[-2:], [new_stage, 'record_when_each_app_server_installed_its_waiting_security_updates'])
+        # Only the first restore drill's two stages come after them.
+        self.assertEqual(stages[-4:], [new_stage, 'record_when_each_app_server_installed_its_waiting_security_updates',
+                                       'push_the_newest_database_changes_before_the_first_restore_drill',
+                                       'start_the_restore_drill_until_one_has_passed'])
         text = playbook[playbook.index(f'  - id: {new_stage}'):playbook.index("  # util01's rule for the load")]
         self.assertIn('nodes: [app_servers, jobs_servers, load_balancer_servers]', text)
         self.assertIn('unattended-upgrade --no-minimal-upgrade-steps', text)

@@ -639,7 +639,10 @@ command on the desk, looks at the page, and resolves one test notice.
   in the run's results, correct the cause, and run `every_server` again.
 - **A drill or a copy failed** (steps 1 and 2): a drill or a copy that
   failed starts again in each run of `every_server` until one passes: fix
-  the cause, publish, and run `every_server` again.
+  the cause, publish, and run `every_server` again. Find a failed drill's
+  cause in its failed fleet stage, as
+  [The drill failed](../operating_procedures/run_the_weekly_database_restore_drill.md#if-something-is-different)
+  says, before you name a cause to the person.
 - **The test SOS is not acknowledged** (step 10): the command exits 1 and
   the test stays open. Check Pushover on the phone and its critical
   alerts, then run the command again.

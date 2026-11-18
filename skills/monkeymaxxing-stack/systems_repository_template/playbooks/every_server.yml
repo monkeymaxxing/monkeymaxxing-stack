@@ -1731,42 +1731,6 @@ fleet_stages:
                 script: exec /usr/local/bin/mmhotline settings apply
                 only_when_tracked_inputs_changed: true
 
-  # The weekly restore drill (roles/util_server) starts after every_server
-  # until a restore drill has passed on util01. On a new system, the first
-  # drill starts at the end of the every_server run that built the system,
-  # after the production database's first backup. So MMWatchdog's
-  # restore_drill/a_restore_drill_passed_in_the_last_8_days check on util01
-  # passes from the initial setup. After a failed drill, every_server starts
-  # another drill at the end of each run until a drill passes.
-  # The retry includes the every_server run that applies the correction for
-  # the failed drill.
-  #
-  # The restore drill starts in the background. If an uploads copy is
-  # running or starting, systemd waits for the copy to finish before
-  # starting the drill, because weekly_database_restore_drill.service is
-  # ordered after copy_uploads_to_the_backup_bucket.service. The drill takes
-  # util01's lock, so a drill started by util01's every_server run waits for
-  # the every_server run to end.
-  #
-  # A run from a systems desk holds no lock on util01. The drill starts at once.
-  # The drill's MMX run begins only after creating restore01, which
-  # takes minutes, after start_the_restore_drill_until_one_has_passed. The
-  # minutes usually let the desk's run finish first; nothing waits for
-  # the desk's run.
-  # A new util01 starts the restore drill only after the systems repository
-  # is cloned at /var/lib/mmhotline/systems_repository, where the drill runs.
-  # start_the_restore_drill_until_one_has_passed runs last, so a failure in
-  # start_the_restore_drill_until_one_has_passed holds back no server work.
-  - id: start_the_restore_drill_until_one_has_passed
-    nodes: util_server
-    node_tasks:
-      - id: start_the_restore_drill_in_the_background
-        shell:
-          script: systemctl start --no-block weekly_database_restore_drill.service
-          dryrun: printf 'would start the restore drill, because none has passed on util01 yet\n'
-          skip_if_this_path_exists: /var/lib/restore_drill/latest_passed_drill
-          run_only_if_this_path_exists: /var/lib/mmhotline/systems_repository
-
   # A new app, jobs or load-balancer server installs its waiting security
   # updates last, after it serves: on the only app server, a replacement's
   # site then answers 3 to 7 minutes sooner. The fixes reach no request
@@ -1837,3 +1801,72 @@ fleet_stages:
                 APP_SERVER: "{{ .app_server }}"
                 INSTALLED_AT: "{{ .outputs.read_the_time_of_the_security_updates_marker[.app_server].installed_at }}"
               dryrun: printf 'would record when %s installed its waiting security updates\n' "$APP_SERVER"
+
+  # The weekly restore drill (roles/util_server) starts after every_server
+  # until a restore drill has passed on util01. On a new system, the first
+  # drill starts at the end of the every_server run that built the system,
+  # after the production database's first backup. So MMWatchdog's
+  # restore_drill/a_restore_drill_passed_in_the_last_8_days check on util01
+  # passes from the initial setup. After a failed drill, every_server starts
+  # another drill at the end of each run until a drill passes.
+  # The retry includes the every_server run that applies the correction for
+  # the failed drill.
+  #
+  # The restore drill starts in the background. If an uploads copy is
+  # running or starting, systemd waits for the copy to finish before
+  # starting the drill, because weekly_database_restore_drill.service is
+  # ordered after copy_uploads_to_the_backup_bucket.service. The drill takes
+  # util01's lock, so a drill started by util01's every_server run waits for
+  # the every_server run to end.
+  #
+  # A run from a systems desk holds no lock on util01. The drill starts at once.
+  # The drill's MMX run begins only after creating restore01, which
+  # takes minutes, after start_the_restore_drill_until_one_has_passed. The
+  # minutes usually let the desk's run finish first; nothing waits for
+  # the desk's run.
+  # A new util01 starts the restore drill only after the systems repository
+  # is cloned at /var/lib/mmhotline/systems_repository, where the drill runs.
+  # The drill's two fleet stages run last, so a failure in them holds back
+  # no server work, and no later fleet stage of the run finds util01 busy
+  # with the drill: MMX refuses a node that runs another MMX job.
+  #
+  # The drill restores the backup bucket as it stood when the drill started
+  # (playbooks/weekly_database_restore_drill.yml). On a new system, the
+  # run that starts the first drill also ran the apps' first migrations,
+  # and a database server sends its newest changes to the bucket only
+  # about once a minute (archive_timeout = 60, roles/database_server). A
+  # drill started at once restored a copy without the apps' tables, and its
+  # check queries failed (a test system, 2026-11-18). So the primary first
+  # runs pgBackRest's check, which switches to a new segment of the
+  # write-ahead log and waits until that segment is in the bucket. Once on
+  # each database server: a later drill starts long after the changes
+  # before it, and a later fault in archiving never fails every_server
+  # (MMWatchdog warns about archiving). A replica archives nothing.
+  - id: push_the_newest_database_changes_before_the_first_restore_drill
+    nodes: database_servers
+    node_tasks:
+      - id: push_the_write_ahead_log_to_the_backup_bucket_once
+        shell:
+          script: |
+            set -euo pipefail
+            in_recovery=$(/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/psql --no-psqlrc --tuples-only --no-align \
+              --port 5432 --dbname postgres --command 'select pg_is_in_recovery()')
+            if [ "$in_recovery" = t ]; then
+              echo "This server is a replica; the primary sends the changes."
+              exit 0
+            fi
+            exec pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main check
+          dryrun: printf 'would send the newest database changes to the backup bucket, once, before the first restore drill\n'
+          run_as_user_account: postgres
+          env:
+            POSTGRESQL_MAJOR_VERSION: "{{ .vars.postgresql_major_version }}"
+          run_only_once_marker_file: /var/lib/mmx/commands_run_once/push_the_newest_database_changes_before_the_first_restore_drill
+  - id: start_the_restore_drill_until_one_has_passed
+    nodes: util_server
+    node_tasks:
+      - id: start_the_restore_drill_in_the_background
+        shell:
+          script: systemctl start --no-block weekly_database_restore_drill.service
+          dryrun: printf 'would start the restore drill, because none has passed on util01 yet\n'
+          skip_if_this_path_exists: /var/lib/restore_drill/latest_passed_drill
+          run_only_if_this_path_exists: /var/lib/mmhotline/systems_repository
