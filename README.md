@@ -9,6 +9,9 @@ builds the system in about a day and then runs it. Everything is in your own
 accounts, on plain Linux servers that cost 10 to 30 times less than
 hosting at a platform such as Heroku.
 
+> [!NOTE]
+> **This is an alpha version.** The system's design is solid. The setup may still have a few rough spots, but your coding agent can get you past them. If anything confuses you or breaks, please tell us: [how to report it](CONTRIBUTING.md). Thanks!
+
 ## What you get
 
 - Maxxed for monkey/human understanding
