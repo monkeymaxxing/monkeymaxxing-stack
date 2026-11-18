@@ -372,7 +372,7 @@ the person's. Then you push the changes and watch the first build.
      [one short line per changed file, about 8 lines at most]
 
    Tests: I did not run your app's tests.  This laptop has no podman or docker,
-   so your app's tests run in CI, on GitHub, when I push.
+   so your app's tests run at GitHub, automatically, when I push.
 
    Say "yes" and I push them.  Or say "show" to see the details, or tell me what to change.
    ```
@@ -421,14 +421,24 @@ the person's. Then you push the changes and watch the first build.
    production's `deployed_image_tags` in the laptop's copy, and commit
    there. Chapter 7 starts the app with that image.
 
-   **Tell the person after:**
+   **Tell the person after:** the end of part 1, "Your app", with
+   [chapter 0's compact map](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-compact-map),
+   whose first line gives the result, such as:
 
-   > Your changes are on `main`, and CI is building your app's first image.
-   > Building an image changes no server. Chapter 9 puts your app live.
+   ```text
+   Your app is ready: my changes are on main, and GitHub is building your app.  That changes no server yet.
 
-   Then, in the same reply, start chapter 3 with its account screen, as
-   the skill's "Now and next" rule says. Never end the reply with
-   "chapter 3 is next".
+     ✓ 1. Your app
+     → 2. Your accounts            now, about 25 minutes
+       3. Your keys locked away
+       4. Your servers
+       5. Live
+       Later: phone alerts.  Your site has none yet.
+   ```
+
+   Then, in the same reply, chapter 3's account screen follows as the
+   reply's last text, as the skill's "Now and next" rule says. Never end
+   the reply with "chapter 3 is next", or name a chapter at all.
 
    **Check:** the push succeeded, and `deployed_image_tags` holds the
    pushed commit's full ID, and you read CI's result from the registry,

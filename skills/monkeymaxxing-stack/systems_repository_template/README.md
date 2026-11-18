@@ -268,9 +268,15 @@ measured warning or an event:
 
 ## What the setup asks of you and of your app
 
-The initial setup takes about one working day, in ten chapters. Your coding
-agent does the work, explains each step, and asks you for facts and for a
-few major decisions.
+The setup comes in five parts, about an hour in all, and needs you for
+about 20 minutes, mostly at the start: **Your app** (you approve the
+changes to your app), **Your accounts** (you make 3 accounts and paste 4
+keys, and approve the real price), **Your keys locked away** (you save one
+passphrase and scan one code with your phone), **Your servers** (nothing
+for you), and **Live**. Phone alerts follow in about 15 minutes, and the
+triage agent, the status page and your written operating guide when you
+want them. Your coding agent does the work, tells you which part you are
+in, and asks you for facts and for a few major decisions.
 
 Your app must meet three conditions. Your app uses Postgres, keeps uploaded
 files in R2, and runs as a container image. If your app does not meet a
@@ -444,9 +450,8 @@ phone code. When the systems desk's settings changed since your last review, the
 command shows each change and runs only after you type `yes`. Your coding
 agent explains each change first.
 
-Keep the recovery passphrase that
-[chapter 4 (set up your accounts and lock your systems desk)](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#steps)
-showed you in the team's password manager. It opens the recovery bundle,
+Keep the recovery passphrase that the setup showed you in "Your keys locked
+away" in the team's password manager. It opens the recovery bundle,
 which holds every item a lost systems desk needs. If you lose your phone, your laptop,
 or your systems desk, tell your coding agent. The operating procedures are
 [Recover from a lost phone](operating_procedures/recover_from_a_lost_phone.md),

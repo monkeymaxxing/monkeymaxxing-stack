@@ -70,7 +70,9 @@ The script first does two checks:
 
 Then the script does six things, in order:
 
-1. **A prompt for each value,** named as the provider's page names the
+1. **A prompt for each value,** after one line that names the person's
+   part of the setup and the account, as the chat's screen does:
+   `Your accounts: account 1 of 3, Hetzner.` Each prompt is named as the provider's page names the
    value, such as `Hetzner API token (hidden): `. A value the guide marks
    as not secret, such as OVHcloud's project ID, comes first, at a
    visible prompt; every key value is hidden, with `read -rs`. It removes
@@ -100,7 +102,8 @@ Then the script does six things, in order:
    the real price next, and orders your systems desk after your yes.` and waits for the file
    `~/example-setup/desk-ordered`, which your `create-desk01` script makes
    only after the provider accepted the desk's order (chapter 3, step 2 of
-   "Create desk01 through WireGuard"). Then it prints `Your systems desk
+   "Create desk01 through WireGuard"; the script's lines name no chapter,
+   because the person reads them). Then it prints `Your systems desk
    is ordered.  Building it takes about 10 minutes.` and waits for the
    file `~/example-setup/desk-ready`, which you make when the desk is
    ready (chapter 4, step 2). It checks every 5 seconds. It gives up after

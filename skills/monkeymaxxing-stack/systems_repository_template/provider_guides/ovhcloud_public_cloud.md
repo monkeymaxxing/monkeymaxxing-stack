@@ -23,7 +23,7 @@ daily backup that OVHcloud requires with it:
 | Size | VPS | Public Cloud | A VPS is cheaper after |
 | --- | --- | --- | --- |
 | 2 vCPU, 4 GB | VPS-1, $5.85 a month | d2-4, $0.0256 an hour | about 9.5 days |
-| 4 vCPU, 8 GB, the app server | VPS-2, $10.60 a month | b2-15, $0.1663 an hour | about 2.7 days |
+| 4 vCPU, 8 GB, the bigger app server option | VPS-2, $10.60 a month | b2-15, $0.1663 an hour | about 2.7 days |
 
 Before you create a server, show the person both prices, and say which
 kind you chose and why.
@@ -565,10 +565,10 @@ plan charges the whole month and cannot be switched back.
 ## Region, image, and network
 
 Query regional catalogs before creation; `US-EAST-VA-1` is Virginia in the US service.
-`d2-4` has 2 vCPUs, 4 GB RAM, and 50 GB disk, meeting the database,
+`d2-4` has 2 vCPUs, 4 GB RAM, and 50 GB disk, meeting the app, database,
 utility, and staging sizes in [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md).
-For the app server, `b2-15` has 4 vCPUs, 15 GB RAM, and 100 GB disk.
-`d2-8` has only 50 GB disk, below the app requirement. Choose x86-64 because ARM needs matching binaries
+For the bigger app server option, `b2-15` has 4 vCPUs, 15 GB RAM, and 100 GB disk.
+`d2-8` has only 50 GB disk, below the bigger app option's 80 GB. Choose x86-64 because ARM needs matching binaries
 and images. Use hourly billing for temporary servers; stopping a server does not end billing.
 
 **Prices.** Two requests give a flavor's price (OVHcloud's v1 schema: `cloud.json`, the flavor's

@@ -432,8 +432,8 @@ and turns the hourly price into a monthly estimate with the hours of an average 
 ## Commercial type, zone, and image
 
 Use x86_64 types with a local disk, because the create makes the root disk on the type's local disk:
-`DEV1-M` (3 vCPUs, 4 GB RAM, 40 GB) for the ordinary roles and `DEV1-L` (4 vCPUs, 8 GB, 80 GB) for
-`app001`, as [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md)
+`DEV1-M` (3 vCPUs, 4 GB RAM, 40 GB) for `app001` and the other ordinary roles, and `DEV1-L` (4 vCPUs, 8 GB,
+80 GB) as the price screen's bigger option for a heavier app, as [chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md)
 asks. `DEV1-S`'s 2 GB of RAM and 20 GB of disk are too small. ARM types need different images, tools and
 containers.
 

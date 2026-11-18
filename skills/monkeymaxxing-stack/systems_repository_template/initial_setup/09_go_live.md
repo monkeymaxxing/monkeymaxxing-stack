@@ -30,9 +30,18 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
 
 ## Steps
 
-1. **The public host names.** From the laptop, confirm each
+1. **The public host names.** Never look up an app's address from the
+   laptop, with `curl`, `dig` or a browser, before chapter 5 made its DNS
+   record. Reason: the laptop then remembers "no such address" for
+   minutes, and in a newcomer test run the live site failed to open on
+   the laptop for that reason. From the laptop, confirm each
    app's health URL answers HTTP 200 through Cloudflare at the app's public
    host name, the way users reach it: `curl -fsS https://shop.example.com/up`.
+   In the first part of the setup, chapter 8's part 1 already started this
+   check as a bounded background wait; its end wakes you here. When it
+   ended at its bound, such as while the domain is still "Pending" at
+   Cloudflare, say so in one line, with when you check next, and start the
+   same wait again.
    A connector is `cloudflared`, the program on the app server that
    connects to Cloudflare and brings requests to Caddy.
    Cloudflare's API lists a healthy connector of the `example_systems-apps` tunnel on each
@@ -69,17 +78,23 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    end your reply with the screen, with no tool call after it:
 
    ```text
-   Your app is live at https://example.com.
+   YOUR APP IS LIVE AT  HTTPS://EXAMPLE.COM
 
-   Checked just now: it answered through Cloudflare, from app001.
+   Open it now.
 
    YOUR SITE HAS NO PHONE ALERTS YET.  Say "set up alerts" to add them.  It takes about 15 minutes.
 
-   Now: I am turning on the checks of your site, then putting your app's newest version live.
-   Next for you: nothing.  I'll tell you when it's done, in about 15 minutes.
+   Things to know:
+     It answered just now through Cloudflare, from app001, the way your users reach it.
+     Now: I am turning on the checks of your site, then putting your app's newest version live.
+     Next for you: nothing.  I'll tell you when it's done, in about 15 minutes.
    ```
 
-   Name each app's address and the app servers that answered. With
+   The first lines are only these three: the address in capitals, "Open
+   it now.", and the phone-alerts line. Everything else goes under
+   "Things to know", at most five lines, with no commit IDs, image tags,
+   or restore times. Name each app's address and the app servers that
+   answered. With
    `first_release_waits_for_a_persons_approval` set to `true`, the last
    line is instead: Say "release" to put your app's newest version live.
    The checks still turn on meanwhile.
@@ -147,7 +162,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    **Tell the person after:**
 
    > Your first release is live: [the image tag]. A return to the previous version uses the previous image tag, [the previous tag].
-   > The rollback test is [complete, or still open as `deploy_and_rollback` on the checklist].
+   > The test of going back to the previous version is [complete, or still to come with your next release].
 
    An open rollback test can remain for the handover, which records
    outstanding checks.
@@ -176,10 +191,25 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    `restore_drill_check_queries` in `mmx_project_settings.yml`, then commit
    and push. The next weekly drill pulls the commit before it starts.
 
-   **Tell the person after,** which also ends the chapter:
+   **Tell the person after,** which also ends the chapter and the
+   person's five parts, with the compact map of
+   [chapter 0](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-compact-map)
+   as the last text of your reply:
 
-   > Your first release is live. The first part of your setup is done.
-   > When you are ready, say "set up alerts", so a broken site wakes you.
+   ```text
+   Your newest version is live.  All five parts are done.
+
+     ✓ 1. Your app
+     ✓ 2. Your accounts
+     ✓ 3. Your keys locked away
+     ✓ 4. Your servers
+     ✓ 5. Live
+
+     Later, about 15 minutes:    phone alerts.  YOUR SITE HAS NO PHONE ALERTS YET.
+     Then, when you want them:   the triage agent, the status page, and your written operating guide.
+
+   Say "set up alerts" when you are ready, so a broken site wakes you.
+   ```
 
    **Check:** `restore_drill_checks_data_people_create` waits for its
    trigger in the checklist.

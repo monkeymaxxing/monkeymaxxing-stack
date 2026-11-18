@@ -10,7 +10,7 @@ run_history_retention: 30d                  # mmx results and --diff work for a 
 vars:
   # Every server schedule is in UTC, one clock for every server and every
   # log. The coding agent picks these times during setup from the hours
-  # when most of your users are away (chapter 1 asks where they are), and
+  # when most of your users are away (from where your servers are), and
   # tells you the times in your local time. To see times in your local time
   # afterward, add that instruction to AGENTS.md.
   #
@@ -90,9 +90,10 @@ vars:
   # sets false, because the deploy's health check keeps users on the old
   # version when the new version fails.
   production_releases_wait_for_a_persons_approval: true
-  # The first release, at the end of the first part of the setup (chapter 9), asks for
-  # no approval while this is false. Reason: the person approved the app's
-  # changes in chapter 2, and the first release is that approved image.
+  # The first release, when your site goes live at the end of the setup's
+  # five parts, asks for no approval while this is false. Reason: the
+  # person approved the app's changes in "Your app", the setup's first
+  # part, and the first release is that approved image.
   # Setting it to true asks again, once, before the first release. Like the
   # setting above, the coding agent follows it; no server reads it. Later
   # releases follow production_releases_wait_for_a_persons_approval.
@@ -108,7 +109,7 @@ vars:
   # (pushover_application_token and mmwatchdog_pushover_user_or_group_key).
   # While false, util01 and the other servers need no Pushover key: the fleet
   # hub has no push destination, so no alert pretends to reach a phone.
-  # Reason: the first part of the setup goes live without alerts, and a person who has
+  # Reason: the site goes live without phone alerts, and a person who has
   # no Pushover account yet should not have to make one to get the site up.
   # The alerts part of the setup sets it to true in the same change that adds the keys.
   phone_alerts_are_set_up: false
@@ -150,7 +151,7 @@ vars:
   # an sos alert when the app does not answer. Until go-live the domain can
   # still be Pending at Cloudflare and the app is not announced, so the
   # checks would wake the person on call for a system that was never live.
-  # Chapter 9 (go live) sets this to true after the first public check
+  # The coding agent sets this to true at go-live, after the first public check
   # passes, and util01 applies it with every_server.
   public_site_checks_run: false
   status_page_host_name: status.example.com
@@ -588,15 +589,15 @@ vars:
   # says which Debian releases the Stack supports.
   server_image: debian-13
   # The name under which util01's mmhotline user's public key is registered
-  # at the provider (chapter 7). Every server util01 creates, restore01
+  # at the provider when the servers are set up. Every server util01 creates, restore01
   # included, starts with that key, and MMX on util01 logs in with the
   # mmhotline user's matching private key.
   util01_ssh_key_name_at_the_provider: util01, the mmhotline user
 
   # The growth limits: the servers the coding agent adds without asking.
-  # The person sets them once, in chapter 6 (create your three production
-  # servers), after seeing each server type's monthly price and the monthly
-  # cost of every pool at its limit. Inside the limits, when an operating
+  # The person approves them once, with "go" on the setup's first screen,
+  # which shows the most they may add a month, and sees them again before
+  # the servers are created. Inside the limits, when an operating
   # procedure's trigger arrives, the coding agent adds a server to a pool,
   # or replaces a server with a bigger type from the pool's list, at once,
   # and then reports the new server and its monthly cost. The coding agent
@@ -629,13 +630,14 @@ vars:
   #   load_balancer_servers: 2: the operating procedure adds the pair lb01
   #     and lb02.
   # server_types: the provider's types the pool may use, smallest first.
-  # The template's are Hetzner Cloud's, chapter 6's sizes and one bigger
-  # type each; chapter 6 writes the team's provider's types. A
+  # The template's are Hetzner Cloud's, the setup's sizes and one bigger
+  # type each; the coding agent writes the team's provider's types when it
+  # creates the servers. A
   # load-balancer server is at least an app server's size, because either
   # one of the pair may carry every request alone
   # (operating_procedures/add_load_balancer_servers.md).
   growth_limits:
-    app_servers: {smallest_number_of_servers: 1, largest_number_of_servers: 4, server_types: [cx33, cx43]}
+    app_servers: {smallest_number_of_servers: 1, largest_number_of_servers: 4, server_types: [cx23, cx33]}
     database_servers: {largest_number_of_servers: 2, server_types: [cx23, cx33]}
     jobs_servers: {largest_number_of_servers: 2, server_types: [cx33]}
     load_balancer_servers: {largest_number_of_servers: 2, server_types: [cx33, cx43]}
@@ -790,8 +792,8 @@ vars:
       version: "0.1.0"
       download_url: https://github.com/monkeymaxxing/mmx/releases/download/v0.1.0/mmx-0.1.0-linux-amd64.tar.gz
       sha256: "603b7a7d82bb710906d37dffe788d1c1ea75089fdf63fc2335dc27f2a7152ab4"
-    # doubleshell runs only on the person's laptop, which chapter 1
-    # (initial_setup/01_answer_two_questions.md) installs it on.
+    # doubleshell runs only on the person's laptop, where the coding agent
+    # installs it at the start of the setup.
     # download_url and sha256 are its linux-amd64 archive, as for every pin.
     # laptop_archive_sha256 gives each laptop platform's archive,
     # doubleshell-VERSION-PLATFORM.tar.gz beside download_url, from the

@@ -175,7 +175,7 @@ func goLiveDoneMessage(e *environment) string {
 	if e.deskIsLocked() {
 		return "\nDone.  Your systems desk is locked.\n\nGo back to your coding agent."
 	}
-	return "\nDone.  Your phone code is ready.  Your coding agent locks your systems desk next.\n\nGo back to your coding agent."
+	return "\nDone.  Your phone code is ready.  Your coding agent locks your systems desk next, then builds your servers.\n\nGo back to your coding agent."
 }
 
 // prepare checks everything the screens need before the first one, so the
@@ -233,7 +233,7 @@ func (g *goLive) readProviderCredential() (string, error) {
 	}
 	content, err := g.e.readRootFile(path)
 	if err != nil {
-		return "", fmt.Errorf("this systems desk has no server provider key in its API proxy yet (%v). The systems desk's bootstrap puts it there; ask your coding agent", err)
+		return "", fmt.Errorf("this systems desk has no server provider key in its API proxy yet (%v). Your coding agent puts it there when it sets up your systems desk; ask your coding agent", err)
 	}
 	if path == signingCredentialFile {
 		var credential signingCredential
@@ -410,7 +410,8 @@ func (g *goLive) refused(service, item string, err error, advice string) {
 // while the person types, so without it the screen looks finished.
 const stillWaitingHere = "The setup is still running.  It waits for you at the line below."
 
-// Account 2 of 3: Cloudflare. The account screens count only the accounts
+// Account 2 of 3: Cloudflare. Every screen of the accounts names the
+// person's part of the setup, "Your accounts". The account screens count only the accounts
 // the person makes in the setup (Hetzner, Cloudflare, Backblaze), so the
 // registrar screen, skipped when the domain already points at Cloudflare,
 // carries no number and never leaves a gap in the count.
@@ -448,7 +449,7 @@ func (g *goLive) cloudflare() (string, error) {
 		"\n     The page is long.  Scroll to the bottom, below the list of permissions."+
 		"\n     Press  Review token,  then  Create token.")
 	var screen strings.Builder
-	screen.WriteString("\nAccount 2 of 3: Cloudflare (your web address and protection)\n\nWhat this is for:\n" +
+	screen.WriteString("\nYour accounts: account 2 of 3, Cloudflare (your web address and protection)\n\nWhat this is for:\n" +
 		"  Cloudflare puts your site on the internet and keeps your private pages private.\n\nDo this now:\n")
 	for i, step := range steps {
 		fmt.Fprintf(&screen, "  %d. %s\n", i+1, step)
@@ -620,7 +621,7 @@ func (g *goLive) registrar() (string, error) {
 		"Put in these two, and remove the others:\n\n       "+strings.Join(g.zone.NameServers, "\n       ")+"\n",
 		"Press save.")
 	var screen strings.Builder
-	fmt.Fprintf(&screen, "\nOne change at %s\n\nWhat this is for:\n  Your domain must point at Cloudflare.\n", title)
+	fmt.Fprintf(&screen, "\nYour accounts: one change at %s\n\nWhat this is for:\n  Your domain must point at Cloudflare.\n", title)
 	if registration.dnssec == dnssecOn {
 		screen.WriteString("\nTURN OFF DNSSEC FIRST.  YOUR SITE WILL NOT WORK WITH IT ON.\n")
 	}
@@ -750,7 +751,7 @@ func (g *goLive) backblaze() (string, error) {
 		region = "  " + name + "."
 	}
 	e.show(fmt.Sprintf(`
-Account 3 of 3: Backblaze (your backups)
+Your accounts: account 3 of 3, Backblaze (your backups)
 
 What this is for:
   Your database backups are stored at Backblaze, away from your servers.
@@ -905,7 +906,7 @@ func (g *goLive) containerRegistryToken() (string, error) {
 	}
 	link := "https://github.com/settings/tokens/new?scopes=read:packages&description=" + url.QueryEscape(strings.ToLower(strings.ReplaceAll(g.companyName(), " ", "-"))+"-servers")
 	e.show(fmt.Sprintf(`
-One more key: so your servers can download your app.
+Your accounts: one more key, so your servers can download your app.
 
 Do this now:
   1. Open this link.  It fills in the key for you:
@@ -1137,9 +1138,9 @@ func (g *goLive) appKeysFromOutsideServices() (string, error) {
 		if g.saved.hasAll(item.Key) {
 			continue
 		}
-		title := "Key for " + item.App + ": " + item.Variable
+		title := "Your accounts: a key for " + item.App + ", " + item.Variable
 		if item.Staging {
-			title = "Key for " + item.App + " on staging01: " + item.Variable
+			title = "Your accounts: a key for " + item.App + " on staging01, " + item.Variable
 		}
 		var screen strings.Builder
 		fmt.Fprintf(&screen, "\n%s\n\nWhat this is for:\n  %s\n\nDo this now:\n", title, screenText(item.Why))
@@ -1301,9 +1302,16 @@ func (g *goLive) recoveryPassphrase() (string, error) {
 	words := strings.Fields(g.passphrase)
 	e.setValueOnScreen(true)
 	e.show(fmt.Sprintf(`
-Last two steps.
+Your accounts are done.
 
-Step 1 of 2: your recovery passphrase
+  ✓ 1. Your app
+  ✓ 2. Your accounts
+  → 3. Your keys locked away    now: 2 steps, about 3 minutes
+    4. Your servers
+    5. Live
+    Later: phone alerts.  Your site has none yet.
+
+Your keys locked away: step 1 of 2, your recovery passphrase
 
 What this is for:
   If you lose your systems desk, this one passphrase brings everything back.
@@ -1338,7 +1346,7 @@ Do this now:
 func (g *goLive) phoneCode() (string, error) {
 	e := g.e
 	e.show(`
-Step 2 of 2: your phone code
+Your keys locked away: step 2 of 2, your phone code
 
 What this is for:
   From now on, your systems desk needs your laptop AND a code from your phone.

@@ -192,7 +192,7 @@ google_network=default                                          # the VPC networ
 google_stack_system_id=example_systems                          # every server's stack-system-id label
 
 # google_boot_disk_gib MACHINE_TYPE: the boot disk's size, from chapter 6's
-# sizes: 80 GiB for the app server's type, 40 GiB for the others.
+# sizes: 80 GiB for the bigger app server type, 40 GiB for the others.
 google_boot_disk_gib() {
   case "$1" in e2-custom-4-8192) echo 80 ;; *) echo 40 ;; esac
 }
@@ -595,8 +595,9 @@ serial console; public SSH is closed on purpose.
 ## Sizes, network and quotas
 
 E2 [custom types](https://docs.cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type)
-that meet the setup's sizes are `e2-custom-4-8192` with an 80 GiB boot disk for `app001`, and `e2-custom-2-4096`
-with 40 GiB for `db01`, `util01` and `staging01`, as `google_boot_disk_gib` gives. `e2-small` has only 2 GiB and
+that meet the setup's sizes are `e2-custom-2-4096` with 40 GiB for `app001`, `db01`, `util01` and `staging01`,
+and `e2-custom-4-8192` with an 80 GiB boot disk as the price screen's bigger option for a heavier app, as
+`google_boot_disk_gib` gives. `e2-small` has only 2 GiB and
 a shared core. ARM families need ARM images and programs, so use x86 E2. Check
 [quotas](https://docs.cloud.google.com/compute/resource-usage) for regional E2 CPUs, instances, disks, external
 addresses and a new account's `CPUs (All Regions)`, and leave room for `restore01` and a replacement.

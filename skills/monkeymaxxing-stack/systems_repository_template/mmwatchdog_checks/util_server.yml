@@ -55,10 +55,10 @@ check_groups:
   # tunnel that checks directly on the app servers do not see.
   # Staging's host names are behind Cloudflare Access, so the public_sites
   # check group does not check staging's host names.
-  # public_site_checks_run is false until chapter 9 (go live): before then
+  # public_site_checks_run is false until go-live: before then
   # the domain can still be Pending and the app is not announced, and each
   # failing check could send an sos alert that wakes the person on call for a system that was
-  # never live. Chapter 9 sets public_site_checks_run to true in
+  # never live. At go-live, the coding agent sets public_site_checks_run to true in
   # mmx_project_settings.yml, and util01's next every_server run adds the
   # check group.
 {{- if .inputs.public_site_checks_run }}

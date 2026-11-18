@@ -373,8 +373,8 @@ answer is lost and a listing of more than one page.
 ## Plan, region, and image
 
 For the [server setup in chapter 6 (create your three production servers: app, database, and tools)](../initial_setup/06_create_your_three_production_servers.md),
-the smallest matching regular plans are `vc2-4c-8gb` for `app001` and `vc2-2c-4gb` for `db01`, `util01` and
-`staging01`: 4 vCPUs/8 GB/160 GB and 2 vCPUs/4 GB/80 GB. The cheapest 1 GB and 2 GB plans fall below the
+the smallest matching regular plan is `vc2-2c-4gb` (2 vCPUs/4 GB/80 GB) for `app001`, `db01`, `util01` and
+`staging01`; `vc2-4c-8gb` (4 vCPUs/8 GB/160 GB) is the price screen's bigger option for a heavier app. The cheapest 1 GB and 2 GB plans fall below the
 Stack's starting requirements. Use x64 plans, because the template's downloads are AMD64. Amsterdam is `ams`.
 
 **Stock:** the public `GET https://api.vultr.com/v2/regions/REGION/availability?type=vc2` answers without

@@ -177,7 +177,7 @@ nodes:
     ssh_config: ssh/config
     vars:
       public_ipv4_address: 203.0.113.11
-      server_type: cx33
+      server_type: cx23
       location: fsn1
       private_ip: 10.20.1.1
       wireguard_public_key: "ZxyZitx4fq2p2omFOcF+fIsM4eUqdKy8pjgZ99jx1EI="

@@ -363,7 +363,7 @@ func (c *cloudflareClient) zoneOf(hostName string) (string, string, error) {
 			}
 		}
 	}
-	return "", "", fmt.Errorf("Cloudflare has no domain in account %s that %s belongs to. Add the domain at Cloudflare first, as chapter 1 describes", c.accountID, hostName)
+	return "", "", fmt.Errorf("Cloudflare has no domain in account %s that %s belongs to. Add the domain at Cloudflare first: your coding agent does it with the Cloudflare account, in \"Your accounts\"", c.accountID, hostName)
 }
 
 // runMMHotlineStatusPageSetUp reuses MMHotline's own set-up of the status

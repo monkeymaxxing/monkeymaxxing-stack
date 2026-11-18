@@ -61,7 +61,7 @@ account screen of step 1 is the opening.
    [the real price, approved once](#the-real-price-approved-once).
 
    ```text
-   Account 1 of 3: Hetzner (your servers)
+   Your accounts: account 1 of 3, Hetzner (your servers)
 
    What this is for:
      Hetzner runs your servers.  I build them with a key you make there.
@@ -125,7 +125,7 @@ account screen of step 1 is the opening.
    already filled in:
 
    ```text
-   One more page: a private backup of your systems repository at GitHub.
+   Your accounts: one more page, a private backup of your systems repository at GitHub.
 
    Do this now:
      1. Open  https://github.com/new?owner=OWNER&name=example_systems&visibility=private
@@ -231,11 +231,48 @@ account screen of step 1 is the opening.
      same region (the same continent), and recommend the one that has it
      in one line: "Nuremberg is sold out of this size; Helsinki has it,
      at the same price." The production servers stay together in one
-     location, and the desk stays in a different location from
-     production.
+     location.
    - Only when no nearby location has the size, recommend the next
      bigger size, with the old total, the new total and the reason, one
      line each.
+   - **Always also offer "wait and try again"** when a cheap size is sold
+     out, with the honest line: "Cheap sizes often come back within the
+     hour. I check again every few minutes and tell you when one is
+     back." On that answer, re-check in the background with a bound, such
+     as `timeout 60m bash -c 'until CHECK; do sleep 180; done'`, and say
+     when you next speak. Reason: in a newcomer test run, Hetzner's
+     smallest size was sold out in every location at 04:54 and back in
+     Nuremberg at 04:57.
+
+   Re-check the stock right before you show any price dearer than the
+   plan's, and again at the moment of each order: the desk's, and the
+   three servers' in chapter 6's step 4. Reason: stock changes within
+   minutes, both ways.
+
+   **The desk's place.** By default the desk is in a different location
+   from production. Reason: an outage of the production location then
+   leaves the desk working, so you can still reach the provider and
+   rebuild from it. The separate place is a good default, not a must:
+   when the desk's size costs more there than in production's location,
+   or is sold out there, show both on the price screen with the
+   difference in money, and recommend the cheaper place unless the person
+   asked for the separate one:
+
+   ```text
+     Systems desk, same place as your servers:   about €6 a month   (I recommend this)
+     Systems desk, a separate place:             about €20 a month, €14 more
+       A separate place keeps your systems desk working if your servers' location has an outage.
+   ```
+
+   **The app server's size.** `app001` starts at the smallest size, as
+   [chapter 6's table](06_create_your_three_production_servers.md#steps)
+   says. Offer the next size on the price screen, in one line, for a
+   heavier app, such as an app that runs many worker processes or holds
+   big files in memory:
+
+   ```text
+     A bigger app001 (4 CPUs, 8 GB), for a heavier app:  about €3 a month more.  Say "bigger app server".
+   ```
 
    Never offer a kind of product the person did not ask about, such as
    a provider's hourly cloud servers in place of its monthly ones,
@@ -249,14 +286,16 @@ account screen of step 1 is the opening.
    Your real price, checked with Hetzner just now:
 
      Systems desk  desk01, Falkenstein     about €6 a month
-     app001        Nuremberg               about €9 a month
+     app001        Nuremberg               about €6 a month
      db01          Nuremberg               about €6 a month
      util01        Nuremberg               about €6 a month
      Backups       Backblaze               a few cents a month at first
 
-     In all:  about €27 a month, each server with its public address, before VAT
+     In all:  about €24 a month, before VAT
 
-   Say "yes", and I order your systems desk now.  Your three servers come later, in chapter 6, at these prices.
+     A bigger app001 (4 CPUs, 8 GB), for a heavier app:  about €3 a month more.  Say "bigger app server".
+
+   Say "yes", and I order your systems desk now, and your three servers as soon as it is ready.
    Or tell me what to change.
    ```
 
@@ -270,13 +309,23 @@ account screen of step 1 is the opening.
    or, only when no nearby location has the size:
 
    ```text
-     Before:  about €27 a month
-     Now:     about €39 a month
+     Before:  about €24 a month
+     Now:     about €36 a month
      Why:     Hetzner has app001's size nowhere in Europe today, so app001 is the next bigger size.
    ```
 
-   The person's yes approves the desk's order now and the servers that
-   chapter 6 creates, at these sizes, locations and prices. Write the
+   Each price includes the server's public address, so the screen does
+   not say so. Name sizes in the person's words, such as "2 CPUs, 4 GB",
+   never the provider's type code, such as `cx23`. When the person must
+   choose between plans, such as after a sell-out, give each option at
+   most three lines: its total a month, what differs from the plan, and
+   its one drawback. Reason: in a newcomer test run, the options carried
+   type codes and four lines each, and the person had to think.
+
+   The person's yes approves the desk's order now and the three servers,
+   which you create as soon as the desk is ready
+   ([Create the three production servers now](#create-the-three-production-servers-now)),
+   at these sizes, locations and prices. Write the
    approved sizes and locations into the settings that chapter 6 and
    "Create desk01 through WireGuard" read, and the monthly total into the
    commit message. Order only after the yes in the chat.
@@ -548,7 +597,10 @@ repository's name, including paths inside quoted SSH commands.
    said how long the build takes. When the person writes meanwhile,
    answer, and say in one line what the run is doing now.
 
-   **Tell the person after:** chapter 4's first screen.
+   **Tell the person after:** nothing yet. First create the three
+   production servers, as
+   [Create the three production servers now](#create-the-three-production-servers-now)
+   says; then chapter 4's first screen follows.
 
    The run's normal end prints `The desk is ready.` and the production
    public key. When the run ends with an error such as
@@ -559,6 +611,34 @@ repository's name, including paths inside quoted SSH commands.
    **Check:** the run printed `The desk is ready.`, the key's move
    succeeded and the laptop file `~/example-setup/provider-key` is gone,
    and `ssh desk01-agent true` logs in as `coding-agent` with no code.
+
+## Create the three production servers now
+
+As soon as the desk is ready, and before chapter 4's step 2 opens the
+person's next accounts, create `app001`, `db01` and `util01`. They stay
+idle until chapter 7 installs everything on them. Reason: stock changes by
+the hour; in a newcomer test run, the approved sizes sold out in the 35
+minutes between the person's yes and the creation. The servers need only
+the desk: the Cloudflare tunnels' tokens and every other secret are read
+later, when chapter 7 installs everything.
+
+1. **Your login and your clone.** Do chapter 4's
+   [step 1](04_set_up_your_accounts_and_lock_your_desk.md#steps) now: open
+   your shared login on the desk, and clone the desk's repository on the
+   laptop. Every change from here on is made in that clone.
+
+   **Check:** chapter 4's step 1 check passes.
+
+2. **Create the servers.** Follow chapter 6's
+   [Before you start](06_create_your_three_production_servers.md#before-you-start),
+   with its check that no private network overlaps the WireGuard network,
+   then its steps 1 to 5. Chapter 6 later does only its steps 6 and 7.
+
+   **Tell the person first,** one line, between your work:
+
+   > Your systems desk is ready. I am creating your three servers now, so the prices you approved hold: `app001` for your app, `db01` for its data, and `util01` for the system tools. About 5 minutes. Nothing for you.
+
+   **Check:** chapter 6's step 5 check passes.
 
 ## Update the desk's production peers
 
@@ -674,6 +754,16 @@ already, so storing the passphrase inside the vault exposes nothing.
 
 ## If something is different
 
+- **A brand-new server does not answer within its time limit**: the
+  server is new and empty, so delete it at the provider and create it
+  again, once, by yourself, with one line to the person, such as "Your
+  systems desk did not start properly. I am creating it again; this costs
+  a few cents and takes about 5 minutes. Nothing for you." (with the
+  server's name, such as `db01`, for a production server). Only a second
+  failure goes to the person. Never ask the person to read the provider's
+  console to decide. Reason: a new server that hangs at its first boot is
+  rare and costs nothing to replace, and the person cannot judge a boot
+  console.
 - **A provider whose guide gives the scripts whole** ("The provider
   account", step 3): every guide except Hetzner Cloud's. There is no tool
   to install: the scripts send each request, sign it, or make its token,

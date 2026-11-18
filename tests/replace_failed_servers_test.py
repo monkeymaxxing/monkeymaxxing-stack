@@ -270,7 +270,7 @@ class ReplaceFailedServers(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(['power_off_a_server_at_the_provider', '--server-id', 'id-app001'], commands)
         create = next(c for c in commands if c[0] == 'create_a_server_at_the_provider')
-        for flag, value in (('--server-name', 'app002'), ('--server-type', 'cx33'), ('--location', 'fsn1'),
+        for flag, value in (('--server-name', 'app002'), ('--server-type', 'cx23'), ('--location', 'fsn1'),
                             ('--image', 'debian-13'), ('--ssh-key-name', 'util01, the mmhotline user'),
                             ('--wireguard-private-ip', '10.20.1.2'), ('--wireguard-public-key', NEW_KEY)):
             self.assertEqual(create[create.index(flag) + 1], value, flag)
@@ -281,7 +281,7 @@ class ReplaceFailedServers(unittest.TestCase):
         self.assertNotIn('destroy_a_server_at_the_provider', names)
         inventory = self.main_at_the_git_host()
         self.assertIn('  app002:\n    address: 10.20.1.2\n    https_address: https://10.20.1.2:7443\n', inventory)
-        for line in ('public_ipv4_address: 203.0.113.200', 'server_type: cx33', 'location: fsn1',
+        for line in ('public_ipv4_address: 203.0.113.200', 'server_type: cx23', 'location: fsn1',
                      'private_ip: 10.20.1.2', f'wireguard_public_key: "{NEW_KEY}"'):
             self.assertIn(line, inventory)
         self.assertNotIn('app001', inventory)
@@ -307,14 +307,14 @@ class ReplaceFailedServers(unittest.TestCase):
         """The triage agent's last report names the new server's cost from these lines; a missing price never stops the run."""
         result, _ = self.run_program([node('app001', 'silent', 120), node('db01')])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("app002 is cx33 in fsn1; its monthly price could not be read", result.stdout)
+        self.assertIn("app002 is cx23 in fsn1; its monthly price could not be read", result.stdout)
         self.setUp_again()
         price = self.repository/'server_management_scripts/read_the_monthly_price_at_the_provider'
-        price.write_text('#!/bin/sh\necho \'{"server_type": "cx33", "location": "fsn1", "monthly_price": "7.49", "currency": "EUR"}\'\n')
+        price.write_text('#!/bin/sh\necho \'{"server_type": "cx23", "location": "fsn1", "monthly_price": "7.49", "currency": "EUR"}\'\n')
         price.chmod(0o755)
         result, _ = self.run_program([node('app001', 'silent', 120), node('db01')])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("app002, cx33 in fsn1, costs 7.49 EUR a month with its public address, at the provider's price now", result.stdout)
+        self.assertIn("app002, cx23 in fsn1, costs 7.49 EUR a month with its public address, at the provider's price now", result.stdout)
 
     def setUp_again(self):
         """A fresh copy, so that the next run starts from a main without the earlier replacement."""
@@ -409,7 +409,7 @@ class ReplaceFailedServers(unittest.TestCase):
     def test_a_server_type_outside_the_pools_types_is_refused(self):
         result, commands = self.run_program([node('app001', 'silent', 120), node('db01')],
                                             GROWTH_LIMITS={'app_servers': {'largest_number_of_servers': 4, 'server_types': ['cx43']}})
-        self.assert_nothing_happened(result, commands, 'app001 has the server type cx33, which is not in growth_limits.app_servers.server_types')
+        self.assert_nothing_happened(result, commands, 'app001 has the server type cx23, which is not in growth_limits.app_servers.server_types')
 
     def test_a_failed_provider_list_is_refused(self):
         result, commands = self.run_program([node('app001', 'silent', 120), node('db01')], LIST_EXIT='1')
