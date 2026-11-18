@@ -1487,6 +1487,13 @@ Without CI, the coding agent tests, builds, and pushes the image on the
 laptop, in a container, with the person's registry login. In either
 case, the coding agent updates the image tag, commits, pushes, and deploys.
 CI needs registry access, never server SSH keys or the vault passphrase.
+The coding agent reads CI's result itself: from the image at the
+registry, or from the `ci-report` branch that the workflow's last step
+pushes on every run, with the result and the tests' output, which the
+agent fetches with the Git login it already pushes with. It never asks
+the person to sign in to the Git host or to look at a CI page. Reason: a
+private repository's CI page says "Page not found" to a browser that is
+not signed in, and in a newcomer test the person could not sign in there.
 
 ### Scheduled server settings comparison
 
@@ -5586,6 +5593,11 @@ stop counts only when the file was written after the wait started, because
 an earlier run's `stopped_with` stays until the next run's first write.
 Reason: in a newcomer test the agent wrote 25 polling loops, and one
 blocked `sleep 240` turned a wait into a turn that ended with a promise.
+The agent starts each wait on the person as a background command, with
+`--at-most-minutes 60`, then ends its turn with the screen, and the
+command's end wakes it. Reason: Claude Code collapses text written
+between tool calls to one line, and shows only the text that ends a
+turn in full, so a screen followed by a waiting command was never read.
 `wait_for_the_app_image`, in `server_management_scripts/`, runs on the
 laptop, because the desk's registry login is in the vault: it asks the
 registry's manifest address, with a login only when the laptop already

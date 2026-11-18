@@ -243,8 +243,9 @@ You do the rest. It takes about 15 minutes.
    The command saves each key in the vault, and commits and publishes the
    vault itself. Wait on that result, as
    [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
-   says: run `secrets usage` every 10 seconds, for at most 9 minutes,
-   until both keys show as defined.
+   says: start a background command that runs `secrets usage` every 10
+   seconds, for at most an hour, until both keys show as defined, then
+   end your reply with the message above.
 
    **Check:** `secrets usage` shows both keys as defined.
 
@@ -548,10 +549,11 @@ command on the desk, looks at the page, and resolves one test notice.
     > Your status page lives in Cloudflare's file storage, R2. It costs nothing up to 10 GB a month.
     > Please open https://dash.cloudflare.com/?to=/:account/r2/overview and finish the checkout there. It asks for a card. I carry on by myself when R2 is on.
 
-    Wait on the same R2 request every 10 seconds, for at most 9 minutes,
-    until it answers, as
+    Wait on the same R2 request every 10 seconds, for at most an hour,
+    until it answers, as a background command, as
     [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
-    says, and never ask the person to say "done".
+    says, then end your reply with the message above. Never ask the
+    person to say "done".
 
     **Check:** the setting is pushed, and the R2 request answers.
 
@@ -573,8 +575,9 @@ command on the desk, looks at the page, and resolves one test notice.
     > It shows a link. Open it, press Continue to summary, then Create Token, and paste the token at its prompt.
     > It makes only what is missing. I carry on by myself when the keys are saved.
 
-    Wait on `secrets usage` every 10 seconds, for at most 9 minutes,
-    until both R2 vault keys show as defined.
+    Wait on `secrets usage` every 10 seconds, for at most an hour, until
+    both R2 vault keys show as defined, as a background command, then end
+    your reply with the message above.
 
     **Check:** the page's bucket is in the R2 bucket list, and
     `secrets usage` shows both R2 vault keys as defined.

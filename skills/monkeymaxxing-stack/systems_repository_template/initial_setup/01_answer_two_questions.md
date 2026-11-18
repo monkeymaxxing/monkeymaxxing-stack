@@ -79,9 +79,7 @@ answers.
    **Ask the person,** in your first reply, with no command before it:
 
    ```text
-   Two questions, then I start.
-
-   1. Which domain is your app on?  (for example  example.com)
+   First question:  which domain is your app on?  (for example  example.com)
    ```
 
    **Check:** you recorded the domain.
@@ -91,7 +89,7 @@ answers.
    **Ask the person,** in your second reply:
 
    ```text
-   2. Which company should run your servers?
+   Second question:  which company should run your servers?
 
       I recommend Hetzner.  It is cheap, fast, and simple.
       Other choices:  OVHcloud, DigitalOcean, Vultr, Scaleway, AWS, Google Cloud.
@@ -179,31 +177,51 @@ answers.
      nothing to a newcomer, and a monthly sum the person approved is no
      surprise on the bill.
 
-   **Ask the person:**
+   **Ask the person,** as the last text of your reply, with no tool call
+   after it:
 
    ```text
    Here is what I will set up.
 
-     Servers near:       Frankfurt          (from your laptop's time zone: change this if your users are somewhere else)
-     Size:               the smallest system (3 servers and 1 systems desk, the small server that holds your keys)
-     Your app's address: example.com        (your domain itself: say if you want another, such as notes.example.com)
-     Company name:       Example            (from your domain)
-     Password manager:   1Password          (the one this laptop has)
-     Your name on the systems desk:  alex           (your laptop's user name)
-     Status page:        status.example.com (the public page where your customers see if your site is up)
-     Alerts page:        ops.example.com    (your private page for alerts: only your team signs in)
-     Sign-in email:      alex@gmail.com     (from your Git settings; it signs you in to the alerts page and gets the setup's notices. It must be a mailbox you read today)
+     Servers near:       Frankfurt           (from your laptop's time zone; change it if your users are elsewhere)
+     Size:               the smallest system (3 servers, and 1 systems desk: a small server that holds your keys)
+     Your app's address: example.com
+     Company name:       Example
+     Password manager:   1Password
+     Sign-in email:      alex@gmail.com      (a mailbox you read today)
 
-     Cost:               about €27 a month for the servers at Hetzner  (price from Hetzner's list; stock checked before ordering)
+     Cost:               about €27 a month in all, at first
+
+   Say "details" to see everything this includes.
+   Tell me what to change, or say "go".
+   ```
+
+   Keep the screen to these lines. Reason: a newcomer reads a short
+   screen; a long one hides the lines that matter. Write nothing below
+   the screen: no second sign-in email line, and no alerts sentence.
+   The cost line is one sum: the systems desk and the three servers, each
+   with its public address, plus backups. When the stock line above
+   applies, add `(price from Hetzner's list; stock checked before
+   ordering)` to it.
+
+   **"details"** shows the rest, as one reply that ends your turn, then
+   the same question:
+
+   ```text
+   Everything "go" approves:
+
+     Servers:            about €27 a month at Hetzner  (price from Hetzner's list; stock checked before ordering)
                          (one line per server with its real price: the systems desk, app001, db01, util01)
-                         Backups at Backblaze: a few cents a month at first
-                         Later, phone alerts: Pushover, a one-time fee of about $5 for each phone
-
-   I will also install two small tools in your home folder: mmx and doubleshell.
-
-   "go" also approves a weekly test that your backups restore.
-   Your servers may grow by themselves to at most 4 app servers and 2 database servers,
-   up to about €65 a month more, without asking you.
+     Backups:            Backblaze, a few cents a month at first
+     Later, phone alerts: Pushover, a one-time fee of about $5 for each phone
+     Growth:             your servers may grow by themselves to at most 4 app servers and 2 database servers,
+                         up to about €65 a month more, without asking you
+     Restore test:       a weekly test that your backups restore
+     Your name on the systems desk:  alex  (your laptop's user name)
+     Status page:        status.example.com  (the public page where your customers see if your site is up)
+     Alerts page:        ops.example.com     (your private page for alerts: only your team signs in)
+     Sign-in email:      from your Git settings; it signs you in to the alerts page and gets the setup's notices
+     Tools:              mmx and doubleshell, two small tools in your home folder
 
    Nothing is bought until chapter 3 orders your systems desk and chapter 6 creates your servers.
    Your "go" approves those prices.
@@ -211,20 +229,22 @@ answers.
    Tell me what to change, or say "go".
    ```
 
-   "go" approves everything on the screen and what comes with it: the
+   "go" approves everything on both screens, whether or not the person
+   said "details": the
    prices of the desk and the three servers, the weekly restore drill,
    the default growth limits in `growth_limits` of
-   `mmx_project_settings.yml`, and the two installs. Chapter 6 creates the
-   servers at these prices without asking again. Never promise the person
-   a later price approval. Reason: the chapters make none, and a promise
-   the agent invents is a promise that breaks. When the price or the
-   server type at creation differs from this screen (no stock, a changed
-   price, a different size), stop and ask again with the new number,
-   with the choices that the stock line above names.
+   `mmx_project_settings.yml`, and the two installs. Chapter 6 states the
+   growth limit's money line again before it creates the servers, and
+   creates them at these prices without asking again. Never promise the
+   person a later price approval. Reason: the chapters make none, and a
+   promise the agent invents is a promise that breaks. When the price or
+   the server type at creation differs from this screen (no stock, a
+   changed price, a different size), stop and ask again with the new
+   number, with the choices that the stock line above names.
    When Git's address is empty or a placeholder, the sign-in line reads:
 
    ```text
-     Sign-in email:      which address do you read today?  (Git has no real address for you, only a placeholder. This address signs you in to the alerts page and gets the setup's notices. Not one on your new domain, which has no mail yet)
+     Sign-in email:      which address do you read today?  (not one on your new domain, which has no mail yet)
    ```
 
    When the person asks what one line means, answer in one or two

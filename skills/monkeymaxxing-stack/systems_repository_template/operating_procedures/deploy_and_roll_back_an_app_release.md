@@ -43,9 +43,10 @@ without the memory check.
    - **With CI:** CI tests, builds, and pushes the image when the team has
      CI (chapter 2's ready GitHub Actions file does).
      **Check:** CI's run for the full app commit is green
-     (`gh run list --commit FULL_APP_COMMIT_ID`, or ask the person to look
-     at the repository's Actions tab) and the last step's output names
-     `linux/amd64`; that step asks the registry for the tag. Before that,
+     (`git fetch origin ci-report` in the app's folder, then
+     `git show origin/ci-report:result.txt` names the commit and `job
+     status: success`; or `gh run list --commit FULL_APP_COMMIT_ID` when
+     `gh` is signed in). Never ask the person to look at a CI page. Before that,
      run `./server_management_scripts/wait_for_the_app_image IMAGE_NAME:FULL_APP_COMMIT_ID`
      on the laptop: exit 0 means the image is there, exit 1 that it is
      still missing after 9 minutes, and exit 3 that the laptop cannot read

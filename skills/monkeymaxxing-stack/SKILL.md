@@ -76,6 +76,27 @@ present the whole chapter before its first action.
 
 In every reply:
 
+- **Screen last.** Anything the person must read or act on is the last
+  thing in your reply, and your turn ends there: never a tool call after
+  it. Text between tool calls is collapsed on the person's screen: Claude
+  Code draws it as one short line, and the person never sees the whole
+  text. Only the text that ends your turn is shown in full. So a screen,
+  a question, an approval such as a price, or a result the person must
+  read always ends the turn. When you must wait for the person's result,
+  such as the key file, `desk-ready`, `wait-for-the-setup` or an order's
+  progress, start the wait first as a background command (in Claude
+  Code, the Bash tool's run-in-background option), then write the screen
+  and end your turn. The background command's end wakes you, and you
+  carry on. An agent with no background commands ends its turn with the
+  screen and asks the person to say "done" when the person's window
+  says so.
+- **Long work.** Before any stretch of work longer than about a minute,
+  end a reply with one line: what happens now, about how long, and that
+  the person need do nothing, such as "Now: I am setting up your servers,
+  about 15 minutes. Next for you: nothing. I tell you when it is done."
+  Run long work as background commands, with your turn ended, where you
+  can. Notes between tool calls are collapsed, so never rely on them to
+  tell the person anything.
 - **Now and next, at the end of every reply.** The last lines say what
   you are doing now and what the person does next, such as "Now: I am
   building your systems desk, about 10 minutes. Next for you: nothing. I
@@ -102,15 +123,9 @@ In every reply:
   sentence for the person, such as "Check that your systems repository's
   settings are valid". A tool call's lines scroll past and its output is
   folded away, so a screen or a question never goes only there.
-- Put each screen the person acts on in your own reply, whole. When you
-  then wait for the person's result, put the screen first and whole in
-  the reply's text, then start the wait: Claude Code shows text before a
-  long command starts. The chapters give each wait, its time limit and
-  what to say when the limit passes. Never ask the person to say "done"
-  for a result your wait reads. Only an agent that does not show its text
-  before a command ends its reply with the screen instead, and asks the
-  person to say "done": that agent has no wait running to read the
-  result.
+- Put each screen the person acts on in your own reply, whole, as the
+  reply's last text ("Screen last" above). Never ask the person to say
+  "done" for a result your background wait reads.
 - **Never say you showed, checked or ordered something unless the
   conversation or a command's output shows it.** Reason: "the price I
   showed you" with no price shown, or "building your systems desk"
@@ -147,7 +162,8 @@ In every reply:
   that keeps the person's work. Never hand the person a command the person
   cannot understand. Reason: the person is not the debugger.
 - Before any wait over about a minute, say what you are doing and about how
-  long it takes. Reason: a silent wait looks like a hang.
+  long it takes, in a reply that ends your turn ("Long work" above).
+  Reason: a silent wait looks like a hang.
 - Say "I carry on meanwhile" only while a job of yours really runs, and
   name the job, such as "I am creating your systems desk meanwhile." When
   nothing runs until the person acts, say that you wait for the person.
@@ -183,14 +199,15 @@ Keep every required check and safety condition.
 
 ## The two windows agree
 
-Before you send the person to their own terminal, show the exact command
-and what they will see in the chat reply itself, and while they work
-there, wait only on a result you can read. Read the whole rule in the
-template's
+Before you send the person to their own terminal, start your wait on a
+result you can read as a background command, then end your reply with
+the exact command and what the person will see. Read the whole rule in
+the template's
 [`AGENTS.md`, "The two windows agree"](systems_repository_template/AGENTS.md#the-two-windows-agree)
 before chapter 1's first command. Reason: a tool call's description and
-command scroll past, and its output is folded away, so the person reads
-only the chat reply.
+command scroll past, its output is folded away, and text between tool
+calls is collapsed, so the person reads only the text that ends your
+reply.
 
 ## What the stack is
 

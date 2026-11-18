@@ -51,8 +51,8 @@ account screen of step 1 is the opening.
    `mmx_project_settings.yml`, as the guide says, including the trailing
    slash.
 
-   **Ask the person:** the screen below, first and whole in your reply's
-   text, with the guide's own website steps. At OVHcloud, steps 4 and 5
+   **Ask the person:** the screen below, whole, as the last text of your
+   reply, with the guide's own website steps. At OVHcloud, steps 4 and 5
    become the guide's project step and its key page, with the page's own
    field names; the command asks for the project's ID first, then shows
    the filled-in key link, then asks for the three values. At OVHcloud,
@@ -65,8 +65,13 @@ account screen of step 1 is the opening.
    I wait here until the key is in.
    ```
 
+   The price screen after the key is its own reply: the plan, the
+   location, and the price, then "Say yes and I order it." Your turn ends
+   with that screen, with no tool call after it. Order only after the
+   person's yes in the chat.
+
    ```text
-   Account 1 of 4: Hetzner (your servers)
+   Account 1 of 3: Hetzner (your servers)
 
    What this is for:
      Hetzner runs your servers.  I build them with a key you make there.
@@ -90,28 +95,22 @@ account screen of step 1 is the opening.
    I wait here until the key is in.
    ```
 
-   Then, in the same turn, wait for the key file, as
+   First start the wait for the key file as a background command, as
    [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
-   says: the screen is in your reply's text, and you say in one line what
-   you wait for. Give the command the longest time your agent allows a
-   command, 10 minutes in Claude Code:
+   says, then end your reply with the screen, whole, as its last text:
+   your turn ends there, with no tool call after it.
 
    ```sh
-   # On the laptop. Waits up to 9 minutes for the key file.
-   for i in $(seq 108); do [ -f ~/example-setup/provider-key ] && break; sleep 5; done
+   # On the laptop, as a background command. Waits up to an hour for the key file.
+   for i in $(seq 720); do [ -f ~/example-setup/provider-key ] && break; sleep 5; done
    ls -l ~/example-setup/provider-key
    ```
 
-   Reason for 9 minutes: the loop ends by itself before Claude Code's
-   10-minute limit stops the command, so you get a clear answer, and a
-   question the person types meanwhile waits 9 minutes at most.
-   When the file is there, carry on without being told. When the limit
-   passed, say in one line that you are still waiting and that the person
-   can type anything here when the key command is done, and end the
-   reply. At the person's next message, look for the file, and wait again
-   when it is not there yet. Never print the file. An agent that does
-   not show its text before a command ends its reply with the screen and
-   "When it says  Hetzner accepted the key,  tell me "done" here."
+   When the wait ends with the file there, carry on without being told.
+   When the hour passed, start the same wait again, and end your reply
+   with one line that you still wait for the key. Never print the file.
+   An agent with no background commands ends its reply with the screen
+   and "When it says  Hetzner accepted the key,  tell me "done" here."
    The key command stays open after that on purpose: chapter 4 step 2
    tells it when the desk is ready.
 
@@ -293,7 +292,8 @@ repository's name, including paths inside quoted SSH commands.
    `desk-ordered`: tell the person in one line, and offer the choices of
    chapter 1's [stock line](01_answer_two_questions.md#steps).
 
-   **Tell the person,** once the provider accepted the request:
+   **Tell the person,** as the last text of the reply that ends your turn
+   once step 4's bootstrap runs in the background:
 
    ```text
    I am building your systems desk now, a small server of your own that holds your keys.
@@ -440,7 +440,9 @@ repository's name, including paths inside quoted SSH commands.
    ~/.local/bin/mmx run systems_desk --var desk_name=desk01 --only-fleet-stages systems_desk --connection ssh_only
    ```
 
-   The `systems_desk` stage runs alone because `util01` does not exist
+   Start the run as a background command, then end your reply with step
+   2's message, as the skill's "Long work" rule says; the run's end wakes
+   you. The `systems_desk` stage runs alone because `util01` does not exist
    yet. The run installs the waiting security updates, which take several
    minutes. Root SSH from the laptop stays open until the lock in
    chapter 4.
@@ -471,10 +473,9 @@ repository's name, including paths inside quoted SSH commands.
    laptop file when the check fails, so run it again after the cause is
    fixed.
 
-   **Tell the person while waiting:** nothing more. The screen of step 2
-   said how long the build takes. When the build runs past 15 minutes,
-   say in one line what the run is doing now and that the person still
-   has nothing to do.
+   **Tell the person while waiting:** nothing more. The message of step 2
+   said how long the build takes. When the person writes meanwhile,
+   answer, and say in one line what the run is doing now.
 
    **Tell the person after:** chapter 4's first screen.
 

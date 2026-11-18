@@ -42,7 +42,14 @@ before the push, picks the quiet hour, and adds each missing vault key.
 - `NEW_VERSION` is the new version's tag, such as `v0.2.0`. Bring it into
   the clone with `git -C STACK_REPOSITORY fetch --tags`, then
   `git -C STACK_REPOSITORY checkout NEW_VERSION`. Follow this page as that
-  checkout holds it.
+  checkout holds it. The installed skill is a copy, not a link, so copy
+  the new version's skill directory in place of the old copy, as the
+  Stack's README says:
+  `rm -rf ~/.claude/skills/monkeymaxxing-stack` and
+  `cp -R STACK_REPOSITORY/skills/monkeymaxxing-stack ~/.claude/skills/`
+  (Codex: `~/.agents/skills`). Reason: a symbolic link makes Claude Code
+  ask permission for each read outside the working folders, even in auto
+  mode.
 - `NEW_COMMIT` is the new version's release commit,
   `git -C STACK_REPOSITORY rev-parse HEAD` after the checkout.
 - Read `OLD_COMMIT` from `stack_commit` in

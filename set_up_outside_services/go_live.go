@@ -410,7 +410,10 @@ func (g *goLive) refused(service, item string, err error, advice string) {
 // while the person types, so without it the screen looks finished.
 const stillWaitingHere = "The setup is still running.  It waits for you at the line below."
 
-// Account 2 of 4: Cloudflare.
+// Account 2 of 3: Cloudflare. The account screens count only the accounts
+// the person makes in the setup (Hetzner, Cloudflare, Backblaze), so the
+// registrar screen, skipped when the domain already points at Cloudflare,
+// carries no number and never leaves a gap in the count.
 
 // r2OverviewLink opens the account's R2 page, where Cloudflare's checkout
 // turns R2 on.
@@ -445,7 +448,7 @@ func (g *goLive) cloudflare() (string, error) {
 		"\n     The page is long.  Scroll to the bottom, below the list of permissions."+
 		"\n     Press  Review token,  then  Create token.")
 	var screen strings.Builder
-	screen.WriteString("\nAccount 2 of 4: Cloudflare (your web address and protection)\n\nWhat this is for:\n" +
+	screen.WriteString("\nAccount 2 of 3: Cloudflare (your web address and protection)\n\nWhat this is for:\n" +
 		"  Cloudflare puts your site on the internet and keeps your private pages private.\n\nDo this now:\n")
 	for i, step := range steps {
 		fmt.Fprintf(&screen, "  %d. %s\n", i+1, step)
@@ -577,7 +580,7 @@ Cloudflare did not tell me your account ID.  Copy it from Cloudflare's page:
 	}
 }
 
-// Account 3 of 4: the domain's registrar.
+// The domain's registrar: no account number, as above.
 
 func (g *goLive) registrar() (string, error) {
 	e := g.e
@@ -617,7 +620,7 @@ func (g *goLive) registrar() (string, error) {
 		"Put in these two, and remove the others:\n\n       "+strings.Join(g.zone.NameServers, "\n       ")+"\n",
 		"Press save.")
 	var screen strings.Builder
-	fmt.Fprintf(&screen, "\nAccount 3 of 4: %s\n\nWhat this is for:\n  Your domain must point at Cloudflare.\n", title)
+	fmt.Fprintf(&screen, "\nOne change at %s\n\nWhat this is for:\n  Your domain must point at Cloudflare.\n", title)
 	if registration.dnssec == dnssecOn {
 		screen.WriteString("\nTURN OFF DNSSEC FIRST.  YOUR SITE WILL NOT WORK WITH IT ON.\n")
 	}
@@ -722,7 +725,7 @@ func vcardName(card []any) string {
 	return ""
 }
 
-// Account 4 of 4: Backblaze.
+// Account 3 of 3: Backblaze.
 
 // backblazeRegionName is the region's name on Backblaze's sign-up page, from
 // the S3 endpoint in the settings: EU Central for s3.eu-central-003.backblazeb2.com.
@@ -747,7 +750,7 @@ func (g *goLive) backblaze() (string, error) {
 		region = "  " + name + "."
 	}
 	e.show(fmt.Sprintf(`
-Account 4 of 4: Backblaze (your backups)
+Account 3 of 3: Backblaze (your backups)
 
 What this is for:
   Your database backups are stored at Backblaze, away from your servers.

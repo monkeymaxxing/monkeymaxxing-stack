@@ -222,8 +222,12 @@ nothing, unless the prices rose since chapter 1 (step 3).
 
    **Tell the person first:**
 
-   > Next, I create `util01`, then `app001` and `db01`, with the sizes and prices you approved.
+   > Next, I create `util01`, then `app001` and `db01`, with the sizes and prices you approved: about [the total] a month.
    > Each server starts with no open SSH port to the internet. Only your systems desk reaches it, through a private network.
+   > As you approved, your servers may later grow by themselves to at most 4 app servers and 2 database servers, up to about [X] a month more, without asking you.
+
+   The growth line gives chapter 1's numbers: the person may have
+   approved them without saying "details".
 
    **Tell the person while waiting:** each server takes about a minute or
    two to create and boot. The Stack's tests measured 49 to 94 seconds at

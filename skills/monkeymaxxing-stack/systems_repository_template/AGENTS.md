@@ -478,29 +478,46 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
 ### The two windows agree
 
 The person reads the chat and their own terminal. A tool call's
-description and command scroll past, and its output is folded away, so
-the person does not read instructions there. Two windows that disagree
-cost the person a refused tool call and a question.
+description and command scroll past, its output is folded away, and text
+you write between tool calls is collapsed to one short line on the
+person's screen. Only the text that ends your turn is shown in full. Two
+windows that disagree cost the person a refused tool call and a question.
 
-- Before you send the person to their own terminal, write in the chat
-  reply, as plain text, the exact command to type and what they will
-  see. Never put it only in a tool call's description or summary.
-- While the person works in their terminal, wait only on a result you
-  can read: `ssh desk01-agent wait-for-the-setup` for the setup,
-  `ssh desk01-agent wait-for-a-desk-job NAME` for a desk job, or the
-  file a laptop script writes. Never wait a fixed time on something you
-  cannot see. Keep each wait within the command's own bound, and say in
-  one line what you wait for before each one.
+- **Screen last.** Anything the person must read or act on, such as a
+  screen, a question, a price to approve, or the exact command to type in
+  their terminal and what they will see, is the last thing in your reply,
+  and your turn ends there: never a tool call after it. Never put it only
+  in a tool call's description or summary.
+- **Start the wait first, in the background.** While the person works in
+  their terminal, wait only on a result you can read:
+  `ssh desk01-agent wait-for-the-setup --at-most-minutes 60` for the
+  setup, `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60`
+  for a desk job, or the file a laptop script writes. Start the wait as a
+  background command (in Claude Code, the Bash tool's run-in-background
+  option), then write the screen, and end your turn. When the background
+  command ends, your agent wakes you, and you carry on: read its output,
+  and say what happened. A question the person types meanwhile reaches
+  you at once, because your turn has ended. Never wait a fixed time on
+  something you cannot see.
 - Never ask the person to say "done" for a result your wait reads: the
   key file, `desk-ready`, `wait-for-the-setup`, or a job's exit. Ask for
   "done" only when nothing you can read shows the result, such as a step
   only on a website, and say so in the step.
-- When a wait ends with a stop, say at once, in one plain sentence, what
-  stopped and what happens next. `wait-for-the-setup` prints the
-  stop's reason, also when `go-live` refused before its first screen.
+- **An agent with no background commands** ends its turn with the screen
+  and asks the person to say "done" when their window shows the result.
+  At the person's "done", run the same wait in the foreground: it ends at
+  once when the result is there.
+- When a wait ends at its bound (exit 124), start it again in the
+  background, and end your turn with one line that you still wait and
+  for what. When a wait ends with a stop, say at once, in one plain
+  sentence, what stopped and what happens next. `wait-for-the-setup`
+  prints the stop's reason, also when `go-live` refused before its first
+  screen.
 
-Reason: the chat is the only window the person reads, and a wait on a
-result you cannot read ends only by timeout.
+Reason: the person reads only the text that ends your reply, and a wait
+on a result you cannot read ends only by timeout. A wait in the
+background leaves the chat free, so the screen is the last thing the
+person sees, and a question gets an answer at once.
 
 ### Making a change
 
@@ -586,20 +603,23 @@ both, right after `systemd-run --user`
 `-E SSH_AUTH_SOCK=/run/desk-ssh-agent/socket -E GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig`.
 Without them, Git cannot reach the main copy on `util01`.
 
-Wait for the job with one command, never a loop of `sleep`s; give the
-command a 10-minute limit in Claude Code:
+Wait for the job with one command, never a loop of `sleep`s. Start the
+wait as a background command, then end your reply with one line: what
+the job does, about how long, and that the person need do nothing, as
+"The two windows agree" says:
 
 ```sh
-# On the laptop. NAME: the name you gave the desk job.
-ssh desk01-agent wait-for-a-desk-job NAME
+# On the laptop, as a background command. NAME: the name you gave the desk job.
+ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60
 ```
 
 It prints a few lines of the log as the job goes, ends when the job ends,
 and returns the job's exit code with a plain last line, such as
 `The desk job every-server-1405 ended with exit code 1.`, after the log's
 last 30 lines. Exit 125 means the exit file holds no number; the last line
-shows what it holds. Exit 124 means the job still runs after 9 minutes:
-say in one line what the job is doing, and run the same command again. Run
+shows what it holds. Exit 124 means the job still runs at the wait's
+bound: start the same wait again in the background, and say in one line
+what the job is doing. Run
 it for a job that already ended to read its result again. After a closed
 connection, open it again, as "Your login on the desk" says, then run the
 same command. Never start a run again only because the connection closed.

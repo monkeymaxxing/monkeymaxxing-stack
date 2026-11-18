@@ -427,10 +427,11 @@ other choice as a default, with the monthly cost. You say "go".
 busy for about an hour of it:
 
 1. You approve your agent's changes to your app, once.
-2. You make four accounts, one screen at a time: your server provider,
-   Cloudflare, your domain's registrar, and Backblaze for the backups. Each
-   screen says what the account is for and exactly what to do, and each key
-   you paste is checked with its company at once.
+2. You make three accounts, one screen at a time: your server provider,
+   Cloudflare, and Backblaze for the backups, and you point your domain at
+   Cloudflare at your domain's registrar if it does not point there yet.
+   Each screen says what the account is for and exactly what to do, and
+   each key you paste is checked with its company at once.
 3. You make one token at GitHub, so your servers can download your app.
 4. You save one recovery passphrase, and scan one QR code with your phone.
 
@@ -469,7 +470,7 @@ skill from github.com/monkeymaxxing/monkeymaxxing-stack, at its newest
 release." Then start a new session.
 
 By hand: clone the Monkeymaxxing Stack repository once, check out the
-newest release, then link the skill directory into the place where your
+newest release, then copy the skill directory into the place where your
 agent looks for your skills:
 
 ```sh
@@ -478,12 +479,17 @@ git -C ~/monkeymaxxing-stack checkout "$(git -C ~/monkeymaxxing-stack describe -
 
 # Claude Code reads your skills from ~/.claude/skills
 mkdir -p ~/.claude/skills
-ln -s ~/monkeymaxxing-stack/skills/monkeymaxxing-stack ~/.claude/skills/monkeymaxxing-stack
+cp -R ~/monkeymaxxing-stack/skills/monkeymaxxing-stack ~/.claude/skills/
 
 # Codex reads your skills from ~/.agents/skills
 mkdir -p ~/.agents/skills
-ln -s ~/monkeymaxxing-stack/skills/monkeymaxxing-stack ~/.agents/skills/monkeymaxxing-stack
+cp -R ~/monkeymaxxing-stack/skills/monkeymaxxing-stack ~/.agents/skills/
 ```
+
+Copy the directory; never link it. Reason: the skill's files must be
+inside your agent's skills folder. With a symbolic link, Claude Code asks
+your permission each time it reads the skill outside your working
+folders, even in auto mode.
 
 Each release is a Git tag with a version number, such as `v0.1.0`. Use a
 release, not the `main` branch: between releases, `main` names no released
@@ -498,11 +504,20 @@ Then start a new session of your agent. To give the skill to everyone who
 works in one repository instead, commit a copy in that repository's
 `.claude/skills/` (Claude Code) or `.agents/skills/` (Codex), such as
 `cp -R ~/monkeymaxxing-stack/skills/monkeymaxxing-stack .claude/skills/`.
-A committed link works only on a machine that has the stack's clone at the
-same path. For your own skills, a copy works as well as a link.
 
 `git -C ~/monkeymaxxing-stack fetch --tags` brings new releases of the
-stack, and changes none of your systems. Your agent applies a new release's
+stack, and changes none of your systems. To use a new release, check it
+out in the clone and copy the skill directory again, in place of the old
+copy. Replace `NEW_VERSION` with the release's tag, such as `v0.4.0`:
+
+```sh
+git -C ~/monkeymaxxing-stack checkout NEW_VERSION
+# Claude Code; for Codex, the same two lines with ~/.agents/skills
+rm -rf ~/.claude/skills/monkeymaxxing-stack
+cp -R ~/monkeymaxxing-stack/skills/monkeymaxxing-stack ~/.claude/skills/
+```
+
+Your agent applies a new release's
 changes to your systems repository only when you ask, following the
 [upgrade procedure](skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/upgrade_to_a_new_stack_version.md).
 

@@ -4,15 +4,17 @@
 systems desk).
 
 **What this chapter does:** the person types one command on the laptop,
-`ssh desk01-setup`. The command shows the next three accounts, one at a
-time: Cloudflare, the domain's registrar, and Backblaze. Then one token at
+`ssh desk01-setup`. The command shows the next two accounts, one at a
+time: Cloudflare and Backblaze, with the domain's registrar between them
+when the domain does not point at Cloudflare yet. Then one token at
 the Git host, so the servers can download the app. Each value is checked
 with its service at once. Then the lock: one recovery passphrase, and one
 QR code for the phone. After the lock, the desk needs the laptop and a
 code from the phone.
 
-**Who acts:** the person signs up on three websites, makes one key at
-each, changes the nameservers at the registrar, saves the recovery
+**Who acts:** the person signs up at Cloudflare and Backblaze, makes one
+key at each and one at the Git host, changes the nameservers at the
+registrar when needed, saves the recovery
 passphrase, and scans the QR code. You watch the command's progress from
 your own login, and do everything the person's keys let you do: the
 domain at Cloudflare, its DNS records, and the lock.
@@ -85,7 +87,7 @@ domain at Cloudflare, its DNS records, and the lock.
    Your systems desk, the small server that holds your keys, is ready.
 
    The window where you typed the Hetzner key goes on by itself now.
-   It shows the next 3 accounts, one at a time.
+   It shows the next 2 accounts, one at a time, and a change at your domain's registrar if one is needed.
    I carry on by myself when it is done.
    Ask me here at any time if a step is unclear.
 
@@ -95,23 +97,20 @@ domain at Cloudflare, its DNS records, and the lock.
      ssh desk01-setup
    ```
 
-   Put the screen first and whole in your reply's text, as
+   First start the wait for `go-live` as a background command, as
    [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
-   says, never only in a tool call's description. Say in one line that you
-   wait for `go-live` to finish or stop. Then, in the same
-   turn, wait on the desk until it does. Give the
-   command the longest time your agent allows a command, 10 minutes in
-   Claude Code:
+   says. Then end your reply with the screen, whole, as its last text:
+   your turn ends there, with no tool call after it.
 
    ```sh
-   # On the laptop. Waits up to 9 minutes for go-live to finish or stop.
-   ssh desk01-agent wait-for-the-setup
+   # On the laptop, as a background command. Waits up to an hour for go-live to finish or stop.
+   ssh desk01-agent wait-for-the-setup --at-most-minutes 60
    ```
 
    It prints the steps as they change, and a line at least once a minute.
    It ends with the results file's summary: the steps, `finished`,
    `stopped_with` and `for_the_coding_agent`. Exit 0 means `go-live`
-   finished, 1 that it stopped, and 124 that it still runs after 9 minutes.
+   finished, 1 that it stopped, and 124 that it still runs at the bound.
    When it ends with a stop, say at once, in one plain sentence, what
    `stopped_with` says and what happens next: a refusal before the first
    screen, such as a setting that is still the template's example, is in
@@ -119,30 +118,29 @@ domain at Cloudflare, its DNS records, and the lock.
    type `ssh desk01-setup` again.
    A stop counts only when the run wrote the file after the wait started,
    so an earlier run's `stopped_with` never ends the wait for the next run.
-   Reason for 9 minutes: the wait ends by itself before Claude Code's
-   10-minute limit stops the command, and a question the person types
-   meanwhile waits 9 minutes at most. The wait is one more session on your
-   shared login, and the person's `ssh desk01-setup` is a separate login, so
-   neither blocks the other. Both go through the same doubleshell tunnel,
-   which serves several connections at once.
+   The wait is one more session on your shared login, and the person's
+   `ssh desk01-setup` is a separate login, so neither blocks the other.
+   Both go through the same doubleshell tunnel, which serves several
+   connections at once.
 
-   When `finished` is true, carry on with the steps below without being
-   told. With `stopped_with`, tell the person the reason in plain words and
-   what to do. When the limit passed, do the work of each step that is
-   done, such as step 3's, then say in one line that you are still waiting
-   and that the person can type anything here when the command is done,
-   and end the reply. At the person's next message, run
-   `ssh desk01-agent wait-for-the-setup` again: it ends at once when
-   `go-live` finished. An agent that does
-   not show its text before a command ends its reply with the screen and
-   "When it says  Go back to your coding agent,  tell me "done" here."
+   When the person writes to you meanwhile, answer, read the results
+   file, and do the work of each step that is done, such as step 3's; the
+   background wait keeps running. When `finished` is true, carry on with
+   the steps below without being told. With `stopped_with`, tell the
+   person the reason in plain words and what to do. At exit 124, start
+   the same wait again in the background, and end your reply with one
+   line that you still wait for the setup window. An agent with no
+   background commands ends its reply with the screen and "When it says
+   Go back to your coding agent,  tell me "done" here.", and then runs
+   the same wait in the foreground: it ends at once when `go-live`
+   finished.
 
    **Check:** the results file shows that `go-live` started.
 
 3. **Cloudflare.** The command shows:
 
    ```text
-   Account 2 of 4: Cloudflare (your web address and protection)
+   Account 2 of 3: Cloudflare (your web address and protection)
 
    What this is for:
      Cloudflare puts your site on the internet and keeps your private pages private.
@@ -218,10 +216,14 @@ domain at Cloudflare, its DNS records, and the lock.
 4. **The domain's registrar.** The command reads the domain's registrar
    and its DNSSEC state from the registry's RDAP service, and shows the
    zone's two Cloudflare nameservers. A domain that already points at
-   Cloudflare skips the screen, and the step shows `not_needed`.
+   Cloudflare skips the screen, and the step shows `not_needed`. The
+   screen has no account number: the account screens count only the
+   accounts the person makes in this setup (Hetzner 1 of 3, Cloudflare 2
+   of 3, Backblaze 3 of 3), so a skipped registrar screen never leaves a
+   gap in the count.
 
    ```text
-   Account 3 of 4: your domain's registrar (Namecheap)
+   One change at your domain's registrar (Namecheap)
 
    What this is for:
      Your domain must point at Cloudflare.
@@ -265,7 +267,7 @@ domain at Cloudflare, its DNS records, and the lock.
    as `EU Central` for servers in Europe. The command shows:
 
    ```text
-   Account 4 of 4: Backblaze (your backups)
+   Account 3 of 3: Backblaze (your backups)
 
    What this is for:
      Your database backups are stored at Backblaze, away from your servers.
@@ -342,35 +344,31 @@ domain at Cloudflare, its DNS records, and the lock.
    into `mmx_project_settings.yml`, and commit it in your clone, to
    publish once `go-live` has finished, as in step 3.
    `container_image_found` says whether CI has built the first image yet.
-   With `no, not built yet`, wait for the image on the laptop, before
-   chapter 6, with the tag chapter 2 recorded in `deployed_image_tags`:
+   With `no, not built yet`, read CI's result yourself, before chapter 6,
+   as chapter 2's step 7 says: the `ci-report` branch in the app's
+   repository, which also shows a failure's reason, and the image at the
+   registry, as a background command, with the tag chapter 2 recorded in
+   `deployed_image_tags`:
 
    ```sh
-   # On the laptop, in ~/code/example_systems. Waits up to 9 minutes.
+   # On the laptop, in ~/code/example_systems, as a background command.
    ./server_management_scripts/wait_for_the_app_image ghcr.io/example/shop:FULL_APP_COMMIT_ID
    ```
 
    Exit 0: the image is at the registry; carry on. Exit 1: it is still
-   missing after 9 minutes, so the build failed or still runs; check CI as
-   below. Exit 3: the registry does not let the laptop read a private image
-   without a registry login, so the command cannot tell; check CI as below.
-   Never tell the person the app's tests passed from the image alone: say
-   only what CI's run or the command showed. Check CI with `gh run watch`
-   when `gh` is signed in. Without `gh`, show the person one screen, with
-   the app's repository in the link:
+   missing after 9 minutes, so the build failed or still runs. Exit 3:
+   the registry does not let the laptop read a private image without a
+   registry login, so the command cannot tell. In both cases, read the
+   `ci-report` branch, or use `gh run watch` when `gh` is signed in.
+   Never ask the person to sign in to the Git host or to look at a CI
+   page. Never tell the person the app's tests passed from the image
+   alone: say only what CI's report or the command showed.
 
-   ```text
-   One check: did GitHub build your app?
-
-   Do this now:
-     1. Sign in to GitHub in your browser.  Without it, the page says  Page not found.
-     2. Open  https://github.com/OWNER/shop/actions
-     3. Tell me what the newest run shows: a green tick, a red cross, or a yellow dot.
-   ```
-
-   A red cross: ask the person to open the run and tell you the failed
-   step's name, fix the app, and push the fix after the person's "yes".
-   A yellow dot: the build still runs; ask again in a few minutes.
+   When CI's report says the tests failed, read `test.log` on the
+   branch, fix the app, show the fix as chapter 2's step 7 does, and push
+   it after the person's "yes". When no report exists for the pushed
+   commit after about 15 minutes, CI did not run: check that the workflow
+   file is on `main`, and say plainly what you found.
 
    An organization may require a token that ends. The command accepts a
    token that ends 30 or more days from now, after the person types `yes`,

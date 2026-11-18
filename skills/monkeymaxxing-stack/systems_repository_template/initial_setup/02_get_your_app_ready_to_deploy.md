@@ -29,7 +29,10 @@ the person's. Then you push the changes and watch the first build.
   command of the app only inside a container on the laptop, with
   `podman` or `docker`, with only the app's folder mounted, written out:
   `podman run --rm -v /Users/alex/code/shop:/app -w /app IMAGE npm test`. CI runs the
-  real tests and builds on a clean machine. This risk is accepted when
+  real tests and builds on a clean machine. When the laptop has no
+  podman or docker, run none of these commands on the laptop: say on
+  step 7's screen that the app's tests run in CI for this reason. Never
+  ask the person to install a container tool. This risk is accepted when
   the team chooses one agent on the laptop. The guide states this risk
   here only.
 - **Systems settings go into the laptop's copy,** `~/code/example_systems`,
@@ -294,6 +297,33 @@ the person's. Then you push the changes and watch the first build.
    6. asks the registry to list the tag, so a run that reports success has
       a tag at the registry.
 
+   Add one last step to the workflow, so you can read CI's result
+   without the person (step 7): it pushes the run's result and the tests'
+   output to a branch, `ci-report`, in the app's repository, success or
+   failure. Make the test step save its output: the app's test command
+   followed by `2>&1 | tee /tmp/test.log`, such as
+   `run: go test ./... 2>&1 | tee /tmp/test.log`, with `shell: bash`,
+   which still fails the step when the tests fail; set the job's
+   `permissions: contents: write`, which lets the run push that branch,
+   and add:
+
+   ```yaml
+         # CI's result, for a coding agent that cannot read this private repository's CI page.
+         - name: Report the result to the ci-report branch
+           if: always() && github.event_name == 'push'
+           env:
+             GITHUB_TOKEN_FOR_THIS_RUN: ${{ secrets.GITHUB_TOKEN }}
+           run: |
+             mkdir /tmp/ci-report && cd /tmp/ci-report && git init -q -b ci-report
+             printf 'commit: %s\njob status: %s\n' "$GITHUB_SHA" "${{ job.status }}" > result.txt
+             cp /tmp/test.log . 2>/dev/null || true
+             git add . && git -c user.name=ci -c user.email=ci@localhost commit -qm "CI result for $GITHUB_SHA"
+             git push -qf "https://x-access-token:${GITHUB_TOKEN_FOR_THIS_RUN}@github.com/${GITHUB_REPOSITORY}" HEAD:ci-report
+   ```
+
+   A push made with the run's own token starts no new run, and the
+   workflow runs only for `main`, so the report never loops.
+
    Two things must agree with the app. The image name is
    `ghcr.io/<owner>/<repository>` in lowercase, and it must be the same
    text as `image` of the app under `vars.apps` (step 2), or the servers pull
@@ -322,57 +352,70 @@ the person's. Then you push the changes and watch the first build.
    **Check:** the workflow file is among the uncommitted changes, with
    both `REPLACE` steps filled in.
 
-7. **Show every change, once, and push.** Show the screen below. Give
-   each changed or new file one line that says what changes in it and
-   why, in the person's words, such as "`src/uploads.js`: uploads go to
-   R2, so a new app server has every picture." Never paste the diff:
-   Claude Code already showed each edit, and the person can say "show"
-   to see one file's change. Explain a term the person needs for a
-   change, such as the primary database server or R2, in the same line.
-   Name every file that changed or is new: compare your list with
+7. **Show every change, once, and push.** Show the screen below, as the
+   last text of your reply, with no tool call after it. Give each changed
+   or new file one short line in plain words: what changes and why, such
+   as "`src/uploads.js`: uploads go to R2, so every app server has every
+   picture." Keep the file lines to about 8; when more files changed,
+   group small ones on one line, such as "3 settings files: the database
+   address", and name each file behind "show". Never paste the diff:
+   Claude Code already showed each edit. Name every file that changed or
+   is new, on the screen or behind "show": compare your list with
    `git status --short` in the app's folder, so a file such as
    `README.md` is not left out.
 
    **Ask the person:**
 
    ```text
-   Your app needs 4 small changes to run on the servers.  Here they are.
+   Your app needs 4 small changes to run on the servers.
 
-     [one line per changed file: the file, what changes, and why]
-
-   Say "show" and a file's name to see its whole change.
+     [one short line per changed file, about 8 lines at most]
 
    Tests: I did not run your app's tests.  This laptop has no podman or docker,
-   and I run your app's code only in a container.  CI builds the app next.
+   so your app's tests run in CI, on GitHub, when I push.
 
-   Say "yes" and I push them.  Or tell me what to change.
+   Say "yes" and I push them.  Or say "show" to see the details, or tell me what to change.
    ```
 
+   "show" gives, per file, what changed in more words and the terms the
+   person needs, such as the primary database server or R2, then the same
+   question; "show" and a file's name shows that file's change.
+
    Make the "Tests:" line true. When a container tool exists and you ran
-   the tests, say that they passed or which failed. When none exists,
-   keep the line above, with no forced install of one. Never say or imply
-   that tests passed when you did not run them.
+   the tests, say that they passed or which failed. When the laptop has
+   no podman or docker, keep the line above: the app's tests run in CI
+   for that reason. Never ask the person to install a container tool.
+   Never say or imply that tests passed when you did not run them.
 
    One "yes" approves the set. When the person asks for a change, make it
    and show the screen again.
 
    After "yes", commit the changes in the app's folder with a message that
    says what changed and why, and push `main` with the person's own Git
-   login. Then watch the CI run:
+   login. Then read CI's result yourself, from what you can read, never
+   from the person: never ask the person to sign in to the Git host or to
+   look at a CI page. Reason: a private repository's CI page says "Page
+   not found" to a browser that is not signed in, and in a newcomer test
+   the person could not sign in there at all. The routes, none of which
+   needs the person:
 
-   - With `gh` signed in: `gh run watch` on the run of the pushed commit.
-     A green run whose last step names `linux/amd64` means the image is at
-     the registry.
-   - Without `gh`: run
+   - **The image at the registry:**
      `./server_management_scripts/wait_for_the_app_image IMAGE:FULL_APP_COMMIT_ID`
-     in the systems repository. Exit 0 means the image is at the registry.
-     Exit 3 means the image is private and this laptop has no registry
-     login, so it cannot tell; the person needs nothing now. Never send the
-     person to the Actions page: a private repository's page says "Page not
-     found" to a browser that is not signed in to GitHub. Chapter 4's Git
-     host token screen reads the image at the registry with the new token,
-     and the results file's `container_image_found` tells you whether CI
-     built it.
+     in the systems repository, as a background command. Exit 0 means CI
+     built and pushed the image. Exit 3 means the image is private and
+     this laptop has no registry login, so it cannot tell. From chapter 4
+     on, the Git host token screen also reads the image with the new
+     token, and the results file's `container_image_found` says whether
+     CI built it.
+   - **CI's report on the `ci-report` branch,** which step 6's workflow
+     pushes on every run, success or failure: `git fetch origin ci-report`
+     in the app's folder, then `git show origin/ci-report:result.txt` and
+     `git show origin/ci-report:test.log`. The report names the commit,
+     so check that it is the one you pushed. This route works with the
+     Git login you already push with, and it also shows why a run
+     failed.
+   - **`gh run watch`** on the pushed commit's run, when `gh` is signed in
+     on the laptop.
 
    Record the pushed commit's full ID, 40 characters, as the app's tag in
    production's `deployed_image_tags` in the laptop's copy, and commit
@@ -388,8 +431,9 @@ the person's. Then you push the changes and watch the first build.
    "chapter 3 is next".
 
    **Check:** the push succeeded, and `deployed_image_tags` holds the
-   pushed commit's full ID. With `gh`, the run is green and names
-   `linux/amd64`. Without `gh`, chapter 4 checks the image.
+   pushed commit's full ID, and you read CI's result from the registry,
+   the `ci-report` branch, or `gh`. When none of them could tell yet,
+   chapter 4 checks the image.
 
 8. **An app requirement in the checklist that the app cannot meet** is a
    deviation, recorded with the reason. For example, a job queue in Redis,
@@ -426,8 +470,10 @@ the person's. Then you push the changes and watch the first build.
 - **GHCR refuses the first push of a brand-new package with `denied`**
   (step 7). The workflow's image label links the package to the
   repository, which normally prevents it. If it happens, rerun the failed
-  job, with `gh run rerun --failed` or in the repository's Actions tab,
-  with nothing changed. A second `denied` is a real permission problem.
+  job with `gh run rerun --failed` when `gh` is signed in; otherwise push
+  an empty commit (`git commit --allow-empty`) after the person's "yes",
+  and record its ID as the tag. Never send the person to the Actions
+  tab. A second `denied` is a real permission problem.
 
 ## An app you didn't write
 

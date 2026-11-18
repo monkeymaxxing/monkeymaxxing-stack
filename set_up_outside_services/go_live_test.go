@@ -251,9 +251,9 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	}
 
 	// Each screen in the design's order, with its four parts.
-	order := []string{"Account 2 of 4: Cloudflare (your web address and protection)", "4. Turn on R2", "It costs nothing up to 10 GB of files a month.",
+	order := []string{"Account 2 of 3: Cloudflare (your web address and protection)", "4. Turn on R2", "It costs nothing up to 10 GB of files a month.",
 		"5. Open this link.", "Cloudflare accepted the token.", "R2 is not on yet",
-		"Account 3 of 4: your domain's registrar (Namecheap, Inc.)", "TURN OFF DNSSEC FIRST.", "Account 4 of 4: Backblaze (your backups)",
+		"One change at your domain's registrar (Namecheap, Inc.)", "TURN OFF DNSSEC FIRST.", "Account 3 of 3: Backblaze (your backups)",
 		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "One more key: so your servers can download your app.",
 		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Key for shop: STRIPE_API_KEY",
 		"Stripe takes your customers' card payments with it.", "1. Open  https://dashboard.stripe.com/apikeys", "Stripe accepted the key.", "Step 1 of 2: your recovery passphrase", "SAVE IT NOW.",
@@ -446,7 +446,7 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 		t.Errorf("the rerun's first results still say it stopped: %q", rerun.StoppedWith)
 	}
 	output := h.transcript.String()
-	for _, screen := range []string{"Account 2 of 4", "Account 3 of 4", "Account 4 of 4", "Get Started Free", "One more key", "Step 1 of 2"} {
+	for _, screen := range []string{"Account 2 of 3", "One change at your domain's registrar", "Account 3 of 3", "Get Started Free", "One more key", "Step 1 of 2"} {
 		if strings.Contains(output, screen) {
 			t.Errorf("the rerun showed %q again", screen)
 		}
