@@ -294,6 +294,14 @@ class PublishBranchToMain(unittest.TestCase):
         self.git(self.laptop, 'commit', '--quiet', '-m', message)
         self.git(self.laptop, 'push', '--quiet', 'origin', 'HEAD:refs/heads/%s' % branch)
 
+    def another_clone(self):
+        """A clone of the main copy that stands in for util01, with a Git identity of its own."""
+        other = self.root/'other'
+        self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
+        self.git(other, 'config', 'user.name', 'mmhotline on util01')
+        self.git(other, 'config', 'user.email', 'mmhotline@util01')
+        return other
+
     def publish_branch_to_main(self, branch='work'):
         return subprocess.run(['bash', str(self.command), branch], text=True, capture_output=True, env=self.environment)
 
@@ -315,8 +323,7 @@ class PublishBranchToMain(unittest.TestCase):
         self.assertEqual(self.git(self.desk, 'rev-parse', 'main'), self.git(self.origin, 'rev-parse', 'main'))
 
     def test_commits_that_reached_the_main_copy_meanwhile_come_first(self):
-        other = self.root/'other'
-        self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
+        other = self.another_clone()
         (other/'notes.md').write_text('a note\n')
         self.git(other, 'add', 'notes.md')
         self.git(other, 'commit', '--quiet', '-m', 'A note from util01')
@@ -328,8 +335,7 @@ class PublishBranchToMain(unittest.TestCase):
                          ['Add a server', 'A note from util01', 'Start the systems repository on desk01'])
 
     def test_a_conflict_names_the_files_and_changes_nothing(self):
-        other = self.root/'other'
-        self.git(self.root, 'clone', '--quiet', str(self.origin), str(other))
+        other = self.another_clone()
         (other/'inventory.yml').write_text('servers: three\n')
         self.git(other, 'commit', '--quiet', '-am', 'Another server')
         self.git(other, 'push', '--quiet', 'origin', 'main')
