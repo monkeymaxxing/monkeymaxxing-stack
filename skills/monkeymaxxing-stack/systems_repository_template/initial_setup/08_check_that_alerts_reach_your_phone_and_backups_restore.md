@@ -49,12 +49,12 @@ phone.
 - **MMX runs.** Publish each settings change with the
   [Making a change](../AGENTS.md#making-a-change) steps. Run `every_server`
   with the desk's button, `sudo -n -u servers-mmx run-mmx-on-the-servers`,
-  as a desk job, until a run has applied the triage agent's settings in
-  part 3. After that, use the helper,
+  as a desk job, until chapter 7's run 2 has applied MMHotline's settings.
+  After that, use the helper,
   `./server_management_scripts/run_mmx_on_util01 run every_server`.
   Reason: the helper runs only commits that MMHotline trusts, and
-  MMHotline learns that it trusts every commit on `origin` with the
-  triage agent's settings (`trusted_commits`).
+  MMHotline learns that it trusts every commit on `origin` from the
+  `systems_repository_commits` section of its settings (`trusted_commits`).
 - **The domain must be active for parts 2 and 4.** Signing in to MMHotline
   and the status page need the domain active at Cloudflare. While the
   domain is pending, tell the person which part waits, and when you check
@@ -262,7 +262,7 @@ You do the rest. It takes about 15 minutes.
 
    **Check:** `secrets usage` shows both keys as defined.
 
-8. **Apply the settings.** Run `every_server` with the desk's button, as
+8. **Apply the settings.** Run `every_server` with `util01`'s helper, as
    a desk job ([Making a change](../AGENTS.md#making-a-change)). The run
    writes `/etc/mmhotline/mmhotline_settings.yml`, and its
    `apply_the_mmhotline_settings` stage runs `mmhotline settings apply`.
@@ -711,10 +711,10 @@ alerts, and the alerts part of the setup adds them in about 15 minutes. Reason: 
 first part of the setup is long already, and each extra account in it is one more
 chance to stop before the site is live.
 
-**The button until the triage agent's settings.** `util01`'s helper runs
+**The button until chapter 7's run 2.** `util01`'s helper runs
 only commits that MMHotline trusts, and MMHotline learns that it trusts
-every commit on `origin` from the triage agent's settings
-(`trusted_commits`). Before they are applied, the helper refuses with
+every commit on `origin` from the `systems_repository_commits` section of its
+settings (`trusted_commits`). Before run 2 applies them, the helper refuses with
 "MMHotline did not answer the commit check".
 
 **MMHotline's own test SOS.** `mmhotline incidents send-test-sos` pages the

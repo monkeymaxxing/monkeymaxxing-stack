@@ -160,7 +160,7 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.ran_at(commands), {self.first})
         self.assertEqual(result.stderr, 'find_the_trusted_commit_of_the_systems_repository: MMHotline checks no commit during a '
-                         'lock-out, because its settings then hold no trusted_commits; this job runs at the commit util01 already '
+                         'lock-out, because its settings then hold no systems_repository_commits.trusted_commits; this job runs at the commit util01 already '
                          f'has, {self.first[:12]}, and at nothing newer\n')
         # Outside a lock-out the same refusal keeps MMHotline's own words and the did-not-answer line.
         self.settings.write_text(self.rendered_mmhotline_settings(['ssh-ed25519 AAAA desk']))
@@ -253,7 +253,9 @@ class TimersRunOnlyTrustedCommits(unittest.TestCase):
 
     def test_mmhotline_trusts_every_commit_on_origin_and_holds_no_signing_settings(self):
         text = self.rendered_mmhotline_settings(['ssh-ed25519 AAAA desk'])
-        self.assertEqual(re.findall(r'(?m)^  trusted_commits: (.*)$', text), ['every_commit_on_origin'])
+        self.assertEqual(re.findall(r'(?m)^systems_repository_commits:\n  trusted_commits: (.*)$', text), ['every_commit_on_origin'])
+        # Commit trust is outside the triage agent section, so a setup without a triage agent has it.
+        self.assertNotIn('trusted_commits', text.split('\ntriage_agent:\n', 1)[1].split('\nmmhotline_down_alarm:', 1)[0])
         for removed in ('commit_signing_public_key', 'trusted_commit_signing_public_keys',
                         'commits_without_a_trusted_signature_are_approved_by', 'paths_only_a_person_may_approve'):
             self.assertNotRegex(text, r'(?m)^\s*' + removed + ':')

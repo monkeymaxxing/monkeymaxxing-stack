@@ -124,7 +124,7 @@ The contracts below state the required outcomes for changes to the stack.
   command plus one phone code.
 - **The team's main copy is on `util01`:** a root-owned bare repository that refuses force pushes and branch
   deletions. Only keys in `root_ssh_public_keys` can push to it. MMHotline and `util01` trust every commit on it
-  (`triage_agent.trusted_commits: every_commit_on_origin`); nothing is signed. MMHotline pushes the triage agent's
+  (`systems_repository_commits.trusted_commits: every_commit_on_origin`); nothing is signed. MMHotline pushes the triage agent's
   commits only when they change nothing but its notes and one-time playbooks. The Git host keeps a backup that the
   laptop pushes with the person's own login; nothing reads from it, and a refused backup push is shown to the
   person.

@@ -257,7 +257,7 @@ or `mmhotline_settings.yml`, and that it reaches the button only after the next 
   settings comparison and restore drill use the same lock.
 
   MMHotline trusts every commit on `main` in the main copy
-  (`trusted_commits: every_commit_on_origin` in `mmhotline_settings.yml`).
+  (`systems_repository_commits.trusted_commits: every_commit_on_origin` in `mmhotline_settings.yml`).
   Commits are not signed, and no commit waits for review. Reason: only
   the keys in `root_ssh_public_keys` can push to the main copy, and those
   keys already log in as root on every server, so a signature would

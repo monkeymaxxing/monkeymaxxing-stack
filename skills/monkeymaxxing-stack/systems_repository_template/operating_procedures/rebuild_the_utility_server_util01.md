@@ -189,7 +189,7 @@ an open SOS when step 3 asks.
    server and registers each replica with the monitor.
    The step 7 run also clones `util01`'s copy of the systems repository, `/var/lib/mmhotline/systems_repository`.
    MMHotline trusts every commit on the main copy
-   (`triage_agent.trusted_commits: every_commit_on_origin`), so the new
+   (`systems_repository_commits.trusted_commits: every_commit_on_origin`), so the new
    `util01` needs nothing more before it runs `main`.
 
    Then compare every environment's live web and job images

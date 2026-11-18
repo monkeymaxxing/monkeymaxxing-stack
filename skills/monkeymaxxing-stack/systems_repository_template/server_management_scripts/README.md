@@ -29,7 +29,7 @@ ran. On `util01`,
 as root, the helper first asks MMHotline to check the commit, without the
 lock:
 `mmhotline commit-reviews check --commit-id COMMIT --json`. MMHotline
-trusts every commit on `origin` (`trusted_commits: every_commit_on_origin`
+trusts every commit on `origin` (`systems_repository_commits.trusted_commits: every_commit_on_origin`
 in `mmhotline_settings.yml`), fetches, and moves its checkout forward to
 the commit. When MMHotline does not answer, the helper says so and runs
 nothing. Then the helper takes the shared lock as `mmhotline`,

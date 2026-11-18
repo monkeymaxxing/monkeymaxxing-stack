@@ -797,7 +797,7 @@ A push decides only what the next run applies; a push starts no run.
 
 ### What the triage agent may do without a person
 
-The team gives one answer in chapter 6,
+The team gives one answer in chapter 8, part 3 (the triage agent's part of the setup),
 `what_the_triage_agent_may_do_without_a_person` in
 `mmx_project_settings.yml`: `every_fix_waits_for_a_person`,
 `routine_fixes` (the default), or `routine_fixes_and_server_work`.
@@ -820,9 +820,10 @@ load checks are rendered from the same answer ([Reboots](#reboots),
   the answer: MMHotline's rules, the reboot check that exists only with
   the third answer (so that no coding agent starts when there is no work
   for it), and the rules text the triage agent reads. A hand-written block
-  in `mmhotline_settings.yml` would hold the same fact twice. Both files
-  are in `paths_only_a_person_may_approve`, so the triage agent cannot
-  widen its own powers. The cost: a team that wants another MMHotline rule
+  in `mmhotline_settings.yml` would hold the same fact twice. The triage
+  agent cannot widen its own powers by editing these files: it cannot push
+  to the main copy, and MMHotline pushes its commits only when they change
+  nothing but `triage_agent_notes/` and `one_time_playbooks/`. The cost: a team that wants another MMHotline rule
   edits the template block and records a deviation.
 - **The third answer is not MMHotline's `every_fix_without_permission`:**
   that preset lets `unrecognized_task` and `reboot_a_server` act at once on
@@ -1450,7 +1451,7 @@ fleet hub and the provider's list, never from a file of its own on
 MMHotline is the one place that says which commit of `main` runs, for its
 own MMX runs and triage agent runs, for the helper, and for `util01`'s
 scheduled jobs. The template sets
-`triage_agent.trusted_commits: every_commit_on_origin`: MMHotline trusts
+`systems_repository_commits.trusted_commits: every_commit_on_origin`: MMHotline trusts
 every commit on `origin`, the main copy on `util01`. Nothing is signed, and
 no commit waits for review.
 
@@ -1480,7 +1481,7 @@ What protects the main copy without signatures:
   journal name the key and the time of each change to `main`
   ([Respond to a break-in](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/respond_to_a_break_in.md#an-unknown-commit-in-the-systems-repository)).
 - **A lock-out trusts nothing.** During a lock-out MMHotline's settings have
-  no `triage_agent` section, so MMHotline answers no commit, and the jobs
+  no `systems_repository_commits` section, so MMHotline answers no commit, and the jobs
   run nothing new.
 
 **The lock order.** MMHotline's copy lock is

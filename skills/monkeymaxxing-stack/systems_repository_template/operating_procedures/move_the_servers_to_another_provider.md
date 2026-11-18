@@ -115,8 +115,9 @@ settings, and do the replacements. Only a person:
    provider and in a location different from production:
    - **The first desk,** whose keys are in the recovery bundle: rebuild it with
      [Rebuild a systems desk](rebuild_a_systems_desk.md). It keeps its old
-     private address, its WireGuard key and its person, so production needs
-     no change to accept it.
+     private address, its WireGuard key and its person, so the servers still
+     recognize it. Only its public address changes, and that change reaches
+     the servers' peers in the `WireGuard peers` item below.
    - **Each teammate's desk:** add a new desk for that teammate, as "Joining"
      in [Add or remove a team member](add_or_remove_a_team_member.md#joining)
      says, then remove the old desk, as "Leaving" steps 2 and 3 say.
@@ -129,7 +130,8 @@ settings, and do the replacements. Only a person:
      keep that desk until every other desk works.
    - **The WireGuard peers.** The rebuilt desk starts at a new public
      address. Its first `every_server` run, through that desk (step 19 of
-     that procedure), saves the new address in every server's peers.
+     that procedure), applies the new address to every server's peers; until that run
+     finishes, the servers still hold the old address.
      Record the new address as the desk's `public_ipv4_address` in
      `inventories/servers.yml` first.
    - **The lock-out button's reviewed record.** Each new desk's bootstrap
