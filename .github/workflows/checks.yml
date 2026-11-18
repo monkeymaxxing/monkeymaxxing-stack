@@ -1,9 +1,9 @@
 name: Tests
 
 # Runs the Stack's tests on every push and pull request: the tests/ suite
-# with the MMX release the template pins, mmx validate on the template, and
-# the Go checks of set-up-outside-services. No test needs a provider account
-# or a credential: each one uses stand-ins.
+# with the MMX release the template pins, and the Go checks of
+# set-up-outside-services. No test needs a provider account or a
+# credential: each one uses stand-ins.
 
 on:
   push:
@@ -49,9 +49,6 @@ jobs:
           sudo apt-get install --yes --no-install-recommends jq
           # The row-recovery tests run initdb and pg_ctl against two local clusters.
           ls -d /usr/lib/postgresql/*/bin | sort -V | tail -n 1 >> "$GITHUB_PATH"
-      - name: Validate the systems repository template
-        working-directory: skills/monkeymaxxing-stack/systems_repository_template
-        run: mmx validate
       - name: Run every test in tests/
         shell: bash
         run: |

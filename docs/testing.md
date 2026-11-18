@@ -3,8 +3,8 @@
 Test only what changed, with the smallest check that proves the change. If
 one thing broke in one place, test that one thing.
 
-On every push and pull request, GitHub Actions runs every test in `tests/`,
-`mmx validate` on the template, and `go vet`, `go test` and `gofmt` in
+On every push and pull request, GitHub Actions runs every test in `tests/`
+and `go vet`, `go test` and `gofmt` in
 `set_up_outside_services/`, with MMX built from the release the template
 pins (`.github/workflows/checks.yml`). The checks below say what to run
 before that, and what only real servers prove.
@@ -18,7 +18,7 @@ programs](design.md#a-stack-release-pins-its-own-programs)).
 | What changed | The check that proves the change |
 | --- | --- |
 | Text only | Check that links resolve. Have a fresh reader read new or heavily changed guide text. No servers are needed. |
-| The systems repository template | Run `mmx validate` in `skills/monkeymaxxing-stack/systems_repository_template/`. |
+| The systems repository template | Run `python3 tests/staging_server_test.py` with MMX on PATH or `MMX_BINARY` set: it runs `mmx validate` on a copy of the template with the setup's values filled in, with and without `staging01`. `mmx validate` on the template itself refuses, because the template ships the values only the setup knows empty. |
 | The utility-server helper, `run_mmx_on_util01` | Run `python3 tests/run_mmx_on_util01_test.py`. |
 | Break-in containment, evidence, or the status switch | Run `python3 tests/break_in_response_test.py` with MMX on PATH or `MMX_BINARY` set. Prove the two-desk drill in `operating_procedures/respond_to_a_break_in.md` on disposable guests, including an active MMX job, fresh SSH and HTTPS MMX after undo, and an HTTP client. |
 | `set-up-outside-services`, the account and secret setup command | Run `go vet ./...` and `go test ./...` in `set_up_outside_services/`. For a change to its requests, its root step, or its files, also apply the desk role through MMX on a disposable Debian 13 desk, so the role installs the release from `build_release_archive.sh`, and run each changed command as the person, in a terminal, against `internal/standins/serve` over TLS. Before a release, a short live run at Backblaze and Cloudflare checks what stand-ins cannot: the providers' permission checks, the lock's enforcement, the permission groups' names, and the dashboard links. |
