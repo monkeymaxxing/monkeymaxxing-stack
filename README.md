@@ -5,9 +5,12 @@
 The Monkeymaxxing Stack is a full production system for web services: web
 apps, websites, and APIs, from a first product to a company's heavy
 production traffic. Your coding agent, such as [Claude Code](https://claude.com/claude-code) or [Codex](https://openai.com/codex/),
-builds the system in about a day and then runs it. Everything is in your own
+builds the system in a few hours and then runs it. Everything is in your own
 accounts, on plain Linux servers that cost 10 to 30 times less than
 hosting at a platform such as Heroku.
+
+> [!NOTE]
+> **This is an alpha version.** The system's design is solid. The setup may still have a few rough spots, but your coding agent can get you past them. If anything confuses you or breaks, please tell us: [how to report it](CONTRIBUTING.md). Thanks!
 
 ## What you get
 
@@ -20,7 +23,7 @@ hosting at a platform such as Heroku.
 
 - Hosting 10-30x cheaper than Heroku, Railway, Replit, etc.
 - Fully open source (Apache 2.0)
-- Live in about an hour; the whole setup, with phone alerts, the triage agent and a status page, in about a day
+- Live in as fast as 2 hours; the whole setup, with phone alerts, the triage agent and a status page, in a few hours
 - Migration guides for 19 platforms (Heroku, Railway, Replit, Vercel, etc.)
 - Guides for 11 app frameworks (Rails, Django, Laravel, Next.js, etc.)
 - Runs on any Linux VPS or bare metal
@@ -414,8 +417,8 @@ risk.
 
 ## What the setup is like
 
-**About an hour in all. Your coding agent needs you for about 20 minutes
-of it, mostly at the start.**
+**As fast as 2 hours until your site is live. Your coding agent needs you
+for about 20 minutes of it, mostly at the start.**
 
 You tell your agent: "Set up the Monkeymaxxing Stack for my app." Your
 agent asks two questions, your domain and your server provider, and shows
