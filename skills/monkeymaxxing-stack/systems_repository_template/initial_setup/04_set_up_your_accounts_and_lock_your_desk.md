@@ -288,6 +288,9 @@ domain at Cloudflare, its DNS records, and the lock.
      3. Save the login in 1Password.
      4. Open  App Keys  and press  Generate New Master Application Key.
 
+   Backblaze calls it the master key.  I use it once, to make a narrow key
+   for each server, and never store it.
+
    Then paste the two values here.
 
      keyID:

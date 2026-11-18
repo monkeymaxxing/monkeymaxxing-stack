@@ -59,7 +59,11 @@ after the person approves the price:
    `addonFamilies` mark them `mandatory`. Read the cart's total with
    `GET /order/cart/CART_ID/checkout`, which orders nothing, and show the
    person the order: the plan, the datacenter, the first month's total
-   with tax, and the price of each later month, as the last text of your
+   with tax, and the price of each later month. The US site's checkout
+   total leaves out sales tax, which OVHcloud adds to the bill, so write
+   "plus sales tax" beside each US price: a person who approved $17.55
+   and then saw a higher total thought the agent had changed the price.
+   End with the price screen as the last text of your
    reply, with no tool call after it, so your turn ends on the price.
    Only after the person's yes, read the total again and send `POST /order/cart/CART_ID/checkout`
    when it is unchanged; when it changed, stop and show the new total.
