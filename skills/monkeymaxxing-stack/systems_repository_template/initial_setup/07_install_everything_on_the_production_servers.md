@@ -46,6 +46,15 @@ chapter.
   server's waiting security updates, which takes 3 to 7 minutes on Debian 13
   on a small server. App, jobs and load-balancer servers install theirs
   last, after they serve.
+- **The person hears from you at least every 10 minutes.** Wait for each
+  desk job with `--at-most-minutes 10`, and start the wait again while
+  the job runs, with one line each time, as the skill's "A wait over
+  about 10 minutes speaks every 10 minutes" says: what is happening to
+  the person's servers, how far along, and the new estimate when it
+  changed. A restart, the restore test, or a desk job that waits for
+  another to finish is normal, and is said as normal: "Your servers
+  restart one at a time, as planned." Reason: in a newcomer test run,
+  the person heard nothing during a 30-minute install unless they asked.
 - **The link.** The person sees the servers' results on the app's page and,
   from chapter 8, on MMHotline's page.
 
@@ -398,7 +407,7 @@ chapter.
    back from its reboot in under a minute, and the app was down for about
    20 seconds.
 
-   > The restore test takes a few minutes. Then each server restarts in turn, in about a minute each.
+   > The restore test, a check that your backups really restore, takes a few minutes. Then each server restarts in turn, as planned, in about a minute each.
 
    Then reboot `util01` itself:
 

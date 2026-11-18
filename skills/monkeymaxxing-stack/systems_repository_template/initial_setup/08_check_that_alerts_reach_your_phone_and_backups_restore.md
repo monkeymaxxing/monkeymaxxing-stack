@@ -108,8 +108,11 @@ This part runs in the first part of the setup. The person does nothing.
    [chapter 0's compact map](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-compact-map),
    as the last text of your reply, once step 3 below is done. Before you
    write it, start chapter 9's step 1 check as a bounded background wait,
-   such as `timeout 30m bash -c 'until curl -fsS https://shop.example.com/up; do sleep 15; done'`,
-   so its end wakes you:
+   such as `timeout 10m bash -c 'until curl -fsS https://shop.example.com/up; do sleep 15; done'`,
+   so its end wakes you. While the domain is still "Pending" at
+   Cloudflare, start it again each time it ends, with one line for the
+   person, as the skill's "A wait over about 10 minutes speaks every 10
+   minutes" says:
 
    ```text
      ✓ 1. Your app

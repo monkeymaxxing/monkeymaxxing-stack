@@ -65,7 +65,7 @@ Run me in auto mode for this setup, so I don't stop to ask before each step.
 In Claude Code: press Shift+Tab until it shows "auto mode on".
 Reason: the Stack needs a coding agent you trust, and anything that changes your live servers still goes through your systems desk and a `yes` you type.
 
-The setup takes about an hour.  I need you for about 20 minutes of it, mostly at the start.
+The setup takes about an hour and a half.  I need you for about 20 minutes of it, mostly at the start.
 
 By default, I'll go fast and only stop when I need you. Say "guide me" any time
 and I'll slow down and explain each part before I do it. Say "go fast" to speed
@@ -76,8 +76,8 @@ The time line is the only word about time and parts before "go": the
 map of the five parts comes right after "go". The pace paragraph comes
 again under the map; the skill's "The person's pace" says what "guide
 me", "go fast" and "why?" change. Reason: the person has
-already chosen the Stack and wants to start; a newcomer test run showed
-55 minutes from the first question to the live site.
+already chosen the Stack and wants to start; newcomer test runs showed
+55 to 70 minutes from the first question to the live site.
 
 Then ask question 1 in the same reply. When the person's agent is not
 Claude Code, say in one line how to use that agent's own auto mode, or
@@ -115,7 +115,12 @@ answers.
    screen.
 
    - **Servers near:** the provider location nearest the laptop's time
-     zone, such as Frankfurt for `Europe/Berlin`. Read the time zone with
+     zone, such as Falkenstein for `Europe/Berlin` at Hetzner. Name only
+     a location from the provider's own list: the provider guide's list
+     of locations, or the provider's own list of locations from its API.
+     Never a nearby city the provider does not use. Reason: in a newcomer
+     test run, the plan said "Frankfurt", where Hetzner has no servers.
+     Read the time zone with
      `readlink /etc/localtime` on a Mac or Linux, or
      `timedatectl show -p Timezone --value` on Linux. Pick the desk's
      location too: by default a different location of the same provider,
@@ -129,8 +134,13 @@ answers.
      as `example.com`. The domain itself is the default. Never choose a
      name such as `shop.example.com` yourself: offer it only when the
      person asks, or when the domain already runs another site.
-   - **Company name:** from the domain, such as `Example` for
-     `example.com`.
+   - **Company name:** from the app: the name in its README's title, or
+     its repository's name, such as `Example` for a repository named
+     `example`. When neither gives a name, write "What is your company or
+     project called?" on the screen. Never derive the name from the domain
+     alone. Reason: in a newcomer test run, the agent proposed the
+     domain's name, and the person had to correct it to the company's own
+     name.
    - **Password manager:** the one the laptop has, such as 1Password,
      Bitwarden, or KeePassXC. On a Mac, look in `/Applications`. On Linux,
      look for `1password`, `bitwarden`, or `keepassxc` on `PATH` or in
@@ -157,7 +167,7 @@ answers.
    - **Cost, an estimate:** the desk and each of the three servers, each
      with its public address, from the provider's public price list or
      public catalog, as the provider guide says, plus backups. Round to
-     one sum, "about €N a month". Name every paid thing across the parts
+     one sum, "from about €N a month". Name every paid thing across the parts
      of the setup: the servers, backup storage, and the one-time fee for
      phone alerts. When you leave a paid thing out, say plainly that it
      comes later and has a fee. Reason: a paid service that appears in
@@ -189,14 +199,17 @@ answers.
    ```text
    Here is what I will set up.
 
-     Servers near:       Frankfurt           (from your laptop's time zone; change it if your users are elsewhere)
-     Size:               the smallest system (3 servers, and 1 systems desk: a small server that holds your keys)
+     Servers near:       Falkenstein         (from your laptop's time zone; change it if your users are elsewhere)
+     Size:               the smallest system: 3 servers, and 1 systems desk
+                         (your systems desk is a small server of your own that holds your keys and secrets,
+                          so neither your laptop nor I ever hold them; I work through it)
      Your app's address: example.com
-     Company name:       Example
+     Company name:       Example             (from your app; change it if it is wrong)
      Password manager:   1Password
      Sign-in email:      alex@gmail.com      (a mailbox you read today)
 
-     Cost:               about €24 a month, checked against Hetzner's stock before anything is bought
+     Cost:               from about €24 a month.  I check Hetzner's stock and show you
+                         the real price before anything is bought.
 
    Say "details" to see everything this includes.
    Tell me what to change, or say "go".
@@ -206,9 +219,16 @@ answers.
    screen; a long one hides the lines that matter. Write nothing below
    the screen: no second sign-in email line, and no alerts sentence.
    The cost line is one sum: the systems desk and the three servers, each
-   with its public address, plus backups, and it always ends with
-   "checked against Hetzner's stock before anything is bought", with the
-   provider's name.
+   with its public address, plus backups. It always reads "from about €N
+   a month" and ends with "I check Hetzner's stock and show you the real
+   price before anything is bought", with the provider's name. Reason:
+   the price depends on what the provider has in stock at the moment of
+   the order, which nobody can know before the key works. When no name
+   for the company is found, the company line reads:
+
+   ```text
+     Company name:       what is your company or project called?
+   ```
 
    **"details"** shows the rest, as one reply that ends your turn, then
    the same question:
@@ -216,7 +236,7 @@ answers.
    ```text
    Everything "go" approves:
 
-     Servers:            about €24 a month at Hetzner, from Hetzner's price list
+     Servers:            from about €24 a month at Hetzner, from Hetzner's price list
                          (one line per server with its list price: the systems desk, app001, db01, util01)
      Backups:            Backblaze, a few cents a month at first
      Later, phone alerts: Pushover, a one-time fee of about $5 for each phone

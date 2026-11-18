@@ -429,10 +429,10 @@ end of each part what is done and what is left:
 | Part | What you do | What your agent does |
 | --- | --- | --- |
 | **1. Your app** (about 5 minutes) | Approve your agent's changes to your app, once | Gets your app ready to deploy |
-| **2. Your accounts** (about 25 minutes) | Make 3 accounts: your server provider, Cloudflare, and Backblaze for the backups. Paste a key from each, and one from GitHub, one screen at a time. Approve the real monthly price. If your domain does not point at Cloudflare yet, change one setting at your domain's registrar | Checks each key with its company at once, builds your systems desk, a small server that holds your keys, orders your servers right after your yes so the price holds, and sets up everything else at each company |
+| **2. Your accounts** (about 25 minutes) | Make 3 accounts: your server provider, Cloudflare, and Backblaze for the backups. Paste a key from each, and one from GitHub, one screen at a time. Approve the real monthly price. If your domain does not point at Cloudflare yet, change one setting at your domain's registrar | Checks each key with its company at once, builds your systems desk, a small server of your own that holds your keys and secrets so neither your laptop nor your agent holds them, orders your servers right after your yes so the price holds, and sets up everything else at each company |
 | **3. Your keys locked away** (about 3 minutes) | Save one recovery passphrase, and scan one code with your phone | Locks your systems desk |
-| **4. Your servers** (about 30 minutes) | Nothing. Your laptop may sleep | Installs everything on your servers, backs up your data, and proves a restore |
-| **5. Live** | Nothing | Tells you the moment your site is up |
+| **4. Your servers** (about 40 minutes) | Nothing. Your laptop may sleep | Installs everything on your servers, backs up your data, and proves a restore |
+| **5. Live** (about 15 minutes) | Nothing | Tells you the moment your site is up, then puts your app's newest version live |
 
 **Later: phone alerts,** about 15 minutes. Then, when you want them: an
 agent that answers alerts before they reach you, a status page for your

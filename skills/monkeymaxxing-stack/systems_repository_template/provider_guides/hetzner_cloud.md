@@ -107,6 +107,11 @@ before writing the team's scripts. The provider script contract is in the
    as [the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says. Hetzner's
    other European locations for a sold-out size are `fsn1`, `nbg1` and
    `hel1`; its US locations are `ash` and `hil`.
+9. Locations, with the names to say to the person: Falkenstein (`fsn1`),
+   Nuremberg (`nbg1`) and Helsinki (`hel1`) in Europe; Ashburn (`ash`) and
+   Hillsboro (`hil`) in the US; Singapore (`sin`). `GET /locations` lists
+   them with their `city`. Say only these names, never a nearby city,
+   such as Frankfurt.
 
 Reason: `curl` calls the one API the same way in all three places, so the scripts run unchanged on the laptop,
 the desk and `util01` without a program to install, and `curl` never repeats a create whose answer was lost

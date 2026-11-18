@@ -72,14 +72,20 @@ Then the script does six things, in order:
 
 1. **A prompt for each value,** after one line that names the person's
    part of the setup and the account, as the chat's screen does:
-   `Your accounts: account 1 of 3, Hetzner.` Each prompt is named as the provider's page names the
-   value, such as `Hetzner API token (hidden): `. A value the guide marks
+   `Your accounts: account 1 of 3, Hetzner.` A single secret value is
+   the person's "key", with the provider's own name for it once, in the
+   line before the prompt: `Hetzner calls it an API token.`, then
+   `Hetzner key (hidden): `. A credential of several values names each
+   value as the provider's page names it, such as `Application Secret
+   (hidden): ` at OVHcloud. Reason: the person's screens call every
+   pasted credential a key; in a newcomer test run, "API token" and
+   "key" read as two different things to make. A value the guide marks
    as not secret, such as OVHcloud's project ID, comes first, at a
    visible prompt; every key value is hidden, with `read -rs`. It removes
    spaces, line breaks and quotes that came with a paste.
 2. **A shape check of each value,** with the guide's shape, before any
    request. A wrong shape prints what the value must look like, such as
-   "The token has 64 letters and digits. Copy it again.", and asks again.
+   "The key has 64 letters and digits. Copy it again.", and asks again.
 3. **One read-only API call** with the values: the guide's listing
    request. A refusal prints the provider's own reason and asks again. The
    script sends each value only in the request's header or signature,

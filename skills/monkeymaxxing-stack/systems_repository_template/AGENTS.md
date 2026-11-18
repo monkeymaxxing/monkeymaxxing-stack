@@ -491,7 +491,7 @@ windows that disagree cost the person a refused tool call and a question.
 - **Start the wait first, in the background.** While the person works in
   their terminal, wait only on a result you can read:
   `ssh desk01-agent wait-for-the-setup --at-most-minutes 60` for the
-  setup, `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60`
+  setup, `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 10`
   for a desk job, or the file a laptop script writes. Start the wait as a
   background command (in Claude Code, the Bash tool's run-in-background
   option), then write the screen, and end your turn. When the background
@@ -503,7 +503,13 @@ windows that disagree cost the person a refused tool call and a question.
   the wait commands, or `timeout` around a loop of your own, such as
   `timeout 10m bash -c 'until CHECK; do sleep 10; done'`, never an
   `until` loop with no bound. Its end wakes you whatever the result, and
-  you say the result in a reply: done, failed, or still waiting. A failed
+  you say the result in a reply: done, failed, or still waiting. While
+  the person waits on your work, bound each wait to about 10 minutes and
+  start it again while the work runs, with one line each time: what is
+  happening to the person's things, how far along, and the new estimate
+  when it changed. Say what is normal as normal, such as a restart or
+  the restore test. Reason: in a newcomer test run, the person heard
+  nothing during a 30-minute install unless they asked. A failed
   background command gets the same line as any failed command: what
   failed and whether it matters, before any retry.
 - **Say when you next speak.** While a background job runs, the last
@@ -623,7 +629,7 @@ the job does, about how long, and that the person need do nothing, as
 
 ```sh
 # On the laptop, as a background command. NAME: the name you gave the desk job.
-ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60
+ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 10
 ```
 
 It prints a few lines of the log as the job goes, ends when the job ends,

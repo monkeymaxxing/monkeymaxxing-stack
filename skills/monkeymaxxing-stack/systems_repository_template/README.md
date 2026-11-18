@@ -268,7 +268,7 @@ measured warning or an event:
 
 ## What the setup asks of you and of your app
 
-The setup comes in five parts, about an hour in all, and needs you for
+The setup comes in five parts, about an hour and a half in all, and needs you for
 about 20 minutes, mostly at the start: **Your app** (you approve the
 changes to your app), **Your accounts** (you make 3 accounts and paste a
 key from each, plus one from GitHub, and approve the real price), **Your keys locked away** (you save one

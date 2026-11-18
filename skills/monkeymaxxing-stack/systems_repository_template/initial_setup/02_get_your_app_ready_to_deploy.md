@@ -371,6 +371,10 @@ the person's. Then you push the changes and watch the first build.
 
      [one short line per changed file, about 8 lines at most]
 
+   And one later change:  at the end of the setup I add one line to your README.md,
+   "Deployed with the Monkeymaxxing Stack.", as your first release.  It proves that a new
+   version goes live the way every later release will.  Your users see nothing.
+
    Tests: I did not run your app's tests.  This laptop has no podman or docker,
    so your app's tests run at GitHub, automatically, when I push.
 
@@ -387,8 +391,14 @@ the person's. Then you push the changes and watch the first build.
    for that reason. Never ask the person to install a container tool.
    Never say or imply that tests passed when you did not run them.
 
-   One "yes" approves the set. When the person asks for a change, make it
-   and show the screen again.
+   One "yes" approves the set, and the README line of the first release
+   with it: chapter 9's step 3 pushes that line and asks nothing. Reason:
+   "Your servers" and "Live" tell the person there is nothing to do, and
+   in a newcomer test run a question about that line, asked there, waited
+   unseen for over 9 minutes. When the person asks for a change, make it
+   and show the screen again. When the person strikes the README line,
+   ask on this screen which small change the first release may use
+   instead, or offer an empty commit, which changes no file.
 
    After "yes", commit the changes in the app's folder with a message that
    says what changed and why, and push `main` with the person's own Git

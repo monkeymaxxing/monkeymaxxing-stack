@@ -72,7 +72,7 @@ account screen of step 1 is the opening.
      3. Turn on two-step sign-in, which Hetzner calls  Two-factor authentication (2FA):
           https://accounts.hetzner.com/tfa
      4. Open  https://console.hetzner.com  and press  New project.  Name it  Example.
-     5. In the project, open  Security,  then  API tokens.
+     5. In the project, open  Security,  then  API tokens.  Hetzner calls the key an API token.
         Press  Generate API token.  Name it  example-desk.  Choose  Read & Write.
 
    Then open a terminal on this laptop and type:
@@ -238,11 +238,15 @@ account screen of step 1 is the opening.
    - **Always also offer "wait and try again"** when a cheap size is sold
      out, with the honest line: "Cheap sizes often come back within the
      hour. I check again every few minutes and tell you when one is
-     back." On that answer, re-check in the background with a bound, such
-     as `timeout 60m bash -c 'until CHECK; do sleep 180; done'`, and say
-     when you next speak. Reason: in a newcomer test run, Hetzner's
-     smallest size was sold out in every location at 04:54 and back in
-     Nuremberg at 04:57.
+     back." On that answer, re-check in the background with a 10-minute
+     bound, such as `timeout 10m bash -c 'until CHECK; do sleep 180; done'`,
+     and start it again while the size stays sold out, up to about an
+     hour. At each end, say one line, such as "Still sold out at 10:40;
+     I check again. I'll tell you when a size is back (I look every few
+     minutes)." Reason: in a newcomer test run, Hetzner's smallest size
+     was sold out in every location at 04:54 and back in Nuremberg at
+     04:57; in another, the person heard nothing during a 15-minute stock
+     wait unless they asked.
 
    Re-check the stock right before you show any price dearer than the
    plan's, and again at the moment of each order: the desk's, and the
@@ -285,10 +289,10 @@ account screen of step 1 is the opening.
    ```text
    Your real price, checked with Hetzner just now:
 
-     Systems desk  desk01, Falkenstein     about €6 a month
-     app001        Nuremberg               about €6 a month
-     db01          Nuremberg               about €6 a month
-     util01        Nuremberg               about €6 a month
+     Systems desk  desk01, Nuremberg       about €6 a month
+     app001        Falkenstein             about €6 a month
+     db01          Falkenstein             about €6 a month
+     util01        Falkenstein             about €6 a month
      Backups       Backblaze               a few cents a month at first
 
      In all:  about €24 a month, before VAT
@@ -299,20 +303,24 @@ account screen of step 1 is the opening.
    Or tell me what to change.
    ```
 
-   With a change from chapter 1's plan, put its lines above "In all",
-   such as:
+   The screen leads with the real numbers: each server's line shows the
+   size and place you will order, and "In all" the real total. A change
+   from chapter 1's plan gets one line under "In all", such as:
 
    ```text
-     Nuremberg is sold out of app001's size today.  Helsinki has it, at the same price.  I recommend Helsinki.
+     Falkenstein is sold out of app001's size today.  Helsinki has it, at the same price.  I recommend Helsinki.
    ```
 
    or, only when no nearby location has the size:
 
    ```text
-     Before:  about €24 a month
-     Now:     about €36 a month
-     Why:     Hetzner has app001's size nowhere in Europe today, so app001 is the next bigger size.
+     More than the plan's "from about €24": Hetzner has app001's size nowhere in Europe today,
+     so app001 is the next bigger size.
    ```
+
+   Never word it as a correction of yourself, such as "this is not the
+   price I quoted". Reason: chapter 1's plan said "from about", and the
+   real numbers are what the person approves.
 
    Each price includes the server's public address, so the screen does
    not say so. Name sizes in the person's words, such as "2 CPUs, 4 GB",

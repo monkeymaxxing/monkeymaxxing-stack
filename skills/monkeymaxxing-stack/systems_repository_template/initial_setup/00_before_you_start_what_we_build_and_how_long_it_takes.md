@@ -48,28 +48,31 @@ has no numbered steps.
 
 Show the full map once, right after the person's "go" in chapter 1, as its
 own screen. Fill in the team's own facts, as the list below the screen
-says. The time figures come from a full newcomer test run, which went live
-in 55 minutes; say "about", never an exact time.
+says. The time figures come from full newcomer test runs, which went live
+in 55 to 70 minutes; say "about", never an exact time. The parts' times
+add up to the total: 5, 25, 3, 40 and 15 minutes make about an hour and a
+half.
 
 **Show the person,** after "go", for a Hetzner setup:
 
 ```text
-Here is the whole setup, in five parts.  About an hour in all.
+Here is the whole setup, in five parts.  About an hour and a half in all.
 
   1. Your app                  about 5 minutes
      I get your app ready to deploy.  You approve my changes.
   2. Your accounts             about 25 minutes
      You make 3 accounts and paste a key from each, plus one from GitHub,
      approve the real price, and change one setting at your domain's registrar.
-     I build your systems desk, a small server that holds your keys,
-     order your servers right after your yes, and do the rest.
+     I build your systems desk: a small server of your own that holds your keys
+     and secrets, so neither your laptop nor I ever hold them.  I work through it.
+     I order your servers right after your yes, and do the rest.
   3. Your keys locked away     about 3 minutes
      You save one passphrase and scan one code with your phone.
-  4. Your servers              about 30 minutes
+  4. Your servers              about 40 minutes
      I install everything on your servers, back up your data, and prove a restore.
      Nothing for you.
-  5. Live
-     I tell you the moment your site is up.
+  5. Live                      about 15 minutes
+     I tell you the moment your site is up, then put your app's newest version live.
      If your domain is new to Cloudflare, going live waits for its move, minutes to about a day.
 
   Later, about 15 minutes:     phone alerts.
@@ -111,10 +114,10 @@ The facts on the screen:
   "guide me", "go fast" and "why?".
 - **The private backup repository at GitHub:** when `gh` is not signed in
   on the laptop, the person makes it on one screen in "Your accounts", so
-  add "and make one empty repository at GitHub" before "I do the rest".
+  add "and make one empty repository at GitHub" before "and do the rest".
 - **An app that needs bigger changes first,** such as a move from SQLite
   to PostgreSQL: part 1's time reads "longer: your app needs bigger
-  changes, which I show you first", and the "about an hour" line says that
+  changes, which I show you first", and the "about an hour and a half" line says that
   part 1 can take days.
 - **The Now and Next lines** follow the skill's "Now and next" rule. Before
   you end your reply with the map, start the two tools' install as a
@@ -190,7 +193,7 @@ The account steps of `setup_results.json` are every step before
 
 The map gives the times. When the person asks for more, say:
 
-> The setup takes about an hour in all, and I need you for about 20 minutes of it, mostly at the start.
+> The setup takes about an hour and a half in all, and I need you for about 20 minutes of it, mostly at the start.
 >
 > Two waits can be long, and you have nothing to do during them:
 >
@@ -198,9 +201,11 @@ The map gives the times. When the person asks for more, say:
 >   and nothing speeds it up. The move starts in "Your accounts", and I
 >   keep working meanwhile. Your site goes live only once the move is
 >   finished.
-> - Installing everything on your servers, in "Your servers", takes most
->   of half an hour, mostly for the servers' security updates. Your laptop
->   may sleep: the work continues on your systems desk.
+> - "Your servers" takes about 40 minutes: installing everything, mostly
+>   the servers' security updates, then the restore test, a check that
+>   your backups really restore. Your laptop may sleep: the work
+>   continues on your systems desk. I give you a line about every 10
+>   minutes.
 >
 > If your app needs bigger changes first, such as moving from SQLite to
 > PostgreSQL or its uploads to R2, "Your app" can take days.

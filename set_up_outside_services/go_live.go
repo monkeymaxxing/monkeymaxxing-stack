@@ -454,11 +454,11 @@ func (g *goLive) cloudflare() (string, error) {
 	for i, step := range steps {
 		fmt.Fprintf(&screen, "  %d. %s\n", i+1, step)
 	}
-	screen.WriteString("\nThen paste the token here.\n\n")
+	screen.WriteString("\nThen paste the key here.  Cloudflare calls it an API token.\n\n")
 	e.show(screen.String())
 	var link *cloudflareClient
 	for link == nil {
-		value, err := g.askHidden("  Cloudflare token (hidden): ")
+		value, err := g.askHidden("  Cloudflare key (hidden): ")
 		if err != nil {
 			return "", err
 		}
@@ -468,10 +468,10 @@ func (g *goLive) cloudflare() (string, error) {
 			return "", err
 		}
 		if err != nil {
-			g.refused("Cloudflare", "token", err, advice)
+			g.refused("Cloudflare", "key", err, advice)
 		}
 	}
-	e.say("Cloudflare accepted the token.")
+	e.say("Cloudflare accepted the key.")
 	g.note("cloudflare_account_id", link.accountID)
 	defer e.quietly(func() error { e.deleteTheLinkToken(link); return nil })
 	err := e.quietly(func() error {
@@ -513,9 +513,9 @@ func (g *goLive) cloudflare() (string, error) {
 // advice is set when Cloudflare refused the token, so the person may paste
 // another; other errors stop the run.
 func (g *goLive) checkTheLinkToken(value string) (*cloudflareClient, string, error) {
-	pasteAgain := fmt.Sprintf("Copy the whole token, then paste it again.\nIf Cloudflare no longer shows it, make a new one with the link in step %d.", g.tokenStep)
+	pasteAgain := fmt.Sprintf("Copy the whole key, then paste it again.\nIf Cloudflare no longer shows it, make a new one with the link in step %d.", g.tokenStep)
 	if err := checkTokenValue("token", value); err != nil {
-		return nil, pasteAgain, errors.New("that is not a whole Cloudflare token: it has a space or another character a token never has")
+		return nil, pasteAgain, errors.New("that is not a whole Cloudflare key: it has a space or another character a key never has")
 	}
 	link := &cloudflareClient{baseURL: g.e.cloudflareAPIURL, token: value, who: "the link token"}
 	accounts, err := link.accountIDs()
@@ -546,11 +546,11 @@ func (g *goLive) checkTheLinkToken(value string) (*cloudflareClient, string, err
 		}
 		err = g.e.quietly(func() error { return g.e.acceptLinkToken(g.settings, link, id) })
 		if errors.Is(err, errLinkTokenCannotMakeTokens) {
-			return nil, fmt.Sprintf("Make the token with the link in step %d, and keep the settings the link fills in.", g.tokenStep), errors.New("this token cannot make keys")
+			return nil, fmt.Sprintf("Make the key with the link in step %d, and keep the settings the link fills in.", g.tokenStep), errors.New("this key cannot make other keys")
 		}
 		return link, "", err
 	}
-	return nil, pasteAgain, errors.New("Cloudflare does not know this token")
+	return nil, pasteAgain, errors.New("Cloudflare does not know this key")
 }
 
 // askForTheAccountID asks for the account's ID where Cloudflare's dashboard
@@ -919,11 +919,11 @@ Do this now:
 
   3. Press  Generate token.
 
-Then paste the token here.
+Then paste the key here.  GitHub calls it a token.
 
 `, link))
 	for {
-		token, err := g.askHidden("  GitHub token (hidden): ")
+		token, err := g.askHidden("  GitHub key (hidden): ")
 		if err != nil {
 			return "", err
 		}
@@ -932,22 +932,22 @@ Then paste the token here.
 			return "", err
 		}
 		if err != nil {
-			g.refused("GitHub", "token", err, advice)
+			g.refused("GitHub", "key", err, advice)
 			continue
 		}
 		if !check.expiresAt.IsZero() {
 			e.show(fmt.Sprintf(`
-This token stops working on %s.
+This key stops working on %s.
 
   After that, your servers cannot download your app.
-  Deploys and new servers stop until you replace the token.
+  Deploys and new servers stop until you replace the key.
   Your coding agent reminds you in the weekly review.
 
-  Type  yes  to use this token.
-  Press Enter to paste a token with no end date instead.
+  Type  yes  to use this key.
+  Press Enter to paste a key with no end date instead.
 
 `, check.expiresAt.Format("2006-01-02 15:04:05 UTC")))
-			answer, err := e.confirm("  Use this token (yes): ")
+			answer, err := e.confirm("  Use this key (yes): ")
 			if err != nil {
 				return "", err
 			}
@@ -962,7 +962,7 @@ This token stops working on %s.
 		if err := g.saved.save(vaultKey, token); err != nil {
 			return "", err
 		}
-		e.say("GitHub accepted the token.")
+		e.say("GitHub accepted the key.")
 		g.note("container_registry_read_only_username", check.login)
 		g.note("container_image_found", map[bool]string{true: "yes", false: "no, not built yet"}[check.imageFound])
 		return stepDone, nil
@@ -1003,10 +1003,10 @@ const shortestRegistryTokenLife = 30 * 24 * time.Hour
 // ghcr.io. advice is set when the token is refused, so the person may paste
 // another; other errors stop the run.
 func (g *goLive) checkTheRegistryToken(token, repository string) (registryTokenCheck, string, error) {
-	const fromTheLink = "Make a new token with the link in step 1"
+	const fromTheLink = "Make a new key with the link in step 1"
 	var check registryTokenCheck
 	if checkTokenValue("token", token) != nil {
-		return check, "Copy the whole token, then paste it again.", errors.New("that is not a whole GitHub token: it has a space or another character a token never has")
+		return check, "Copy the whole key, then paste it again.", errors.New("that is not a whole GitHub key: it has a space or another character a key never has")
 	}
 	// https://docs.github.com/en/rest/users/users#get-the-authenticated-user
 	request, err := http.NewRequest(http.MethodGet, g.e.githubAPIURL+"/user", nil)
@@ -1026,7 +1026,7 @@ func (g *goLive) checkTheRegistryToken(token, repository string) (registryTokenC
 			Message string `json:"message"`
 		}
 		_ = json.Unmarshal(body, &refusal)
-		return check, "Copy the whole token, then paste it again.", &apiError{Provider: "GitHub", Call: "GET /user", Status: response.StatusCode, Message: refusal.Message}
+		return check, "Copy the whole key, then paste it again.", &apiError{Provider: "GitHub", Call: "GET /user", Status: response.StatusCode, Message: refusal.Message}
 	}
 	var user struct {
 		Login string `json:"login"`
@@ -1040,10 +1040,10 @@ func (g *goLive) checkTheRegistryToken(token, repository string) (registryTokenC
 		// https://docs.github.com/en/rest/overview/resources-in-the-rest-api#authentication
 		expiresAt, err := time.Parse("2006-01-02 15:04:05 MST", ends)
 		if err != nil {
-			return check, fromTheLink + ", with  Expiration  set to  No expiration.", fmt.Errorf("this token stops working on %s, and your deploys with it", ends)
+			return check, fromTheLink + ", with  Expiration  set to  No expiration.", fmt.Errorf("this key stops working on %s, and your deploys with it", ends)
 		}
 		if expiresAt.Sub(g.e.now()) < shortestRegistryTokenLife {
-			return check, fromTheLink + ", with  Expiration  set to  No expiration.", fmt.Errorf("this token stops working on %s, less than 30 days from now, and your deploys with it", ends)
+			return check, fromTheLink + ", with  Expiration  set to  No expiration.", fmt.Errorf("this key stops working on %s, less than 30 days from now, and your deploys with it", ends)
 		}
 		check.expiresAt = expiresAt.UTC()
 	}
@@ -1054,16 +1054,16 @@ func (g *goLive) checkTheRegistryToken(token, repository string) (registryTokenC
 		}
 	}
 	if !scopes["read:packages"] {
-		return check, fromTheLink + ".  It ticks  read:packages  for you.", errors.New("this token cannot download packages")
+		return check, fromTheLink + ".  It ticks  read:packages  for you.", errors.New("this key cannot download packages")
 	}
 	delete(scopes, "read:packages")
 	if len(scopes) > 0 {
-		return check, fromTheLink + ", with only  read:packages  ticked.", fmt.Errorf("this token can do more than download your app: it can also use %s.  Every server keeps it, so it may only read", strings.Join(sortedNames(scopes), ", "))
+		return check, fromTheLink + ", with only  read:packages  ticked.", fmt.Errorf("this key can do more than download your app: it can also use %s.  Every server keeps it, so it may only read", strings.Join(sortedNames(scopes), ", "))
 	}
 	found, err := readImageTags(g.e.containerRegistryURL, repository, user.Login, token)
 	var refusal *apiError
 	if errors.As(err, &refusal) {
-		return check, "Make the token while you are signed in to the GitHub account that owns the image.", fmt.Errorf("this token cannot read your app's image ghcr.io/%s", repository)
+		return check, "Make the key while you are signed in to the GitHub account that owns the image.", fmt.Errorf("this key cannot read your app's image ghcr.io/%s", repository)
 	}
 	check.imageFound = found
 	return check, "", err

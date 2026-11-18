@@ -160,9 +160,9 @@ domain at Cloudflare, its DNS records, and the lock.
         The page is long.  Scroll to the bottom, below the list of permissions.
         Press  Review token,  then  Create token.
 
-   Then paste the token here.
+   Then paste the key here.  Cloudflare calls it an API token.
 
-     Cloudflare token (hidden):
+     Cloudflare key (hidden):
    ```
 
    When an app keeps uploaded files, the screen has one more step before
@@ -339,13 +339,13 @@ domain at Cloudflare, its DNS records, and the lock.
 
      3. Press  Generate token.
 
-   Then paste the token here.
+   Then paste the key here.  GitHub calls it a token.
 
-     GitHub token (hidden):
+     GitHub key (hidden):
    ```
 
    The command reads the app's image at the registry with the token, and
-   prints `GitHub accepted the token.` Write
+   prints `GitHub accepted the key.` Write
    `container_registry_read_only_username` from `for_the_coding_agent`
    into `mmx_project_settings.yml`, and commit it in your clone, to
    publish once `go-live` has finished, as in step 3.
@@ -578,11 +578,11 @@ domain at Cloudflare, its DNS records, and the lock.
      ✓ 1. Your app
      ✓ 2. Your accounts
      ✓ 3. Your keys locked away
-     → 4. Your servers             now, about 30 minutes
+     → 4. Your servers             now, about 40 minutes
        5. Live
        Later: phone alerts.  Your site has none yet.
 
-   Now: I am setting up Cloudflare for your site and installing everything on your servers, about 30 minutes.
+   Now: I am setting up Cloudflare for your site and installing everything on your servers, about 40 minutes.
    Your laptop may sleep: the work continues on your systems desk.
    Next for you: nothing.  I tell you the moment your site is up.
    ```

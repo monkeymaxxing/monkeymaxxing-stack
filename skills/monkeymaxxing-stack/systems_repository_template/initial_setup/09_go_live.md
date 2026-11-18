@@ -13,7 +13,7 @@ turn on. The first release goes out the way every later release does.
 **Who acts:** you, the coding agent, check the app, change the settings,
 and run the release through the desk. The first release asks the person
 for no approval, because the person approved the app's changes in
-chapter 2 and the first release is that approved image. To ask for the
+chapter 2, the first release's README line among them. To ask for the
 approval again, set `first_release_waits_for_a_persons_approval` to `true`
 in `mmx_project_settings.yml`; the steps below say where it applies.
 
@@ -74,27 +74,52 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    commit, publish (the [Making a change](../AGENTS.md#making-a-change)
    steps), start the `every_server` run on `util01` as a desk job, and
    start its wait as a background command with its bound, such as
-   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 30`. Then
-   end your reply with the screen, with no tool call after it:
+   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 10`, and
+   start it again each time it ends unfinished, as the skill's "A wait
+   over about 10 minutes speaks every 10 minutes" says. Then end your
+   reply with the live screen, with no tool call after it:
 
    ```text
-   YOUR APP IS LIVE AT  HTTPS://EXAMPLE.COM
+   YOUR SITE IS LIVE:  HTTPS://EXAMPLE.COM
 
    Open it now.
 
+     ✓ 1. Your app
+     ✓ 2. Your accounts
+     ✓ 3. Your keys locked away
+     ✓ 4. Your servers
+     ✓ 5. Live
+
    YOUR SITE HAS NO PHONE ALERTS YET.  Say "set up alerts" to add them.  It takes about 15 minutes.
 
-   Things to know:
-     It answered just now through Cloudflare, from app001, the way your users reach it.
-     Now: I am turning on the checks of your site, then putting your app's newest version live.
-     Next for you: nothing.  I'll tell you when it's done, in about 15 minutes.
+   Still open:
+     I am turning on the checks that watch your site, and putting your app's newest
+     version live, the way every later release goes.  Your site stays up meanwhile.
+
+   Next for you: nothing.  I'll tell you when it's done (about 15 minutes).
    ```
 
-   The first lines are only these three: the address in capitals, "Open
-   it now.", and the phone-alerts line. Everything else goes under
-   "Things to know", at most five lines, with no commit IDs, image tags,
-   or restore times. Name each app's address and the app servers that
-   answered. With
+   The live screen is the first thing in the reply, and nothing comes
+   before it: no line about the check, the release, a commit, an image
+   tag, an HTTP code or the checklist. Reason: in a newcomer test run,
+   the last reply opened with a commit ID, an HTTP code, an image tag and
+   the checklist, and the live screen came only below them. With several
+   apps, give each app's address on its own line at the top. "Still open"
+   has at most 4 lines, in the person's words ("The person's words" in the
+   skill): no commit IDs, image tags, HTTP codes, restore times, check
+   names such as "pin check" or "memory check", and no "checklist". A
+   known security flaw on a brand-new server goes there plainly, or waits
+   for the weekly system review:
+
+   ```text
+     One program on util01 has a known security flaw.  Its fix is not published yet.
+     Nothing for you to do: the weekly system review tracks it.
+   ```
+
+   When the first release also ended before you wrote this reply, its
+   result is one line under "Still open", such as "Your app's newest
+   version is live too, the way every later release goes.", and the last
+   line is step 5's "Say "set up alerts" ..." line. With
    `first_release_waits_for_a_persons_approval` set to `true`, the last
    line is instead: Say "release" to put your app's newest version live.
    The checks still turn on meanwhile.
@@ -127,9 +152,11 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    follows the agent-run deployment used for every later release.
    The first release needs an image the app servers do not run yet,
    so the first release proves a real version switch.
-   Use one of the app's own changes, or, when none waits, make a small
-   change that users do not see, such as a line in the app's README, and
-   ask nothing about it. Commit and push the change to the app's main
+   Use the README line the person approved with the app's changes in
+   chapter 2's step 7, or the change the person chose there instead, and
+   ask nothing about it: "Your servers" and "Live" told the person there
+   is nothing to do. Never a change the person did not approve there.
+   Commit and push the change to the app's main
    branch from the app's folder on the laptop, with the person's own Git
    login, as "A release" describes. The first release skips the approval
    that "A release" asks for when `production_releases_wait_for_a_persons_approval`
@@ -156,13 +183,12 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    If CI builds the image, inspect CI's credentials and verify no server
    key or vault passphrase is available. CI needs only registry access.
 
-   **Tell the person:** the messages of "A release". Say that every later
-   release follows the steps in "A release".
-
-   **Tell the person after:**
-
-   > Your first release is live: [the image tag]. A return to the previous version uses the previous image tag, [the previous tag].
-   > The test of going back to the previous version is [complete, or still to come with your next release].
+   **Tell the person:** nothing while it runs beyond the wait lines of the
+   skill's "A wait over about 10 minutes speaks every 10 minutes": the
+   live screen already said what happens. "A release"'s messages are for
+   later releases. Its result, the memory check's numbers, the commit and
+   the image tags go into the checklist's `last_result`, never into the
+   reply. Step 5 gives the result.
 
    An open rollback test can remain for the handover, which records
    outstanding checks.
@@ -192,26 +218,24 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    and push. The next weekly drill pulls the commit before it starts.
 
    **Tell the person after,** which also ends the chapter and the
-   person's five parts, with the compact map of
-   [chapter 0](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-compact-map)
-   as the last text of your reply:
+   person's five parts, as the last text of your reply. The live screen
+   of step 2 already showed the five parts ticked, so this reply shows no
+   map again:
 
    ```text
-   Your newest version is live.  All five parts are done.
+   Your app's newest version is live, the way every later release goes.  All five parts are done.
 
-     ✓ 1. Your app
-     ✓ 2. Your accounts
-     ✓ 3. Your keys locked away
-     ✓ 4. Your servers
-     ✓ 5. Live
+   Still open:
+     Going back to an earlier version is tested with your next release.
+     Then, when you want them: an agent that answers alerts before they reach you,
+     a status page for your customers, and a written guide to running your system.
 
-     Later, about 15 minutes:    phone alerts.  YOUR SITE HAS NO PHONE ALERTS YET.
-     Then, when you want them:   an agent that answers alerts before they reach you,
-                                 a status page for your customers,
-                                 and a written guide to running your system.
-
-   Say "set up alerts" when you are ready, so a broken site wakes you.
+   YOUR SITE HAS NO PHONE ALERTS YET.  Say "set up alerts" when you are ready, so a broken site wakes you.
+   It takes about 15 minutes.
    ```
+
+   "Still open" keeps the rules of step 2's screen: at most 4 lines, in
+   the person's words.
 
    **Check:** `restore_drill_checks_data_people_create` waits for its
    trigger in the checklist.

@@ -252,10 +252,10 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 
 	// Each screen in the design's order, with its four parts.
 	order := []string{"Your accounts: account 2 of 3, Cloudflare (your web address and protection)", "4. Turn on R2", "It costs nothing up to 10 GB of files a month.",
-		"5. Open this link.", "Cloudflare accepted the token.", "R2 is not on yet",
+		"5. Open this link.", "Cloudflare accepted the key.", "R2 is not on yet",
 		"Your accounts: one change at your domain's registrar (Namecheap, Inc.)", "TURN OFF DNSSEC FIRST.", "Your accounts: account 3 of 3, Backblaze (your backups)",
 		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "Your accounts: one more key, so your servers can download your app.",
-		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Your accounts: a key for shop, STRIPE_API_KEY",
+		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the key.", "Your accounts: a key for shop, STRIPE_API_KEY",
 		"Stripe takes your customers' card payments with it.", "1. Open  https://dashboard.stripe.com/apikeys", "Stripe accepted the key.", "Your accounts are done.", "→ 3. Your keys locked away", "Your keys locked away: step 1 of 2, your recovery passphrase", "SAVE IT NOW.",
 		"[the screen is cleared]", "Your keys locked away: step 2 of 2, your phone code", "Done.  Your phone code is ready.  Your coding agent locks your systems desk next, then builds your servers."}
 	at := 0
@@ -281,8 +281,8 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 		}
 	}
 	// Each refused value was asked again, with the service's reason.
-	for _, reason := range []string{"Cloudflare did not accept the token.  It said: Invalid request headers.",
-		"Backblaze did not accept the key.  It said: The applicationKeyId and/or the applicationKey are wrong.", "This token stops working on " + tokenEndsInTenDays + ", less than 30 days from now",
+	for _, reason := range []string{"Cloudflare did not accept the key.  It said: Invalid request headers.",
+		"Backblaze did not accept the key.  It said: The applicationKeyId and/or the applicationKey are wrong.", "This key stops working on " + tokenEndsInTenDays + ", less than 30 days from now",
 		"Stripe did not accept the key.  It said: Invalid API Key provided: sk_live_****wxyz.", "That is not the passphrase above."} {
 		if !strings.Contains(output, reason) {
 			t.Errorf("the output lacks the refusal %q", reason)
@@ -535,17 +535,17 @@ func TestGoLiveAcceptsARegistryTokenThatExpires(t *testing.T) {
 	output := h.transcript.String()
 	ends := strings.TrimSuffix(tokenEnd(90), " UTC")
 	ends = strings.Split(ends, " ")[0]
-	for _, line := range []string{"This token stops working on " + ends, "your servers cannot download your app.",
-		"Deploys and new servers stop until you replace the token.", "Type  yes  to use this token.", `SET EXPIRATION TO "NO EXPIRATION".`} {
+	for _, line := range []string{"This key stops working on " + ends, "your servers cannot download your app.",
+		"Deploys and new servers stop until you replace the key.", "Type  yes  to use this key.", `SET EXPIRATION TO "NO EXPIRATION".`} {
 		if !strings.Contains(output, line) {
 			t.Errorf("the screen lacks %q", line)
 		}
 	}
-	afterNo := output[strings.Index(output, "Use this token (yes): no"):]
-	if !strings.Contains(afterNo[:strings.Index(afterNo, "GitHub token (hidden): ")], "The setup is still running.  It waits for you at the line below.") {
+	afterNo := output[strings.Index(output, "Use this key (yes): no"):]
+	if !strings.Contains(afterNo[:strings.Index(afterNo, "GitHub key (hidden): ")], "The setup is still running.  It waits for you at the line below.") {
 		t.Errorf("after no, no line says the setup still waits for a token:\n%s", afterNo)
 	}
-	if strings.Count(output, "GitHub accepted the token.") != 1 {
+	if strings.Count(output, "GitHub accepted the key.") != 1 {
 		t.Error("the token must be accepted once, after yes, not after no")
 	}
 	if h.vault.values["container_registry_read_only_token"] != expiringRegistryToken {
