@@ -59,9 +59,10 @@ Here is the whole setup, in five parts.  About an hour in all.
   1. Your app                  about 5 minutes
      I get your app ready to deploy.  You approve my changes.
   2. Your accounts             about 25 minutes
-     You make 3 accounts and paste 4 keys, approve the real price,
-     and change one setting at your domain's registrar.
-     I build your systems desk, order your servers right after your yes, and do the rest.
+     You make 3 accounts and paste a key from each, plus one from GitHub,
+     approve the real price, and change one setting at your domain's registrar.
+     I build your systems desk, a small server that holds your keys,
+     order your servers right after your yes, and do the rest.
   3. Your keys locked away     about 3 minutes
      You save one passphrase and scan one code with your phone.
   4. Your servers              about 30 minutes
@@ -69,9 +70,16 @@ Here is the whole setup, in five parts.  About an hour in all.
      Nothing for you.
   5. Live
      I tell you the moment your site is up.
+     If your domain is new to Cloudflare, going live waits for its move, minutes to about a day.
 
   Later, about 15 minutes:     phone alerts.
-  Then, when you want them:    the triage agent, the status page, and your written operating guide.
+  Then, when you want them:    an agent that answers alerts before they reach you,
+                               a status page for your customers,
+                               and a written guide to running your system.
+
+By default, I'll go fast and only stop when I need you. Say "guide me" any time
+and I'll slow down and explain each part before I do it. Say "go fast" to speed
+up again. Ask "why?" about anything.
 
 Now: I am installing two small tools and reading your app, about 5 minutes.
 Next for you: approve my changes to your app, in about 5 minutes.  I show them here.
@@ -82,19 +90,25 @@ The facts on the screen:
 - **The 3 accounts** are the server provider, Cloudflare and Backblaze.
   They are the 3 accounts that the terminal window counts, "account 1 of
   3" to "account 3 of 3".
-- **The 4 keys** are the server provider's key, Cloudflare's token,
-  Backblaze's key (two values, the key's ID and the key) and the GitHub
-  token that lets the servers download the app. Add one key for each value
-  that an app needs from an outside service, such as a Stripe key: "paste
-  5 keys". The person sees each extra key as its own screen in "Your
-  accounts".
+- **The keys** are a key from each of the 3 accounts and one from
+  GitHub: the server provider's key, Cloudflare's token, Backblaze's key
+  (two values, the key's ID and the key) and the GitHub token that lets
+  the servers download the app. The map says "a key from each" and never
+  a count, because the person counts pastes, and Backblaze's key is two
+  pastes. Add each outside service that an app needs a key from, such as
+  Stripe: "plus one from GitHub and one from Stripe". The person sees each
+  extra key as its own screen in "Your accounts".
 - **The registrar's setting** is the domain's nameservers. Leave the words
   "and change one setting at your domain's registrar" out when
   `dig NS example.com +short` already names Cloudflare's nameservers, or
   when the person registers a new domain at Cloudflare. When the clause is
-  in, add one line under part 5: "Your domain's move to Cloudflare can
-  take a few hours, and nothing speeds it up. I tell you if part 5 waits
-  for it."
+  in, keep the line under part 5: "If your domain is new to Cloudflare,
+  going live waits for its move, minutes to about a day." Otherwise leave
+  that line out too.
+- **The pace paragraph** ("By default, I'll go fast ...") stays as it
+  stands. It is the second time the person sees it, after chapter 1's
+  first screen. The skill's "The person's pace" holds the rules for
+  "guide me", "go fast" and "why?".
 - **The private backup repository at GitHub:** when `gh` is not signed in
   on the laptop, the person makes it on one screen in "Your accounts", so
   add "and make one empty repository at GitHub" before "I do the rest".

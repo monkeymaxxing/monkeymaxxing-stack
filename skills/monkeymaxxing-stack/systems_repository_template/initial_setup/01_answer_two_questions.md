@@ -66,10 +66,16 @@ In Claude Code: press Shift+Tab until it shows "auto mode on".
 Reason: the Stack needs a coding agent you trust, and anything that changes your live servers still goes through your systems desk and a `yes` you type.
 
 The setup takes about an hour.  I need you for about 20 minutes of it, mostly at the start.
+
+By default, I'll go fast and only stop when I need you. Say "guide me" any time
+and I'll slow down and explain each part before I do it. Say "go fast" to speed
+up again. Ask "why?" about anything.
 ```
 
-The last line is the only word about time and parts before "go": the
-map of the five parts comes right after "go". Reason: the person has
+The time line is the only word about time and parts before "go": the
+map of the five parts comes right after "go". The pace paragraph comes
+again under the map; the skill's "The person's pace" says what "guide
+me", "go fast" and "why?" change. Reason: the person has
 already chosen the Stack and wants to start; a newcomer test run showed
 55 minutes from the first question to the live site.
 

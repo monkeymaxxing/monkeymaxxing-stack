@@ -244,6 +244,41 @@ detail for an action or asks for detail. The reasons a person may ask
 about are in **Why the chapter works this way**.
 Keep every required check and safety condition.
 
+## The person's pace
+
+The person chooses how fast you go. Chapter 1's first screen and the full
+map each end with the pace paragraph:
+
+```text
+By default, I'll go fast and only stop when I need you. Say "guide me" any time
+and I'll slow down and explain each part before I do it. Say "go fast" to speed
+up again. Ask "why?" about anything.
+```
+
+Reason: the Stack is run by the person's agent, and not by a fixed script,
+so that the person can go at their own pace, ask anything, and have
+problems fixed along the way.
+
+- **Fast is the default.** It is what the rules in "Talking with the
+  person" describe: short screens, and detail only when the person needs
+  it or asks.
+- **Guided,** after "guide me": before each of the five parts, say in at
+  most about eight lines what is about to be built and why, in the
+  person's words, taken from the reasons written in the guide and in the
+  Stack's design. Then ask "Any questions before I start this part?" and
+  wait for the answer. After each part, say in three or four lines what now
+  exists. Inside a part, the short-screen rules still hold.
+- **Switching.** "go fast" returns to the default at once. Either phrase
+  works at any time, and so does any wording that means the same, such as
+  "explain as you go" or "skip the explanations".
+- **"why?"** at any point, about anything: answer in a few lines from the
+  reason written beside the rule or default, in the guide or in the
+  Stack's design. When no reason is written, say so plainly, and never
+  invent one. A missing reason is a fault in the guide: offer once to
+  write it up for the Stack's maintainers, as the Monkeymaxxing Stack
+  repository's `CONTRIBUTING.md`, "Reporting a bug or asking for a
+  feature", says.
+
 ## Where the person is: the five parts
 
 The person must always know what is going to happen, where the setup is
@@ -256,7 +291,7 @@ README. The chapters are your own structure.
 | --- | --- | --- |
 | Before the parts | Answers two questions and says "go" | Chapter 1, steps 1 to 3 |
 | 1. Your app | Approves your changes to the app | Chapter 1, steps 4 and 5; chapter 2 |
-| 2. Your accounts | Makes 3 accounts (the server provider, Cloudflare, Backblaze) and pastes 4 keys (one more for each key an app needs from an outside service), approves the real price, makes one private repository at GitHub when `gh` is not signed in, and changes the nameservers at the domain's registrar when they do not point at Cloudflare yet | Chapter 3, with chapter 6's steps 1 to 5, which create the three servers as soon as the systems desk is ready; chapter 4, steps 1 to 6 |
+| 2. Your accounts | Makes 3 accounts (the server provider, Cloudflare, Backblaze) and pastes a key from each, plus one from GitHub (one more for each key an app needs from an outside service; Backblaze's key is two values), approves the real price, makes one private repository at GitHub when `gh` is not signed in, and changes the nameservers at the domain's registrar when they do not point at Cloudflare yet | Chapter 3, with chapter 6's steps 1 to 5, which create the three servers as soon as the systems desk is ready; chapter 4, steps 1 to 6 |
 | 3. Your keys locked away | Saves one recovery passphrase and scans one phone code | Chapter 4, steps 7 to 9 |
 | 4. Your servers | Nothing | Chapter 5; chapter 6, steps 6 and 7; chapter 7; chapter 8, part 1 |
 | 5. Live | Nothing | Chapter 9 |
@@ -268,8 +303,9 @@ holds the screens. Show them at these moments:
 
 - **The first screen** says, in one line, about how long the setup takes
   in all and about how many minutes you need the person, mostly at the
-  start, as chapter 1's trust screen shows. Nothing more about the parts
-  comes before "go".
+  start, as chapter 1's trust screen shows, then the pace paragraph
+  ("The person's pace" above). Nothing more about the parts comes before
+  "go".
 - **The full map** is its own screen, right after "go". It ends your
   reply only when the person must act next. Otherwise the first Now and
   Next lines follow it, and the map and those lines together are the last

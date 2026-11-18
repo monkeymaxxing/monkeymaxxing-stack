@@ -206,7 +206,9 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
      ✓ 5. Live
 
      Later, about 15 minutes:    phone alerts.  YOUR SITE HAS NO PHONE ALERTS YET.
-     Then, when you want them:   the triage agent, the status page, and your written operating guide.
+     Then, when you want them:   an agent that answers alerts before they reach you,
+                                 a status page for your customers,
+                                 and a written guide to running your system.
 
    Say "set up alerts" when you are ready, so a broken site wakes you.
    ```

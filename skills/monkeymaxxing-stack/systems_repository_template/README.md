@@ -270,12 +270,13 @@ measured warning or an event:
 
 The setup comes in five parts, about an hour in all, and needs you for
 about 20 minutes, mostly at the start: **Your app** (you approve the
-changes to your app), **Your accounts** (you make 3 accounts and paste 4
-keys, and approve the real price), **Your keys locked away** (you save one
+changes to your app), **Your accounts** (you make 3 accounts and paste a
+key from each, plus one from GitHub, and approve the real price), **Your keys locked away** (you save one
 passphrase and scan one code with your phone), **Your servers** (nothing
-for you), and **Live**. Phone alerts follow in about 15 minutes, and the
-triage agent, the status page and your written operating guide when you
-want them. Your coding agent does the work, tells you which part you are
+for you), and **Live**. Phone alerts follow in about 15 minutes, and,
+when you want them, an agent that answers alerts before they reach you, a
+status page for your customers, and a written guide to running your
+system. Your coding agent does the work, tells you which part you are
 in, and asks you for facts and for a few major decisions.
 
 Your app must meet three conditions. Your app uses Postgres, keeps uploaded
