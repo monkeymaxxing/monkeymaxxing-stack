@@ -220,7 +220,7 @@ account screen of step 1 is the opening.
    public stock route when its "Stock" line names one. These are `curl`
    calls that only read, so no provider program is installed. The
    guide's "Stock" line names the request, such as Hetzner's
-   `GET /datacenters`, and `read_the_monthly_price_at_the_provider` gives
+   `GET /server_types`, and `read_the_monthly_price_at_the_provider` gives
    each size's monthly price with its public address. At OVHcloud, the
    desk's line is the total of the guide's order cart, which orders
    nothing.

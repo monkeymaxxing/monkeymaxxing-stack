@@ -96,10 +96,13 @@ before writing the team's scripts. The provider script contract is in the
    charge there, and returns the sum as `monthly_price` with the currency
    the answer names.
 8. Stock: no public route; Hetzner's API needs the key. With the key,
-   before any order, `GET /datacenters` lists each datacenter's
-   `server_types.available`: a type missing there cannot be ordered there
-   now. Run it on the laptop with the key file in chapter 3, and through
-   `http://127.0.0.1:8081/datacenters` on the desk. Chapter 3 reads it,
+   before any order, `GET /server_types` lists each type's `locations`,
+   each with `available`: a type whose location says `"available": false`,
+   or that lists no such location, cannot be ordered there now. Run it on
+   the laptop with the key file in chapter 3, and through
+   `http://127.0.0.1:8081/server_types` on the desk. Hetzner removed the
+   older `GET /datacenters` request, which now answers 410
+   `deprecated_api_endpoint`. Chapter 3 reads it,
    for the desk and every server of the plan, before its one price screen,
    as [the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says. Hetzner's
    other European locations for a sold-out size are `fsn1`, `nbg1` and
