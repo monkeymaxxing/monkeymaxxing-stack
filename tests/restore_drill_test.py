@@ -118,7 +118,7 @@ elif name == 'mmx':
             finally:
                 # What MMX needs before mark-node-work-failed: this process has exited.
                 (flags / 'inner_run_ended').write_text('')
-        print(json.dumps({'entries':[{'node':'restore01','fleet_stage':'check_the_restored_copy','response':{'outputs':{'answered_the_check_queries_at':'2026-11-02T00:01:00Z','seconds_of_writes_missing_at_most':17}}}]}))
+        print(os.environ.get('RESTORE_RESULT') or json.dumps({'entries':[{'node':'restore01','fleet_stage':'check_the_restored_copy','response':{'outputs':{'answered_the_check_queries_at':'2026-11-02T00:01:00Z','seconds_of_writes_missing_at_most':17}}}]}))
         sys.exit(int(os.environ.get('RESTORE_EXIT', '0')))
     elif args[0] == 'stop':
         if os.environ.get('FLAGS'): pathlib.Path(os.environ['FLAGS'], 'stop_called_at').write_text(str(time.time()))
@@ -275,6 +275,31 @@ class RestoreDrill(unittest.TestCase):
                 self.assertIn(['destroy_a_server_at_the_provider','--server-id','owned-123'],commands)
                 self.assertTrue(any(c[0]=='rm' and c[-1].endswith('/project') for c in commands))
                 self.assertNotIn('latest_passed_drill',markers)
+
+    def test_a_failed_restore_names_its_failed_stage_and_error_in_the_journal(self):
+        # 2026-11-18 on a test system: the journal said only "read the journal",
+        # and the coding agent named restore01's boot as the cause; the real
+        # cause, the failed check queries, was in restore_result.json.
+        stderr = ('notes, the_migrations_came_back: ERROR:  relation "schema_migrations" does not exist\n'
+                  + ''.join(f'line {n}\n' for n in range(20))
+                  + "the restored copy failed its check queries: notes's query the_notes_table_exists answered 'f', not true")
+        restore = {'status': 'failed', 'entries': [
+            {'node': 'restore01', 'fleet_stage': 'restore_the_backup', 'response': {'status': 'succeeded', 'results': []}},
+            {'node': 'restore01', 'fleet_stage': 'check_the_restored_copy', 'response': {'status': 'failed', 'results': [
+                {'task': 'run_the_check_queries_of_each_app', 'status': 'failed', 'exit_code': 1,
+                 'reason': 'the command exited with 1', 'stderr': stderr}]}}]}
+        result, commands, markers = self.run_drill(RESTORE_EXIT='1', RESTORE_RESULT=json.dumps(restore))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('restore drill failed at fleet stage check_the_restored_copy on restore01', result.stderr)
+        self.assertIn('run_the_check_queries_of_each_app', result.stderr)
+        self.assertIn('relation "schema_migrations" does not exist', result.stderr)
+        # A few lines, not the whole error output.
+        self.assertNotIn('line 19', result.stderr)
+
+    def test_a_drill_that_failed_before_the_restore_says_so(self):
+        result, commands, markers = self.run_drill(CREATE_EXIT='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('no fleet stage of the restore failed', result.stderr)
 
     def test_empty_upload_sample_is_reported(self):
         result, commands, markers = self.run_drill(EMPTY_UPLOADS='yes')
@@ -504,6 +529,28 @@ class ScheduledServerSettingsComparison(unittest.TestCase):
                 self.assertFalse(any(c[0]=='mmx' for c in commands))
                 # Without a trusted commit the job never takes the lock.
                 self.assertEqual(any(c[0]=='flock' and c[-1]=='9' for c in commands),'MERGE_BASE_EXIT' in settings)
+
+class TheFirstDrillReadsTheNewestChanges(unittest.TestCase):
+    """2026-11-18 on a test system: every_server started the first drill seconds
+    after the app's first migrations, before their write-ahead log reached the
+    bucket, and the drill reads the bucket as it stood at its start. The
+    restored copy had no app tables, and the check queries failed."""
+
+    def test_the_primary_pushes_its_write_ahead_log_just_before_the_first_drill_starts(self):
+        playbook = (TEMPLATE/'playbooks/every_server.yml').read_text()
+        stages = re.findall(r'(?m)^  - id: (\S+)', playbook)
+        self.assertEqual(stages[-2:], ['push_the_newest_database_changes_before_the_first_restore_drill',
+                                       'start_the_restore_drill_until_one_has_passed'])
+        push = playbook[playbook.index('  - id: push_the_newest_database_changes_before_the_first_restore_drill'):
+                        playbook.index('  - id: start_the_restore_drill_until_one_has_passed')]
+        self.assertIn('nodes: database_servers', push)
+        # pgBackRest's check switches to a new segment of the write-ahead log and
+        # waits until that segment is in the bucket; a replica archives nothing.
+        self.assertIn('pg_is_in_recovery()', push)
+        self.assertIn('pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main check', push)
+        self.assertIn('run_as_user_account: postgres', push)
+        self.assertIn('run_only_once_marker_file: /var/lib/mmx/commands_run_once/', push)
+
 
 if __name__ == '__main__':
     unittest.main()

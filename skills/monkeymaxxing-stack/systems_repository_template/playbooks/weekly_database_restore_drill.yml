@@ -173,7 +173,23 @@ fleet_stages:
                 result=1
                 jq -n --arg started_at "$started_at" --arg attempt_dir "$work_dir" \
                   '{passed:false,started_at:$started_at,attempt_dir:$attempt_dir}' > "$state_dir/latest_result.json.new"
-                echo "restore drill failed; read the journal and $work_dir" >&2
+                # Name the failed fleet stage of restore_database and its error,
+                # from the run's own record, so a reader of the journal sees
+                # the real cause. The first 8 lines: the error's start names it.
+                # Before the restore started, or when the restore passed and a
+                # later step failed, such as the uploads check or the cleanup,
+                # the cause is in the journal above.
+                failed_stage=$(jq -r 'first(.entries[] | select(.response.status == "failed")) // first(.entries[] | select(.response.status != "succeeded"))
+                  | "restore drill failed at fleet stage \(.fleet_stage) on \(.node): "
+                    + ((first(.response.results[]? | select(.status == "failed")) | "\(.task): \(.reason // "")\n\(.stderr // "")")
+                       // .response.error // "status \(.response.status)")' \
+                  "$work_dir/restore_result.json" 2>/dev/null | head -n 8 | cut -c 1-300) || true
+                if [ -n "$failed_stage" ]; then
+                  printf '%s\n' "$failed_stage" >&2
+                else
+                  echo "restore drill failed, but no fleet stage of the restore failed: the restore did not start, or a later step failed; the cause is in the lines above" >&2
+                fi
+                echo "restore drill failed; the run's full record is $work_dir/restore_result.json" >&2
               fi
               mv "$state_dir/latest_result.json.new" "$state_dir/latest_result.json"
               if [ "$result" -eq 0 ]; then
