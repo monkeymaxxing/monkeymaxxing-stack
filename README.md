@@ -62,9 +62,9 @@ hosting at a platform such as Heroku.
 - Offsite backups of user uploads (images, docs), also deletion-proof
 
 You do not need to be a systems engineer to get all of this. Your coding
-agent builds it with you in about one working day and explains each step as
-it goes, so a startup founder or a developer who is new to running servers
-ends the day with the whole system and understands it.
+agent builds it with you in a few hours and explains each step as it goes,
+so a startup founder or a developer who is new to running servers ends the
+day with the whole system and understands it.
 
 Your team owns every account, every server, and all the data.
 
