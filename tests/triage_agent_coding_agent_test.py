@@ -20,6 +20,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 SETTING = re.compile(r'(?m)^  triage_agent_coding_agent: \w+$')
@@ -44,6 +48,7 @@ class CodexOnlyWhenChosen(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)/'systems'
             shutil.copytree(T, project, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(project)
             settings = project/'mmx_project_settings.yml'
             text = settings.read_text()
             self.assertEqual(len(SETTING.findall(text)), 1, 'the template sets triage_agent_coding_agent once')

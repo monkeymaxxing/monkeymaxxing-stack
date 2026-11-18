@@ -61,6 +61,157 @@ fleet_stages:
             Stack version, a tag such as v0.1.0, whose pins hold each
             program's real release. Nothing changed.
 
+  # The values that only this system's setup can know: names, addresses,
+  # keys and IDs. The template leaves each one empty, with a comment that
+  # names the setup step that fills it, so a value copied from the template
+  # never looks real. While one is empty, `mmx validate` and every run of
+  # this playbook stop on it and name it ("value supplied at
+  # mmx_project_settings.yml:LINE (vars.NAME)"). A value of the wrong shape
+  # stops a run before any server changes. The checks follow the order in
+  # which the setup fills the values, so during the setup `mmx validate
+  # every_server` stops at the first value still to fill. One check reads
+  # one value, so a refusal names the right one. Reason: in three newcomer
+  # test runs the template's example bucket name was kept, and in one the
+  # template's example desk key replaced the desk's own key and locked the
+  # desk out of the servers.
+  - id: refuse_values_the_setup_has_not_filled_in
+    nodes: util_server
+    on_node_failure: stop_run
+    node_tasks:
+      - id: the_status_page_has_a_host_name
+        assert:
+          that:
+            matches: ["{{ .vars.status_page_host_name }}", '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$']
+          message: >-
+            status_page_host_name in mmx_project_settings.yml is
+            "{{ .vars.status_page_host_name }}". Write a host name under the
+            team's domain, such as status.acme.com (chapter 1 of the setup).
+            Nothing changed.
+      - id: the_alerts_page_has_a_host_name
+        assert:
+          that:
+            matches: ["{{ .vars.util01_private_page_host_names.mmhotline }}", '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$']
+          message: >-
+            util01_private_page_host_names.mmhotline in mmx_project_settings.yml
+            is "{{ .vars.util01_private_page_host_names.mmhotline }}". Write a
+            host name under the team's domain, such as ops.acme.com (chapter 1
+            of the setup). Nothing changed.
+      - id: the_systems_repository_has_its_backup_address
+        assert:
+          that:
+            matches: ["{{ .vars.systems_repository.backup_url_at_the_git_host }}", '^(https://|ssh://|git@)[^ ]+$']
+          message: >-
+            systems_repository.backup_url_at_the_git_host in
+            mmx_project_settings.yml is
+            "{{ .vars.systems_repository.backup_url_at_the_git_host }}". Write
+            the private backup repository's address, such as
+            https://github.com/OWNER/acme_systems.git (chapter 3 of the
+            setup). Nothing changed.
+      - id: the_database_backups_have_a_bucket
+        assert:
+          that:
+            matches: ["{{ .vars.backups.production_bucket }}", '^[A-Za-z0-9-]{6,50}$']
+          message: >-
+            backups.production_bucket in mmx_project_settings.yml is
+            "{{ .vars.backups.production_bucket }}". Write a Backblaze bucket
+            name of 6 to 50 letters, digits and hyphens, with the company's
+            name in it, such as acme-systems-backups (chapter 3 of the setup).
+            Nothing changed.
+      - id: the_uploads_backups_have_a_bucket_or_none
+        assert:
+          that:
+            matches: ["{{ .vars.backups.uploads_bucket }}", '^([A-Za-z0-9-]{6,50})?$']
+          message: >-
+            backups.uploads_bucket in mmx_project_settings.yml is
+            "{{ .vars.backups.uploads_bucket }}". Write a Backblaze bucket name
+            of 6 to 50 letters, digits and hyphens, such as
+            acme-systems-uploads-backups, or "" when no app keeps uploads
+            (chapter 3 of the setup). Nothing changed.
+      - id: mmhotline_backups_have_a_bucket
+        assert:
+          that:
+            matches: ["{{ .vars.backups.mmhotline_backup_replica_url }}", '^s3://[A-Za-z0-9-]{6,50}/[^ ]+$']
+          message: >-
+            backups.mmhotline_backup_replica_url in mmx_project_settings.yml is
+            "{{ .vars.backups.mmhotline_backup_replica_url }}". Write
+            s3://BUCKET/mmhotline?endpoint=...&region=..., with a Backblaze
+            bucket name that holds the company's name (chapter 3 of the
+            setup). Nothing changed.
+      - id: root_ssh_public_keys_holds_a_systems_desk_key
+        assert:
+          that: {not: {equals: ["{{ .vars.root_ssh_public_keys }}", []]}}
+          message: >-
+            root_ssh_public_keys in mmx_project_settings.yml is empty. The
+            systems desk's start writes the desk's production key there, in
+            the desk's checkout of the systems repository; take the settings
+            from that checkout, never from a copy made before the desk
+            started. Without a desk key, no desk could reach the servers.
+            Nothing changed.
+      - id: each_root_ssh_public_key_is_an_ssh_key
+        loop: "{{ .vars.root_ssh_public_keys }}"
+        as: key
+        assert:
+          that:
+            matches: ["{{ .key }}", '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+=* [^ ].*$']
+          message: >-
+            root_ssh_public_keys in mmx_project_settings.yml holds
+            "{{ .key }}". Each line is one OpenSSH public key with a comment
+            that says whose it is, such as "ssh-ed25519 AAAA... sam on
+            desk01". Nothing changed.
+      - id: the_cloudflare_account_is_named
+        assert:
+          that:
+            matches: ["{{ .vars.cloudflare_account_id }}", '^[0-9a-f]{32}$']
+          message: >-
+            cloudflare_account_id in mmx_project_settings.yml is
+            "{{ .vars.cloudflare_account_id }}". Write the 32-character
+            account ID that set-up-outside-services printed for your coding
+            agent (chapter 4 of the setup). Nothing changed.
+      - id: the_registry_account_is_named
+        assert:
+          that:
+            matches: ["{{ .vars.container_registry_read_only_username }}", '^[A-Za-z0-9][A-Za-z0-9_.-]*$']
+          message: >-
+            container_registry_read_only_username in mmx_project_settings.yml is
+            "{{ .vars.container_registry_read_only_username }}". Write the
+            registry login that set-up-outside-services printed for your
+            coding agent (chapter 4 of the setup). Nothing changed.
+      - id: the_uploads_copy_has_its_r2_address_or_none
+        assert:
+          that:
+            matches: ["{{ .vars.backups.uploads_r2_s3_endpoint }}", '^(https://[0-9a-f]{32}\.r2\.cloudflarestorage\.com)?$']
+          message: >-
+            backups.uploads_r2_s3_endpoint in mmx_project_settings.yml is
+            "{{ .vars.backups.uploads_r2_s3_endpoint }}". Write the R2 address
+            that set-up-outside-services printed for your coding agent, or ""
+            when no app keeps uploads (chapter 4 of the setup). Nothing
+            changed.
+      - id: each_server_has_its_public_address
+        loop: "{{ .inventory.nodes }}"
+        as: server
+        key: "{{ .server.key }}"
+        assert:
+          that:
+            matches: ["{{ .server.value.vars.public_ipv4_address }}", '^([0-9]{1,3}\.){3}[0-9]{1,3}$']
+          message: >-
+            {{ .server.key }} in inventories/servers.yml has public_ipv4_address
+            "{{ .server.value.vars.public_ipv4_address }}". Write the server's
+            public IPv4 address from the provider's receipt: chapter 3 of the
+            setup for a systems desk, chapter 6 for the production servers.
+            Nothing changed.
+      - id: each_server_has_its_wireguard_key
+        loop: "{{ .inventory.nodes }}"
+        as: server
+        key: "{{ .server.key }}"
+        assert:
+          that:
+            matches: ["{{ .server.value.vars.wireguard_public_key }}", '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$']
+          message: >-
+            {{ .server.key }} in inventories/servers.yml has wireguard_public_key
+            "{{ .server.value.vars.wireguard_public_key }}". Write the WireGuard
+            public key made for the server before it was created: chapter 3
+            of the setup for a systems desk, chapter 6 for the production
+            servers. Nothing changed.
   # The schedule settings in mmx_project_settings.yml, checked before any
   # server changes. Each message gives the reason for the limit.
   - id: validate_the_schedule_settings
@@ -1754,8 +1905,8 @@ fleet_stages:
           script: |
             systemctl stop apt-daily.timer apt-daily-upgrade.timer
             trap 'systemctl start apt-daily.timer apt-daily-upgrade.timer' EXIT
-            if command -v cloud-init >/dev/null; then cloud-init status --wait >/dev/null || true; fi
-            while systemctl show --property ActiveState --value apt-daily.service apt-daily-upgrade.service | grep -qx -e active -e activating -e deactivating; do sleep 5; done
+            if command -v cloud-init >/dev/null; then timeout 5m cloud-init status --wait >/dev/null 2>&1 || echo "cloud-init status --wait ended with exit $? (124: still running after 5 minutes); the install goes on"; fi
+            for _ in $(seq 60); do systemctl show --property ActiveState --value apt-daily.service apt-daily-upgrade.service | grep -qx -e active -e activating -e deactivating || break; sleep 5; done
             apt-get update && unattended-upgrade --no-minimal-upgrade-steps
           dryrun: printf 'would install the waiting security updates, the first time only\n'
           run_only_once_marker_file: /var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server

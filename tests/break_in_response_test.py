@@ -15,6 +15,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 
 
@@ -493,6 +496,7 @@ class OnlyTheLockOutButtonStartsOrUndoesALockOut(unittest.TestCase):
     def project(self, temporary, desk_that_keeps_access, inventory_changes=()):
         project = Path(temporary)/'systems'
         shutil.copytree(T, project, ignore=shutil.ignore_patterns('.mmx'))
+        template_values.fill_the_values_the_setup_fills(project)
         inventory = project/'inventories/servers.yml'
         text = inventory.read_text()
         if desk_that_keeps_access:

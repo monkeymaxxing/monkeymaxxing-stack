@@ -12,6 +12,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 TEMPLATE = Path(__file__).resolve().parents[1] / 'skills/monkeymaxxing-stack/systems_repository_template'
 PLAYBOOK = TEMPLATE / 'playbooks/restore_database.yml'
@@ -110,6 +114,7 @@ class TheDeskThatKeepsAccessCanRunARecovery(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary) / 'systems'
             shutil.copytree(TEMPLATE, root, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(root)
             inventory = (root / 'inventories/servers.yml').read_text()
             db03 = ('  db03:\n    address: 10.20.2.3\n    ssh_user: root\n    connection: ssh_only\n'
                     '    ssh_known_hosts: ssh/known_hosts\n    ssh_config: ssh/config\n    vars:\n'

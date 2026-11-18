@@ -135,8 +135,10 @@ the person's. Then you push the changes and watch the first build.
    **Tell the person:** no message, because the settings come from the
    app's code, and step 7 shows the person each change the app needs.
 
-   **Check:** `mmx validate` passes, and each key above holds the app's
-   value, not `shop`'s.
+   **Check:** each key above holds the app's value, not `shop`'s, and
+   `mmx validate every_server` stops, if at all, only on a value whose
+   comment names a later chapter, as chapter 1's check says. Chapter 7's
+   check runs the whole `mmx validate` once every value is filled.
 
 3. **The app's hostnames, image tags, and secret mappings:** in
    `inventories/servers.yml`, set the app's production host name in
@@ -168,7 +170,8 @@ the person's. Then you push the changes and watch the first build.
    **Tell the person:** no message, for the same reason as step 2.
 
    **Check:** the `grep` above finds `shop` only in comments that use it
-   as an example, and `mmx validate` passes.
+   as an example, and `mmx validate every_server` stops, if at all, only
+   on a value whose comment names a later chapter.
 
 4. **Its checklist items:** copy the `apps.shop` block of the checklist
    under the app's name, with the app's name in each item's `id` and text.

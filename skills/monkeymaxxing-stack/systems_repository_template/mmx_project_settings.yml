@@ -2,7 +2,14 @@
 # locating mmx_project_settings.yml. Values every server or role reads are
 # under vars. The playbook calling each role passes the required vars
 # values as role inputs.
-project_name: example_systems
+#
+# A setting with no value after its colon, with a comment that says
+# "the setup fills it", is a value that only this system's setup can know:
+# a name, an address, a key or an ID. The template ships it empty, so a
+# value copied from the template never looks real. While it is empty,
+# `mmx validate` stops and names it; the setup step named in the comment
+# fills it (playbooks/every_server.yml, refuse_values_the_setup_has_not_filled_in).
+project_name:                               # the setup fills it: chapter 1, such as acme_systems
 allow_role_calls_within_roles: true         # shared server/desk containment tasks
 default_inventory: servers                  # inventories/servers.yml: production, and staging01 when the team has it
 vault_file: secrets_vault.age
@@ -154,8 +161,8 @@ vars:
   # The coding agent sets this to true at go-live, after the first public check
   # passes, and util01 applies it with every_server.
   public_site_checks_run: false
-  status_page_host_name: status.example.com
-  cloudflare_account_id: "0123456789abcdef0123456789abcdef"
+  status_page_host_name:                     # the setup fills it: chapter 1, such as status.acme.com
+  cloudflare_account_id:                     # the setup fills it: chapter 4, the 32-character account ID
   apps:
     shop:
       image: ghcr.io/example/shop
@@ -478,22 +485,24 @@ vars:
     keep_prior_file_versions_in_buckets_for_days: 14
     b2_s3_endpoint: s3.eu-central-003.backblazeb2.com
     b2_region: eu-central-003
-    production_bucket: example-systems-backups
-    uploads_bucket: example-systems-uploads-backups
-    uploads_r2_s3_endpoint: https://example-cloudflare-account-id.r2.cloudflarestorage.com
+    production_bucket:                       # the setup fills it: chapter 3, such as acme-systems-backups
+    uploads_bucket:                          # the setup fills it: chapter 3, such as acme-systems-uploads-backups, or "" without uploads
+    uploads_r2_s3_endpoint:                  # the setup fills it: chapter 4, https://ACCOUNT_ID.r2.cloudflarestorage.com, or "" without uploads
     uploads_backup_runs_on: [util_server]
     uploads_copy_every_hours: 24
     warn_when_one_uploads_copy_hides_more_than_percent_of_an_apps_files: 10
     warn_about_hidden_uploads_only_when_an_app_has_at_least_files: 100
-    mmhotline_backup_replica_url: "s3://example-mmhotline-backup/mmhotline?endpoint=https://s3.eu-central-003.backblazeb2.com&region=eu-central-003"
+    # The setup fills it: chapter 3, such as
+    # s3://acme-mmhotline-backup/mmhotline?endpoint=https://s3.eu-central-003.backblazeb2.com&region=eu-central-003
+    mmhotline_backup_replica_url:
 
   # The app servers pull the apps' images with a read-only login to the
   # registry. container_registry_read_only_username names the registry
   # account. The registry account's token is in the vault as
   # container_registry_read_only_token. On GitHub's registry, ghcr.io, the
   # account is the GitHub account that owns the token, and the token needs
-  # only the read:packages permission. Replace the example account.
-  container_registry_read_only_username: example-registry-reader
+  # only the read:packages permission.
+  container_registry_read_only_username:     # the setup fills it: chapter 4, the registry account's login
 
   # Normal root access on app, database, jobs, tools, staging, and load-balancer servers:
   # one OpenSSH public key line each.
@@ -506,14 +515,17 @@ vars:
   # MMX logs in with the private keys matching root_ssh_public_keys too.
   # Keep each systems desk's production key and the key of util01's
   # mmhotline user, or MMX loses SSH access.
-  # The example keys belong to nobody; replace them.
-  root_ssh_public_keys:
-    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIR+J8OoEVNHl3P/KSWFruheEQaq8Cgw/PziDAinSTJJ alex on desk01
-    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4Jcw7Fq2URbtI72IZ9N/p0WjdFGpZ0VJcet+YVhxZx util01, the mmhotline user
+  # The template ships the list empty. The systems desk's start writes the
+  # desk's production key here, in the desk's checkout (chapter 3), and
+  # chapter 7 adds util01's key. every_server refuses an empty list.
+  root_ssh_public_keys: []
 
   # The public half of the triage agent's SSH key, which lives on util01.
   # The triage agent logs in as the triage user, only from util01's
   # WireGuard address.
+  # Chapter 7 writes the real key after util01's first run, which needs a
+  # value here; the template's key belongs to nobody, so until then no one
+  # logs in as the triage user.
   triage_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPsX9pp+bDzWfdnB2oQs5Hfkdg86mfoXg/fTLpSaAVrE util01, the triage agent
 
   # The coding agent that the triage agent runs on util01: claude_code or
@@ -533,7 +545,7 @@ vars:
 
   # MMHotline's private dashboard, protected by Cloudflare Access.
   util01_private_page_host_names:
-    mmhotline: ops.example.com
+    mmhotline:                               # the setup fills it: chapter 1, such as ops.acme.com
 
   # The coding agent reaches the provider's API at 127.0.0.1:8081 on the
   # desk, which sends each request here. Use the chosen provider guide's
@@ -566,7 +578,7 @@ vars:
   # No server or desk reads backup_url_at_the_git_host.
   systems_repository:
     main_copy_path_on_util01: /var/lib/systems_repository.git
-    backup_url_at_the_git_host: https://github.com/example/example_systems.git
+    backup_url_at_the_git_host:              # the setup fills it: chapter 3, such as https://github.com/OWNER/acme_systems.git
 
   # The weekly restore drill's server, restore01: util01 creates it at the
   # server provider, with the team's provider scripts and util01's own token

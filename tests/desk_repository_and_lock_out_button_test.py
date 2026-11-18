@@ -28,6 +28,9 @@ import types
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 
 
@@ -58,8 +61,14 @@ def desk_key(text, desk):
 
 
 class ProductionKeyInTheSettings(unittest.TestCase):
-    def test_the_key_replaces_this_desks_example_and_keeps_the_others(self):
-        text = (T/'mmx_project_settings.yml').read_text()
+    def test_the_shipped_template_gets_only_this_desks_key(self):
+        changed = SETUP.set_root_ssh_public_keys((T/'mmx_project_settings.yml').read_text(), KEY, 'desk01')
+        self.assertEqual(root_keys(changed), [KEY])
+        inventory = SETUP.set_desk_production_key((T/'inventories/servers.yml').read_text(), KEY, 'desk01')
+        self.assertEqual(desk_key(inventory, 'desk01'), KEY)
+
+    def test_the_key_replaces_this_desks_earlier_key_and_keeps_the_others(self):
+        text = (template_values.filled_copy()/'mmx_project_settings.yml').read_text()
         changed = SETUP.set_root_ssh_public_keys(text, KEY, 'desk01')
         keys = root_keys(changed)
         self.assertEqual(keys[0], KEY)
@@ -90,6 +99,7 @@ class BreakInButton(unittest.TestCase):
         root = Path(self.directory.name)
         self.reviewed, self.repository, self.run_directory = root/'reviewed', root/'repository', root/'run'
         shutil.copytree(T, self.repository)
+        template_values.fill_the_values_the_setup_fills(self.repository)
         # What the desk review installed.
         for path in BUTTON.REVIEWED_PATHS:
             (self.reviewed/path).parent.mkdir(parents=True, exist_ok=True)
@@ -294,6 +304,7 @@ class LockOutButtonPress(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.repository, self.reviewed = self.root/'repository', self.root/'reviewed'
         shutil.copytree(T, self.repository)
+        template_values.fill_the_values_the_setup_fills(self.repository)
         for path in BUTTON.REVIEWED_PATHS:
             (self.reviewed/path).parent.mkdir(parents=True, exist_ok=True)
             (shutil.copytree if (T/path).is_dir() else shutil.copy)(T/path, self.reviewed/path)
@@ -808,6 +819,7 @@ class EveryFileTheLockOutLoadsIsReviewed(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 repository = Path(directory).resolve()/'systems'
                 shutil.copytree(T, repository, symlinks=True)
+                template_values.fill_the_values_the_setup_fills(repository)
                 if desk_that_keeps_access:
                     inventory = repository/'inventories/servers.yml'
                     inventory.write_text(inventory.read_text().replace(
@@ -854,6 +866,7 @@ class EveryPressFirstChecksThatThisDeskKeepsItsAccess(unittest.TestCase):
                  tempfile.TemporaryDirectory() as directory:
                 repository = Path(directory).resolve()/'systems'
                 shutil.copytree(T, repository, symlinks=True)
+                template_values.fill_the_values_the_setup_fills(repository)
                 if desk_that_keeps_access:
                     inventory = repository/'inventories/servers.yml'
                     inventory.write_text(inventory.read_text().replace(

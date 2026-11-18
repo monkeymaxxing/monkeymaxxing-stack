@@ -115,8 +115,7 @@ account screen of step 1 is the opening.
    [`AGENTS.md`](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host)). When the
    person gave the backup repository's address on chapter 2's screen, use
    that address exactly as given, and skip `gh repo create` and the
-   screen below; still set the address and remove the example key, as
-   the end of this step says. Never ask for the address again. Otherwise make an empty
+   screen below; still set the address, as the end of this step says. Never ask for the address again. Otherwise make an empty
    private repository, `example_systems`, at the app's Git host and owner
    from chapter 2. With `gh` signed in:
 
@@ -146,19 +145,7 @@ account screen of step 1 is the opening.
    address the person did not see or confirm. Reason: a backup address
    that names a repository nobody made fails at the first backup push, in
    chapter 4, far from its cause. No key of the desk or
-   of a server goes to the Git host. Remove the example `util01` key from
-   `root_ssh_public_keys` until chapter 7 registers the real key, with
-   your edit tool, in `mmx_project_settings.yml`: the old text is this
-   one whole line, and the new text is nothing:
-
-   ```text
-       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4Jcw7Fq2URbtI72IZ9N/p0WjdFGpZ0VJcet+YVhxZx util01, the mmhotline user
-   ```
-
-   Never delete lines that match the words `util01, the mmhotline user`:
-   the setting `util01_ssh_key_name_at_the_provider` holds the same words
-   and must stay. Reason: in two newcomer test runs, a line match removed
-   that setting too.
+   of a server goes to the Git host.
 
    **Tell the person:** no message with `gh`. You made the repository.
 
@@ -204,9 +191,10 @@ account screen of step 1 is the opening.
    - `vars.backups`: Backblaze's S3 endpoint and region for the region
      nearest the servers, such as `s3.eu-central-003.backblazeb2.com` and
      `eu-central-003` for servers in Europe, and the buckets' names,
-     `production_bucket`, `uploads_bucket` when an app keeps uploads, and
-     MMHotline's bucket in `mmhotline_backup_replica_url`, such as
-     `s3://example-mmhotline-backup/mmhotline?endpoint=https://s3.eu-central-003.backblazeb2.com&region=eu-central-003`.
+     `production_bucket`, `uploads_bucket` (`""` when no app keeps
+     uploads), and MMHotline's bucket in `mmhotline_backup_replica_url`,
+     such as
+     `s3://acme-mmhotline-backup/mmhotline?endpoint=https://s3.eu-central-003.backblazeb2.com&region=eu-central-003`.
      Bucket names are unique across all of Backblaze, so use the company's
      name in them. The three backup lengths keep the template's values,
      each written out there with its reason.
@@ -217,7 +205,12 @@ account screen of step 1 is the opening.
 
    **Tell the person:** no message.
 
-   **Check:** `mmx validate` passes.
+   **Check:** the `grep` for `the setup fills it` lists no value of
+   chapters 1 to 3 other than the desk's and its laptop's, which the desk's
+   steps below fill, and `mmx validate every_server` stops, if at all, only
+   on such a value or one whose comment names a later chapter. Reason: in
+   three newcomer test runs `go-live` stopped in the person's terminal on a
+   bucket name left as the template's example.
 
 ## The real price, approved once
 
@@ -551,7 +544,18 @@ repository's name, including paths inside quoted SSH commands.
    exits 0, and `ssh/known_hosts` holds `desk01`'s lines.
 
 4. **Copy the repository and run the bootstrap.** Commit every setting of
-   chapters 1 to 3 in the laptop's copy first. The bootstrap is the
+   chapters 1 to 3 in the laptop's copy first, and check that
+   `~/.local/bin/mmx validate systems_desk --var desk_name=desk01` passes:
+   it names a value of the desk or its laptop that is still empty. Leave
+   `production_ssh_public_key` and `root_ssh_public_keys` as the template
+   has them: the bootstrap writes the desk's production key into both, in
+   the desk's checkout. After the bootstrap, never copy the laptop's copy
+   over the desk's checkout again: it would empty both settings, and
+   `every_server` would refuse to run. Reason: in a newcomer test run,
+   the template's example key replaced the desk's own, and the first
+   install locked the desk out of the servers.
+
+   The bootstrap is the
    desk's whole setup, run as root from the laptop, before the lock. It
    makes the production key, the vault passphrase and the vault, starts
    the systems repository in your checkout on the desk,
@@ -713,8 +717,10 @@ after a reboot.
 ## Check remaining example values
 
 1. **Replace the example values.** Before chapter 7 (install everything
-   on the production servers), replace every actual setting's example
-   value, including zero software checksums, with the verified release
+   on the production servers), the `grep` for `the setup fills it` in
+   `mmx_project_settings.yml` and `inventories/servers.yml` lists
+   nothing, and `mmx validate` passes. Then replace every remaining example value,
+   including zero software checksums, with the verified release
    values. Keep documentation examples and script usage examples. Run the
    search in the laptop's clone of the systems repository:
 

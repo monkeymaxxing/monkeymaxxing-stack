@@ -964,15 +964,19 @@ node_tasks:
   # apt's lock (a newcomer test run, 2026-11-18, on a desk and on util01).
   # So the script pauses apt's two timers, waits for cloud-init and for
   # an apt run already going to end, installs, and starts the timers
-  # again. The task's time_limit bounds the wait.
+  # again. Each wait has its own bound, 5 minutes, and the install goes on
+  # after it: on a server one provider had reinstalled, `cloud-init status
+  # --wait` did not end within 15 minutes (a newcomer test run,
+  # 2026-11-18), while on a new server it ends within 2 minutes. The same script is in
+  # roles/every_server, which says more.
   - id: install_the_waiting_security_updates_on_a_new_server
     time_limit: 30m
     shell:
       script: |
         systemctl stop apt-daily.timer apt-daily-upgrade.timer
         trap 'systemctl start apt-daily.timer apt-daily-upgrade.timer' EXIT
-        if command -v cloud-init >/dev/null; then cloud-init status --wait >/dev/null || true; fi
-        while systemctl show --property ActiveState --value apt-daily.service apt-daily-upgrade.service | grep -qx -e active -e activating -e deactivating; do sleep 5; done
+        if command -v cloud-init >/dev/null; then timeout 5m cloud-init status --wait >/dev/null 2>&1 || echo "cloud-init status --wait ended with exit $? (124: still running after 5 minutes); the install goes on"; fi
+        for _ in $(seq 60); do systemctl show --property ActiveState --value apt-daily.service apt-daily-upgrade.service | grep -qx -e active -e activating -e deactivating || break; sleep 5; done
         apt-get update && unattended-upgrade
       dryrun: printf 'would install the waiting security updates, the first time only\n'
       run_only_once_marker_file: /var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server

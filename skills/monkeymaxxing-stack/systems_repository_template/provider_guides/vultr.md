@@ -430,7 +430,7 @@ done
 Keep the early guards until WireGuard runs and both chains reject public SSH. The same file is the
 template that `util01`'s create renders, so the restore drill and the replacements get the correction too.
 Pass the renderer's result, without further changes, to the create. After boot, connect over WireGuard.
-Check `cloud-init status --wait --long`. Verify the expected WireGuard public key and address, and
+Check `timeout 5m cloud-init status --wait --long`. Verify the expected WireGuard public key and address, and
 `/etc/cloud/cloud-init.disabled`. The marker can make cloud-init report `disabled`; the status alone then
 does not prove first boot finished. Check public TCP 22 from outside the server. Inspect first-boot service
 ordering over the private connection. Never print the private key or cloud-init user data while collecting

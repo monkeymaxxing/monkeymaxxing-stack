@@ -13,6 +13,9 @@ import textwrap
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 TEMPLATE = Path(__file__).resolve().parents[1] / 'skills/monkeymaxxing-stack/systems_repository_template'
 MOVING = dict(wireguard_address='10.20.11.1', wireguard_public_key='W4MVmeNMv9vw3FJUc9fGBUxhKPQrS17V6L96pYaVUUM=',
               public_ipv4_address='203.0.113.50', postgres_port=5544, copy_onto='db01', apps=['shop'], through_relay=False)
@@ -132,6 +135,7 @@ class SwitchPlaybook(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)/'systems'
             shutil.copytree(TEMPLATE, root, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(root)
             settings = root/'mmx_project_settings.yml'
             text = settings.read_text()
             self.assertEqual(text.count('\n  database_moving_in: {}\n'), 1)

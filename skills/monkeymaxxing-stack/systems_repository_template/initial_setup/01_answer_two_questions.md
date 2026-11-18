@@ -357,6 +357,16 @@ answers.
    git init -b main ~/code/example_systems
    ```
 
+   The template leaves each value that only this system's setup can know
+   empty: a name, an address, a key or an ID, with the comment `# the setup
+   fills it: chapter N`. Fill each one in the chapter its comment names,
+   and replace the whole line, comment included, such as
+   `project_name: example_systems`. So
+   `grep -n 'the setup fills it' mmx_project_settings.yml inventories/servers.yml`
+   lists exactly the values still to fill. Reason: the template's example
+   values looked real, and in three newcomer test runs an example bucket
+   name was kept.
+
    Write the answers into the copy:
 
    - `project_name: example_systems` in `mmx_project_settings.yml`.
@@ -367,18 +377,6 @@ answers.
      as `1Password`, from the screen. The account screens of chapters 3
      and 4 name it.
    - `desk01.vars.person_unix_username` in `inventories/servers.yml`.
-   - The example person's name in the example keys: in place of `alex`,
-     write the person's desk name in the key comment `alex on desk01`,
-     in `desk01.vars.production_ssh_public_key` of
-     `inventories/servers.yml` and in `root_ssh_public_keys` of
-     `mmx_project_settings.yml`, such as `sam on desk01`. In
-     `desk01.vars.allowed_laptops`, write the laptop's short host name as
-     `laptop_name` in place of `work-laptop`, and `USER@HOST` in place of
-     the key comment `alex@work-laptop`. The keys themselves stay the
-     template's until chapter 3 writes the real ones: chapter 3 replaces
-     `allowed_laptops`, and the systems desk's start replaces every key
-     that ends in ` on desk01`. Reason: a stranger's name in the person's
-     files reads as someone else's access.
    - `status_page_host_name` under `vars` in `mmx_project_settings.yml`,
      and `util01_private_page_host_names.mmhotline` beside it, from the
      screen's two names. The person's sign-in email goes into
@@ -405,18 +403,14 @@ answers.
    > Your systems repository is on this laptop at `~/code/example_systems`. Now I am reading your app's code, to see what it needs to run on your servers.
 
    **Check:** `~/code/example_systems` holds the template with the values
-   above, and `mmx validate` passes there. `mmx validate` does not catch a
-   value that is still the template's example, and `go-live` refuses one.
-   Search the systems repository with your search tool for `example.com`,
-   `example.invalid` and `example-`, and search `inventories/servers.yml`
-   and `mmx_project_settings.yml` for `alex` and `work-laptop`. Replace
-   each one that this chapter owns now: the status page and alerts page
-   names, and the example person in the key comments `alex on desk01`
-   and `alex@work-laptop`. The guides' example commands keep `alex`. The others belong to
-   later chapters, which fill each before a step needs it: the app's
-   address in chapter 2, the bucket names in chapter 3, the Cloudflare
-   account and the registry account in chapter 4, and the example person
-   in chapter 7.
+   above, and the `grep` for `the setup fills it` lists no value of
+   chapter 1. `mmx validate every_server` stops on the first value still
+   empty and names it, such as
+   `value supplied at mmx_project_settings.yml:488:23 (vars.backups.production_bucket)`:
+   its checks follow the order in which the setup fills the values. Until
+   chapter 6 has filled the last one, a stop on a value whose comment
+   names a later chapter is expected; any other error is a mistake to fix
+   now. The example app, `shop`, and its address belong to chapter 2.
 
 ## If something is different
 

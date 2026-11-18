@@ -15,6 +15,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 TEMPLATE = Path(__file__).resolve().parents[1] / 'skills/monkeymaxxing-stack/systems_repository_template'
 
@@ -23,7 +27,7 @@ def util01_tasks():
     mmx = os.environ.get('MMX_BINARY') or shutil.which('mmx')
     if not mmx:
         raise RuntimeError('Set MMX_BINARY to test with the actual MMX explain output.')
-    explained = subprocess.run([mmx, 'explain', 'every_server', '--json'], cwd=TEMPLATE, text=True, capture_output=True, check=True)
+    explained = subprocess.run([mmx, 'explain', 'every_server', '--json'], cwd=template_values.filled_copy(), text=True, capture_output=True, check=True)
     tasks = {}
 
     def walk(value):

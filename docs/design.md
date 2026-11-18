@@ -2093,7 +2093,7 @@ vars:
     staging: [staging_server]
   job_containers_run_only_on_the_jobs_servers: false   # the later steps' settings: true once the step is in effect (Later steps)
   tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers: false
-  container_registry_read_only_username: example-registry-reader
+  container_registry_read_only_username:    # the setup fills it: chapter 4; each value only the setup knows ships empty, and every_server refuses it empty
   postgresql_major_version: 17              # Debian 13's, on the database servers, staging01, and util01's failover monitor
   pgbouncer_runs_in_front_of_postgres: false   # PgBouncer, a later step: on, then each environment's apps through PgBouncer
   apps_connect_through_pgbouncer:
@@ -2102,17 +2102,17 @@ vars:
   backups:                                  # pgBackRest's B2 bucket for production, through B2's S3-compatible API
     b2_s3_endpoint: s3.eu-central-003.backblazeb2.com
     b2_region: eu-central-003
-    production_bucket: example-systems-backups
-    uploads_bucket: example-systems-uploads-backups   # the apps' uploads, copied from R2 every night (Uploaded files)
-    uploads_r2_s3_endpoint: https://example-cloudflare-account-id.r2.cloudflarestorage.com
+    production_bucket:                      # the setup fills it: chapter 3, such as acme-systems-backups
+    uploads_bucket:                         # the setup fills it: the apps' uploads, copied from R2 every night (Uploaded files); "" without uploads
+    uploads_r2_s3_endpoint:                 # the setup fills it: chapter 4, https://ACCOUNT_ID.r2.cloudflarestorage.com; "" without uploads
     uploads_backup_runs_on: [util_server]       # [] while no app keeps uploads: then no copy, and no uploads keys needed
-    mmhotline_backup_replica_url: "s3://example-mmhotline-backup/mmhotline?endpoint=...&region=..."   # Litestream's copy of MMHotline's database, in the same B2 account as the buckets above
-  root_ssh_public_keys:                     # who may log in to every server; the comment says whose key
+    mmhotline_backup_replica_url:           # the setup fills it: s3://BUCKET/mmhotline?endpoint=...&region=...; Litestream's copy of MMHotline's database, in the same B2 account as the buckets above
+  root_ssh_public_keys:                     # who may log in to every server; the comment says whose key; [] in the template, the desk's start adds its key
     - ssh-ed25519 AAAA... Ana Silva's systems desk
     - ssh-ed25519 AAAA... util01, the mmhotline user
   triage_ssh_public_key: ssh-ed25519 AAAA... util01, the triage agent
   util01_private_page_host_names:           # each behind Cloudflare Access, through util01's own tunnel
-    mmhotline: ops.example.com
+    mmhotline: ops.example.com              # the template ships it empty; chapter 1 fills it
   systems_repository:                       # the main copy on util01, and the backup at the Git host
     main_copy_path_on_util01: /var/lib/systems_repository.git   # the team's main copy, root-owned, on util01
     backup_url_at_the_git_host: https://github.com/example/example_systems.git   # pushed from the laptop, never read
@@ -4777,8 +4777,9 @@ settings. It reads which keys are already saved from `mmx secrets list-keys`.
 A bucket or key the system does not use is not made: no staging tunnel,
 staging keys, or staging uploads bucket without `staging01`, no staging
 backup bucket ever (`staging01` keeps no backups), and no uploads bucket or uploads keys while no
-app keeps uploads. The command refuses a setting that still holds the
-template's example, such as `example-systems-backups`.
+app keeps uploads. The command refuses a setting that is empty or still holds a
+template example, such as `example-systems-backups` in a repository
+started from an older template.
 
 **A key issued but not saved** is its own outcome.
 The command saves a new key's two values one after the other. When a save

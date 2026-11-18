@@ -131,24 +131,28 @@ nodes:
     ssh_known_hosts: ssh/known_hosts
     ssh_config: ssh/desk01
     vars:
-      public_ipv4_address: 203.0.113.91
-      # This desk's own server ID at the provider, from the create receipt. The API
-      # proxy refuses a request other than GET that names it.
-      provider_server_id: "4242424242"
+      # A value with no value after its colon, with a comment that says "the
+      # setup fills it", is one only this system's setup can know. While it
+      # is empty, `mmx validate` and the desk's runs stop and name it.
+      public_ipv4_address:                  # the setup fills it: chapter 3, from the create receipt
+      # This desk's own server ID at the provider, from the create receipt, in
+      # quotes. The API proxy refuses a request other than GET that names it.
+      provider_server_id:                   # the setup fills it: chapter 3, such as "4242424242"
       # Its name at the provider, for a provider that puts the name in the API
       # path (an OVHcloud VPS service name, a Google Cloud instance name); ""
       # when the provider uses the ID.
       provider_server_name: ""
       private_ip: 10.20.9.1
-      wireguard_public_key: "urzzcMKwVZ9bM84MmgWUjMRxOTNn2PDtEF5it/uZFQ4="
-      person_unix_username: alex
-      # The public half of this desk's production key, also in root_ssh_public_keys.
-      production_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIR+J8OoEVNHl3P/KSWFruheEQaq8Cgw/PziDAinSTJJ alex on desk01
+      wireguard_public_key:                 # the setup fills it: chapter 3, printed when the desk is created
+      person_unix_username:                 # the setup fills it: chapter 1, such as sam
+      # The public half of this desk's production key, also in
+      # root_ssh_public_keys. The desk's start writes both (chapter 3).
+      production_ssh_public_key:
       allowed_laptops:
-        - laptop_name: work-laptop
-          wireguard_public_key: "IUKgB/tUTa5m1zF4S5Q2+YM4Ktdtpv9rBtIiHDfqDC4="
+        - laptop_name:                      # the setup fills it: chapter 3, the laptop's short host name
+          wireguard_public_key:             # the setup fills it: chapter 3, from doubleshell create-wireguard-key
           private_ip: 10.20.10.1
-          ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIORZZg3NlYdxJ28janK/DsJ1O0O2YgF7KN2aiEPskegs alex@work-laptop"
+          ssh_public_key:                   # the setup fills it: chapter 3, the laptop's ~/.ssh/desk01.pub
 
   util01:
     address: 10.20.0.1                    # WireGuard address for SSH
@@ -157,7 +161,7 @@ nodes:
     ssh_known_hosts: ssh/known_hosts
     ssh_config: ssh/config
     vars:
-      public_ipv4_address: 203.0.113.1
+      public_ipv4_address:                  # the setup fills it: chapter 6, from the create receipt
       # The provider's server type and location this server was created
       # with, from the create script's receipt. Every server but the systems
       # desks and restore01 records both: a replacement of a failed server is
@@ -167,7 +171,7 @@ nodes:
       location: fsn1
       private_ip: 10.20.0.1                 # util01's WireGuard address
       # The setup machine records the public key before the first MMX run.
-      wireguard_public_key: "PFHMlKh61wvN0/mEnwE2mCdTk3PCQmr/u0lh3F8JkT0="
+      wireguard_public_key:                 # the setup fills it: chapter 6
 
   app001:
     address: 10.20.1.1
@@ -176,11 +180,11 @@ nodes:
     ssh_known_hosts: ssh/known_hosts
     ssh_config: ssh/config
     vars:
-      public_ipv4_address: 203.0.113.11
+      public_ipv4_address:                  # the setup fills it: chapter 6, from the create receipt
       server_type: cx23
       location: fsn1
       private_ip: 10.20.1.1
-      wireguard_public_key: "ZxyZitx4fq2p2omFOcF+fIsM4eUqdKy8pjgZ99jx1EI="
+      wireguard_public_key:                 # the setup fills it: chapter 6
 
   db01:
     address: 10.20.2.1
@@ -189,11 +193,11 @@ nodes:
     ssh_known_hosts: ssh/known_hosts
     ssh_config: ssh/config
     vars:
-      public_ipv4_address: 203.0.113.21
+      public_ipv4_address:                  # the setup fills it: chapter 6, from the create receipt
       server_type: cx23
       location: fsn1
       private_ip: 10.20.2.1
-      wireguard_public_key: "W4MVmeNMv9vw3FJUc9fGBUxhKPQrS17V6L96pYaVUUM="
+      wireguard_public_key:                 # the setup fills it: chapter 6
 
 groups:
   systems_desks:

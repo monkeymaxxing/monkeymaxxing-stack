@@ -30,6 +30,10 @@ import subprocess
 import tempfile
 import threading
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 CHECK_SUFFIX = '_pin_is_the_newest_release'
@@ -118,6 +122,7 @@ class PinnedProgramReleases(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)/'systems'
             shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(root)
             settings = (root/'mmx_project_settings.yml').read_text()
             for old, new in settings_changes:
                 assert settings.count(old) == 1, old
@@ -177,7 +182,7 @@ class PinnedProgramReleases(unittest.TestCase):
         for playbook, extra, first in (('every_server', [], 'util01 / refuse_programs_pinned_without_a_release/'),
                                        ('systems_desk', ['--var', 'desk_name=desk01'], 'desk01 / systems_desk/refuse_a_node_outside_systems_desks')):
             with self.subTest(playbook=playbook):
-                result = subprocess.run([self.mmx, 'explain', playbook, *extra], cwd=T, text=True, capture_output=True)
+                result = subprocess.run([self.mmx, 'explain', playbook, *extra], cwd=template_values.filled_copy(), text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 tasks = re.findall(r'^  (\S+ / \S+): ', result.stdout, re.M)
                 self.assertTrue(tasks[0].startswith(first), tasks[:3])

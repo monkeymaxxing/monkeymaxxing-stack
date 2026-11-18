@@ -71,6 +71,65 @@ fleet_stages:
             fits the pin. Copy stack_software from the template of a released
             Stack version, a tag such as v0.1.0, whose pins hold each
             program's real release. Nothing changed.
+      # This desk's values that only the setup can know. The template leaves
+      # each one empty, with a comment that names the setup step that fills
+      # it; while one is empty, the run stops before any change and names it
+      # ("value supplied at inventories/servers.yml:LINE"). One check reads one
+      # value, so a refusal names the right one. The desk's public address
+      # and WireGuard key are checked in playbooks/every_server.yml, and the
+      # desk's start writes production_ssh_public_key itself.
+      - id: the_person_has_an_account_name
+        assert:
+          that:
+            matches: ["{{ .vars.person_unix_username }}", '^[a-z_][a-z0-9_-]*$']
+          message: >-
+            {{ .node.name }}'s person_unix_username in inventories/servers.yml is
+            "{{ .vars.person_unix_username }}". Write the person's account name
+            on the desk, in lowercase letters, such as sam (chapter 1 of the
+            setup). Nothing changed.
+      - id: the_desk_has_its_id_at_the_provider
+        assert:
+          that:
+            matches: ["{{ .vars.provider_server_id }}", '^[^ ]+$']
+          message: >-
+            {{ .node.name }}'s provider_server_id in inventories/servers.yml is
+            "{{ .vars.provider_server_id }}". Write the desk's ID from the
+            provider's receipt, in quotes (chapter 3 of the setup). Nothing
+            changed.
+      - id: each_laptop_has_a_name
+        loop: "{{ .vars.allowed_laptops }}"
+        as: laptop
+        key: "{{ .laptop.private_ip }}"
+        assert:
+          that:
+            matches: ["{{ .laptop.laptop_name }}", '^[A-Za-z0-9][A-Za-z0-9.-]*$']
+          message: >-
+            A laptop of {{ .node.name }} in inventories/servers.yml has
+            laptop_name "{{ .laptop.laptop_name }}". Write the laptop's short
+            host name (chapter 3 of the setup). Nothing changed.
+      - id: each_laptop_has_its_wireguard_key
+        loop: "{{ .vars.allowed_laptops }}"
+        as: laptop
+        key: "{{ .laptop.private_ip }}"
+        assert:
+          that:
+            matches: ["{{ .laptop.wireguard_public_key }}", '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$']
+          message: >-
+            A laptop of {{ .node.name }} in inventories/servers.yml has
+            wireguard_public_key "{{ .laptop.wireguard_public_key }}". Write the
+            key that doubleshell create-wireguard-key printed on the laptop
+            (chapter 3 of the setup). Nothing changed.
+      - id: each_laptop_has_its_ssh_key
+        loop: "{{ .vars.allowed_laptops }}"
+        as: laptop
+        key: "{{ .laptop.private_ip }}"
+        assert:
+          that:
+            matches: ["{{ .laptop.ssh_public_key }}", '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+=*( .*)?$']
+          message: >-
+            A laptop of {{ .node.name }} in inventories/servers.yml has
+            ssh_public_key "{{ .laptop.ssh_public_key }}". Write the laptop's
+            ~/.ssh/desk01.pub (chapter 3 of the setup). Nothing changed.
       - role: systems_desk
         inputs:
           wireguard_listen_port: "{{ .vars.wireguard_listen_port }}"

@@ -21,6 +21,9 @@ import tempfile
 import textwrap
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 T = Path(os.environ.get('STACK_TEMPLATE_DIR') or Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template')
 
 STAGING_STAGES = ['database_server_on_staging01', 'pgbouncer_on_staging01', 'find_the_live_and_new_web_ports_on_staging01',
@@ -73,6 +76,7 @@ class TwoShapes(unittest.TestCase):
     def system(self, directory, with_staging01):
         root = Path(directory)/'systems'
         shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+        template_values.fill_the_values_the_setup_fills(root)
         if with_staging01:
             add_staging01(root)
         self.mmx_in(root, 'validate')

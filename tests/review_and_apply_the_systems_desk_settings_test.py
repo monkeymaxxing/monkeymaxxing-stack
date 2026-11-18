@@ -22,6 +22,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 loader = importlib.machinery.SourceFileLoader('desk_review', str(T/'roles/systems_desk/files/review-and-apply-the-systems-desk-settings'))
 DESK_REVIEW = importlib.util.module_from_spec(importlib.util.spec_from_loader('desk_review', loader))
@@ -46,6 +49,7 @@ class DeskRunView(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.repository = Path(self.directory.name).resolve()/'systems'
         shutil.copytree(T, self.repository, symlinks=True)
+        template_values.fill_the_values_the_setup_fills(self.repository)
 
     def tearDown(self):
         self.directory.cleanup()
@@ -255,6 +259,7 @@ class FirstDeskReview(unittest.TestCase):
         environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull}
         checkout = self.checkout = root/'home/coding-agent/systems_repository'
         shutil.copytree(T, checkout, symlinks=True, ignore=shutil.ignore_patterns('.mmx', '__pycache__'))
+        template_values.fill_the_values_the_setup_fills(checkout)
         for arguments in (['init', '--quiet', '-b', 'main'], ['add', '--all'],
                           ['-c', 'user.name=A', '-c', 'user.email=a@example.com', '-c', 'commit.gpgsign=false',
                            'commit', '--quiet', '-m', 'Start the systems repository on desk01']):

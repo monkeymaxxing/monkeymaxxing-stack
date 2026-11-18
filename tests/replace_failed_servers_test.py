@@ -40,6 +40,9 @@ import tempfile
 import time
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 T = ROOT/'skills/monkeymaxxing-stack/systems_repository_template'
 NEW_KEY = 'PFHMlKh61wvN0/mEnwE2mCdTk3PCQmr/u0lh3F8JkT0='
@@ -151,6 +154,7 @@ class ReplaceFailedServers(unittest.TestCase):
         os.environ['GIT_CONFIG_GLOBAL'] = str(self.gitconfig)
         self.repository = root/'repository'
         shutil.copytree(T, self.repository)
+        template_values.fill_the_values_the_setup_fills(self.repository)
         steps = self.repository/'server_management_scripts/steps_for_replacing_failed_servers.bash'
         steps.write_text(steps.read_text().replace('/var/lib/replace_failed_servers', str(self.state)))
         (self.repository/'one_time_playbooks/completed').mkdir(parents=True)

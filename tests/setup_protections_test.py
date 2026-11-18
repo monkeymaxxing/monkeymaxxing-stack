@@ -20,6 +20,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 FLAGS = ['is_systems_desk', 'is_app_server', 'is_database_server', 'is_util_server',
@@ -123,7 +127,7 @@ class Rendered(unittest.TestCase):
             with self.subTest(node=node):
                 self.assertRegex(self.render('roles/every_server/files/hosts', node=node), rf'(?m)^\S+ {node}$')
         result = subprocess.run([self.mmx, 'explain', 'systems_desk', '--json', '--var', 'desk_name=desk01'],
-                                cwd=T, text=True, capture_output=True, stdin=subprocess.DEVNULL)
+                                cwd=template_values.filled_copy(), text=True, capture_output=True, stdin=subprocess.DEVNULL)
         self.assertEqual(result.returncode, 0, result.stderr)
         tasks = [task for stage in json.loads(result.stdout)['fleet_stages'] for task in stage.get('node_tasks') or []]
         self.assertTrue(any(task['path'].endswith('/set_the_desk_name') for task in tasks))

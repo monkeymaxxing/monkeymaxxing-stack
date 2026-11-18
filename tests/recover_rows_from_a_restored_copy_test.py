@@ -23,6 +23,9 @@ import sys
 import tempfile
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / 'skills/monkeymaxxing-stack/systems_repository_template'
 SOURCE = TEMPLATE / 'playbooks/recover_rows_from_a_restored_copy.yml'
@@ -110,7 +113,7 @@ def explain_env(mmx, **values):
     arguments = [mmx, 'explain', 'recover_rows_from_a_restored_copy', '--json']
     for key, value in values.items():
         arguments += ['--var', f'{key}={value}']
-    result = subprocess.run(arguments, cwd=TEMPLATE, text=True, capture_output=True, stdin=subprocess.DEVNULL)
+    result = subprocess.run(arguments, cwd=template_values.filled_copy(), text=True, capture_output=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         raise AssertionError(result.stderr)
     task = json.loads(result.stdout)['fleet_stages'][0]['node_tasks'][0]
@@ -231,13 +234,13 @@ class RowRecovery(unittest.TestCase):
         self.assertFalse(any(c[0] == 'create_a_server_at_the_provider' for c in commands))
 
     def test_mmx_refuses_a_run_without_the_values(self):
-        result = subprocess.run([self.mmx, 'explain', 'recover_rows_from_a_restored_copy', '--json'], cwd=TEMPLATE,
+        result = subprocess.run([self.mmx, 'explain', 'recover_rows_from_a_restored_copy', '--json'], cwd=template_values.filled_copy(),
                                 text=True, capture_output=True, stdin=subprocess.DEVNULL)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('rows_where', result.stderr)
         # An empty value for a variable with no default is refused by MMX itself, naming the variable.
         result = subprocess.run([self.mmx, 'explain', 'recover_rows_from_a_restored_copy', '--json', '--var', 'table='],
-                                cwd=TEMPLATE, text=True, capture_output=True, stdin=subprocess.DEVNULL)
+                                cwd=template_values.filled_copy(), text=True, capture_output=True, stdin=subprocess.DEVNULL)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('--var table= gives an empty value', result.stderr)
 

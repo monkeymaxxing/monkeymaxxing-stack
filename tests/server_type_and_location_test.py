@@ -21,6 +21,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 TASK = 'every_server_records_its_server_type_and_location'
@@ -44,6 +48,7 @@ class ServerTypeAndLocation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)/'systems'
             shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(root)
             if edit:
                 inventory = root/'inventories/servers.yml'
                 inventory.write_text(edit(inventory.read_text()))

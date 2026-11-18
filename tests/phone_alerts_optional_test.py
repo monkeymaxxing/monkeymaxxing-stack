@@ -18,6 +18,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 SETTING_OFF = 'phone_alerts_are_set_up: false'
@@ -44,6 +48,7 @@ class PhoneAlertsAreOptionalInTheFirstPartOfTheSetup(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)/'project'
         shutil.copytree(T, root)
+        template_values.fill_the_values_the_setup_fills(root)
         settings = root/'mmx_project_settings.yml'
         text = settings.read_text()
         self.assertIn(SETTING_OFF, text)

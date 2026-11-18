@@ -29,6 +29,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 SERVERS = {  # name: (pool, private address)
@@ -174,6 +178,7 @@ def group_vars_of_the_template():
 def make_project(root, state='default', extra_vars='', extra_servers=None, extra_groups=None):
     """The template with the ten test servers. extra_groups: name -> (servers, vars lines)."""
     shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+    template_values.fill_the_values_the_setup_fills(root)
     inventory = (root/'inventories/servers.yml').read_text()
     head = inventory[:inventory.index('\nnodes:\n')]
     overrides = ''.join('  %s: %s\n' % (k, json.dumps(v)) for k, v in STATES[state].items())

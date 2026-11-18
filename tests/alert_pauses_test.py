@@ -25,6 +25,10 @@ import re
 import shutil
 import subprocess
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 OFF = '/usr/local/bin/mmwatchdog maintenance off --every-check-group'
@@ -116,6 +120,7 @@ class EachPauseIsTheSumOfItsWaits(unittest.TestCase):
             with self.subTest(node=node, value=value), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)/'systems'
                 shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+                template_values.fill_the_values_the_setup_fills(root)
                 inventory = (root/'inventories/servers.yml').read_text()
                 inventory = re.sub(r'(?m)^(  %s:\n(?:    .*\n)*?    vars:\n)' % node, r'\1      %s: %s\n' % (self.SETTING, value), inventory, count=1)
                 self.assertIn('      %s: %s\n' % (self.SETTING, value), inventory)
@@ -230,7 +235,7 @@ class AFailureEndsThePauseWhereMMXOffersIt(unittest.TestCase):
             raise RuntimeError('Set MMX_BINARY to explain the actual playbooks.')
 
     def tasks(self, playbook, *arguments):
-        result = subprocess.run([self.mmx, 'explain', playbook, *arguments, '--json'], cwd=T, text=True, capture_output=True)
+        result = subprocess.run([self.mmx, 'explain', playbook, *arguments, '--json'], cwd=template_values.filled_copy(), text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         source = text(f'playbooks/{playbook}.yml')
         tasks = []

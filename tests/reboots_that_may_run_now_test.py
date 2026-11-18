@@ -27,6 +27,9 @@ import sys
 import tempfile
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 RULE = T/'roles/every_server/files/check-whether-a-reboot-may-run-now'
 WINDOW = ['--weekday', 'tuesday', '--starts-at', '21:00', '--length-minutes', '60']
@@ -111,6 +114,7 @@ class ThePlaybookAndTheCheck(unittest.TestCase):
     def copy_of_the_template(self, temporary, settings_changes=(), inventory_changes=()):
         root = Path(temporary)/'systems'
         shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+        template_values.fill_the_values_the_setup_fills(root)
         for name, changes in (('mmx_project_settings.yml', settings_changes), ('inventories/servers.yml', inventory_changes)):
             text = (root/name).read_text()
             for old, new in changes:

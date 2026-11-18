@@ -199,8 +199,10 @@ domain at Cloudflare, its DNS records, and the lock.
 
    - Write `cloudflare_account_id` from `for_the_coding_agent` into
      `vars.cloudflare_account_id` in `mmx_project_settings.yml`, and
-     commit it in your clone. Publish it once `go-live` has finished
-     (step 7's check), as "Making a change" in
+     `vars.backups.uploads_r2_s3_endpoint` beside it:
+     `https://ACCOUNT_ID.r2.cloudflarestorage.com` with that ID when an app
+     keeps uploads, or `""` when none does. Commit both in your clone.
+     Publish them once `go-live` has finished (step 7's check), as "Making a change" in
      [`AGENTS.md`](../AGENTS.md#making-a-change) says. Reason: `go-live`
      saves keys in the vault of the desk's checkout and commits them only
      later, and `publish-branch-to-main` refuses a checkout with changes that

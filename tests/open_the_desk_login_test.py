@@ -15,6 +15,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 LAPTOP_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIORZZg3NlYdxJ28janK/DsJ1O0O2YgF7KN2aiEPskegs alex@work-laptop'
@@ -54,7 +58,7 @@ class OpenTheDeskLogin(unittest.TestCase):
         (self.repository/'inventories').mkdir()
         shutil.copy2(T/'ssh/open-the-desk-login', self.repository/'ssh/open-the-desk-login')
         shutil.copy(T/'ssh/desk01', self.repository/'ssh/desk01')
-        shutil.copy(T/'inventories/servers.yml', self.repository/'inventories/servers.yml')
+        shutil.copy(template_values.filled_copy()/'inventories/servers.yml', self.repository/'inventories/servers.yml')
         self.home = self.root/'home'
         (self.home/'.ssh').mkdir(parents=True)
         (self.home/'.ssh/desk01.pub').write_text(LAPTOP_KEY + '\n')

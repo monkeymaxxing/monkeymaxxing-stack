@@ -52,6 +52,9 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from server_connections_test import T, make_project, server_block  # noqa: E402
 
 REFERENCE = re.compile(r'\.(node_tasks|vars|inputs|secrets)\.([A-Za-z0-9_]+)(?:\.([A-Za-z0-9_]+))?')
@@ -208,6 +211,7 @@ class TaskOutputsAfterASecret(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)/'systems'
             shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(root)
             for playbook in PLAYBOOKS:
                 if playbook in ('restore_database', 'remove_server'):
                     continue  # they need a node the template's inventory does not have

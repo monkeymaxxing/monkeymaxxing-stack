@@ -15,6 +15,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
 FILES = T/'roles/systems_desk/files'
@@ -31,6 +35,7 @@ def explain(settings_changes=()):
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)/'systems'
         shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+        template_values.fill_the_values_the_setup_fills(root)
         settings = root/'mmx_project_settings.yml'
         text = settings.read_text()
         for old, new in settings_changes:
@@ -158,7 +163,7 @@ class TheDeskDoor(unittest.TestCase):
             self.assertEqual(len(keys), 1)
             self.assertRegex(keys[0], r'^\{\{ \.node_tasks\.(create|read)_the_root_owned_self_management_key\.public_key \}\}$')
         # The person's and coding-agent's keys: the allowed laptops' keys only.
-        inventory = (T/'inventories/servers.yml').read_text()
+        inventory = (template_values.filled_copy()/'inventories/servers.yml').read_text()
         production_key = inventory.split('production_ssh_public_key: ', 1)[1].split('\n', 1)[0].split()[1]
         for name in ('allow_exactly_the_allowed_laptops_ssh_keys', 'allow_the_allowed_laptops_ssh_keys_for_the_coding_agent'):
             with self.subTest(task=name):

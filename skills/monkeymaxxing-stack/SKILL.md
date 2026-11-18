@@ -144,10 +144,12 @@ In every reply:
   account; I'll say when." Reason: in a test run the terminal showed a new
   prompt after five quiet minutes, with no word in the chat. Before you
   say it, check that the settings files the next step reads hold no
-  template example value, such as `example-systems-backups` or
-  `example.com`: `grep -nE '^[^#]*example' mmx_project_settings.yml
-  inventories/servers.yml` lists them, outside comments. Fill each one
-  that the next step reads before you say it. Reason: in a newcomer test run,
+  value still to fill: the template leaves each value only the setup can
+  know empty, with the comment `# the setup fills it: chapter N`, and
+  `grep -n 'the setup fills it' mmx_project_settings.yml
+  inventories/servers.yml` lists them. Fill each one that the next step
+  reads before you say it, replacing the whole line, comment included.
+  Reason: in a newcomer test run,
   `vars.backups.production_bucket` was still `example-systems-backups`,
   and the person's terminal showed a stop while the chat said "look for
   the Cloudflare screen".

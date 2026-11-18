@@ -101,11 +101,17 @@ after the person approves the price:
    every 20 seconds, and print each try's result.
 6. Before the first MMX run on a new VPS, such as the systems desk's
    bootstrap, wait for the server's own package updates: over that
-   login, run `cloud-init status --wait`, then wait until
+   login, run `timeout 5m cloud-init status --wait`, then wait until
    `systemctl is-active apt-daily.service apt-daily-upgrade.service`
-   shows neither as `active` or `activating`, for at most 10 minutes, and
+   shows neither as `active` or `activating`, for at most 5 minutes, and
    say in one line that the server still installs its own updates. Reason: a fresh VPS's `unattended-upgrades` held the package
    lock, and the bootstrap failed once on it (a real VPS, 2026-11-17).
+   Bound each wait, and carry on when it ends: on a rebuilt VPS,
+   `cloud-init status --wait` without `timeout` did not end within 15
+   minutes, and the person waited with no word (a newcomer test run,
+   2026-11-18). Never wait on `unattended-upgrades.service`: it is a
+   service that stays `active` all the time, so a wait on it ends only at
+   its bound. The bootstrap's own update step waits the same way.
 
 **The desk stays outside production's location,** so a production
 outage leaves the team's tools working. When the desk's location has no

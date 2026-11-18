@@ -19,6 +19,10 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1] / 'skills/monkeymaxxing-stack/systems_repository_template'
 PROCEDURE = (T / 'operating_procedures/restore_an_uploaded_file.md').read_text()
@@ -115,6 +119,7 @@ class ThePlaybooksAsWritten(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary) / 'systems'
             shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(root)
             (root / 'one_time_playbooks').mkdir(exist_ok=True)
             for name, text in (('2026-11-03_restore_all_uploaded_files_of_shop_on_util01', WHOLE_APP),
                                ('2026-11-03_restore_uploaded_files_of_shop_on_util01', LISTED)):

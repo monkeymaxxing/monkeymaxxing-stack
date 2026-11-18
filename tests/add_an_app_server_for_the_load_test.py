@@ -31,6 +31,9 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import template_values  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import replace_failed_servers_test as replacement  # noqa: E402
 
 T = replacement.T
@@ -273,6 +276,7 @@ class DatabaseConnectionsPerWorkerProcessIsChecked(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)/'systems'
             shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
+            template_values.fill_the_values_the_setup_fills(root)
             if line is not None:
                 settings = root/'mmx_project_settings.yml'
                 text = settings.read_text()
