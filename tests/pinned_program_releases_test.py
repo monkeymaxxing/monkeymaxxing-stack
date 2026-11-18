@@ -267,7 +267,7 @@ class PinnedProgramReleases(unittest.TestCase):
 
     def test_a_failed_request_is_tried_again_in_the_same_run(self):
         code, output = self.run_script(self.check('mmx'), {'monkeymaxxing/mmx': [
-            (502, 'Bad gateway'), release('v0.2.0', 'monkeymaxxing/mmx')]})
+            (502, 'Bad gateway'), release('v99.0.0', 'monkeymaxxing/mmx')]})
         self.assertEqual(code, 1, output)
         self.assertEqual(StandInGitHub.requests['monkeymaxxing/mmx'], 2)
 
