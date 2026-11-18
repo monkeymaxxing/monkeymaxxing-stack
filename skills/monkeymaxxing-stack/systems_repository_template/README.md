@@ -341,7 +341,7 @@ history.
 
 Two kinds of settings live outside this repository: the outside
 companies' settings, such as your DNS records at Cloudflare, and each
-person's own Pushover contact method in MMHotline, which your coding agent adds from the person's own Pushover user key.
+person's own Pushover contact method in MMHotline, which each person adds with their own Pushover user key on MMHotline's Contact methods page.
 
 ## Operating links
 

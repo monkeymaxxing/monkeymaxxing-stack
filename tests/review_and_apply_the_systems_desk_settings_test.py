@@ -224,6 +224,36 @@ class Review(unittest.TestCase):
         self.assertTrue(self.review(new, 'YES')[0])
         self.assertEqual((self.record/'desk_run_view').read_text().split('\n'), new)
 
+    def test_a_long_change_on_a_terminal_is_shown_without_a_pager_and_the_question_comes_last(self):
+        """A pager once hid the question behind its own prompt."""
+        old = ['Task a on desk01: shell, ready', '  shell.script: "true"']
+        new = ['Task a on desk01: shell, ready'] + ['  shell.script: "line %d"' % number for number in range(200)]
+        self.review(old, 'yes')
+        terminal = io.StringIO()
+        terminal.isatty = lambda: True
+        shown = []
+
+        def ask(question):
+            shown.append(terminal.getvalue())
+            return 'no'
+        with patch.object(DESK_REVIEW, 'ask_the_person', side_effect=ask), \
+                patch.object(DESK_REVIEW.subprocess, 'run', side_effect=AssertionError('no pager')), \
+                contextlib.redirect_stdout(terminal):
+            self.assertFalse(DESK_REVIEW.review(new, 'abc1234'))
+        self.assertIn('shell.script: "line 199"', shown[0])
+        self.assertTrue(shown[0].rstrip().endswith('Scroll up to read every change.'))
+
+    def test_the_first_review_after_the_bootstrap_says_first_what_it_does(self):
+        old = ['Task a on desk01: shell, ready', '  shell.script: "true"']
+        new = ['Task a on desk01: shell, ready', '  shell.script: "false"']
+        with patch.object(os, 'chown'):
+            DESK_REVIEW.write_record(old, 'abc1234, recorded by the bootstrap', [])
+        output = self.review(new, '')[1]
+        self.assertTrue(output.startswith('This is your first systems desk review.'))
+        with patch.object(os, 'chown'):
+            DESK_REVIEW.write_record(old, 'abc1234', [])
+        self.assertNotIn('first systems desk review', self.review(new, '')[1])
+
 
     def test_the_keys_the_lock_out_button_lets_in_are_shown_and_recorded(self):
         """The record is what the lock-out button compares with, so the systems desk review shows

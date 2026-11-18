@@ -40,7 +40,7 @@ each term. Pushover is the push app that puts the alerts on the phone.
    **Check:** step 4's test alert checks this step, because only a phone
    signed in to the person's account receives the test.
 2. **Allow alerts to sound in Silent Mode** (Critical Alerts on iOS), as
-   [chapter 8 (check that alerts reach your phone and backups restore)](../initial_setup/08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-each-person-on-call-signs-in-and-adds-a-phone)
+   [chapter 8 (check that alerts reach your phone and backups restore)](../initial_setup/08_check_that_alerts_reach_your_phone_and_backups_restore.md#part-2-phone-alerts)
    describes for the first phone.
    **Check:** step 5's test SOS rings the phone in Silent Mode. Step 5 runs
    only when the person is on call now. MMHotline's dashboard shows who
@@ -174,10 +174,10 @@ Keep that login open until step 4.
   trial.
 - **If step 4's test alert never arrives on the new phone:** check that
   the new phone is signed in to the team's Pushover account, with the login
-  from the password manager. Then remove the person's
-  Pushover contact method (`sudo mmhotline contact-methods remove
-  --contact-method-id ID`) and add it again as chapter 8, step 9 shows,
-  and send the test again.
+  from the password manager. Then the person removes their
+  Pushover contact method on its card on MMHotline's Contact methods page,
+  and adds it again there as chapter 8, step 9 shows, and you send the
+  test again.
   Reason: the contact method holds the Pushover user key, and a new
   contact method makes MMHotline send to the account as it is now.
 - **If the person is not on call now,** skip the test SOS in step 5 of

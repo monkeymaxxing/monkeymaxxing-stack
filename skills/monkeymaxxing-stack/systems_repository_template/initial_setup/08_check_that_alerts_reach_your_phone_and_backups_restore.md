@@ -25,7 +25,8 @@ tells customers about a problem, gets its settings and a test notice.
 
 **Who acts:** you, the coding agent, write the settings, run MMX through
 the desk, and run every test. The person makes the outside accounts, types
-each secret at a hidden prompt on the desk, and presses Acknowledge on the
+each secret at a hidden prompt on the desk, pastes their own Pushover user
+key on MMHotline's Contact methods page, and presses Acknowledge on the
 phone.
 
 **Tell the person when the chapter starts,** in the first part of the setup:
@@ -148,7 +149,8 @@ This part runs in the first part of the setup. The person does nothing.
 ## Part 2: Phone alerts
 
 This part is the alerts part of the setup. The person makes a Pushover account,
-types two keys on the desk, and presses Acknowledge twice on the phone.
+types two keys on the desk, pastes their own user key on MMHotline's
+Contact methods page, and presses Acknowledge twice on the phone.
 You do the rest. It takes about 15 minutes.
 
 4. **Who is on call.** Read `people` and
@@ -199,26 +201,16 @@ You do the rest. It takes about 15 minutes.
      4. Open  https://pushover.net/apps/build.  Name it  Example alerts.  Press  Create Application.
      5. Open  https://pushover.net/groups.  Make a group named  Example on call,  and add yourself.
 
-   Then paste your own user key here, in the chat.
-   It is at the top of  https://pushover.net, under "Your User Key".
-   It is not the group's key. It is not a secret.
-
-   Optional: to get alerts on one device only, such as your phone and not
-   your tablet, also tell me that device's name. It is listed at
-   https://pushover.net under "Your Devices". Leave it out to get alerts
-   on every device on your account.
+   Say "done" when these five are done. Later, you add your phone to
+   MMHotline yourself, on its own page. I show you how.
    ```
 
-   Each other person on call does steps 1 to 3 on their own phone, and
-   sends you their own user key, and a device name if they want one; the
-   person adds each one to the group.
-   A delivery group's key lets the hub-outage alerters wake everyone in
-   it at once, when `util01` goes silent. MMHotline needs each person's
-   own user key instead, because an acknowledgement from a group key
-   cannot claim an incident.
+   Each other person on call does steps 1 to 3 on their own phone, and the
+   person adds each one to the group. A delivery group's key lets the
+   hub-outage alerters wake everyone in it at once, when `util01` goes
+   silent. Step 9 adds each person's own user key to MMHotline.
 
-   **Check:** you have a user key of 30 letters and digits for each
-   person on call, and none of them is the group's key.
+   **Check:** the person says the five steps are done.
 
 6. **Add Pushover and the MMHotline-down alarm to the settings.** Copy two
    sections back from the Stack template's `mmhotline_settings.yml`
@@ -290,41 +282,80 @@ You do the rest. It takes about 15 minutes.
    `mmhotline settings show` on `util01` shows the `sending_services` and
    `mmhotline_down_alarm` parts applied.
 
-9. **Add each phone to MMHotline.** For each person on call, add a
-   Pushover contact method with their own user key. The key reaches
-   `mmhotline` on `util01` on standard input, never on its command line. Add `--pushover-device-name NAME`
-   only for a person who named one device; leave it out to send to every
-   device on the person's account:
+9. **Each person adds their own phone to MMHotline.** Each person on call
+   pastes their own Pushover user key on MMHotline's Contact methods page.
+   The page asks for it in its own field, so the key never passes through
+   the chat. Reason: a user key, with any application token, reaches every
+   device on that person's Pushover account, so it is kept as private as
+   a password.
 
-   ```sh
-   # On the laptop. USER_KEY: the person's own Pushover user key, never the group's key. EMAIL: the person's sign-in address in people.
-   ssh desk01-agent 'cd systems_repository && printf "%s\n" USER_KEY | ssh -F ssh/config root@10.20.0.1 "mmhotline contact-methods add --sign-in-email-address EMAIL --contact-method-type pushover_notification --pushover-user-key-file -"'
-   # With one device (up to 25 letters, digits, _ and -), add to the end of the mmhotline command: --pushover-device-name NAME
+   **Ask the person:**
+
+   ```text
+   Add your phone to MMHotline
+
+   What this is for:
+     MMHotline needs your own Pushover user key to wake your phone.
+
+   Do this now:
+     1. Open  https://ops.example.com/contact-methods.  Sign in with your
+        company email address and the code it emails you.
+     2. Open  https://pushover.net  in another tab.  Copy "Your User Key"
+        from the top of the page.  Not the group's key.
+     3. Under  Add Pushover notification,  paste it into  Pushover user key.
+     4. Optional: to get alerts on one device only, such as your phone and
+        not your tablet, type that device's name in  Pushover device name.
+        The names are at  https://pushover.net  under "Your Devices".
+        Leave it empty to get alerts on every device.
+     5. Press  Add Pushover notification.
+
+   Your phone then shows a quiet notification, "MMHotline can reach this
+   phone". Nothing to do.
+
+   I carry on by myself when your phone is added. You need not tell me.
    ```
 
-   You add the contact method yourself. Do not send the person to
-   MMHotline's Contact methods page for it.
+   Each other person on call does the same, signed in with their own
+   address. Send them the steps above.
 
-   MMHotline refuses a device name that Pushover does not list for the
-   key, and names the devices Pushover lists. With a group key, MMHotline
-   saves the contact method and prints a warning in capitals: use the
-   person's own user key instead (remove the contact method, then add it
-   again).
+   MMHotline needs each person's own user key, never the group's key,
+   because an acknowledgement from a group key cannot claim an incident.
+   With a group key, the page saves the contact method and warns in
+   capitals: the person removes the contact method on its card and adds it
+   again with their own user key. MMHotline refuses a device name that
+   Pushover does not list for the key, and names the devices Pushover
+   lists.
+
+   Never ask for the user key in the chat, and do not add the contact
+   method from the server with `mmhotline contact-methods add` or
+   `mmhotline connect-pushover`: the first needs the key, and the second
+   also writes the application token into
+   `/etc/mmhotline/mmhotline_settings.yml`, which `every_server` writes
+   from the vault.
+
+   Learn that a phone is added from MMHotline, which shows only the last
+   four characters of each user key:
+
+   ```sh
+   # On the laptop:
+   ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 mmhotline contact-methods list --json'
+   ```
+
+   Wait on it as
+   [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
+   says: start a background command that runs it every 10 seconds, for at
+   most an hour, until `contact_methods` holds a `pushover_notification`
+   for each person on call (`sign_in_email_address`), then end your reply
+   with the screen above.
 
    Saving the contact method sends that phone a quiet notification titled
-   "MMHotline can reach this phone". It needs no acknowledgement. The
-   command ends with the line "THIS PHONE HAS NOT PROVED IT WAKES YOU YET.
-   RUN: sudo mmhotline incidents send-test-sos --sign-in-email-address
-   EMAIL"; step 10 does that.
+   "MMHotline can reach this phone". It needs no acknowledgement. Until
+   step 10, its `pushover_emergency_test.explanation` says
+   `Emergency test: not yet acknowledged.`
 
-   **Tell the person first:**
-
-   > Your phone shows a quiet Pushover notification, "MMHotline can reach this phone". Nothing to do.
-
-   **Check:** `mmhotline contact-methods list` on `util01` says
-   `Last test message: accepted` for each person, and the person says the
-   notification arrived. `contact-methods list` shows only the last four
-   characters of each user key.
+   **Check:** `contact-methods list` shows a `pushover_notification` for
+   each person on call, with `last_test_message.delivery_state`
+   `accepted`, and the person says the notification arrived.
 
 10. **The test SOS.** MMHotline sends itself a test SOS and wakes one
     person's phone as a real SOS does, whether or not that person is on
@@ -357,8 +388,8 @@ You do the rest. It takes about 15 minutes.
       Pushover group key. The command stops at once and the test stays
       open. Remove that person's contact method (`mmhotline contact-methods
       remove --contact-method-id ID`, with the ID from `contact-methods
-      list`), add it again with the person's own user key (step 9), and run
-      the test again.
+      list`), ask the person to add it again with their own user key on the
+      Contact methods page (step 9), and run the test again.
 
     **Ask the person after,** with `test_sos.incident_page_url`:
 
@@ -668,8 +699,8 @@ command on the desk, looks at the page, and resolves one test notice.
   the test stays open. Check Pushover on the phone and its critical
   alerts, then run the command again.
 - **The acknowledgement did not claim the test** (step 10): the contact
-  method holds a Pushover group key. Add it again with the person's own
-  user key.
+  method holds a Pushover group key. The person adds it again with their
+  own user key, on the Contact methods page (step 9).
 - **Resolving the test notice from the desk fails** (step 19): resolve it
   from `util01` at once.
 

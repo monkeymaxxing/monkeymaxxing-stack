@@ -472,7 +472,9 @@ repository's name, including paths inside quoted SSH commands.
    ```
 
    doubleshell reads the wg-quick format. No laptop VPN interface or
-   service starts. Add the desk's entries to `~/.ssh/config`. Each entry
+   service starts. When the desk does not answer on port 443, try port
+   51820, as [If something is different](#if-something-is-different)
+   says. Add the desk's entries to `~/.ssh/config`. Each entry
    is one short name the person or you type:
 
    ```sshconfig
@@ -802,6 +804,14 @@ already, so storing the passphrase inside the vault exposes nothing.
   console to decide. Reason: a new server that hangs at its first boot is
   rare and costs nothing to replace, and the person cannot judge a boot
   console.
+- **The systems desk does not answer the laptop** (SSH to `desk01` times
+  out, while the provider shows the desk running): some networks block
+  UDP 443. Before you create the desk again, change the port in
+  `Endpoint` in `~/.config/doubleshell/desk01.conf` from `443` to
+  `51820`, the port that servers and desks use (`vars.wireguard_listen_port`),
+  and try again. The desk answers on both ports. When 51820 works, keep
+  it, and tell the person in one line that their network blocks UDP 443,
+  so the laptop uses the desk's second port.
 - **A provider whose guide gives the scripts whole** ("The provider
   account", step 3): every guide except Hetzner Cloud's. There is no tool
   to install: the scripts send each request, sign it, or make its token,

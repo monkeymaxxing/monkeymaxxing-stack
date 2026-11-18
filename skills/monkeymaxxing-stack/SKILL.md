@@ -502,8 +502,8 @@ exception with its rule, and give its reason.
    buckets, live in the companies' accounts. The companies' resources are
    set up once (idea 4). Each person's contact methods, such as a Pushover
    user key, live only in MMHotline's database, because MMHotline's settings
-   file cannot hold them. The coding agent adds them with
-   `mmhotline contact-methods add`, from the person's own Pushover user key.
+   file cannot hold them. Each person adds their own Pushover user key on
+   MMHotline's Contact methods page, never in the chat.
 2. **The vault holds every secret the servers use.** Never a secret in
    another file of the repository, a commit message, an image, a log, or
    this conversation. What a program makes and keeps for itself, such as

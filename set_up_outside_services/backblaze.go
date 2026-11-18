@@ -465,7 +465,7 @@ func runBackblaze(e *environment, arguments []string) error {
 	if err := e.deleteOldKeys(oldKeys, "backblaze", true, client.deleteKey, b2KeysPage); err != nil {
 		return err
 	}
-	e.say(sayTellTheCodingAgent)
+	e.say(sayTheCodingAgentCarriesOn)
 	if settings.uploadsAreBackedUp() && len(settings.Vars.Backups.UploadsBackupRunsOn) == 0 {
 		e.say("The uploads' bucket and key are ready, so your coding agent can now set vars.backups.uploads_backup_runs_on to [util_server].")
 	}

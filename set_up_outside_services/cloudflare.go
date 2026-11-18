@@ -566,7 +566,7 @@ func runCloudflare(e *environment, arguments []string) error {
 	}
 	linkDeleted = true
 	e.deleteTheLinkToken(link)
-	e.say(sayTellTheCodingAgent)
+	e.say(sayTheCodingAgentCarriesOn)
 	return nil
 }
 

@@ -343,7 +343,7 @@ func (e *environment) repositoryHas(name string) bool {
 	return err == nil
 }
 
-const sayTellTheCodingAgent = "Tell your coding agent this command finished. It checks the result with mmx secrets usage, which lists names only."
+const sayTheCodingAgentCarriesOn = "This command finished. Your coding agent carries on by itself: it checks the result with mmx secrets usage, which lists names only."
 
 // handleInterrupts lets Ctrl-C stop the command at once, except between a
 // provider issuing a key and the vault saving it. There the command first

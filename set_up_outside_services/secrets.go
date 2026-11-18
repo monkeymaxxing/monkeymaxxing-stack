@@ -521,7 +521,7 @@ func runSecrets(e *environment, arguments []string) error {
 		}
 		e.say("Tell your coding agent to set credential_type: %s under triage_agent in mmhotline_settings.yml. That setting is not a secret, so your coding agent writes it.", choice.credentialType)
 	}
-	e.say(sayTellTheCodingAgent)
+	e.say(sayTheCodingAgentCarriesOn)
 	return nil
 }
 

@@ -819,6 +819,8 @@ refuses a removed database server's name again. WireGuard uses interface
 `wg0`, listening on UDP `vars.wireguard_listen_port` (51820; a port above 1024, because AppArmor on newer
 releases refuses a lower one for `wg-quick`), with the inventory's `vars.wireguard_network`.
 Laptops and provider firewalls keep UDP 443: `wireguard-udp-443-redirect.service` redirects it.
+Some networks block UDP 443: when the desk does not answer the laptop, change the port in `Endpoint` in
+`~/.config/doubleshell/desk01.conf` to 51820 before you create the desk again; the desk answers on both.
 Servers and desks reach each other on `Endpoint = <public_ipv4_address>:51820`, not 443, and a second table
 in that unit skips connection tracking for that traffic: a redirected flow stalled a peer for 12+ minutes after a reload.
 The WireGuard network must not overlap a network a

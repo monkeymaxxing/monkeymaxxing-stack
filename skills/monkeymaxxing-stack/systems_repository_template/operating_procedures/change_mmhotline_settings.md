@@ -25,12 +25,15 @@ terminal, and adds and changes the person's own contact methods.
   at the release tag for `vars.stack_software.mmhotline.version` in
   `mmx_project_settings.yml`.
 - **Contact methods are not in this file.** MMHotline's settings file
-  cannot hold them. The coding agent adds and changes them with
-  `mmhotline contact-methods add` and `change` on `util01`, as chapter 8,
-  step 9 shows, from the person's own Pushover user key (never a group
-  key). To send to one device only, add `--pushover-device-name NAME`.
-  MMHotline sends a quiet test notification at once, "MMHotline can reach
-  this phone". It needs no acknowledgement.
+  cannot hold them. Each person adds and changes their own on MMHotline's
+  Contact methods page, `https://ops.example.com/contact-methods`, as
+  chapter 8, step 9 shows, with their own Pushover user key (never a group
+  key), and a device name to send to one device only. The key never
+  passes through the chat. The coding agent reads them with
+  `mmhotline contact-methods list --json` on `util01`, which shows only the
+  last four characters of each key. MMHotline sends a quiet test
+  notification at once, "MMHotline can reach this phone". It needs no
+  acknowledgement.
 - **A Pushover secret is a vault key here.** Teams that edit MMHotline's
   file by hand use `mmhotline settings set-secret`. The Stack does not: the
   vault holds `pushover_application_token`, and MMX renders it into the

@@ -42,7 +42,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import socket
 import subprocess
 import sys
@@ -397,17 +396,15 @@ def ask_the_person(question):
 
 
 def show(lines):
+    """Writes the changes straight to the terminal, never through a pager,
+    so the question that follows is the last thing on the screen. Reason: a
+    pager hid the question behind its own prompt, and the person scrolls
+    back in their terminal to read a long change."""
     if sys.stdout.isatty():
         colors = {'@': '36', '-': '31', '+': '32'}
         lines = ['\033[%sm%s\033[0m' % (colors[line[0]], line) if line[:1] in colors else line for line in lines]
-    text = '\n'.join(lines) + '\n'
-    rows = shutil.get_terminal_size((80, 24)).lines
-    if sys.stdout.isatty() and len(lines) > rows - 8 and shutil.which('less'):
-        # LESSSECURE turns off less's shell commands and file opening.
-        subprocess.run(['less', '-R', '-F', '-X'], input=text, text=True, env={'LESSSECURE': '1', 'PATH': '/usr/bin:/bin'})
-    else:
-        sys.stdout.write(text)
-        sys.stdout.flush()
+    sys.stdout.write('\n'.join(lines) + '\n')
+    sys.stdout.flush()
 
 
 def review(view, commit):
@@ -423,6 +420,10 @@ def review(view, commit):
         answer = ask_the_person('Type yes to run the systems desk playbook and record it as reviewed, or press Enter to stop: ')
         return answer.lower() == 'yes'
     diff = changes(old, view)
+    if 'recorded by the bootstrap' in old_commit:
+        print('This is your first systems desk review. It sets up your systems desk from your settings as they are now,')
+        print('in place of the ones the setup recorded when it made the systems desk. The changes below are the details.')
+        print()
     print('What the systems desk playbook does changed since your last systems desk review (%s).' % old_commit)
     print('This systems desk review runs as root on this systems desk, where your production key, phone-code secret and tokens are.')
     print('Your coding agent, your teammates and util01 can push changes to it, so read each change before you agree;')
@@ -433,8 +434,9 @@ def review(view, commit):
     show(diff)
     removed = sum(1 for line in diff if line.startswith('- '))
     added = sum(1 for line in diff if line.startswith('+ '))
+    print()
     print('%d lines removed and %d added. If a change is not one you expect, stop and ask your team' % (removed, added))
-    print('or your coding agent what it is for, before you run it.')
+    print('or your coding agent what it is for, before you run it. Scroll up to read every change.')
     answer = ask_the_person('Type yes to run the changed systems desk playbook as root, or press Enter to stop: ')
     return answer.lower() == 'yes'
 
