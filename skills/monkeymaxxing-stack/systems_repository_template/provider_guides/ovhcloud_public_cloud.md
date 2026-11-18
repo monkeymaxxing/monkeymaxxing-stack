@@ -40,9 +40,10 @@ Two things to know about a VPS:
 **Stock:** the public, credential-free
 `GET https://api.us.ovhcloud.com/1.0/vps/order/rule/datacenter?ovhSubsidiary=US&planCode=PLAN`
 lists each datacenter as available or out of stock for a VPS plan; the US
-has two, `US-EAST-VA` and `US-WEST-OR`. Chapter 1 reads it before the
-price screen, as its [stock line](../initial_setup/01_answer_two_questions.md#steps)
-says, and shows only the VPS plans that a datacenter can sell now.
+has two, `US-EAST-VA` and `US-WEST-OR`. Chapter 1 plans only with VPS
+plans that a datacenter can sell now. Chapter 3 reads it again, for the
+desk and every server of the plan, before its one price screen, as
+[the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says.
 
 How you make a VPS, through the API proxy with the person's credential and
 after the person approves the price:
@@ -107,7 +108,7 @@ outage leaves the team's tools working. When the desk's location has no
 VPS in stock, offer the nearest other datacenter with VPS stock that is
 not production's. Only when none has, offer a Public Cloud `d2-4` there,
 billed by the hour, and say plainly why and what it costs a month against
-the VPS price on chapter 1's screen; move it to a VPS with
+the VPS price on chapter 3's price screen; move it to a VPS with
 [Rebuild a systems desk](../operating_procedures/rebuild_a_systems_desk.md)
 once stock returns. Never put the desk in production's location to save
 money.

@@ -486,8 +486,8 @@ chapter.
     follow [Add an app server](../operating_procedures/add_an_app_server.md)
     for `app002`, with "The second app server's test" at its end, then
     [Add staging01](../operating_procedures/add_staging01.md). The person
-    approved both servers' prices with "go" in chapter 1 (answer two
-    questions). A check through a
+    approved both servers' prices with a yes on
+    [chapter 3's price screen](03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once). A check through a
     public host name, such as the second app server's test and the
     staging Access check, waits until the domain shows "Active", at the
     latest until chapter 9 (go live). The smallest system skips this step.

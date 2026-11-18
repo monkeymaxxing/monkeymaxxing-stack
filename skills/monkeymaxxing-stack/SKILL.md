@@ -90,13 +90,36 @@ In every reply:
   carry on. An agent with no background commands ends its turn with the
   screen and asks the person to say "done" when the person's window
   says so.
+- **Every background wait has a time limit, and its end gets a reply.**
+  Give each wait its bound: `--at-most-minutes N` on the Stack's wait
+  commands, or `timeout` around a loop of your own, such as
+  `timeout 10m bash -c 'until CHECK; do sleep 10; done'`. Never start an
+  `until` loop with no bound. The command's end wakes you whatever the
+  result: success, failure or the bound. Then say the result in a reply
+  that ends your turn, also when it is "still not done". Reason: in a
+  full newcomer test run, an unbounded background loop never ended, and
+  the person waited 8 minutes for a site that was already live.
 - **Long work.** Before any stretch of work longer than about a minute,
   end a reply with one line: what happens now, about how long, and that
   the person need do nothing, such as "Now: I am setting up your servers,
   about 15 minutes. Next for you: nothing. I tell you when it is done."
   Run long work as background commands, with your turn ended, where you
   can. Notes between tool calls are collapsed, so never rely on them to
-  tell the person anything.
+  tell the person anything. While a background job runs, your reply's
+  last line says when you next speak: "I'll tell you when it's done, in
+  about 12 minutes." Reason: the person then never has to ask whether
+  you are still working.
+- **Say the person's next step before it appears in their terminal.**
+  When the person's terminal window will show the next thing to do, such
+  as the setup window's next account, say so in the reply before, with
+  about when: "In about 5 minutes your terminal asks for your Cloudflare
+  account; I'll say when." Reason: in a test run the terminal showed a new
+  prompt after five quiet minutes, with no word in the chat.
+- **Good news the moment it is proven.** When a result the person waits
+  for is proven, such as the site answering at its address, say it at
+  once, as its own screen that ends your turn. Never hold it back for a
+  later step, such as MMWatchdog's first check; start that step in the
+  background first, and report it afterwards.
 - **Now and next, at the end of every reply.** The last lines say what
   you are doing now and what the person does next, such as "Now: I am
   building your systems desk, about 10 minutes. Next for you: nothing. I
@@ -117,7 +140,9 @@ In every reply:
   Claude Code shows each edit and command by itself: before a burst of
   them, say in one line what they are and that the person need not read
   them, such as "I am writing your settings now; you need not read the
-  edits."
+  edits." The same holds for files and scripts you write for your own
+  use: "I am writing five small scripts that talk to Hetzner for me;
+  nothing in them needs reading."
 - **The person sees each tool call:** its command, and its description in
   Claude Code's permission question. Write each description as a plain
   sentence for the person, such as "Check that your systems repository's
@@ -139,6 +164,9 @@ In every reply:
   and use it from then on.
 - Ask before choosing a name the person will see, such as the app's
   address. Recommend the domain itself when the person named a domain.
+  When you must change a name the person already saw, say why in one
+  line: "Your alerts page is `ops2.example.com`, because `ops` was already
+  taken at Cloudflare."
 - When you list your changes, name every file that changed or is new.
 - Say "systems desk", never a bare "desk", and the first time in a reply
   say what it is in the same sentence: "your systems desk, a small separate
@@ -153,7 +181,9 @@ In every reply:
   harmed, and what happens next. Never a wall of technical lines. Reason:
   Claude Code marks each failed command, the person cannot read the
   technical lines, and a failure with no word, or a retry with no reason,
-  makes the person fear the worst.
+  makes the person fear the worst. The rule covers a background
+  command's result too: the reply that reports a failed background
+  command says what failed and whether it matters, before any retry.
 - Never skip a screen or approval you promised, and never promise a later
   approval that the chapter does not give. Reason: a promise that
   does not come makes the person lose trust.

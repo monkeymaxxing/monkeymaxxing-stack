@@ -47,46 +47,55 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
 
    Use each item's `verification` in
    [monkeymaxxing_stack_checklist.yml](../monkeymaxxing_stack_checklist.yml)
-   before marking the item done. Mark `tunnel_and_the_public_host_name`, then
-   `cloudflare_caches_what_the_app_marks` and
-   `mmwatchdog_with_the_default_checks`.
-   MMWatchdog's fleet hub on `util01` checks each app at the app's public host name,
-   but only after this step turns the checks on. Once every health URL
-   answers, set `public_site_checks_run: true` in `mmx_project_settings.yml`,
-   commit, push, and run `every_server` on `util01` (the
-   [Making a change](../AGENTS.md#making-a-change) steps). Then
-   `public_sites` exists on `util01`, and an app that stops answering sends
-   an `sos` alert. The alert wakes the person on call only after the alerts
-   part of the setup.
+   before marking the item done. Mark `tunnel_and_the_public_host_name`
+   and `cloudflare_caches_what_the_app_marks`.
 
    **Tell the person:** no message, because step 2's screen gives the
-   result.
+   result at once.
 
-   **Check:** each health URL answers HTTP 200 through Cloudflare, each app
-   server has a healthy connector, and `public_sites` exists on `util01`.
+   **Check:** each health URL answers HTTP 200 through Cloudflare, and
+   each app server has a healthy connector.
 
-2. **The app is live: tell the person, and ask for the first release.**
-   Show the screen, with the checks that passed:
+2. **The app is live: tell the person at once.** The moment step 1's
+   check passes, the site is live, and the person hears it in the reply
+   that ends your turn. Never hold the screen back for a later step, such
+   as the `every_server` run below or MMWatchdog's first check of the
+   site. Before the screen, only start the next work, in a few seconds
+   each: set `public_site_checks_run: true` in `mmx_project_settings.yml`,
+   commit, publish (the [Making a change](../AGENTS.md#making-a-change)
+   steps), start the `every_server` run on `util01` as a desk job, and
+   start its wait as a background command with its bound, such as
+   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 30`. Then
+   end your reply with the screen, with no tool call after it:
 
    ```text
-   Your app is live:  https://example.com
+   Your app is live at https://example.com.
 
-   What I checked:
-     - The site answers, through Cloudflare.
-     - Backups run, and I restored one to a test server.
-     - Every server reports in.
+   Checked just now: it answered through Cloudflare, from app001.
 
    YOUR SITE HAS NO PHONE ALERTS YET.  Say "set up alerts" to add them.  It takes about 15 minutes.
 
-   I am putting your app's newest version live now.
+   Now: I am turning on the checks of your site, then putting your app's newest version live.
+   Next for you: nothing.  I'll tell you when it's done, in about 15 minutes.
    ```
 
-   With `first_release_waits_for_a_persons_approval` set to `true`, the
-   last line is instead: Say "release" to put your app's newest version
-   live.
+   Name each app's address and the app servers that answered. With
+   `first_release_waits_for_a_persons_approval` set to `true`, the last
+   line is instead: Say "release" to put your app's newest version live.
+   The checks still turn on meanwhile.
 
-   Without the setting, go on to step 3 at once. With it, the person's
-   "release" is the approval that
+   When the wait ends, say the result in one line. `public_sites` then
+   exists on `util01`: MMWatchdog's fleet hub on `util01` checks each app
+   at its public host name, and an app that stops answering sends an
+   `sos` alert. The alert wakes the person on call only after the alerts
+   part of the setup. Mark `mmwatchdog_with_the_default_checks` once
+   `mmwatchdog fleet` on `util01` shows the public check. To wait for that
+   first check, use a bounded wait, such as
+   `timeout 10m bash -c 'until CHECK; do sleep 15; done'`, never an
+   unbounded loop.
+
+   Without the setting, go on to step 3 once the run ended. With it, the
+   person's "release" is the approval that
    [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release)
    asks for. Ask nothing else about the first release. Check CI yourself:
    the `ci-report` branch of the app's repository, as chapter 2's step 7
@@ -95,8 +104,9 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    when it cannot tell (exit 3), `deploy`'s image pull proves the image. Never ask
    the person whether CI is green.
 
-   **Check:** with the setting, the person said "release"; without it,
-   step 3 started.
+   **Check:** the screen ended the reply right after step 1's check, and
+   `public_sites` exists on `util01`; with the setting, the person said
+   "release"; without it, step 3 started.
 
 3. **The first release,** by [A release](../operating_procedures/deploy_and_roll_back_an_app_release.md#a-release),
    follows the agent-run deployment used for every later release.

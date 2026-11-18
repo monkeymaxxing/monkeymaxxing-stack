@@ -352,8 +352,8 @@ because the Stack's server binaries and container images are x86-64, also with a
 **Stock:** no public route; DigitalOcean's API needs the key. With the key, before any order,
 `GET sizes?per_page=200` gives each size's `available` and the `regions` that sell it now, and
 `GET regions` each region's `available`: on the laptop with the key file in chapter 3, and through
-`http://127.0.0.1:8081/` on the desk. Chapter 1's price screen says "price from DigitalOcean's list; stock
-checked before ordering", as its [stock line](../initial_setup/01_answer_two_questions.md#steps) says.
+`http://127.0.0.1:8081/` on the desk. Chapter 3 reads it, for the desk and every server of the plan, before its one price screen, as
+[the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says.
 Use the full region slug, such as `ams3`. Basic `s-4vcpu-8gb` for `app001` and
 `s-2vcpu-4gb` for the remaining ordinary roles meet the shared setup's minimums.
 

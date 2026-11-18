@@ -440,8 +440,8 @@ containers.
 **Stock:** the public
 `GET https://api.scaleway.com/instance/v1/zones/ZONE/products/servers/availability`, in `nl-ams-1`,
 `fr-par-1` or `pl-waw-1`, answers without a key (checked 2026-11-18) and gives each type's `availability`,
-such as `available` or `shortage`. Chapter 1 reads it before the price screen, as its
-[stock line](../initial_setup/01_answer_two_questions.md#steps) says. Before creation, read it again through
+such as `available` or `shortage`. Chapter 1 plans with it, and chapter 3 reads it again before its one
+price screen, as [the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says. Before creation, read it again through
 `http://127.0.0.1:8081/` on the desk.
 
 **Prices.** Scaleway's public product catalog gives each type's price per hour, and needs no credential:

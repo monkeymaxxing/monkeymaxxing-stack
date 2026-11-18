@@ -499,6 +499,19 @@ windows that disagree cost the person a refused tool call and a question.
   and say what happened. A question the person types meanwhile reaches
   you at once, because your turn has ended. Never wait a fixed time on
   something you cannot see.
+- **Every background wait has a bound.** Use `--at-most-minutes N` on
+  the wait commands, or `timeout` around a loop of your own, such as
+  `timeout 10m bash -c 'until CHECK; do sleep 10; done'`, never an
+  `until` loop with no bound. Its end wakes you whatever the result, and
+  you say the result in a reply: done, failed, or still waiting. A failed
+  background command gets the same line as any failed command: what
+  failed and whether it matters, before any retry.
+- **Say when you next speak.** While a background job runs, the last
+  line of your reply says when you next speak, such as "I'll tell you
+  when it's done, in about 12 minutes." When the person's next step will
+  appear in their terminal, say so beforehand, and about when: "In about
+  5 minutes your terminal asks for your Cloudflare account; I'll say
+  when."
 - Never ask the person to say "done" for a result your wait reads: the
   key file, `desk-ready`, `wait-for-the-setup`, or a job's exit. Ask for
   "done" only when nothing you can read shows the result, such as a step

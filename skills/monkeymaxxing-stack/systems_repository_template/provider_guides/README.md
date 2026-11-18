@@ -96,8 +96,8 @@ Then the script does six things, in order:
 5. **One line to the person:** `Hetzner accepted the key.`, with the
    provider's name. The script never prints a value.
 6. **It stays open and starts the desk's setup by itself.** After the
-   line, it prints `Leave this window open.  Your coding agent orders your
-   systems desk next.` and waits for the file
+   line, it prints `Leave this window open.  Your coding agent shows you
+   the real price next, and orders your systems desk after your yes.` and waits for the file
    `~/example-setup/desk-ordered`, which your `create-desk01` script makes
    only after the provider accepted the desk's order (chapter 3, step 2 of
    "Create desk01 through WireGuard"). Then it prints `Your systems desk

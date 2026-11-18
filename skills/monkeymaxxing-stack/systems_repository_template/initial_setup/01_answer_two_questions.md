@@ -138,32 +138,22 @@ answers.
      Reason: the sign-in link for the private alerts page, and the
      setup's notices, go to this address, and the new domain has no
      mailbox yet.
-   - **Stock, before the cost:** check that the provider sells each
-     recommended size in the chosen location now: the desk's size in the
-     desk's location, and the servers' sizes in production's. Use the
-     public route that the provider guide's "Stock" line names; it needs
-     no key. Show only what can be ordered now, at its real price. When a
-     recommended size is sold out there, offer the nearest location that
-     has it before any dearer size or product. Never offer a kind of
-     product the person did not ask about, such as a provider's hourly
-     cloud servers in place of its monthly ones, without saying plainly
-     why and what it costs a month against the plan on this screen. When
-     the guide names no public route, the check happens with the key,
-     before any order, in
-     [chapter 3](03_make_your_server_account_and_your_systems_desk.md#the-provider-account)
-     step 3, and the screen's cost line ends with
-     `(price from Hetzner's list; stock checked before ordering)`.
-     Reason: a price for a server that cannot be ordered is a promise that
-     breaks after the person has made the account.
-   - **Cost:** the real price of the desk and each of the three servers,
-     each with its public address, from the provider's prices, as the
-     provider guide says. Before the provider credential exists, read the
-     provider's public price page or public catalog. Name every paid thing
-     across the parts of the setup: the servers, backup storage, and the one-time
-     fee for phone alerts. When you leave a paid thing out, say plainly
-     that it comes later and has a fee. Reason: a paid service that
-     appears in the middle of a part feels like a trick. Chapter 6 reads the prices
-     again with the API.
+   - **Cost, an estimate:** the desk and each of the three servers, each
+     with its public address, from the provider's public price list or
+     public catalog, as the provider guide says, plus backups. Round to
+     one sum, "about €N a month". Name every paid thing across the parts
+     of the setup: the servers, backup storage, and the one-time fee for
+     phone alerts. When you leave a paid thing out, say plainly that it
+     comes later and has a fee. Reason: a paid service that appears in
+     the middle of a part feels like a trick. When the guide names a
+     public stock route, plan with sizes it lists as sellable now. The
+     real price, checked against the provider's stock, comes once, right
+     after the provider key works, in chapter 3's
+     [the real price, approved once](03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once),
+     before anything is bought. Reason: stock changes by the hour, and
+     most providers show it only with the key; in a newcomer test run the
+     cheap sizes sold out between this screen and the order, and €27
+     became €68.
    - **Growth, as money:** from `growth_limits` in the template's
      `mmx_project_settings.yml` and the same prices, work out the most
      the servers may add by themselves without asking the person: for
@@ -190,7 +180,7 @@ answers.
      Password manager:   1Password
      Sign-in email:      alex@gmail.com      (a mailbox you read today)
 
-     Cost:               about €27 a month in all, at first
+     Cost:               about €27 a month, checked against Hetzner's stock before anything is bought
 
    Say "details" to see everything this includes.
    Tell me what to change, or say "go".
@@ -200,9 +190,9 @@ answers.
    screen; a long one hides the lines that matter. Write nothing below
    the screen: no second sign-in email line, and no alerts sentence.
    The cost line is one sum: the systems desk and the three servers, each
-   with its public address, plus backups. When the stock line above
-   applies, add `(price from Hetzner's list; stock checked before
-   ordering)` to it.
+   with its public address, plus backups, and it always ends with
+   "checked against Hetzner's stock before anything is bought", with the
+   provider's name.
 
    **"details"** shows the rest, as one reply that ends your turn, then
    the same question:
@@ -210,8 +200,8 @@ answers.
    ```text
    Everything "go" approves:
 
-     Servers:            about €27 a month at Hetzner  (price from Hetzner's list; stock checked before ordering)
-                         (one line per server with its real price: the systems desk, app001, db01, util01)
+     Servers:            about €27 a month at Hetzner, from Hetzner's price list
+                         (one line per server with its list price: the systems desk, app001, db01, util01)
      Backups:            Backblaze, a few cents a month at first
      Later, phone alerts: Pushover, a one-time fee of about $5 for each phone
      Growth:             your servers may grow by themselves to at most 4 app servers and 2 database servers,
@@ -223,24 +213,21 @@ answers.
      Sign-in email:      from your Git settings; it signs you in to the alerts page and gets the setup's notices
      Tools:              mmx and doubleshell, two small tools in your home folder
 
-   Nothing is bought until chapter 3 orders your systems desk and chapter 6 creates your servers.
-   Your "go" approves those prices.
+   Nothing is bought yet.  Right after you make your Hetzner key, I check what Hetzner has in stock
+   and show you the real monthly price.  Your yes there approves it.
 
    Tell me what to change, or say "go".
    ```
 
    "go" approves everything on both screens, whether or not the person
-   said "details": the
-   prices of the desk and the three servers, the weekly restore drill,
-   the default growth limits in `growth_limits` of
-   `mmx_project_settings.yml`, and the two installs. Chapter 6 states the
-   growth limit's money line again before it creates the servers, and
-   creates them at these prices without asking again. Never promise the
-   person a later price approval. Reason: the chapters make none, and a
-   promise the agent invents is a promise that breaks. When the price or
-   the server type at creation differs from this screen (no stock, a
-   changed price, a different size), stop and ask again with the new
-   number, with the choices that the stock line above names.
+   said "details": the plan (the desk and the three servers), the weekly
+   restore drill, the default growth limits in `growth_limits` of
+   `mmx_project_settings.yml`, and the two installs. It does not approve
+   a price: the person approves the real monthly total once, on chapter
+   3's price screen, and that yes covers the desk and the servers that
+   chapter 6 creates. Promise only that one price screen. Reason: a
+   promise the agent invents is a promise that breaks. Chapter 6 states
+   the growth limit's money line again before it creates the servers.
    When Git's address is empty or a placeholder, the sign-in line reads:
 
    ```text

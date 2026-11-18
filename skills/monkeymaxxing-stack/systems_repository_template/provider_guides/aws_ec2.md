@@ -611,8 +611,8 @@ stock in an Availability Zone.
 **Stock:** no public route; AWS shows it only with the credential, and for certain only at the create. With the
 credential, before any order, `Action=DescribeInstanceTypeOfferings&LocationType=availability-zone` lists the
 Availability Zones that offer a type: on the laptop in chapter 3 with the guide's signed request and the key file,
-and through `http://127.0.0.1:8081/` on the desk. Chapter 1's price screen says "price from AWS's list; stock
-checked before ordering", as its [stock line](../initial_setup/01_answer_two_questions.md#steps) says.
+and through `http://127.0.0.1:8081/` on the desk. Chapter 3 reads it, for the desk and every server of the plan, before its one price screen, as
+[the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says.
 
 ## Keys, first boot and the network
 

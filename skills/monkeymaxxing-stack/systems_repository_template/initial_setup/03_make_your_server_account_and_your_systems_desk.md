@@ -12,8 +12,9 @@ the desk, and you can never copy them. At the end, the desk's checkout
 is the team's main copy of the systems repository, until `util01` holds
 it from chapter 7 on.
 
-**Who acts:** the person makes the provider account and types the key
-into one short command on the laptop. You do everything else: the
+**Who acts:** the person makes the provider account, types the key
+into one short command on the laptop, and says yes to the real monthly
+price. You do everything else: the
 laptop's keys and SSH settings, the private backup repository at the Git
 host, the desk, and its whole setup.
 
@@ -55,20 +56,9 @@ account screen of step 1 is the opening.
    reply, with the guide's own website steps. At OVHcloud, steps 4 and 5
    become the guide's project step and its key page, with the page's own
    field names; the command asks for the project's ID first, then shows
-   the filled-in key link, then asks for the three values. At OVHcloud,
-   and wherever the systems desk's price is shown after the key, the
-   screen's last three lines become:
-
-   ```text
-   Then leave that window open.
-   After the key, I show you the systems desk's price.  Nothing is ordered before your yes.
-   I wait here until the key is in.
-   ```
-
-   The price screen after the key is its own reply: the plan, the
-   location, and the price, then "Say yes and I order it." Your turn ends
-   with that screen, with no tool call after it. Order only after the
-   person's yes in the chat.
+   the filled-in key link, then asks for the three values. After the key
+   comes the one price screen of
+   [the real price, approved once](#the-real-price-approved-once).
 
    ```text
    Account 1 of 3: Hetzner (your servers)
@@ -90,9 +80,10 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
-   Then leave that window open.  It says when I have ordered your systems desk, a small server
-   of your own that holds your keys, and goes on to the next questions by itself when the systems desk is ready.
-   I wait here until the key is in.
+   Then leave that window open.  It goes on to your next accounts by itself later.
+
+   After the key, I check what Hetzner has in stock and show you the real monthly price here.
+   Nothing is ordered before your yes.  I wait here until the key is in.
    ```
 
    First start the wait for the key file as a background command, as
@@ -174,13 +165,6 @@ account screen of step 1 is the opening.
    ```
 
    A new account answers `{"servers": []}`.
-   When the provider guide's "Stock" line names no public route, check
-   the stock now, with the key and before any order, as chapter 1's
-   [stock line](01_answer_two_questions.md#steps) says: `desk01`'s size in
-   its location, and each production size in production's location. Use
-   the guide's stock request, with the key read from the key file. When a size is sold out, show the person the
-   choices that chapter 1's stock line names, with their prices, before
-   any order.
    Choose `desk01`'s location: the provider location chapter 1 picked for
    the desk, different from production's. Use Debian 13 on x86-64, by
    default with 2 vCPUs and 4 GB of memory. Check the provider's attached
@@ -188,8 +172,12 @@ account screen of step 1 is the opening.
    Keep `desk01.address: 127.0.0.1` for the desk's own runs after the
    bootstrap.
 
-   **Tell the person:** no message. The person approved the desk's price
-   with "go" in chapter 1.
+   Before you write the scripts, say in one line what they are: "I am
+   writing the small scripts that talk to Hetzner for me; nothing in
+   them needs reading."
+
+   **Tell the person:** only that one line. The price comes next, in
+   [the real price, approved once](#the-real-price-approved-once).
 
    **Check:** the list script answers, and `vars.wireguard_network`
    overlaps no provider network.
@@ -215,6 +203,86 @@ account screen of step 1 is the opening.
    **Tell the person:** no message.
 
    **Check:** `mmx validate` passes.
+
+## The real price, approved once
+
+1. **Check the stock and show the real price.** Right after the key
+   works, before anything is ordered, check the stock and read the price
+   of every server of the plan, in one go: `desk01`'s size in the desk's
+   location, and each production server's size in production's location
+   (`app001`, `db01`, `util01`, and with the fuller system `staging01`
+   and `app002`), with the sizes of
+   [chapter 6's table](06_create_your_three_production_servers.md#steps).
+   Use the route this chapter already uses to read the provider before
+   the desk exists: the provider scripts and the guide's read-only
+   requests, with `SERVER_PROVIDER_API_TOKEN` read from
+   `~/example-setup/provider-key` in the same command, or the guide's
+   public stock route when its "Stock" line names one. These are `curl`
+   calls that only read, so no provider program is installed. The
+   guide's "Stock" line names the request, such as Hetzner's
+   `GET /datacenters`, and `read_the_monthly_price_at_the_provider` gives
+   each size's monthly price with its public address. At OVHcloud, the
+   desk's line is the total of the guide's order cart, which orders
+   nothing.
+
+   When a size is sold out where the plan put it:
+
+   - First try the same size at the provider's other locations in the
+     same region (the same continent), and recommend the one that has it
+     in one line: "Nuremberg is sold out of this size; Helsinki has it,
+     at the same price." The production servers stay together in one
+     location, and the desk stays in a different location from
+     production.
+   - Only when no nearby location has the size, recommend the next
+     bigger size, with the old total, the new total and the reason, one
+     line each.
+
+   Never offer a kind of product the person did not ask about, such as
+   a provider's hourly cloud servers in place of its monthly ones,
+   without saying plainly why and what it costs a month against the
+   plan.
+
+   **Ask the person,** as the last text of your reply, with no tool call
+   after it:
+
+   ```text
+   Your real price, checked with Hetzner just now:
+
+     Systems desk  desk01, Falkenstein     about €6 a month
+     app001        Nuremberg               about €9 a month
+     db01          Nuremberg               about €6 a month
+     util01        Nuremberg               about €6 a month
+     Backups       Backblaze               a few cents a month at first
+
+     In all:  about €27 a month, each server with its public address, before VAT
+
+   Say "yes", and I order your systems desk now.  Your three servers come later, in chapter 6, at these prices.
+   Or tell me what to change.
+   ```
+
+   With a change from chapter 1's plan, put its lines above "In all",
+   such as:
+
+   ```text
+     Nuremberg is sold out of app001's size today.  Helsinki has it, at the same price.  I recommend Helsinki.
+   ```
+
+   or, only when no nearby location has the size:
+
+   ```text
+     Before:  about €27 a month
+     Now:     about €39 a month
+     Why:     Hetzner has app001's size nowhere in Europe today, so app001 is the next bigger size.
+   ```
+
+   The person's yes approves the desk's order now and the servers that
+   chapter 6 creates, at these sizes, locations and prices. Write the
+   approved sizes and locations into the settings that chapter 6 and
+   "Create desk01 through WireGuard" read, and the monthly total into the
+   commit message. Order only after the yes in the chat.
+
+   **Check:** the person said yes to a screen that showed the real
+   monthly total, read from the provider after the key worked.
 
 ## Create desk01 through WireGuard
 
@@ -289,8 +357,9 @@ repository's name, including paths inside quoted SSH commands.
    also the order or create receipt's service or instance name as
    `desk01.vars.provider_server_name`. When the provider refuses the
    request, such as for no stock, the block stops before
-   `desk-ordered`: tell the person in one line, and offer the choices of
-   chapter 1's [stock line](01_answer_two_questions.md#steps).
+   `desk-ordered`: tell the person in one line, and show the price screen
+   of [the real price, approved once](#the-real-price-approved-once) again,
+   with the stock as it is now.
 
    **Tell the person,** as the last text of the reply that ends your turn
    once step 4's bootstrap runs in the background:
@@ -299,7 +368,9 @@ repository's name, including paths inside quoted SSH commands.
    I am building your systems desk now, a small server of your own that holds your keys.
    It takes about 10 minutes.
 
-   You have nothing to do until then.  I tell you when it is ready.
+   In about 10 minutes, the window where you typed the Hetzner key goes on by itself
+   and shows your next account, Cloudflare.  I'll say when.
+   Until then, you have nothing to do.
    ```
 
    **Check:** the provider lists `desk01`, `desk01.vars.public_ipv4_address`
@@ -628,14 +699,20 @@ already, so storing the passphrase inside the vault exposes nothing.
   or a rebuilt desk
   ([Rebuild a systems desk](../operating_procedures/rebuild_a_systems_desk.md)):
   follow that operating procedure.
-- **No stock at the desk's location:** follow the provider guide. At
-  OVHcloud, the guide makes a Public Cloud desk until stock returns.
+- **No stock at the desk's location** ("The real price, approved
+  once"): follow the provider guide. At OVHcloud, the guide makes a
+  Public Cloud desk until stock returns, and the price screen says so.
 
 ## Why the chapter works this way
 
 **The provider key is typed on the laptop, once.** The desk does not exist
 yet, and the desk is built with the key. The key sits in a `0600` laptop
 file for about ten minutes, then moves to the desk and is deleted.
+
+**One price approval, after the key.** Most providers show their stock
+only with the key, and stock changes by the hour. So the person sees the
+real total once, checked just before the first order, and that one yes
+covers the desk and the production servers.
 
 **One provider key for the desk and `util01`.** Hetzner makes tokens only
 on its website, so the desk and `util01` share the one key the person made.

@@ -60,6 +60,10 @@ first sign-in at the private pages comes in the alerts part of the setup, in
 
    > Your alert dashboard will be at `ops.example.com`. Only your team can open it, after a sign-in.
 
+   When you picked another name than chapter 1's screen showed, say why
+   in the same line: "Your alert dashboard will be at `ops2.example.com`,
+   because `ops.example.com` is already in use at Cloudflare."
+
    **Check:** `util01_private_page_host_names.mmhotline` holds the name,
    and the domain still has no DNS record for the name.
 

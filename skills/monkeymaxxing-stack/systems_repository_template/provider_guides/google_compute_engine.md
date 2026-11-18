@@ -604,8 +604,8 @@ addresses and a new account's `CPUs (All Regions)`, and leave room for `restore0
 **Stock:** no public route; Compute Engine shows it only with the key, and for certain only at the create.
 With the key, before any order, `GET projects/PROJECT/zones/ZONE/machineTypes` lists the machine types a zone
 offers: on the laptop in chapter 3 with the guide's token request and the key file, and through
-`http://127.0.0.1:8081/` on the desk. Chapter 1's price screen says "price from Google's list; stock checked before ordering", as its
-[stock line](../initial_setup/01_answer_two_questions.md#steps) says.
+`http://127.0.0.1:8081/` on the desk. Chapter 3 reads it, for the desk and every server of the plan, before its one price screen, as
+[the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says.
 
 The project's `default` network has [auto-mode subnets](https://docs.cloud.google.com/vpc/docs/subnets#ip-ranges)
 in `10.128.0.0/9`, which do not overlap `10.20.0.0/16`. Compute Engine's

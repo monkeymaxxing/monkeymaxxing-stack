@@ -379,8 +379,8 @@ Stack's starting requirements. Use x64 plans, because the template's downloads a
 
 **Stock:** the public `GET https://api.vultr.com/v2/regions/REGION/availability?type=vc2` answers without
 a key (checked 2026-11-18) and lists in `available_plans` the plans the region can create now. Chapter 1
-reads it before the price screen, as its [stock line](../initial_setup/01_answer_two_questions.md#steps)
-says. Before creation, read it again through `http://127.0.0.1:8081/` on the desk. A listed plan is not a
+plans with it, and chapter 3 reads it again before its one price screen, as
+[the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says. Before creation, read it again through `http://127.0.0.1:8081/` on the desk. A listed plan is not a
 reserved one.
 
 **Prices.** `curl -sS 'http://127.0.0.1:8081/plans?type=vc2&per_page=500' | jq '.plans[] | select(.id == "vc2-2c-4gb") | {id, monthly_cost, hourly_cost, disk, locations}'`

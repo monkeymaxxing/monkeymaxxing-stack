@@ -81,8 +81,10 @@ further when the person first needs it.
 >   server work, the triage agent tells you when the app servers are busy,
 >   and I add one.
 >
-> You decide about money once, in chapter 1: I show you the prices of the
-> servers, and you approve the limits for growth, such as the smallest and the
+> You decide about money at the start. In chapter 1, I show you an estimate
+> of the servers' cost. Right after you make your server account, I check
+> what the provider has in stock and show you the real monthly price,
+> before anything is bought. You also approve the limits for growth, such as the smallest and the
 > largest number of app servers. Inside your limits, servers are added and
 > removed without asking you, and you get a report of what each one costs.
 > I ask you only for something outside your limits.

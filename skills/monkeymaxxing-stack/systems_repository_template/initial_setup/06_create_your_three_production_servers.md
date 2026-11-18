@@ -7,12 +7,14 @@ private pages).
 provider: `app001` runs the app, `db01` stores the app's data, and `util01`
 runs the system tools. Each server's WireGuard key and SSH host key are
 recorded in the systems repository before any connection. The person
-approved the prices, the weekly restore drill and the default growth
-limits with "go" in chapter 1.
+approved the weekly restore drill and the default growth limits with
+"go" in chapter 1, and the servers' real monthly price with a yes on
+[chapter 3's price screen](03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once).
 
 **Who acts:** you, the coding agent, do every step through the desk: the
 team's scripts reach the provider through the API proxy. The person does
-nothing, unless the prices rose since chapter 1 (step 3).
+nothing, unless the stock or the prices changed since chapter 3's price
+screen (step 2).
 
 **Tell the person when the chapter starts:**
 
@@ -37,8 +39,8 @@ nothing, unless the prices rose since chapter 1 (step 3).
 
 ## Steps
 
-1. **The location and the sizes.** Use the production location chosen in
-   [chapter 1 (answer two questions)](01_answer_two_questions.md#steps), different from the desk location.
+1. **The location and the sizes.** Use the production location and the sizes the person approved on
+   [chapter 3's price screen](03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once), different from the desk location.
    The table gives the initial setup sizes, with Hetzner Cloud as an
    example. With another provider, use x86 types with at least each
    server's vCPUs, memory, and disk in the table:
@@ -72,7 +74,7 @@ nothing, unless the prices rose since chapter 1 (step 3).
    `restore_drill_server_type`, `restore_drill_location`, and
    `server_image` hold `db01`'s values.
 
-2. **The prices, checked against chapter 1.** Read each selected server
+2. **The prices, checked against chapter 3's price screen.** Read each selected server
    type's current hourly and monthly prices in the chosen location from
    the provider, through `http://127.0.0.1:8081/`. With the fuller system, the
    servers include `staging01` and `app002`. The
@@ -87,20 +89,19 @@ nothing, unless the prices rose since chapter 1 (step 3).
    charge too, from `pricing.primary_ips` (type `ipv4`, at the chosen
    location) in `GET http://127.0.0.1:8081/pricing`.
 
-   Compare the monthly total with the cost that chapter 1's screen showed.
-   When the total is higher by more than the rounding of "about", show
-   each server's size, location, and monthly total as "the server, plus
-   its public address", with the currency and whether tax is included,
-   and ask once:
-
-   > The prices at [the provider] rose since you said "go": your servers now cost about [the new total] a month, not [the old total].
-   > Say "go" to create them, or tell me what to change.
-
-   The same holds for the server type: when a type is out of stock or
-   differs from chapter 1's screen, stop and ask again with the new
-   number and size. Otherwise ask nothing, and never promise a separate
-   approval: the person's "go" in chapter 1 approved these
-   servers and the weekly restore drill. The drill runs each
+   Check the stock again with the guide's stock request, through the
+   same proxy. Compare with the sizes, locations and monthly total that
+   the person approved on chapter 3's price screen. When they still hold,
+   ask nothing: that yes approved these servers. When the stock or the
+   price changed since, by more than the rounding of "about", show one
+   screen by the same rule as chapter 3's, as the last text of your
+   reply: each server's size, location and monthly price with its public
+   address, the currency and whether tax is included; a sold-out size
+   first moves to the same size at a nearby location of the same region;
+   only when none has it, a bigger size, with the old total, the new
+   total and the reason, one line each. Then "Say yes to create them, or
+   tell me what to change." Never promise a separate approval otherwise.
+   The person's "go" in chapter 1 approved the weekly restore drill. The drill runs each
    `weekly_work_day`, Sunday in the template, on a temporary server of
    the database server's size, usually within the hour. The first drill
    starts during chapter 7 (install everything on the production
@@ -129,7 +130,8 @@ nothing, unless the prices rose since chapter 1 (step 3).
    servers' creation.
 
    **Check:** `growth_limits` holds the defaults in a commit, and the
-   monthly total is at most chapter 1's, or the person said "go" again.
+   sizes and monthly total are those of chapter 3's price screen, or the
+   person said yes to a new screen.
 
 3. **Prepare each server's WireGuard identity on the systems desk.** Create
    `util01` first. For every initial server, generate the private key in memory with `wg genkey`.
@@ -322,8 +324,9 @@ nothing, unless the prices rose since chapter 1 (step 3).
   choose another network and update the desk's production peers, as
   [Before you start](#before-you-start) says.
 - **The location has no server of the requested type free** (step 4): the
-  create script retries for five minutes. After the retries, get approval of the
-  new price before choosing another sufficient type or a nearby location.
+  create script retries for five minutes. After the retries, show the one
+  price screen of step 2 again, with a nearby location first, before
+  choosing another location or a bigger type.
   Record a changed type or location in the commit message. Previously
   created servers keep the previous location.
 - **The provider is outside the guides** (step 4): use the provider's own

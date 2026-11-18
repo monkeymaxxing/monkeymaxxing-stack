@@ -53,7 +53,9 @@ as written.
   such as "`mmx_project_settings.yml`: the backup time moves to 2 am your
   time." Claude Code shows each edit and command by itself: before a
   burst of them, say in one line what they are and that the person need
-  not read them. Quote one line of output only when the person needs
+  not read them. The same holds for files and scripts you write for your
+  own use: say what they are for and that nothing in them needs reading.
+  Quote one line of output only when the person needs
   that exact line, such as an error the person must look up.
 - **Keep every fact.** When you shorten or split a sentence, keep each
   number, name, condition, step order, actor, and reason. Never replace a
