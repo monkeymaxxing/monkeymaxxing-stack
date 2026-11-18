@@ -7,7 +7,10 @@ On every push and pull request, GitHub Actions runs every test in `tests/`
 and `go vet`, `go test` and `gofmt` in
 `set_up_outside_services/`, with MMX built from the release the template
 pins (`.github/workflows/checks.yml`). The checks below say what to run
-before that, and what only real servers prove.
+before that, and what only real servers prove. `tests/systems_desk_door_test.py`
+asks a real `sshd` about the desk's settings, which need OpenSSH 9.8 or later,
+as on Debian 13. It skips on an older `sshd`, such as GitHub's Ubuntu 24.04
+runner, so run it on a machine with a newer one before a release.
 
 A test that runs MMX needs the MMX release that `stack_software.mmx` in the
 template's `mmx_project_settings.yml` pins, or a later one: the restore drill

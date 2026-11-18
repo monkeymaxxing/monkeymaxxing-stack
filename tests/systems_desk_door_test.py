@@ -75,6 +75,13 @@ class TheDeskDoor(unittest.TestCase):
         cls.directory = tempfile.TemporaryDirectory()
         cls.host_key = Path(cls.directory.name)/'host_key'
         subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(cls.host_key)], check=True)
+        # The desk runs Debian 13's OpenSSH, and its settings use PerSourcePenalties (OpenSSH 9.8).
+        # An older sshd, such as Ubuntu 24.04's 9.6, refuses the file before it can judge a login.
+        probe = Path(cls.directory.name)/'probe_sshd_config'
+        probe.write_text(f'HostKey {cls.host_key}\nPerSourcePenalties no\n')
+        if subprocess.run([SSHD, '-t', '-f', str(probe)], capture_output=True).returncode != 0:
+            cls.directory.cleanup()
+            raise unittest.SkipTest('needs OpenSSH 9.8 or later, as on Debian 13: this sshd does not know PerSourcePenalties')
 
     @classmethod
     def tearDownClass(cls):
