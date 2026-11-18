@@ -117,9 +117,7 @@ class WaitForADeskJob(unittest.TestCase):
                 self.assertEqual(result.returncode, int(code))
                 lines = printed_lines(result.stdout)
                 self.assertIn('line two', lines)
-                self.assertIn(f'The systems desk job job-{code} ended with exit code {code}.', lines[-2])
-                said = 'is done' if code == '0' else 'has ended'
-                self.assertTrue(lines[-1].startswith(f'Tell the person: the systems desk job job-{code} {said}'), lines[-1])
+                self.assertIn(f'The systems desk job job-{code} ended with exit code {code}.', lines[-1])
                 self.assertNotIn('@clock', result.stdout)
 
     def test_a_job_that_ended_without_an_exit_code_returns_its_own_code_and_shows_why(self):
@@ -127,10 +125,9 @@ class WaitForADeskJob(unittest.TestCase):
         (self.runs/'long.exit').write_text('stopped: the systems desk ended the job (timeout, killed TERM). A job runs 10 hours at most.\n')
         result = self.clock.run('long')
         self.assertEqual(result.returncode, 125)
-        lines = printed_lines(result.stdout)
-        self.assertIn('The systems desk job long ended without an exit code', lines[-2])
-        self.assertIn('stopped: the systems desk ended the job', lines[-2])
-        self.assertTrue(lines[-1].startswith('Tell the person: the systems desk job long was stopped before it finished'), lines[-1])
+        last = printed_lines(result.stdout)[-1]
+        self.assertIn('The systems desk job long ended without an exit code', last)
+        self.assertIn('stopped: the systems desk ended the job', last)
 
     def test_the_wait_ends_with_the_job_and_prints_at_least_once_a_minute(self):
         log = self.runs/'every-server-1.log'
@@ -138,12 +135,11 @@ class WaitForADeskJob(unittest.TestCase):
         for second in range(10, 400, 10):
             self.clock.at(second, 'append', log, f'task at {second}\n')
         self.clock.at(400, 'write', self.runs/'every-server-1.exit', '1\n')
-        result = self.clock.run('every-server-1', '--at-most-minutes', '10')
+        result = self.clock.run('every-server-1')
         self.assertEqual(result.returncode, 1)
         gaps = seconds_between_lines(result.stdout)
         self.assertLessEqual(max(gaps), 60, gaps)
-        self.assertIn('ended with exit code 1', printed_lines(result.stdout)[-2])
-        self.assertTrue(printed_lines(result.stdout)[-1].startswith('Tell the person: '))
+        self.assertIn('ended with exit code 1', printed_lines(result.stdout)[-1])
 
     def test_log_lines_come_at_most_every_30_seconds_and_a_quiet_log_still_gets_a_line(self):
         log = self.runs/'busy.log'
@@ -170,21 +166,18 @@ class WaitForADeskJob(unittest.TestCase):
         (self.runs/'slow.log').write_text('starting\n')
         result = self.clock.run('slow', '--at-most-minutes', '3')
         self.assertEqual(result.returncode, 124)
-        lines = printed_lines(result.stdout)
-        self.assertIn('still runs after 3 minutes', lines[-2])
-        self.assertIn('wait-for-a-desk-job slow', lines[-2])
-        self.assertTrue(lines[-1].startswith('Tell the person: the systems desk job slow is still running, as planned'), lines[-1])
+        last = printed_lines(result.stdout)[-1]
+        self.assertIn('still runs after 3 minutes', last)
+        self.assertIn('wait-for-a-desk-job slow', last)
         self.assertLessEqual(max(seconds_between_lines(result.stdout)), 60)
         self.assertFalse((self.runs/'slow.exit').exists())
 
-    def test_the_default_bound_is_five_minutes(self):
-        # The person hears from the coding agent at each end of a wait, at least every 5 minutes.
+    def test_the_default_bound_ends_before_a_ten_minute_command_limit(self):
         (self.runs/'slow.log').write_text('starting\n')
         result = self.clock.run('slow')
         self.assertEqual(result.returncode, 124)
         ended_at = max(int(n) for n in re.findall(r'@clock (\d+)', result.stdout))
-        self.assertGreaterEqual(ended_at - CLOCK_START, 5 * 60)
-        self.assertLess(ended_at - CLOCK_START, 5 * 60 + 10)
+        self.assertLess(ended_at - CLOCK_START, 10 * 60)
 
     def test_a_job_that_never_started_is_named(self):
         result = self.clock.run('never-started')
@@ -227,8 +220,7 @@ class WaitForTheSetup(unittest.TestCase):
         self.assertNotIn('@clock', result.stdout)
         self.assertIn('"cloudflare=done"', result.stdout)
         self.assertIn('cloudflare_account_id', result.stdout)
-        self.assertEqual(printed_lines(result.stdout)[-2], 'go-live finished.')
-        self.assertTrue(printed_lines(result.stdout)[-1].startswith('Tell the person: the setup in your terminal is done'))
+        self.assertEqual(printed_lines(result.stdout)[-1], 'go-live finished.')
 
     def test_an_earlier_runs_stop_does_not_end_the_wait_but_the_new_runs_stop_does(self):
         self.file.write_text(results([('cloudflare', 'in_progress')], stopped_with='Cloudflare refused the token'))
@@ -240,8 +232,7 @@ class WaitForTheSetup(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn('the registrar still lists the old nameservers', result.stdout)
         self.assertNotIn('Cloudflare refused the token', result.stdout)
-        self.assertTrue(printed_lines(result.stdout)[-2].startswith('go-live stopped.'))
-        self.assertTrue(printed_lines(result.stdout)[-1].startswith('Tell the person: the setup in your terminal stopped'))
+        self.assertTrue(printed_lines(result.stdout)[-1].startswith('go-live stopped.'))
         ended_at = max(int(n) for n in re.findall(r'@clock (\d+)', result.stdout))
         self.assertLess(ended_at - CLOCK_START, 300)
 
@@ -249,7 +240,7 @@ class WaitForTheSetup(unittest.TestCase):
         self.clock.at(130, 'write', self.file, results([('cloudflare', 'in_progress')], updated_at='2026-11-17T10:02:10Z'))
         self.clock.at(400, 'write', self.file, results([('cloudflare', 'done')], finished=True,
                                                        updated_at='2026-11-17T10:06:40Z'))
-        result = self.clock.run('--at-most-minutes', '10')
+        result = self.clock.run()
         self.assertEqual(result.returncode, 0)
         self.assertLessEqual(max(seconds_between_lines(result.stdout)), 60)
         self.assertIn('the person has not started it yet', result.stdout)
@@ -259,16 +250,8 @@ class WaitForTheSetup(unittest.TestCase):
         self.file.write_text(results([('cloudflare', 'in_progress')], updated_at='2026-11-17T10:00:00Z'))
         result = self.clock.run('--at-most-minutes', '2')
         self.assertEqual(result.returncode, 124)
-        self.assertIn('Wait again with: wait-for-the-setup', printed_lines(result.stdout)[-2])
-        self.assertEqual(printed_lines(result.stdout)[-1],
-                         'Tell the person: the setup in your terminal is still going, 0 of 1 steps done; '
-                         'add what it does or waits for now and the time left, as a range.')
+        self.assertIn('Wait again with: wait-for-the-setup', printed_lines(result.stdout)[-1])
         self.assertLessEqual(max(seconds_between_lines(result.stdout)), 60)
-
-    def test_at_the_bound_before_the_person_started_it_says_so(self):
-        result = self.clock.run('--at-most-minutes', '1')
-        self.assertEqual(result.returncode, 124)
-        self.assertTrue(printed_lines(result.stdout)[-1].startswith('Tell the person: the setup has not started'))
 
 
 class TheDeskInstallsTheWaits(unittest.TestCase):

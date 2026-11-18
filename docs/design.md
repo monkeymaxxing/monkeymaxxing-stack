@@ -523,7 +523,9 @@ recommends OVHcloud in the Americas and Asia-Pacific, and Hetzner in
 Europe, Africa and the Middle East, from the laptop's time zone, and
 names the other one as the first alternative. When Hetzner's cheap size
 is sold out and the person has made no other account yet, chapter 3's
-options add "use OVHcloud instead". Reason: a system grows first by
+sold-out screen offers "use OVHcloud instead" first, then "order now" at
+the bigger size's real price, then "wait", with no recommendation
+between them, where OVHcloud's guide covers the servers' region. Reason: a system grows first by
 moving to bigger servers, and the biggest are dedicated machines.
 Hetzner has dedicated machines only in Europe; OVHcloud also has them in
 North America and Asia-Pacific (both checked on 2026-11-18). So each
@@ -5608,11 +5610,8 @@ an earlier run's `stopped_with` stays until the next run's first write.
 Reason: in a newcomer test the agent wrote 25 polling loops, and one
 blocked `sleep 240` turned a wait into a turn that ended with a promise.
 The agent starts each wait on the person as a background command, with
-`--at-most-minutes 5`, then ends its turn with the screen, and the
-command's end wakes it. Each end gets one line for the person before the
-next wait, from the command's last line, which starts with "Tell the
-person:". Reason for 5 minutes: in newcomer test runs, the person asked
-"is it done?" after 8 to 13 quiet minutes every time. Reason: Claude Code collapses text written
+`--at-most-minutes 60`, then ends its turn with the screen, and the
+command's end wakes it. Reason: Claude Code collapses text written
 between tool calls to one line, and shows only the text that ends a
 turn in full, so a screen followed by a waiting command was never read.
 `wait_for_the_app_image`, in `server_management_scripts/`, runs on the

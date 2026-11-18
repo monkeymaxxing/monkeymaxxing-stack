@@ -245,9 +245,8 @@ the person's. Then you push the changes and watch the first build.
      app's start code for it, and make the fix
      here and name it on step 7's screen, such as "`server.js`: stops
      cleanly when the server asks, so a release never waits 30 seconds".
-     Reason: in a newcomer test run, the agent found the missing handler
-     only at the first release, after the site was live, and had to ask
-     for another yes;
+     Reason: found later, at the first release, the fix needs another
+     yes after the site is live;
    - a seed command in the app's image that fills an empty database with
      invented test data. Developers run the seed command on their laptops
      against a local database, and
@@ -415,14 +414,6 @@ the person's. Then you push the changes and watch the first build.
    person needs, such as the primary database server or R2, then the same
    question; "show" and a file's name shows that file's change.
 
-   Write the app's test command so it runs as written on a clean
-   machine, and check it against the test runner's own rules before the
-   screen, because without a container tool nothing runs it before CI
-   does. For example, Node's `node --test` finds the `test/` folder by
-   itself, while `node --test test/` makes Node 22 look for a file named
-   `test/` and fail. Reason: in a newcomer test run, that one word failed
-   CI and cost the person a second "yes".
-
    Make the "Tests:" line true. When a container tool exists and you ran
    the tests, say that they passed or which failed. When the laptop has
    no podman or docker, keep the line above: the app's tests run in CI
@@ -431,9 +422,8 @@ the person's. Then you push the changes and watch the first build.
 
    One "yes" approves the set, and the README line of the first release
    with it: chapter 9's step 3 pushes that line and asks nothing. Reason:
-   "Your servers" and "Live" tell the person there is nothing to do, and
-   in a newcomer test run a question about that line, asked there, waited
-   unseen for over 9 minutes. When the person asks for a change, make it
+   "Your servers" and "Live" tell the person there is nothing to do, so
+   a question there would wait unseen. When the person asks for a change, make it
    and show the screen again. When the person strikes the README line,
    ask on this screen which small change the first release may use
    instead, or offer an empty commit, which changes no file.
@@ -443,8 +433,7 @@ the person's. Then you push the changes and watch the first build.
    login. Then read CI's result yourself, from what you can read, never
    from the person: never ask the person to sign in to the Git host or to
    look at a CI page. Reason: a private repository's CI page says "Page
-   not found" to a browser that is not signed in, and in a newcomer test
-   the person could not sign in there at all. The routes, none of which
+   not found" to a browser that is not signed in. The routes, none of which
    needs the person:
 
    - **The image at the registry:**

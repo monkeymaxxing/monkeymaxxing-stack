@@ -490,8 +490,8 @@ windows that disagree cost the person a refused tool call and a question.
   in a tool call's description or summary.
 - **Start the wait first, in the background.** While the person works in
   their terminal, wait only on a result you can read:
-  `ssh desk01-agent wait-for-the-setup --at-most-minutes 5` for the
-  setup, `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 5`
+  `ssh desk01-agent wait-for-the-setup --at-most-minutes 60` for the
+  setup, `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60`
   for a desk job, or the file a laptop script writes. Start the wait as a
   background command (in Claude Code, the Bash tool's run-in-background
   option), then write the screen, and end your turn. When the background
@@ -501,27 +501,11 @@ windows that disagree cost the person a refused tool call and a question.
   something you cannot see.
 - **Every background wait has a bound.** Use `--at-most-minutes N` on
   the wait commands, or `timeout` around a loop of your own, such as
-  `timeout 5m bash -c 'until CHECK; do sleep 10; done'`, never an
+  `timeout 10m bash -c 'until CHECK; do sleep 10; done'`, never an
   `until` loop with no bound. Its end wakes you whatever the result, and
-  you say the result in a reply: done, failed, or still waiting. No
-  single wait is longer than 5 minutes: start it again while the work
-  runs. When a wait ends, say one line, as the text that ends your turn,
-  before you start the next wait: what finished, what runs now, and how
-  long is left. The wait commands' last line, which starts with "Tell
-  the person:", gives that line's content. Give each estimate as a
-  range, such as "10 to 15 minutes", and never repeat an estimate that
-  has passed: say the new range and why. Say what is normal as normal,
-  such as a restart or the restore test. Reason: in newcomer test runs,
-  the person asked "is it done?" after 8 to 13 quiet minutes every
-  time, and "about 8 minutes" became 24. A failed
+  you say the result in a reply: done, failed, or still waiting. A failed
   background command gets the same line as any failed command: what
   failed and whether it matters, before any retry.
-- **Say when you next speak.** While a background job runs, the last
-  line of your reply says when you next speak, such as "I'll tell you
-  how it goes within 5 minutes; it's done in about 10 to 15 minutes." When the person's next step will
-  appear in their terminal, say so beforehand, and about when: "In about
-  5 minutes your terminal asks for your Cloudflare account; I'll say
-  when."
 - Never ask the person to say "done" for a result your wait reads: the
   key file, `desk-ready`, `wait-for-the-setup`, or a job's exit. Ask for
   "done" only when nothing you can read shows the result, such as a step
@@ -633,14 +617,13 @@ the job does, about how long, and that the person need do nothing, as
 
 ```sh
 # On the laptop, as a background command. NAME: the name you gave the desk job.
-ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 5
+ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60
 ```
 
 It prints a few lines of the log as the job goes, ends when the job ends,
-and returns the job's exit code with a plain line, such as
-`The desk job every-server-1405 ended with exit code 1.`, after the log's
-last 30 lines. Its last line starts with `Tell the person:` and gives the
-one line you say before the next wait. Exit 125 means the exit file holds no number; the last line
+and returns the job's exit code with a plain last line, such as
+`The systems desk job every-server-1405 ended with exit code 1.`, after the log's
+last 30 lines. Exit 125 means the exit file holds no number; the last line
 shows what it holds. Exit 124 means the job still runs at the wait's
 bound: start the same wait again in the background, and say in one line
 what the job is doing. Run

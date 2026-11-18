@@ -46,14 +46,6 @@ chapter.
   server's waiting security updates, which takes 3 to 7 minutes on Debian 13
   on a small server. App, jobs and load-balancer servers install theirs
   last, after they serve.
-- **The person hears from you at least every 5 minutes.** Wait for each
-  desk job with `--at-most-minutes 5`, and start the wait again while
-  the job runs, with one line each time, as the skill's "No wait longer than 5 minutes; each end gets one line" says: what is happening to
-  the person's servers, how far along, and the new estimate when it
-  changed. A restart, the restore test, or a desk job that waits for
-  another to finish is normal, and is said as normal: "Your servers
-  restart one at a time, as planned." Reason: in a newcomer test run,
-  the person heard nothing during a 30-minute install unless they asked.
 - **The link.** The person sees the servers' results on the app's page and,
   from chapter 8, on MMHotline's page.
 
@@ -372,19 +364,17 @@ chapter.
    command again. When run 2 failed on another server while `util01` went
    on, its end started the first restore drill, which holds `util01` for
    a few minutes, and MMX refuses `util01` until it ends. So first wait
-   for the drill, as a background wait of 5 minutes at most, started
-   again while the drill runs:
+   for the drill, as a bounded background wait:
 
    ```sh
    # On the laptop, as a background command. The drill's unit is in its "start" state while it runs.
-   ssh desk01-agent "cd systems_repository && ssh -F ssh/config root@10.20.0.1 \"timeout 5m sh -c 'while systemctl show --property SubState --value weekly_database_restore_drill.service | grep -qx start; do sleep 10; done'\""
+   ssh desk01-agent "cd systems_repository && ssh -F ssh/config root@10.20.0.1 \"timeout 20m sh -c 'while systemctl show --property SubState --value weekly_database_restore_drill.service | grep -qx start; do sleep 10; done'\""
    ```
 
    Tell the person it is normal, such as "The restore test, a check that
    your backups work, started by itself; I start the install again when it
-   ends, in about 5 to 10 minutes." Never start the rerun into a running
-   drill. Reason: in a newcomer test run, the reruns were refused for
-   about 10 minutes while the drill ran.
+   ends, in about 10 minutes." Never start the rerun into a running
+   drill: MMX refuses it.
 
    **Tell the person,** only when a run failed:
 

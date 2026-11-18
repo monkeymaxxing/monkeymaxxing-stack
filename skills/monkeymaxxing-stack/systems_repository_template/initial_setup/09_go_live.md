@@ -33,8 +33,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
 1. **The public host names.** Never look up an app's address from the
    laptop, with `curl`, `dig` or a browser, before chapter 5 made its DNS
    record. Reason: the laptop then remembers "no such address" for
-   minutes, and in a newcomer test run the live site failed to open on
-   the laptop for that reason. From the laptop, confirm each
+   minutes, so the live site fails to open on the laptop. From the laptop, confirm each
    app's health URL answers HTTP 200 through Cloudflare at the app's public
    host name, the way users reach it: `curl -fsS https://shop.example.com/up`.
    In the first part of the setup, chapter 8's part 1 already started this
@@ -74,8 +73,8 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    commit, publish (the [Making a change](../AGENTS.md#making-a-change)
    steps), start the `every_server` run on `util01` as a desk job, and
    start its wait as a background command with its bound, such as
-   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 5`, and
-   start it again each time it ends unfinished, as the skill's "No wait longer than 5 minutes; each end gets one line" says. Then end your
+   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60`, and
+   start it again each time it ends unfinished. Then end your
    reply with the live screen, with no tool call after it:
 
    ```text
@@ -100,9 +99,8 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
 
    The live screen is the first thing in the reply, and nothing comes
    before it: no line about the check, the release, a commit, an image
-   tag, an HTTP code or the checklist. Reason: in a newcomer test run,
-   the last reply opened with a commit ID, an HTTP code, an image tag and
-   the checklist, and the live screen came only below them. With several
+   tag, an HTTP code or the checklist. Reason: the live site is what the
+   person waited for, and it must not hide below technical lines. With several
    apps, give each app's address on its own line at the top. "Still open"
    has at most 4 lines, in the person's words ("The person's words" in the
    skill): no commit IDs, image tags, HTTP codes, restore times, check
@@ -130,7 +128,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    part of the setup. Mark `mmwatchdog_with_the_default_checks` once
    `mmwatchdog fleet` on `util01` shows the public check. To wait for that
    first check, use a bounded wait, such as
-   `timeout 5m bash -c 'until CHECK; do sleep 15; done'`, never an
+   `timeout 10m bash -c 'until CHECK; do sleep 15; done'`, never an
    unbounded loop.
 
    Without the setting, go on to step 3 once the run ended. With it, the
@@ -182,9 +180,8 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    If CI builds the image, inspect CI's credentials and verify no server
    key or vault passphrase is available. CI needs only registry access.
 
-   **Tell the person:** nothing while it runs beyond the wait lines of the
-   skill's "No wait longer than 5 minutes; each end gets one line": the
-   live screen already said what happens. "A release"'s messages are for
+   **Tell the person:** nothing while it runs: the live screen already
+   said what happens. "A release"'s messages are for
    later releases. Its result, the memory check's numbers, the commit and
    the image tags go into the checklist's `last_result`, never into the
    reply. Step 5 gives the result.

@@ -97,62 +97,18 @@ In every reply:
 - **Every background wait has a time limit, and its end gets a reply.**
   Give each wait its bound: `--at-most-minutes N` on the Stack's wait
   commands, or `timeout` around a loop of your own, such as
-  `timeout 5m bash -c 'until CHECK; do sleep 10; done'`. Never start an
-  `until` loop with no bound. The command's end wakes you whatever the
-  result: success, failure or the bound. Then say the result in a reply
-  that ends your turn, also when it is "still not done". Reason: in a
-  full newcomer test run, an unbounded background loop never ended, and
-  the person waited 8 minutes for a site that was already live.
+  `timeout 10m bash -c 'until CHECK; do sleep 10; done'`. Never start an
+  `until` loop with no bound: it never ends, so nothing wakes you. The
+  command's end wakes you whatever the result: success, failure or the
+  bound. Then say the result in a reply that ends your turn, also when
+  it is "still not done", and start the wait again while the work runs.
 - **Long work.** Before any stretch of work longer than about a minute,
   end a reply with one line: what happens now, about how long, and that
   the person need do nothing, such as "Now: I am setting up your servers,
-  about 15 to 20 minutes. Next for you: nothing. I tell you when it is done."
+  about 15 minutes. Next for you: nothing. I tell you when it is done."
   Run long work as background commands, with your turn ended, where you
   can. Notes between tool calls are collapsed, so never rely on them to
-  tell the person anything. While a background job runs, your reply's
-  last line says when you next speak: "I'll tell you how it goes in
-  5 minutes at most, and when it's done, in about 10 to 15 minutes." Reason: the person then never has to ask whether
-  you are still working.
-- **No wait longer than 5 minutes; each end gets one line.** Bound each
-  background wait at 5 minutes at most, `--at-most-minutes 5` on the
-  Stack's wait commands or `timeout 5m` around a loop of your own, and
-  start the next one when it ends unfinished. When a wait ends, say one
-  line, as the text that ends your turn, before you start the next
-  wait: what finished, what runs now, and how long is left, such as
-  "Your desk's security updates are done. Now I set up the desk itself,
-  about 10 to 15 more minutes." The wait commands' last line starts with
-  "Tell the person:" and gives that line's content; say it in your own
-  words. Say what is normal as normal: "the restore test, a check
-  that your backups work, is running", "your servers restart one at a
-  time, as planned", never words that sound like trouble, such as
-  "locked", "stuck" or "retry". This holds for every wait, also
-  `wait-for-the-setup` while the person makes accounts. Reason: in
-  newcomer test runs, the person asked "is it done?" after 8 to 13
-  quiet minutes every time, and heard nothing during a 30-minute
-  install unless they asked.
-- **Estimates are ranges, and a passed estimate is replaced.** Give each
-  time as a range, such as "10 to 15 minutes", never one number. When
-  the time you gave has passed, never say it again: say the new range
-  and why, such as "The desk is still installing its updates, which
-  took longer than I said: about 5 to 10 more minutes." Reason: in a
-  newcomer test run, "about 8 minutes" became 24, and each line said
-  the old estimate.
-- **Say the person's next step before it appears in their terminal.**
-  When the person's terminal window will show the next thing to do, such
-  as the setup window's next account, say so in the reply before, with
-  about when: "In about 5 minutes your terminal asks for your Cloudflare
-  account; I'll say when." Reason: in a test run the terminal showed a new
-  prompt after five quiet minutes, with no word in the chat. Before you
-  say it, check that the settings files the next step reads hold no
-  value still to fill: the template leaves each value only the setup can
-  know empty, with the comment `# the setup fills it: chapter N`, and
-  `grep -n 'the setup fills it' mmx_project_settings.yml
-  inventories/servers.yml` lists them. Fill each one that the next step
-  reads before you say it, replacing the whole line, comment included.
-  Reason: in a newcomer test run,
-  `vars.backups.production_bucket` was still `example-systems-backups`,
-  and the person's terminal showed a stop while the chat said "look for
-  the Cloudflare screen".
+  tell the person anything.
 - **Good news the moment it is proven.** When a result the person waits
   for is proven, such as the site answering at its address, say it at
   once, as its own screen that ends your turn. Never hold it back for a
@@ -171,12 +127,12 @@ In every reply:
   security flaw on a brand-new server is said plainly, "One program on
   util01 has a known security flaw. Its fix is not published yet; there
   is nothing for you to do, and the weekly system review tracks it.", or
-  left to the weekly system review. Reason: in a newcomer test run, the
-  last reply opened with a commit ID, an HTTP code, an image tag and the
-  checklist, and the live screen came only below them.
+  left to the weekly system review. Reason: the live site is what the
+  person waited for all along, and it must not hide below technical
+  lines.
 - **Now and next, at the end of every reply.** The last lines say what
   you are doing now and what the person does next, such as "Now: I am
-  building your systems desk, about 10 to 15 minutes. Next for you: nothing. I
+  building your systems desk, about 10 minutes. Next for you: nothing. I
   carry on." When the person has nothing to do, say "Nothing. I carry
   on." A chapter's end is not a stop: give the chapter's result in at
   most three lines and start the next chapter in the same reply. A
@@ -196,9 +152,7 @@ In every reply:
   Claude Code shows each edit and command by itself: before a burst of
   them, say in one line what they are and that the person need not read
   them, such as "I am writing your settings now; you need not read the
-  edits." The same holds for files and scripts you write for your own
-  use: "I am writing five small scripts that talk to Hetzner for me;
-  nothing in them needs reading."
+  edits."
 - **The person sees each tool call:** its command, and its description in
   Claude Code's permission question. Write each description as a plain
   sentence for the person, such as "Check that your systems repository's
@@ -218,10 +172,7 @@ In every reply:
   later, already pushed, costs their trust in every other change. The
   first release's small change, a line in the app's README, is shown and
   approved with the app's other changes in "Your app", as chapter 2's
-  step 7 shows, so "Your servers" and "Live" ask nothing. Reason: in a
-  newcomer test run, the agent asked about that line after telling the
-  person there was nothing to do, and the question waited unseen for
-  over 9 minutes.
+  step 7 shows, so "Your servers" and "Live" ask nothing.
 - Confirm each answer the person gives in your next reply, one line each,
   and use it from then on.
 - Ask before choosing a name the person will see, such as the app's
@@ -245,46 +196,34 @@ In every reply:
   person makes and pastes is a "key" on the person's screens, in the chat
   and in the terminal. Name the company's own word once, where the
   person makes it: "Cloudflare calls it an API token." Keep a company's
-  button names as they are, such as "Create token". Reason: in a newcomer
-  test run, "API token" beside "key" confused the person, as if they
-  were two different things to make.
+  button names as they are, such as "Create token". Reason: "API token"
+  beside "key" reads as two different things to make.
 - **No price you cannot know.** Before the provider key works, give the
   cost as "from about €N a month", from the list price, with "I check
   [the provider]'s stock and show the real price before anything is
   bought". The price screen after the key leads with the real numbers;
   when they differ from the plan, one line under the total says why, such
   as "More than the plan's €24: the smaller sizes are sold out
-  everywhere today." Never "this is not the price I quoted". Reason: in
-  three newcomer test runs, the first price shown was not the one paid,
-  because the cheap sizes sold out.
+  everywhere today." Never "this is not the price I quoted". Reason: the
+  cheap sizes sell out, so a list price is not always the price paid.
 - **Place names come from the provider's own list.** Name a location
   only as the provider names it, from the provider guide's list of
   locations, or the provider's own list of locations from its API, such
   as Hetzner's Falkenstein, Nuremberg and Helsinki. Pick the one nearest
-  the person's time zone. Never a nearby city the provider does not use.
-  Reason: in a newcomer test run, the plan said "Frankfurt", where
-  Hetzner has no servers.
+  the person's time zone. Never a nearby city the provider does not use,
+  such as Frankfurt at Hetzner, which has no servers there.
 - **The recommended provider follows where the person is.** From the
   laptop's time zone: OVHcloud in the Americas and Asia-Pacific, Hetzner
   in Europe, Africa and the Middle East, with the other one as the first
   alternative. Chapter 1's step 2 has the table and the reason: the
   biggest servers a growing system moves to, dedicated machines, are in
   the person's own region.
-- **Write helper scripts with your file-writing tool.** A small script
-  the person runs, such as a command that asks for a key, is a file you
-  write with your agent's file-writing tool, then `chmod +x`. Never write
-  it with a shell heredoc (`cat > FILE <<EOF`), and never put `rm` in a
-  command you run while the person watches. Reason: in a newcomer test
-  run, three such commands made Claude Code ask about a "dangerous rm" in
-  auto mode, which scared the person, who could not read the script.
 - **The company's name comes from the app or from the person.** Take it
   from the app: the name in its README's title, or its repository's
   name. When neither gives it, ask. Never derive it from the domain
-  alone. Reason: in a newcomer test run, the agent proposed the domain's
-  name, and the person had to correct it to the company's own name.
+  alone. Reason: a domain's name is often not the company's own name.
 - After each failed command the person can see, say in one line what
-  failed and whether it matters (for your own slip, the one line of "The
-  person's words" below), also when you expected the failure, such
+  failed and whether it matters, also when you expected the failure, such
   as "The check found no Debian 13 image yet; that is expected, and I try
   the newer list." Before a retry, say what changes. When a run fails,
   your next reply starts with that line: what failed, whether anything is
@@ -442,18 +381,14 @@ and fields that the person may open in the systems repository, such as
 next chapter, say nothing about it, or "I am reading up on the next part".
 The chapter files and their numbers stay your own structure: an
 instruction for an agent, such as this skill or a chapter's own steps, may
-say "chapter 3". Reason: in a newcomer test run, the agent said "Chapter 3
-starts here" and "Chapter 2 is complete", and a chapter number tells the
-person nothing about what happens or what is left.
+say "chapter 3". Reason: a chapter number tells the person nothing about
+what happens or what is left.
 
 ## The person's words
 
 The same rule as for chapters holds for every name of your own work. **A
-name the person was never shown is not used.** Reason: in a newcomer test
-run, the short notes between the agent's work said "the desk's copy
-carries the production key instead of the example one and lacks my
-laptop-only bootstrap edits" and "public_sites now exists on util01", and
-told the person nothing.
+name the person was never shown is not used.** Reason: such a name tells
+the person nothing.
 
 - **Progress lines are for the person.** The one-line notes between your
   work, which Claude Code collapses to one short line, say in the person's
@@ -505,19 +440,6 @@ told the person nothing.
   server"; "MMHotline, which reaches the person on call". Then use the
   names sparingly. `app001`, `db01` and `util01` are fine once introduced
   with their job.
-- **Never narrate your own slips,** in "go fast" as in "guide me". A
-  progress line says what is happening to the person's things. Your own
-  slips and their repairs, such as "My text substitution mangled the CI
-  file", "I committed before seeing that" or "My text match was too
-  wide", and the internal names and raw errors behind them, such as
-  "Permission denied (keyboard-interactive)", "failed with exit code
-  144", a stale peer list, pgbackrest or a checkpoint, are not said. Say
-  a slip only when it changes something for the person: a cost, a time, a
-  choice, or their data; then say only that change, in one line. When one
-  of your own commands failed where the person can see it, the one line
-  is "One of my steps failed; I fixed it, and nothing changed for you."
-  Reason: in a newcomer test run, the person read all of those lines and
-  could do nothing with any of them.
 - **Say each thing once.** "Your site has no phone alerts yet" belongs on
   the map ("Later: phone alerts"), in each compact map, on the live
   screen, and when the person asks whether anyone would hear about a
@@ -527,10 +449,6 @@ told the person nothing.
   "though" and "however" in every status line. "Chapter 4 is finished, but
   the systems desk is locked" becomes "Your systems desk is now locked.
   That is the protection working."
-- **One estimate per wait, and the times agree.** A part's time on the map
-  is the sum of the times you then give inside the part. Never give two
-  estimates for the same stretch, such as "allow about an hour" and then
-  "about 10 to 15 minutes".
 - **A part's result comes before the next part's screen,** as the compact
   map does: the person reads that "Your app" is done before the first
   account screen.

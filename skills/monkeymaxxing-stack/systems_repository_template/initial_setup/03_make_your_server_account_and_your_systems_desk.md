@@ -208,9 +208,8 @@ account screen of step 1 is the opening.
    **Check:** the `grep` for `the setup fills it` lists no value of
    chapters 1 to 3 other than the desk's and its laptop's, which the desk's
    steps below fill, and `mmx validate every_server` stops, if at all, only
-   on such a value or one whose comment names a later chapter. Reason: in
-   three newcomer test runs `go-live` stopped in the person's terminal on a
-   bucket name left as the template's example.
+   on such a value or one whose comment names a later chapter. Reason:
+   otherwise `go-live` stops in the person's terminal on the empty value.
 
 ## The real price, approved once
 
@@ -233,36 +232,41 @@ account screen of step 1 is the opening.
    desk's line is the total of the guide's order cart, which orders
    nothing.
 
-   When a size is sold out where the plan put it:
+   When a size is sold out where the plan put it, first try the same size
+   at the provider's other locations in the same region (the same
+   continent), and recommend the one that has it in one line on the price
+   screen: "Nuremberg is sold out of this size; Helsinki has it, at the
+   same price." The production servers stay together in one location.
 
-   - First try the same size at the provider's other locations in the
-     same region (the same continent), and recommend the one that has it
-     in one line: "Nuremberg is sold out of this size; Helsinki has it,
-     at the same price." The production servers stay together in one
-     location.
-   - Only when no nearby location has the size, recommend the next
-     bigger size, with the old total, the new total and the reason, one
-     line each.
-   - **Always also offer "wait and try again"** when a cheap size is sold
-     out, with the honest line: "Cheap sizes often come back within the
-     hour. I check again every few minutes and tell you when one is
-     back." On that answer, re-check in the background with a 5-minute
-     bound, such as `timeout 5m bash -c 'until CHECK; do sleep 60; done'`,
-     and start it again while the size stays sold out, up to about an
-     hour. At each end, say one line, such as "Still sold out at 10:40;
-     I check again. I'll tell you when a size is back (I look every few
-     minutes)." Reason: in a newcomer test run, Hetzner's smallest size
-     was sold out in every location at 04:54 and back in Nuremberg at
-     04:57; in another, the person heard nothing during a 15-minute stock
-     wait unless they asked.
-   - **At Hetzner, also offer "use OVHcloud instead"** beside waiting
-     and the bigger size, while the person has made no account other than
-     Hetzner's for the setup: "Or I set up your servers at OVHcloud
-     instead, which has this size now." Check OVHcloud's stock first, as
-     its guide says, and give its total in the same line. On that
-     answer, read OVHcloud's guide and start this chapter again with it.
-     Reason: a sold-out cheap size at Hetzner otherwise leaves only a
-     wait or a higher price, and the person has nothing yet to undo.
+   When no nearby location has the size, show the sold-out screen, as the
+   last text of your reply, with no tool call after it. Its options come in
+   this order. "Use OVHcloud instead" comes first, and only at Hetzner,
+   while the person has made no account other than Hetzner's for the
+   setup, and where OVHcloud's guide covers the servers' region (today
+   OVHcloud US): check OVHcloud's stock first, as its guide says, and give
+   its real total. "Order now" is the next bigger size at its real price.
+   "Wait" is last. Reason: the person has nothing yet to undo at Hetzner,
+   so a move costs nothing, and the cheap size may not come back soon.
+
+   ```text
+   Hetzner has the smallest app server size (2 CPUs, 4 GB) in neither of its US locations today.
+
+   You can:
+     Use OVHcloud instead.  It has this size now:   about $26 a month in all, plus sales tax.
+     Order now at Hetzner, with the next bigger app server:   about €29 a month in all, €5 more than the plan.
+     Wait.  I check Hetzner every few minutes and tell you when the size is back.
+       The cheap size may not come back today.
+
+   Say "OVHcloud", "order now" or "wait".
+   ```
+
+   Without the OVHcloud option, the screen has the other two lines. On
+   "OVHcloud", read OVHcloud's guide and start this chapter again with
+   it. On "order now", show the price screen below with the bigger size.
+   On "wait", re-check in the background with a bound, such as
+   `timeout 10m bash -c 'until CHECK; do sleep 60; done'`, and start it
+   again while the size stays sold out. When the size is back, show the
+   price screen below.
 
    Re-check the stock right before you show any price dearer than the
    plan's, and again at the moment of each order: the desk's, and the
@@ -343,8 +347,7 @@ account screen of step 1 is the opening.
    never the provider's type code, such as `cx23`. When the person must
    choose between plans, such as after a sell-out, give each option at
    most three lines: its total a month, what differs from the plan, and
-   its one drawback. Reason: in a newcomer test run, the options carried
-   type codes and four lines each, and the person had to think.
+   its one drawback.
 
    The person's yes approves the desk's order now and the three servers,
    which you create as soon as the desk is ready
@@ -551,9 +554,7 @@ repository's name, including paths inside quoted SSH commands.
    has them: the bootstrap writes the desk's production key into both, in
    the desk's checkout. After the bootstrap, never copy the laptop's copy
    over the desk's checkout again: it would empty both settings, and
-   `every_server` would refuse to run. Reason: in a newcomer test run,
-   the template's example key replaced the desk's own, and the first
-   install locked the desk out of the servers.
+   `every_server` would refuse to run.
 
    The bootstrap is the
    desk's whole setup, run as root from the laptop, before the lock. It
@@ -652,8 +653,8 @@ repository's name, including paths inside quoted SSH commands.
 As soon as the desk is ready, and before chapter 4's step 2 opens the
 person's next accounts, create `app001`, `db01` and `util01`. They stay
 idle until chapter 7 installs everything on them. Reason: stock changes by
-the hour; in a newcomer test run, the approved sizes sold out in the 35
-minutes between the person's yes and the creation. The servers need only
+the hour, so the approved sizes can sell out between the person's yes
+and the creation. The servers need only
 the desk: the Cloudflare tunnels' tokens and every other secret are read
 later, when chapter 7 installs everything.
 

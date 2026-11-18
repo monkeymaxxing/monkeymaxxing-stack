@@ -7,9 +7,7 @@
 # values that are not secrets, never a secret. It prints the steps that
 # changed, and a line at least once a minute, so the login is never idle.
 # At the end it prints the file's summary: the steps, finished,
-# stopped_with and for_the_coding_agent. The last line starts with
-# "Tell the person:" and gives the one line the coding agent says before
-# it starts the next wait (AGENTS.md, "The two windows agree").
+# stopped_with and for_the_coding_agent.
 # The wait ends when the file says finished, or when a go-live run that
 # wrote the file after the wait started stopped with a reason. Reason: an
 # earlier run's stopped_with stays in the file until the person's next run
@@ -19,10 +17,9 @@
 #     1     go-live stopped; stopped_with says why
 #     124   go-live has not finished or stopped; the wait ended at its bound
 #     64    a wrong argument; nothing was waited for
-# Reason for the bound, 5 minutes by default: the person hears from the
-# coding agent at each end of a wait, and in newcomer test runs the person
-# asked "is it done?" after 8 to 13 quiet minutes. It also ends before
-# Claude Code stops a command, after 10 minutes.
+# Reason for the bound, 9 minutes by default: Claude Code stops a command
+# after 10 minutes, so the wait ends first and says so. A coding agent that
+# allows longer commands passes --at-most-minutes.
 set -euo pipefail
 export PATH=/usr/local/bin:/usr/bin:/bin
 results_file=/var/lib/monkeymaxxing-stack/setup_results.json
@@ -30,7 +27,7 @@ seconds_between_checks=5
 seconds_between_lines_at_most=60
 
 refuse() { printf '%s Nothing was waited for.\n' "$1" >&2; exit 64; }
-at_most_minutes=5
+at_most_minutes=9
 case "$#" in
     0) ;;
     2) [ "$1" = --at-most-minutes ] || refuse 'Usage: wait-for-the-setup [--at-most-minutes N]'
@@ -50,10 +47,6 @@ read_the_state() {
 steps_line() {
     jq -r '[.steps[] | "\(.name) \(.state)"] | join(", ")' "$results_file" 2>/dev/null || true
 }
-# Such as "2 of 5 steps done", for the person's line.
-steps_done() {
-    jq -r '"\([.steps[] | select(.state == "done")] | length) of \(.steps | length) steps done"' "$results_file" 2>/dev/null || true
-}
 
 started=$(date +%s)
 last_line_at=$started
@@ -67,11 +60,6 @@ while :; do
         steps=$(steps_line)
         printf 'go-live has not finished or stopped after %s minutes.%s Wait again with: wait-for-the-setup\n' \
             "$at_most_minutes" "${steps:+ Steps: $steps.}"
-        if [ -f "$results_file" ]; then
-            printf 'Tell the person: the setup in your terminal is still going, %s; add what it does or waits for now and the time left, as a range.\n' "$(steps_done)"
-        else
-            printf 'Tell the person: the setup has not started in your terminal yet; add the command to type, if you asked for it, and what it starts.\n'
-        fi
         exit 124
     fi
     steps=$(steps_line)
@@ -94,9 +82,7 @@ done
 jq '{steps: [.steps[] | "\(.name)=\(.state)"], finished, stopped_with, for_the_coding_agent}' "$results_file"
 if [ "$state" = finished ]; then
     echo 'go-live finished.'
-    echo 'Tell the person: the setup in your terminal is done; add what runs now and the time left, as a range.'
     exit 0
 fi
 echo 'go-live stopped. stopped_with above says why. After the fix, the person starts the setup again, and it continues where it stopped.'
-echo 'Tell the person: the setup in your terminal stopped; add, from stopped_with above, why in plain words, and what happens next.'
 exit 1

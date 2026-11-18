@@ -442,6 +442,9 @@ customers, and a written guide to running your system.
 you, and when you say "guide me", it slows down and explains each part
 before doing it.
 
+Your agent may go quiet or make a small mistake and fix it. Ask "how's it
+going?" at any time, just as you would in any other session.
+
 **Have these at hand before you start:** your domain, and the login to
 your domain's registrar; a GitHub account with your app's repository; a
 password manager; a phone with an authenticator app; and a payment card

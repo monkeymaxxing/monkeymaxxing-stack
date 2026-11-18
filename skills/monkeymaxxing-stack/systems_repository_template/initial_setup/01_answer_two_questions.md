@@ -67,6 +67,9 @@ Reason: the Stack needs a coding agent you trust, and anything that changes your
 
 The setup takes about an hour and a half.  I need you for about 20 minutes of it, mostly at the start.
 
+Your agent may go quiet or make a small mistake and fix it. Ask "how's it going?"
+at any time, just as you would in any other session.
+
 By default, I'll go fast and only stop when I need you. Say "guide me" any time
 and I'll slow down and explain each part before I do it. Say "go fast" to speed
 up again. Ask "why?" about anything.
@@ -148,8 +151,8 @@ answers.
      zone, such as Falkenstein for `Europe/Berlin` at Hetzner. Name only
      a location from the provider's own list: the provider guide's list
      of locations, or the provider's own list of locations from its API.
-     Never a nearby city the provider does not use. Reason: in a newcomer
-     test run, the plan said "Frankfurt", where Hetzner has no servers.
+     Never a nearby city the provider does not use, such as Frankfurt at
+     Hetzner, which has no servers there.
      Read the time zone with
      `readlink /etc/localtime` on a Mac or Linux, or
      `timedatectl show -p Timezone --value` on Linux. Pick the desk's
@@ -168,9 +171,7 @@ answers.
      its repository's name, such as `Example` for a repository named
      `example`. When neither gives a name, write "What is your company or
      project called?" on the screen. Never derive the name from the domain
-     alone. Reason: in a newcomer test run, the agent proposed the
-     domain's name, and the person had to correct it to the company's own
-     name.
+     alone. Reason: a domain's name is often not the company's own name.
    - **Password manager:** the one the laptop has, such as 1Password,
      Bitwarden, or KeePassXC. On a Mac, look in `/Applications`. On Linux,
      look for `1password`, `bitwarden`, or `keepassxc` on `PATH` or in
@@ -207,9 +208,8 @@ answers.
      after the provider key works, in chapter 3's
      [the real price, approved once](03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once),
      before anything is bought. Reason: stock changes by the hour, and
-     most providers show it only with the key; in a newcomer test run the
-     cheap sizes sold out between this screen and the order, and €27
-     became €68.
+     most providers show it only with the key, so the cheap sizes can
+     sell out between this screen and the order.
    - **Growth, as money:** from `growth_limits` in the template's
      `mmx_project_settings.yml` and the same prices, work out the most
      the servers may add by themselves without asking the person: for
@@ -363,9 +363,8 @@ answers.
    and replace the whole line, comment included, such as
    `project_name: example_systems`. So
    `grep -n 'the setup fills it' mmx_project_settings.yml inventories/servers.yml`
-   lists exactly the values still to fill. Reason: the template's example
-   values looked real, and in three newcomer test runs an example bucket
-   name was kept.
+   lists exactly the values still to fill. Reason: an example value that
+   looks real is easily kept by mistake.
 
    Write the answers into the copy:
 
