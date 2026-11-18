@@ -112,7 +112,11 @@ account screen of step 1 is the opening.
    checkout first, then `util01` from chapter 7. The Git host keeps a
    private backup copy, which you push from the laptop with the person's
    own login ("The main copy and the backup at the Git host" in
-   [`AGENTS.md`](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host)). Make an empty
+   [`AGENTS.md`](../AGENTS.md#the-main-copy-and-the-backup-at-the-git-host)). When the
+   person gave the backup repository's address on chapter 2's screen, use
+   that address exactly as given, and skip `gh repo create` and the
+   screen below; still set the address and remove the example key, as
+   the end of this step says. Never ask for the address again. Otherwise make an empty
    private repository, `example_systems`, at the app's Git host and owner
    from chapter 2. With `gh` signed in:
 
@@ -143,7 +147,18 @@ account screen of step 1 is the opening.
    that names a repository nobody made fails at the first backup push, in
    chapter 4, far from its cause. No key of the desk or
    of a server goes to the Git host. Remove the example `util01` key from
-   `root_ssh_public_keys` until chapter 7 registers the real key.
+   `root_ssh_public_keys` until chapter 7 registers the real key, with
+   your edit tool, in `mmx_project_settings.yml`: the old text is this
+   one whole line, and the new text is nothing:
+
+   ```text
+       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4Jcw7Fq2URbtI72IZ9N/p0WjdFGpZ0VJcet+YVhxZx util01, the mmhotline user
+   ```
+
+   Never delete lines that match the words `util01, the mmhotline user`:
+   the setting `util01_ssh_key_name_at_the_provider` holds the same words
+   and must stay. Reason: in two newcomer test runs, a line match removed
+   that setting too.
 
    **Tell the person:** no message with `gh`. You made the repository.
 
@@ -238,8 +253,8 @@ account screen of step 1 is the opening.
    - **Always also offer "wait and try again"** when a cheap size is sold
      out, with the honest line: "Cheap sizes often come back within the
      hour. I check again every few minutes and tell you when one is
-     back." On that answer, re-check in the background with a 10-minute
-     bound, such as `timeout 10m bash -c 'until CHECK; do sleep 180; done'`,
+     back." On that answer, re-check in the background with a 5-minute
+     bound, such as `timeout 5m bash -c 'until CHECK; do sleep 60; done'`,
      and start it again while the size stays sold out, up to about an
      hour. At each end, say one line, such as "Still sold out at 10:40;
      I check again. I'll tell you when a size is back (I look every few
@@ -247,6 +262,14 @@ account screen of step 1 is the opening.
      was sold out in every location at 04:54 and back in Nuremberg at
      04:57; in another, the person heard nothing during a 15-minute stock
      wait unless they asked.
+   - **At Hetzner, also offer "use OVHcloud instead"** beside waiting
+     and the bigger size, while the person has made no account other than
+     Hetzner's for the setup: "Or I set up your servers at OVHcloud
+     instead, which has this size now." Check OVHcloud's stock first, as
+     its guide says, and give its total in the same line. On that
+     answer, read OVHcloud's guide and start this chapter again with it.
+     Reason: a sold-out cheap size at Hetzner otherwise leaves only a
+     wait or a higher price, and the person has nothing yet to undo.
 
    Re-check the stock right before you show any price dearer than the
    plan's, and again at the moment of each order: the desk's, and the

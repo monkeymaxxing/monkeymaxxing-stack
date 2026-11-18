@@ -105,12 +105,12 @@ Then the script does six things, in order:
    provider's name. The script never prints a value.
 6. **It stays open and starts the desk's setup by itself.** After the
    line, it prints `Leave this window open.  Your coding agent shows you
-   the real price next, and orders your systems desk after your yes.` and waits for the file
+   the real price next, and sets up your systems desk after your yes.` and waits for the file
    `~/example-setup/desk-ordered`, which your `create-desk01` script makes
    only after the provider accepted the desk's order (chapter 3, step 2 of
    "Create desk01 through WireGuard"; the script's lines name no chapter,
    because the person reads them). Then it prints `Your systems desk
-   is ordered.  Building it takes about 10 minutes.` and waits for the
+   is on its way.  Building it takes about 10 to 15 minutes.` and waits for the
    file `~/example-setup/desk-ready`, which you make when the desk is
    ready (chapter 4, step 2). It checks every 5 seconds. It gives up after
    90 minutes without `desk-ordered`, with `Your systems desk was not

@@ -74,9 +74,8 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    commit, publish (the [Making a change](../AGENTS.md#making-a-change)
    steps), start the `every_server` run on `util01` as a desk job, and
    start its wait as a background command with its bound, such as
-   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 10`, and
-   start it again each time it ends unfinished, as the skill's "A wait
-   over about 10 minutes speaks every 10 minutes" says. Then end your
+   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 5`, and
+   start it again each time it ends unfinished, as the skill's "No wait longer than 5 minutes; each end gets one line" says. Then end your
    reply with the live screen, with no tool call after it:
 
    ```text
@@ -131,7 +130,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    part of the setup. Mark `mmwatchdog_with_the_default_checks` once
    `mmwatchdog fleet` on `util01` shows the public check. To wait for that
    first check, use a bounded wait, such as
-   `timeout 10m bash -c 'until CHECK; do sleep 15; done'`, never an
+   `timeout 5m bash -c 'until CHECK; do sleep 15; done'`, never an
    unbounded loop.
 
    Without the setting, go on to step 3 once the run ended. With it, the
@@ -184,7 +183,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    key or vault passphrase is available. CI needs only registry access.
 
    **Tell the person:** nothing while it runs beyond the wait lines of the
-   skill's "A wait over about 10 minutes speaks every 10 minutes": the
+   skill's "No wait longer than 5 minutes; each end gets one line": the
    live screen already said what happens. "A release"'s messages are for
    later releases. Its result, the memory check's numbers, the commit and
    the image tags go into the checklist's `last_result`, never into the

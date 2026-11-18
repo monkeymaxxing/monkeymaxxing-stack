@@ -958,10 +958,22 @@ node_tasks:
   # time_limit 30m: a months-old image's hundred updates took 3 to 7
   # minutes on Debian 13 on a small server, up to 15 on Ubuntu 26.04; 30
   # leave room for a slow mirror and stop a run that hangs on the network.
+  # A new server runs apt by itself in its first minutes: cloud-init's
+  # first boot, then apt's daily timers, which a fresh image starts at
+  # once. unattended-upgrade stops at once while another program holds
+  # apt's lock (a newcomer test run, 2026-11-18, on a desk and on util01).
+  # So the script pauses apt's two timers, waits for cloud-init and for
+  # an apt run already going to end, installs, and starts the timers
+  # again. The task's time_limit bounds the wait.
   - id: install_the_waiting_security_updates_on_a_new_server
     time_limit: 30m
     shell:
-      script: apt-get update && unattended-upgrade
+      script: |
+        systemctl stop apt-daily.timer apt-daily-upgrade.timer
+        trap 'systemctl start apt-daily.timer apt-daily-upgrade.timer' EXIT
+        if command -v cloud-init >/dev/null; then cloud-init status --wait >/dev/null || true; fi
+        while systemctl show --property ActiveState --value apt-daily.service apt-daily-upgrade.service | grep -qx -e active -e activating -e deactivating; do sleep 5; done
+        apt-get update && unattended-upgrade
       dryrun: printf 'would install the waiting security updates, the first time only\n'
       run_only_once_marker_file: /var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server
   - id: run_the_daily_package_list_refresh

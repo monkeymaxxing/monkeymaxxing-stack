@@ -1749,7 +1749,14 @@ fleet_stages:
       - id: install_the_waiting_security_updates_on_a_new_server
         time_limit: 30m
         shell:
-          script: apt-get update && unattended-upgrade --no-minimal-upgrade-steps
+          # Waits for the server's own apt runs first, as roles/every_server's
+          # task of the same name says.
+          script: |
+            systemctl stop apt-daily.timer apt-daily-upgrade.timer
+            trap 'systemctl start apt-daily.timer apt-daily-upgrade.timer' EXIT
+            if command -v cloud-init >/dev/null; then cloud-init status --wait >/dev/null || true; fi
+            while systemctl show --property ActiveState --value apt-daily.service apt-daily-upgrade.service | grep -qx -e active -e activating -e deactivating; do sleep 5; done
+            apt-get update && unattended-upgrade --no-minimal-upgrade-steps
           dryrun: printf 'would install the waiting security updates, the first time only\n'
           run_only_once_marker_file: /var/lib/mmx/commands_run_once/security_updates_installed_on_a_new_server
 
@@ -1861,6 +1868,12 @@ fleet_stages:
           env:
             POSTGRESQL_MAJOR_VERSION: "{{ .vars.postgresql_major_version }}"
           run_only_once_marker_file: /var/lib/mmx/commands_run_once/push_the_newest_database_changes_before_the_first_restore_drill
+  # A run that failed on another server, such as an app server, still
+  # starts the drill here, because util01 went on. No requires on the
+  # other servers' fleet stages: MMX then refuses every run with
+  # --limit util01. So a rerun after a failed run waits for this drill
+  # first (initial_setup/07_install_everything_on_the_production_servers.md,
+  # step 5).
   - id: start_the_restore_drill_until_one_has_passed
     nodes: util_server
     node_tasks:

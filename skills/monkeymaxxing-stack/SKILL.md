@@ -97,7 +97,7 @@ In every reply:
 - **Every background wait has a time limit, and its end gets a reply.**
   Give each wait its bound: `--at-most-minutes N` on the Stack's wait
   commands, or `timeout` around a loop of your own, such as
-  `timeout 10m bash -c 'until CHECK; do sleep 10; done'`. Never start an
+  `timeout 5m bash -c 'until CHECK; do sleep 10; done'`. Never start an
   `until` loop with no bound. The command's end wakes you whatever the
   result: success, failure or the bound. Then say the result in a reply
   that ends your turn, also when it is "still not done". Reason: in a
@@ -106,35 +106,51 @@ In every reply:
 - **Long work.** Before any stretch of work longer than about a minute,
   end a reply with one line: what happens now, about how long, and that
   the person need do nothing, such as "Now: I am setting up your servers,
-  about 15 minutes. Next for you: nothing. I tell you when it is done."
+  about 15 to 20 minutes. Next for you: nothing. I tell you when it is done."
   Run long work as background commands, with your turn ended, where you
   can. Notes between tool calls are collapsed, so never rely on them to
   tell the person anything. While a background job runs, your reply's
-  last line says when you next speak: "I'll tell you when it's done, in
-  about 12 minutes." Reason: the person then never has to ask whether
+  last line says when you next speak: "I'll tell you how it goes in
+  5 minutes at most, and when it's done, in about 10 to 15 minutes." Reason: the person then never has to ask whether
   you are still working.
-- **A wait over about 10 minutes speaks every 10 minutes.** Bound each
-  background wait the person waits on to at most about 10 minutes, such
-  as `--at-most-minutes 10` or `timeout 10m`, and start the next one when
-  it ends unfinished. At each end, say one line that ends your turn: what
-  is happening to the person's things, how far along it is, and the new
-  estimate when it changed, such as "Your servers are installing their
-  security updates, 2 of 3 done. I'll tell you when they are done (about
-  8 minutes)." Say what is normal as normal: "the restore test, a check
+- **No wait longer than 5 minutes; each end gets one line.** Bound each
+  background wait at 5 minutes at most, `--at-most-minutes 5` on the
+  Stack's wait commands or `timeout 5m` around a loop of your own, and
+  start the next one when it ends unfinished. When a wait ends, say one
+  line, as the text that ends your turn, before you start the next
+  wait: what finished, what runs now, and how long is left, such as
+  "Your desk's security updates are done. Now I set up the desk itself,
+  about 10 to 15 more minutes." The wait commands' last line starts with
+  "Tell the person:" and gives that line's content; say it in your own
+  words. Say what is normal as normal: "the restore test, a check
   that your backups work, is running", "your servers restart one at a
   time, as planned", never words that sound like trouble, such as
-  "locked", "stuck" or "retry". The waits on the person's own terminal,
-  such as `wait-for-the-setup` while the person makes accounts, keep
-  their longer bound. Reason: in a newcomer test run, the person heard
-  nothing during a 15-minute stock wait and a 30-minute install unless
-  they asked, asked "is it done?" four times, and the estimates slipped
-  unsaid.
+  "locked", "stuck" or "retry". This holds for every wait, also
+  `wait-for-the-setup` while the person makes accounts. Reason: in
+  newcomer test runs, the person asked "is it done?" after 8 to 13
+  quiet minutes every time, and heard nothing during a 30-minute
+  install unless they asked.
+- **Estimates are ranges, and a passed estimate is replaced.** Give each
+  time as a range, such as "10 to 15 minutes", never one number. When
+  the time you gave has passed, never say it again: say the new range
+  and why, such as "The desk is still installing its updates, which
+  took longer than I said: about 5 to 10 more minutes." Reason: in a
+  newcomer test run, "about 8 minutes" became 24, and each line said
+  the old estimate.
 - **Say the person's next step before it appears in their terminal.**
   When the person's terminal window will show the next thing to do, such
   as the setup window's next account, say so in the reply before, with
   about when: "In about 5 minutes your terminal asks for your Cloudflare
   account; I'll say when." Reason: in a test run the terminal showed a new
-  prompt after five quiet minutes, with no word in the chat.
+  prompt after five quiet minutes, with no word in the chat. Before you
+  say it, check that the settings files the next step reads hold no
+  template example value, such as `example-systems-backups` or
+  `example.com`: `grep -nE '^[^#]*example' mmx_project_settings.yml
+  inventories/servers.yml` lists them, outside comments. Fill each one
+  that the next step reads before you say it. Reason: in a newcomer test run,
+  `vars.backups.production_bucket` was still `example-systems-backups`,
+  and the person's terminal showed a stop while the chat said "look for
+  the Cloudflare screen".
 - **Good news the moment it is proven.** When a result the person waits
   for is proven, such as the site answering at its address, say it at
   once, as its own screen that ends your turn. Never hold it back for a
@@ -158,7 +174,7 @@ In every reply:
   checklist, and the live screen came only below them.
 - **Now and next, at the end of every reply.** The last lines say what
   you are doing now and what the person does next, such as "Now: I am
-  building your systems desk, about 10 minutes. Next for you: nothing. I
+  building your systems desk, about 10 to 15 minutes. Next for you: nothing. I
   carry on." When the person has nothing to do, say "Nothing. I carry
   on." A chapter's end is not a stop: give the chapter's result in at
   most three lines and start the next chapter in the same reply. A
@@ -246,6 +262,19 @@ In every reply:
   the person's time zone. Never a nearby city the provider does not use.
   Reason: in a newcomer test run, the plan said "Frankfurt", where
   Hetzner has no servers.
+- **The recommended provider follows where the person is.** From the
+  laptop's time zone: OVHcloud in the Americas and Asia-Pacific, Hetzner
+  in Europe, Africa and the Middle East, with the other one as the first
+  alternative. Chapter 1's step 2 has the table and the reason: the
+  biggest servers a growing system moves to, dedicated machines, are in
+  the person's own region.
+- **Write helper scripts with your file-writing tool.** A small script
+  the person runs, such as a command that asks for a key, is a file you
+  write with your agent's file-writing tool, then `chmod +x`. Never write
+  it with a shell heredoc (`cat > FILE <<EOF`), and never put `rm` in a
+  command you run while the person watches. Reason: in a newcomer test
+  run, three such commands made Claude Code ask about a "dangerous rm" in
+  auto mode, which scared the person, who could not read the script.
 - **The company's name comes from the app or from the person.** Take it
   from the app: the name in its README's title, or its repository's
   name. When neither gives it, ask. Never derive it from the domain

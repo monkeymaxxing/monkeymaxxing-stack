@@ -46,10 +46,9 @@ chapter.
   server's waiting security updates, which takes 3 to 7 minutes on Debian 13
   on a small server. App, jobs and load-balancer servers install theirs
   last, after they serve.
-- **The person hears from you at least every 10 minutes.** Wait for each
-  desk job with `--at-most-minutes 10`, and start the wait again while
-  the job runs, with one line each time, as the skill's "A wait over
-  about 10 minutes speaks every 10 minutes" says: what is happening to
+- **The person hears from you at least every 5 minutes.** Wait for each
+  desk job with `--at-most-minutes 5`, and start the wait again while
+  the job runs, with one line each time, as the skill's "No wait longer than 5 minutes; each end gets one line" says: what is happening to
   the person's servers, how far along, and the new estimate when it
   changed. A restart, the restore test, or a desk job that waits for
   another to finish is normal, and is said as normal: "Your servers
@@ -318,7 +317,8 @@ chapter.
    reason. From then on, `apply_the_mmhotline_settings` applies each change
    to `mmhotline_settings.yml`.
    At the end of run 2 (configure every server), the first restore drill starts in the background
-   on `util01`. The restore drill waits for any running uploads copy to
+   on `util01`, also when the run failed on another server, such as an
+   app server. The restore drill waits for any running uploads copy to
    finish before restoring the database.
 
    **Tell the person first:**
@@ -369,7 +369,22 @@ chapter.
    no secret.
 
    Fix the cause in the systems repository, commit, and run the failed
-   command again.
+   command again. When run 2 failed on another server while `util01` went
+   on, its end started the first restore drill, which holds `util01` for
+   a few minutes, and MMX refuses `util01` until it ends. So first wait
+   for the drill, as a background wait of 5 minutes at most, started
+   again while the drill runs:
+
+   ```sh
+   # On the laptop, as a background command. The drill's unit is in its "start" state while it runs.
+   ssh desk01-agent "cd systems_repository && ssh -F ssh/config root@10.20.0.1 \"timeout 5m sh -c 'while systemctl show --property SubState --value weekly_database_restore_drill.service | grep -qx start; do sleep 10; done'\""
+   ```
+
+   Tell the person it is normal, such as "The restore test, a check that
+   your backups work, started by itself; I start the install again when it
+   ends, in about 5 to 10 minutes." Never start the rerun into a running
+   drill. Reason: in a newcomer test run, the reruns were refused for
+   about 10 minutes while the drill ran.
 
    **Tell the person,** only when a run failed:
 

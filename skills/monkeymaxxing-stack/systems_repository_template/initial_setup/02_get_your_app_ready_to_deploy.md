@@ -230,6 +230,21 @@ the person's. Then you push the changes and watch the first build.
      `files_for_your_app/node/pg_with_multiple_database_servers.mjs` into its code
      and makes its pools with it;
    - the health URL fails until the app can reach its database;
+   - **the app stops cleanly when asked:** on `SIGTERM`, which a release
+     sends to the old version's containers, the web and job processes
+     finish their current requests and exit within 30 seconds
+     (`StopTimeout=30` in `roles/app_server/files/web_container.container`).
+     In a container the app's first process is process 1, which ignores
+     `SIGTERM` unless the program handles it. Puma and Gunicorn handle it
+     already. A Go app calls `http.Server.Shutdown` on the signal. A
+     Node.js app, with or without `cluster`, needs a `SIGTERM` handler
+     that closes the server and the database pool, then exits. Read the
+     app's start code for it, and make the fix
+     here and name it on step 7's screen, such as "`server.js`: stops
+     cleanly when the server asks, so a release never waits 30 seconds".
+     Reason: in a newcomer test run, the agent found the missing handler
+     only at the first release, after the site was live, and had to ask
+     for another yes;
    - a seed command in the app's image that fills an empty database with
      invented test data. Developers run the seed command on their laptops
      against a local database, and
@@ -266,7 +281,8 @@ the person's. Then you push the changes and watch the first build.
    **Tell the person:** no message, because step 7 shows every fix.
 
    **Check:** each of the app's items is met by a fix, or step 8 records
-   the item as a deviation.
+   the item as a deviation, and the app's start code handles `SIGTERM`
+   as above.
 
 6. **CI builds the images.** CI, the Git host's automated service, tests
    the app, builds the image from `Containerfile`, and pushes the image to
@@ -378,12 +394,31 @@ the person's. Then you push the changes and watch the first build.
    Tests: I did not run your app's tests.  This laptop has no podman or docker,
    so your app's tests run at GitHub, automatically, when I push.
 
+   Backup: your server settings also get a private backup copy at GitHub, beside your app.
+   If you already have an empty private repository for it, tell me its address exactly as
+   you push to it.  Otherwise I make one, or show you how, in part 2.
+
    Say "yes" and I push them.  Or say "show" to see the details, or tell me what to change.
    ```
+
+   The "Backup:" lines ask for the backup repository's address once,
+   here, together with the app's repository, so no later part asks again.
+   Record the address exactly as the person gives it, such as
+   `git@github.com:OWNER/example_systems.git` or an SSH host alias from the
+   person's `~/.ssh/config`, such as `github-backup:OWNER/example_systems.git`.
+   Leave the lines out when the person already named it.
 
    "show" gives, per file, what changed in more words and the terms the
    person needs, such as the primary database server or R2, then the same
    question; "show" and a file's name shows that file's change.
+
+   Write the app's test command so it runs as written on a clean
+   machine, and check it against the test runner's own rules before the
+   screen, because without a container tool nothing runs it before CI
+   does. For example, Node's `node --test` finds the `test/` folder by
+   itself, while `node --test test/` makes Node 22 look for a file named
+   `test/` and fail. Reason: in a newcomer test run, that one word failed
+   CI and cost the person a second "yes".
 
    Make the "Tests:" line true. When a container tool exists and you ran
    the tests, say that they passed or which failed. When the laptop has

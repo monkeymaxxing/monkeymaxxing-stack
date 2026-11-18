@@ -108,8 +108,9 @@ domain at Cloudflare, its DNS records, and the lock.
    your turn ends there, with no tool call after it.
 
    ```sh
-   # On the laptop, as a background command. Waits up to an hour for go-live to finish or stop.
-   ssh desk01-agent wait-for-the-setup --at-most-minutes 60
+   # On the laptop, as a background command. Waits up to 5 minutes for go-live to finish or stop;
+   # start it again while go-live runs.
+   ssh desk01-agent wait-for-the-setup --at-most-minutes 5
    ```
 
    It prints the steps as they change, and a line at least once a minute.
@@ -513,6 +514,16 @@ domain at Cloudflare, its DNS records, and the lock.
    commits the main copy lacks: show the person those commits. Before a
    restore from it, read its push activity. Push it again at the end of
    each working session.
+
+   When the Git host answers "Repository not found", first try the
+   address in the form the laptop's own Git login reaches it: the form of
+   the app repository's `origin`, or a `Host` entry in `~/.ssh/config`
+   that names the Git host, such as `github-backup:OWNER/NAME.git`. Never
+   ask the person for the address again, and never list it among the
+   open items at the end of the setup: say it once, here, with what you
+   tried. Reason: in a newcomer test run, the person had given the name
+   in part 2, the push used the wrong address form, and the end of the
+   setup asked again, which looked like the setup forgot the answer.
 
    **Check:** `git ls-remote backup main` on the laptop shows the same
    commit as `main` in your clone.

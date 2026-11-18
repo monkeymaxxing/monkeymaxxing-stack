@@ -85,6 +85,13 @@ runcmd:
       set -euo pipefail
       umask 077
       export DEBIAN_FRONTEND=noninteractive
+      # A fresh image starts apt's daily timers at its first start, and
+      # their run holds apt's lock for a few minutes, so apt-get would stop.
+      # Pause the timers, wait for a run already going, and start the
+      # timers again at the end.
+      systemctl stop apt-daily.timer apt-daily-upgrade.timer
+      trap 'systemctl start apt-daily.timer apt-daily-upgrade.timer' EXIT
+      while systemctl show --property ActiveState --value apt-daily.service apt-daily-upgrade.service | grep -qx -e active -e activating -e deactivating; do sleep 5; done
       apt-get update
       apt-get install -y wireguard-tools ufw nftables
       chown root:root /etc/wireguard /etc/wireguard/wg0.private_key /etc/wireguard/wg0.conf

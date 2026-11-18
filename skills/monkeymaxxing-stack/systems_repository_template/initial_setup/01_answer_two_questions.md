@@ -100,14 +100,44 @@ answers.
 
 2. **The server provider.** Read the [provider guides](../provider_guides/README.md).
 
-   **Ask the person,** in your second reply:
+   **Recommend by where the person is,** from the laptop's time zone
+   (`readlink /etc/localtime`, as step 3 reads it; the person can change
+   it):
+
+   | The laptop's time zone | Recommend | First other choice |
+   | --- | --- | --- |
+   | The Americas (`America/...`) | OVHcloud | Hetzner |
+   | Europe (`Europe/...`) | Hetzner | OVHcloud |
+   | Africa and the Middle East (`Africa/...`, and the Middle East's `Asia/...` zones, such as `Asia/Dubai`, `Asia/Riyadh`, `Asia/Tehran` and `Asia/Jerusalem`) | Hetzner | OVHcloud |
+   | Asia-Pacific (the other `Asia/...` zones, `Australia/...`, `Pacific/...`) | OVHcloud | Hetzner |
+
+   Reason, which is also the answer to "why?": a system grows first by
+   moving to bigger servers, and the biggest are dedicated machines.
+   Hetzner's dedicated machines are only in Europe (Nuremberg and
+   Falkenstein in Germany, Helsinki in Finland). OVHcloud also has them
+   in North America (Hillsboro and Vint Hill in the USA, Montreal in
+   Canada) and in Asia-Pacific (Singapore, Mumbai and Sydney). So each
+   recommendation keeps the way to bigger servers in the person's own
+   region; Africa and the Middle East are nearer Europe. Both are also
+   cheap and simple. Checked on 2026-11-18 at
+   `docs.hetzner.com/general/others/data-centers-and-connection/` and
+   `us.ovhcloud.com/bare-metal/regions-availability/`. Say nothing about
+   the other providers' offers or prices.
+
+   **Ask the person,** in your second reply, such as for a laptop in
+   `America/New_York`:
 
    ```text
    Second question:  which company should run your servers?
 
-      I recommend Hetzner.  It is cheap, fast, and simple.
-      Other choices:  OVHcloud, DigitalOcean, Vultr, Scaleway, AWS, Google Cloud.
+      I recommend OVHcloud.  It is cheap and simple, and it has bigger servers
+      in North America for when your app grows.
+      Other choices:  Hetzner, DigitalOcean, Vultr, Scaleway, AWS, Google Cloud.
    ```
+
+   For a laptop in Europe, the first lines are "I recommend Hetzner.  It
+   is cheap and simple, and it has bigger servers in Europe for when your
+   app grows." and "Other choices:  OVHcloud, DigitalOcean, ...".
 
    **Check:** you recorded the provider, and read its guide.
 
