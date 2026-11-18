@@ -30,7 +30,7 @@ phone.
 
 **Tell the person when the chapter starts,** in the first part of the setup:
 
-> I am reading the first backup and the first restore drill.
+> I am reading the first backup and the first restore test.
 
 ## Before you start
 
@@ -99,8 +99,28 @@ This part runs in the first part of the setup. The person does nothing.
 
    **Tell the person after:**
 
-   > Your backups restore: the drill restored your database onto a temporary server in [the measured time], and the data checks passed. The newest restored change was [the age] old when the drill began.
-   > The drill measures how long the database takes to come back, not how long your whole site takes to recover. [What the evidence shows about missing records.]
+   > Your backups restore: the restore test put your database back onto a temporary server in [the measured time], and the data checks passed. The newest restored change was [the age] old when the test began.
+   > The test measures how long the database takes to come back, not how long your whole site takes to recover. [What the evidence shows about missing records.]
+   > From now on the same restore test runs every week by itself: it is called the restore drill.
+
+   In the first part of the setup, this message ends "Your servers", so it
+   ends with
+   [chapter 0's compact map](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-compact-map),
+   as the last text of your reply, once step 3 below is done. Before you
+   write it, start chapter 9's step 1 check as a bounded background wait,
+   such as `timeout 30m bash -c 'until curl -fsS https://shop.example.com/up; do sleep 15; done'`,
+   so its end wakes you:
+
+   ```text
+     ✓ 1. Your app
+     ✓ 2. Your accounts
+     ✓ 3. Your keys locked away
+     ✓ 4. Your servers
+     → 5. Live                     now: I check your site from the internet, about a minute
+       Later: phone alerts.  Your site has none yet.
+
+   Next for you: nothing.  I tell you the moment your site is up.
+   ```
 
    **Check:** `backups_restore_every_week` holds the verified result from
    `latest_result.json`.

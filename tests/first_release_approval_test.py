@@ -24,7 +24,7 @@ class TheFirstReleaseNeedsNoApproval(unittest.TestCase):
 
     def test_the_live_screen_asks_for_no_release_word_without_the_setting(self):
         chapter = (T/'initial_setup/09_go_live.md').read_text()
-        screen = chapter.split('Your app is live at', 1)[1].split('```', 1)[0]
+        screen = chapter.split('YOUR APP IS LIVE AT', 1)[1].split('```', 1)[0]
         self.assertNotIn('Say "release"', screen)
         asking = [line for line in chapter.splitlines() if 'Say "release"' in line or 'person said "release"' in line]
         self.assertTrue(asking)

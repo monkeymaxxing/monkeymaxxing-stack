@@ -323,7 +323,7 @@ items:
       tools (without CI, tests and builds run in containers on the laptop).
       The details of the desk's login protections, such as the refusal of a
       reused code, are in the optional check of the system's protections.
-    waits_for: chapter 3 (make your server account and your systems desk), then chapter 7 (install everything on the production servers) for monitoring enrollment, then the real access and cleanup checks
+    waits_for: building the systems desk, then installing everything on the servers, which adds the systems desk to monitoring, then the real access and cleanup checks
 
   - id: systems_desk_recovery_items_saved
     title: The recovery bundle is saved, and its passphrase is in the team password manager
@@ -371,7 +371,7 @@ items:
       person's systems desk with their own API token (SERVER_PROVIDER_API_TOKEN in the desk's
       token file), and on util01 with util01's own token,
       util01_provider_api_token in the vault, which the restore drill uses
-      (the coding agent started the daily check once over SSH in chapter 8,
+      (the coding agent started the daily check once over SSH after the first restore drill,
       and `journalctl -u check_for_a_leftover_restore01` on util01 shows its
       list passed; the timer then repeats the check every day); and `server_management_scripts/create_a_server_at_the_provider` and
       `server_management_scripts/destroy_a_server_at_the_provider` work for
@@ -405,7 +405,7 @@ items:
       on the Git host, and the backup holds main of the main copy on util01; the person sees on the Git host's token page, such as
       https://github.com/settings/tokens, that the servers' registry token
       has read:packages and no other scope, so it cannot push; and the first
-      every_server run in chapter 7 pulled each app's image on app001 with
+      every_server run that installed the servers pulled each app's image on app001 with
       that token from the vault (caddy_app_containers_and_the_first_deploy),
       which proves its login without anyone reading it.
     waits_for: the initial setup
@@ -588,7 +588,7 @@ items:
     protects_against: losing uploaded files to a mistake, an attacker who reaches an app's R2 key, or a takeover of the Cloudflare account
     verification: >-
       util01's first copy_uploads_to_the_backup_bucket run, started by the
-      chapter 7 run, passed
+      run that installed the servers, passed
       (`journalctl -u copy_uploads_to_the_backup_bucket` on util01); the uploads' bucket holds
       each app's files in a folder named after the app; and MMWatchdog's
       check uploads_backup/a_copy_passed_within_the_copy_interval_plus_2_hours passes. That
@@ -629,7 +629,7 @@ items:
       each app's health URL, such as https://shop.example.com/up, answers 200
       through Cloudflare from outside; Cloudflare's API lists a healthy
       connector of the apps' tunnel on each app server (the tunnel's
-      connections, read through the API proxy, as chapter 9 (go live)
+      connections, read through the API proxy, as the go-live step
       says); and no DNS record of the domain
       holds a server's address. That stopping Caddy takes the connector out
       of the tunnel is in the optional check of the system's protections.
@@ -671,7 +671,7 @@ items:
       installed_packages/known_exploited_flaws
       (known_exploited_vulnerabilities_in_installed_packages); and the fleet hub's
       check of each app's public host name, through DNS, Cloudflare, and the
-      tunnel, passes once chapter 9 sets public_site_checks_run to true.
+      tunnel, passes once go-live sets public_site_checks_run to true.
     waits_for: the initial setup
 
   - id: mmhotline_reaches_the_person_on_call
@@ -752,7 +752,7 @@ items:
     protects_against: a site left down, or jobs left waiting, at night while a failed app server, jobs server or load-balancer server waits for a person, and server work the team did not choose
     verification: >-
       what_the_triage_agent_may_do_without_a_person in mmx_project_settings.yml
-      holds the person's answer from chapter 6;
+      holds the person's answer;
       triage_agent_server_work.pools_whose_failed_servers_the_triage_agent_replaces
       lists app_servers, jobs_servers and load_balancer_servers, or the pools
       the team chose instead, recorded as a deviation; `sudo mmhotline
@@ -770,7 +770,7 @@ items:
       and app_servers_to_remove_for_the_load/no_app_server_waits_to_be_removed,
       each with a message from check-whether-the-load-changes-the-app-pool;
       growth_limits.app_servers holds the person's smallest and largest
-      number of app servers from chapter 6; and, with every answer,
+      number of app servers, approved at the setup's start; and, with every answer,
       /etc/mmhotline/mmhotline_settings.yml on util01 gives
       replace_failed_servers, and no other playbook,
       starts_a_server_replacement: true, and its triage_agent section gives
@@ -802,7 +802,7 @@ items:
       verifies nothing: record the drill that passes when systemd runs it
       again.
     verify_again_every: 7d
-    waits_for: chapter 7 (install everything on the production servers), which starts the first drill once the first backup exists
+    waits_for: installing everything on the servers, which starts the first drill once the first backup exists
 
   - id: provider_console_and_backup_mmhotline_logins
     title: Break-glass access, console and MMHotline tested
@@ -1365,7 +1365,7 @@ growth_and_improvement_items:
       spf=pass, dkim=pass, and dmarc=pass in its Authentication-Results
       header is an optional extra check. A system whose app sends no email
       marks this item deviated, with no email as the reason.
-    trigger: the app sending email, such as sign-up or password-reset messages, or receipts; no chapter of the initial setup sets up an email sending service, so the coding agent and the person set it up when an app first needs it
+    trigger: the app sending email, such as sign-up or password-reset messages, or receipts; no part of the initial setup sets up an email sending service, so the coding agent and the person set it up when an app first needs it
 
 # what_this_system_does_not_survive is a section, not a checklist item.
 # The section never has an open state, so MMHotline's dashboard never

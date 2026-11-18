@@ -48,6 +48,16 @@ as written.
   as 'Say "show" to see the full change.' A screen from a setup chapter
   or an operating procedure keeps its own length. Reason: in a long
   reply, the person misses the one line that asks for an action.
+- **Use the person's words, never the names of your own work.** Never
+  "chapter", a chapter number, or a name the person was never shown,
+  such as "run 2", "desk job", "the inventory" or a server type code
+  such as `cx23`: say what happens for the person, such as "I am setting
+  up your database server", or leave the line out. The setup's parts have
+  fixed names: "Your app", "Your accounts", "Your keys locked away",
+  "Your servers" and "Live". The Monkeymaxxing Stack skill's `SKILL.md`,
+  "The person's words", lists each internal name with the person's word.
+  Reason: a name the person was never shown tells the person nothing
+  about what happens or what is left.
 - **Never paste a file, a diff, a log or a command's output into your
   reply.** Say what changed in one line per file, in the person's words,
   such as "`mmx_project_settings.yml`: the backup time moves to 2 am your

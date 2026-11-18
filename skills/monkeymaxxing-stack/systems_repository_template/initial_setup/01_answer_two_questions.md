@@ -14,12 +14,13 @@ out every other value from the laptop and the domain, and do the rest.
 **Tell the person when the chapter starts:** the trust line and the auto
 mode line below, then the first question.
 
-Chapters 1 to 9 are the first part of the setup, "go live". The first part ends
-with the app live, protected and backed up. Phone alerts are the alerts part of
-the setup. The triage agent, the status page and the break-in page are later
-parts, each a short one.
-[Chapter 0](00_before_you_start_what_we_build_and_how_long_it_takes.md)
-holds the map of the whole system, for when the person asks.
+Chapters 1 to 9 are the first part of the setup: the person's five parts,
+from "Your app" to "Live". They end with the app live, protected and backed
+up. Phone alerts are the alerts part of the setup. The triage agent, the
+status page and the written operating guide are later parts, each a short
+one. The person sees the five parts on
+[chapter 0's map](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map),
+right after "go" (step 4).
 
 ## Before you start
 
@@ -63,7 +64,14 @@ An agent you would not trust with your servers should never be used here.
 Run me in auto mode for this setup, so I don't stop to ask before each step.
 In Claude Code: press Shift+Tab until it shows "auto mode on".
 Reason: the Stack needs a coding agent you trust, and anything that changes your live servers still goes through your systems desk and a `yes` you type.
+
+The setup takes about an hour.  I need you for about 20 minutes of it, mostly at the start.
 ```
+
+The last line is the only word about time and parts before "go": the
+map of the five parts comes right after "go". Reason: the person has
+already chosen the Stack and wants to start; a newcomer test run showed
+55 minutes from the first question to the live site.
 
 Then ask question 1 in the same reply. When the person's agent is not
 Claude Code, say in one line how to use that agent's own auto mode, or
@@ -104,8 +112,10 @@ answers.
      zone, such as Frankfurt for `Europe/Berlin`. Read the time zone with
      `readlink /etc/localtime` on a Mac or Linux, or
      `timedatectl show -p Timezone --value` on Linux. Pick the desk's
-     location too: a different location of the same provider, so a
-     production outage leaves the desk working.
+     location too: by default a different location of the same provider,
+     so a production outage leaves the desk working. The separate place is
+     a good default, not a must: when it costs more, chapter 3's price
+     screen compares both places.
    - **Size:** the smallest system, three production servers and one
      desk. The fuller system adds `staging01`, a test server, and
      `app002`, a second app server.
@@ -180,7 +190,7 @@ answers.
      Password manager:   1Password
      Sign-in email:      alex@gmail.com      (a mailbox you read today)
 
-     Cost:               about €27 a month, checked against Hetzner's stock before anything is bought
+     Cost:               about €24 a month, checked against Hetzner's stock before anything is bought
 
    Say "details" to see everything this includes.
    Tell me what to change, or say "go".
@@ -200,12 +210,12 @@ answers.
    ```text
    Everything "go" approves:
 
-     Servers:            about €27 a month at Hetzner, from Hetzner's price list
+     Servers:            about €24 a month at Hetzner, from Hetzner's price list
                          (one line per server with its list price: the systems desk, app001, db01, util01)
      Backups:            Backblaze, a few cents a month at first
      Later, phone alerts: Pushover, a one-time fee of about $5 for each phone
      Growth:             your servers may grow by themselves to at most 4 app servers and 2 database servers,
-                         up to about €65 a month more, without asking you
+                         up to about €36 a month more, without asking you
      Restore test:       a weekly test that your backups restore
      Your name on the systems desk:  alex  (your laptop's user name)
      Status page:        status.example.com  (the public page where your customers see if your site is up)
@@ -263,7 +273,13 @@ answers.
    OpenSSH, Bash, jq, curl, and OpenSSL. On Windows, every command runs
    inside WSL.
 
-   **Tell the person:** one line, "I am installing mmx and doubleshell."
+   **Tell the person,** right after "go": first confirm each change the
+   person made, one line each, then show
+   [chapter 0's full map](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map),
+   with its Now and Next lines, as the last text of your reply. Start
+   this step's install as a background command before you write the
+   reply, so the install's end wakes you, as the skill's "Screen last"
+   rule says. This is part 1, "Your app", of the person's five parts.
 
    Run both tools by their full paths on the laptop, `~/.local/bin/mmx`
    and `~/.local/bin/doubleshell`, as the laptop's command blocks do, also
@@ -316,7 +332,8 @@ answers.
      to a clone. Without a source clone, remove `stack_commit`.
    - With the fuller system, set `trigger` of `staging_server` and
      `second_app_server` in `monkeymaxxing_stack_checklist.yml` to
-     `chapter 7 (install everything on the production servers), step 10: the team chose the fuller system`.
+     `when your coding agent installs everything on your servers: the team chose the fuller system`.
+     The person may read the checklist, so the value names no chapter.
    - What the triage agent may do,
      `what_the_triage_agent_may_do_without_a_person`, keeps the template's
      `routine_fixes`. The triage agent's part of the setup asks the person.
@@ -324,16 +341,12 @@ answers.
    The servers' production location and the desk's location go into the
    settings that chapter 3 and chapter 6 name.
 
-   **Tell the person:** the chapter's result in at most three lines,
-   then chapter 2's opening line in the same reply, as the skill's "Now
-   and next" rule says. Never end the reply after the result: the person
-   cannot tell whether to wait or to type "go on". For example:
+   **Tell the person:** one short line as you go on to chapter 2, with
+   no map, because "Your app" goes on: the map's Now and Next lines
+   already said what comes. Never end the reply after this result, as
+   the skill's "Now and next" rule says. For example:
 
-   > Your two tools are installed, and your systems repository is on this laptop at `~/code/example_systems`. Nothing is bought yet.
-   >
-   > I am reading your app's code, to see what it needs to run on your servers.
-   >
-   > Now: reading your app. Next for you: nothing. I carry on.
+   > Your systems repository is on this laptop at `~/code/example_systems`. Now I am reading your app's code, to see what it needs to run on your servers.
 
    **Check:** `~/code/example_systems` holds the template with the values
    above, and `mmx validate` passes there. `mmx validate` does not catch a

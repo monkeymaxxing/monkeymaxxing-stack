@@ -20,7 +20,7 @@ hosting at a platform such as Heroku.
 
 - Hosting 10-30x cheaper than Heroku, Railway, Replit, etc.
 - Fully open source (Apache 2.0)
-- Live in a few hours; the whole setup, with phone alerts, the triage agent and a status page, in about a day
+- Live in about an hour; the whole setup, with phone alerts, the triage agent and a status page, in about a day
 - Migration guides for 19 platforms (Heroku, Railway, Replit, Vercel, etc.)
 - Guides for 11 app frameworks (Rails, Django, Laravel, Next.js, etc.)
 - Runs on any Linux VPS or bare metal
@@ -314,11 +314,11 @@ catalog, read on 2026-11-17, month to month.
 
 | Machine | Size | Hetzner Cloud (Europe) | OVHcloud VPS (US) |
 | --- | --- | --- | --- |
-| App server `app001` | 4 vCPU, 8 GB of memory | €8.99 (CX33) | $10.60 (VPS-2) |
+| App server `app001` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.85 (VPS-1) |
 | Database server `db01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.85 (VPS-1) |
 | Utility server `util01` | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.85 (VPS-1) |
 | One systems desk | 2 vCPU, 4 GB of memory | €5.99 (CX23) | $5.85 (VPS-1) |
-| **Total each month** | | **€26.96** | **$28.15** |
+| **Total each month** | | **€23.96** | **$23.40** |
 
 Hetzner's prices are without VAT and include each server's public address
 and 20 TB of traffic. OVHcloud's VPS prices include unlimited traffic and
@@ -412,40 +412,47 @@ risk.
   closes by itself after an hour without use, and after ten hours at most.
   You can shorten both.
 
-## The setup: a few hours to go live
+## What the setup is like
 
-Your coding agent does every step it can. Before you start, you need a
-domain, a password manager, a GitHub account with your app's repository,
-and your coding agent on your laptop. The setup adds accounts at your
-server provider, Cloudflare, and Backblaze.
+**About an hour in all. Your coding agent needs you for about 20 minutes
+of it, mostly at the start.**
 
-You tell your agent: "Set up the Monkeymaxxing Stack for my app." Your agent
-asks two questions, your domain and your server provider, and shows every
-other choice as a default, with the monthly cost. You say "go".
+You tell your agent: "Set up the Monkeymaxxing Stack for my app." Your
+agent asks two questions, your domain and your server provider, and shows
+every other choice on one screen, with the monthly cost. You say "go".
+Then your agent shows you the setup in five parts, and tells you at the
+end of each part what is done and what is left:
 
-**The first part of the setup puts your app live.** It takes a few hours, and you are
-busy for about an hour of it:
+| Part | What you do | What your agent does |
+| --- | --- | --- |
+| **1. Your app** (about 5 minutes) | Approve your agent's changes to your app, once | Gets your app ready to deploy |
+| **2. Your accounts** (about 25 minutes) | Make 3 accounts: your server provider, Cloudflare, and Backblaze for the backups. Paste 4 keys, one screen at a time. Approve the real monthly price. If your domain does not point at Cloudflare yet, change one setting at your domain's registrar | Checks each key with its company at once, builds your systems desk, orders your servers right after your yes so the price holds, and sets up everything else at each company |
+| **3. Your keys locked away** (about 3 minutes) | Save one recovery passphrase, and scan one code with your phone | Locks your systems desk |
+| **4. Your servers** (about 30 minutes) | Nothing. Your laptop may sleep | Installs everything on your servers, backs up your data, and proves a restore |
+| **5. Live** | Nothing | Tells you the moment your site is up |
 
-1. You approve your agent's changes to your app, once.
-2. You make three accounts, one screen at a time: your server provider,
-   Cloudflare, and Backblaze for the backups, and you point your domain at
-   Cloudflare at your domain's registrar if it does not point there yet.
-   Each screen says what the account is for and exactly what to do, and
-   each key you paste is checked with its company at once.
-3. You make one token at GitHub, so your servers can download your app.
-4. You save one recovery passphrase, and scan one QR code with your phone.
+**Later: phone alerts,** about 15 minutes. Then, when you want them: the
+triage agent, a status page for your customers, and your written
+operating guide.
 
-Then your agent works alone: it creates the servers, installs everything,
-sets up the backups, proves a restore, and puts your app live. Your laptop
-may sleep meanwhile. The last step needs nothing from you: the first release goes live without a second approval.
+**Have these at hand before you start:** your domain, and the login to
+your domain's registrar; a GitHub account with your app's repository; a
+password manager; a phone with an authenticator app; and a payment card
+for your server provider's account.
 
-**Then short parts.** Phone alerts, the same day, in about 15 minutes.
-Later: the triage agent, a status page for your customers, and your
-written operating guide.
+**You approve two things:** your agent's changes to your app, and the real
+monthly price, checked with your server provider just before anything is
+bought.
 
-Two waits are long, and you have nothing to do during them. Your domain's
-move to Cloudflare takes from minutes to about a day. The first server
-setup takes most of an hour.
+**Your agent runs the setup from this guide, so the exact words and
+screens differ** from one agent, and from one run, to the next, as they do
+when you drive your agent on any other project. The parts, what you are
+asked to do, and what gets built stay the same. If your agent goes quiet,
+or something is unclear, ask it "where are we?".
+
+One wait can be long, and you have nothing to do during it: your domain's
+move to Cloudflare takes from minutes to about a day, and your site goes
+live once the move is finished.
 
 Your app must meet three conditions. Your app uses Postgres, keeps uploaded
 files in R2, and runs as a container image. If your app does not meet a
@@ -467,7 +474,9 @@ system. The stack skill lives in
 
 The short way: tell your coding agent "Install the Monkeymaxxing Stack
 skill from github.com/monkeymaxxing/monkeymaxxing-stack, at its newest
-release." Then start a new session.
+release." Your agent's reply says only three things: that the skill is
+installed, which version, and what to do next: start a new session and
+say "Set up the Monkeymaxxing Stack for my app."
 
 By hand: clone the Monkeymaxxing Stack repository once, check out the
 newest release, then copy the skill directory into the place where your
@@ -543,7 +552,7 @@ in Codex.
 | Read | When you want to know |
 | --- | --- |
 | [A running Stack system, day to day](docs/day-to-day-operation.md) | What happens when a server fails, what an intruder can reach, how you hear about a problem, how a release goes live, and how the system grows |
-| [The setup chapters](skills/monkeymaxxing-stack/systems_repository_template/initial_setup) | Exactly what the setup does, chapter by chapter |
+| [The setup's instructions](skills/monkeymaxxing-stack/systems_repository_template/initial_setup) | Exactly what your coding agent does in each part of the setup |
 | [The operating procedures](skills/monkeymaxxing-stack/systems_repository_template/operating_procedures) | The tested steps for every later job, such as replacing a server |
 | [App framework examples](docs/app-frameworks/README.md) | How an app in your framework fits the Stack, with a working example |
 | [App platform migration guides](docs/app-platform-migrations/README.md) | How to move from the platform that you use now |

@@ -1,7 +1,10 @@
 # Chapter 6: Create your three production servers: app, database, and tools
 
-**When:** after chapter 5 (put your site behind Cloudflare and lock your
-private pages).
+**When:** steps 1 to 5, which create the servers, run as soon as the
+systems desk is ready, at the end of chapter 3
+([Create the three production servers now](03_make_your_server_account_and_your_systems_desk.md#create-the-three-production-servers-now)),
+so the approved sizes cannot sell out meanwhile. Steps 6 and 7 run after
+chapter 5 (put your site behind Cloudflare and lock your private pages).
 
 **What this chapter does:** the three production servers start at the
 provider: `app001` runs the app, `db01` stores the app's data, and `util01`
@@ -16,9 +19,12 @@ team's scripts reach the provider through the API proxy. The person does
 nothing, unless the stock or the prices changed since chapter 3's price
 screen (step 2).
 
-**Tell the person when the chapter starts:**
-
-> I am creating your three servers: `app001` for your app, `db01` for its data, and `util01` for the system tools.
+**Tell the person when the chapter starts,** at the end of chapter 3,
+before step 1, the one line that
+[Create the three production servers now](03_make_your_server_account_and_your_systems_desk.md#create-the-three-production-servers-now)
+gives, which names each server's job the first time: `app001` for your
+app, `db01` for its data, and `util01` for the system tools. After chapter
+5, no message: the servers already exist.
 
 ## Before you start
 
@@ -40,24 +46,33 @@ screen (step 2).
 ## Steps
 
 1. **The location and the sizes.** Use the production location and the sizes the person approved on
-   [chapter 3's price screen](03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once), different from the desk location.
+   [chapter 3's price screen](03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once),
+   and the desk's location from the same screen.
    The table gives the initial setup sizes, with Hetzner Cloud as an
    example. With another provider, use x86 types with at least each
    server's vCPUs, memory, and disk in the table:
 
    | Server | Hetzner Cloud type | Size |
    | --- | --- | --- |
-   | `app001` | `cx33` | 4 vCPU, 8 GB RAM, 80 GB disk |
+   | `app001` | `cx23` | 2 vCPU, 4 GB RAM, 40 GB disk |
    | `db01` | `cx23` | 2 vCPU, 4 GB RAM, 40 GB disk |
    | `util01` | `cx23` | 2 vCPU, 4 GB RAM, 40 GB disk |
    | `staging01`, with the fuller system, created in chapter 7 | `cx23` | 2 vCPU, 4 GB RAM, 40 GB disk |
-   | `app002`, with the fuller system, created in chapter 7 | `cx33` | 4 vCPU, 8 GB RAM, 80 GB disk |
+   | `app002`, with the fuller system, created in chapter 7 | `app001`'s type | `app001`'s size |
 
    Use x86 servers for the template's x86 software releases and example
    image build. In Hetzner's US locations, use the CPX line instead:
-   `cpx31` for `app001` (4 vCPU, 8 GB RAM, and `app002`), `cpx21` for
-   `db01`, `util01`, and `staging01` (3 vCPU, 4 GB RAM). Each meets the
+   `cpx21` for `app001`, `db01`, `util01`, `staging01` and `app002`
+   (3 vCPU, 4 GB RAM). Each meets the
    table's minimums.
+
+   `app001` starts at the smallest size, like `db01` and `util01`. The
+   price screen offers the next size, such as `cx33` (4 vCPU, 8 GB RAM,
+   80 GB disk), as an option for a heavier app. Reason: a small app's two
+   releases fit in 4 GB during a deploy, and the deploy's memory check
+   stops a deploy that lacks memory, visibly, before it changes anything;
+   [Memory for both releases](../operating_procedures/deploy_and_roll_back_an_app_release.md#memory-for-both-releases)
+   then moves `app001` to the bigger size in `growth_limits.app_servers.server_types`.
 
    The weekly drill's `restore01` takes `db01`'s server type, location,
    and operating-system image. Record `db01`'s values in
@@ -112,7 +127,9 @@ screen (step 2).
    person's "go" approved. Write each pool's `server_types` for the chosen
    provider: the type in the table above, and the next bigger type of the
    same line. A pool is servers with the same job. Jobs servers and
-   load-balancer servers take `app001`'s type and the next bigger one. The
+   load-balancer servers keep the template's types, the bigger app size
+   and the one above it, because a jobs server and a load-balancer server
+   start when the load has grown. The
    defaults and their reasons are beside the setting. Chapter 10's
    operating guide shows each limit with its monthly cost, so the person
    can change a limit any day.
@@ -265,8 +282,8 @@ screen (step 2).
 
    **Tell the person first,** before the first SSH connection:
 
-   > Next, I connect to each new server once and record the server's SSH host key in your systems repository.
-   > Every later connection checks that recorded key, so an impostor server is rejected.
+   > Next, I connect to each new server once and save the server's identity in your systems repository.
+   > Every later connection checks that identity, so an impostor server is rejected.
 
    **Tell the person after,** once each new server answers over SSH:
 
@@ -313,13 +330,23 @@ screen (step 2).
    **Tell the person after,** which also ends the chapter:
 
    > Your three servers and their keys are saved in your systems repository.
-   > Next, in chapter 7, MMX installs everything on the servers.
+   > Next, MMX, the program that sets up your servers from your systems repository, installs everything on them.
 
    **Check:** `git status` shows nothing to commit, and `publish-branch-to-main`
    published the commit on the desk's `main`.
 
 ## If something is different
 
+- **A brand-new server does not answer within its time limit**: the
+  server is new and empty, so delete it at the provider and create it
+  again, once, by yourself, with one line to the person, such as "Your
+  systems desk did not start properly. I am creating it again; this costs
+  a few cents and takes about 5 minutes. Nothing for you." (with the
+  server's name, such as `db01`, for a production server). Only a second
+  failure goes to the person. Never ask the person to read the provider's
+  console to decide. Reason: a new server that hangs at its first boot is
+  rare and costs nothing to replace, and the person cannot judge a boot
+  console.
 - **A private network overlaps `vars.wireguard_network`** (before step 3):
   choose another network and update the desk's production peers, as
   [Before you start](#before-you-start) says.

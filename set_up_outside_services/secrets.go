@@ -216,7 +216,7 @@ func (e *environment) askTriageCredentialType(codingAgent string) (string, error
 	}
 }
 
-// madeElsewhere names the command or chapter that makes each vault key this
+// madeElsewhere names the command or setup step that makes each vault key this
 // step leaves alone, so the summary can say where a missing one comes from.
 func madeElsewhere(key string) string {
 	switch {
@@ -227,7 +227,7 @@ func madeElsewhere(key string) string {
 	case strings.Contains(key, "_b2_"), strings.HasPrefix(key, "mmhotline_backup_"):
 		return "set-up-outside-services backblaze"
 	case key == "mmx_vault_passphrase":
-		return "the systems desk's bootstrap, in chapter 3"
+		return "your coding agent, when it set up your systems desk"
 	case strings.HasPrefix(key, "database_moving_in_"):
 		return "Move a database into the Stack, only while a database moves in"
 	}

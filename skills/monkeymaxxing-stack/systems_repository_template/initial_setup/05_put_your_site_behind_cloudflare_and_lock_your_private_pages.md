@@ -24,7 +24,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
 > So no server needs an open web port, and a scan of the internet finds no web server of yours to attack.
 > Cloudflare also filters what comes in.
 > A sign-in, Cloudflare Access, goes in front of your private pages.
-> You have nothing to do in this chapter.
+> You have nothing to do while I set this up.
 
 ## Before you start
 
@@ -91,7 +91,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
 
    **Tell the person first:**
 
-   > Next, I check the two tunnels that chapter 4 made at Cloudflare.
+   > Next, I check the two tunnels that I made at Cloudflare while you set up your accounts.
    > Your apps use the tunnel `example_systems-apps`, and your private pages use the tunnel `example_systems-util01`.
    > Each tunnel has its own settings and its own access key.
    > So a change to one tunnel leaves the other tunnel as it is.
@@ -108,7 +108,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    **Tell the person after:**
 
    > Your two tunnels are ready at Cloudflare: [tunnels](https://one.dash.cloudflare.com/?to=/:account/networks/tunnels).
-   > Your servers connect to the tunnels only after their setup in chapter 7.
+   > Your servers connect to the tunnels once I have installed everything on them.
 
    **Check:** the request above returns each tunnel's ID, and
    `sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage` shows
@@ -171,7 +171,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
 
    **Tell the person after:**
 
-   > Your alert dashboard admits only addresses that end in `@example.com`: [Access applications](https://one.dash.cloudflare.com/?to=/:account/access/apps).
+   > Your alert dashboard admits only addresses that end in `@example.com`: [the sign-in for your private pages](https://one.dash.cloudflare.com/?to=/:account/access/apps).
 
    **Check:** every Allow rule names the domain, read through the API
    proxy. `company_email` stays `open` until the person's first sign-in in
@@ -232,8 +232,8 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    **Tell the person after,** which also ends the chapter:
 
    > Cloudflare now caches what your app marks as cacheable: [Cache Rules](https://dash.cloudflare.com/?to=/:account/:zone/caching/cache-rules).
-   > Your tunnels, DNS records, Access application, and cache rule now exist at Cloudflare.
-   > Your servers connect only after their setup in chapter 7.
+   > Your tunnels, DNS records, the sign-in for your private pages, and the cache rule now exist at Cloudflare.
+   > Your servers connect once I have installed everything on them.
 
    **Check:** the zone's cache ruleset has a rule with `respect_origin`
    for every production host name. Then Cloudflare's API must list the

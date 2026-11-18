@@ -49,14 +49,18 @@ For a new system, start [chapter 1 (answer two questions)](systems_repository_te
 with [its trust line and auto mode line](systems_repository_template/initial_setup/01_answer_two_questions.md#first-the-trust-line-and-auto-mode),
 so the person runs you in auto mode instead of approving every step,
 then its first question. The person has already chosen the stack, so do
-not explain the whole project first. [Chapter 0](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
-holds the map, for when the person asks.
+not explain the whole project first: the first screen gives one line of
+time, and the map of the setup's five parts comes right after "go" ("Where
+the person is: the five parts" below).
 
-The setup comes in parts. The first part of the setup, chapters 1 to 9, puts the
-app live, protected and backed up, in a few hours. The alerts part of the
-setup adds phone alerts. Later short parts add the triage agent, the status
-page, and chapter 10. Until the alerts part of the setup is done, say plainly that
-the site has no phone alerts.
+The person sees the setup as five parts. After the fifth part, the app is
+live, protected and backed up, in about an hour. In this guide, "the first
+part of the setup" means chapters 1 to 9, all five parts; never say "first
+part" to the person, because the person's part 1 is "Your app". The alerts
+part of the setup adds phone alerts. Later short parts add the triage
+agent, the status page, and the written operating guide (chapter 10).
+Until the alerts part of the setup is done, say plainly that the site has
+no phone alerts.
 
 Each chapter opens with **When**, **What this chapter does**, **Who acts**,
 and a **Tell the person when the chapter starts** message. Then come
@@ -119,13 +123,19 @@ In every reply:
   for is proven, such as the site answering at its address, say it at
   once, as its own screen that ends your turn. Never hold it back for a
   later step, such as MMWatchdog's first check; start that step in the
-  background first, and report it afterwards.
+  background first, and report it afterwards. The live screen starts with
+  only the address in capitals, "Open it now." and the phone-alerts line,
+  as chapter 9 shows. Never look up the app's address from the laptop
+  before its DNS record exists: the laptop then remembers "no such
+  address" for minutes.
 - **Now and next, at the end of every reply.** The last lines say what
   you are doing now and what the person does next, such as "Now: I am
   building your systems desk, about 10 minutes. Next for you: nothing. I
   carry on." When the person has nothing to do, say "Nothing. I carry
   on." A chapter's end is not a stop: give the chapter's result in at
-  most three lines and start the next chapter in the same reply. Stop
+  most three lines and start the next chapter in the same reply. A
+  part's end adds the compact map ("Where the person is: the five
+  parts" below). Stop
   only for an answer, an approval or a step that only the person can
   do, and say which. Reason: a reply that ends with a summary and no
   next step leaves the person unsure whether to wait or to type "go on".
@@ -187,6 +197,13 @@ In every reply:
 - Never skip a screen or approval you promised, and never promise a later
   approval that the chapter does not give. Reason: a promise that
   does not come makes the person lose trust.
+- A brand-new, empty server that does not answer within its time limit
+  is deleted and created again by you, once, with one line, such as "Your
+  systems desk did not start properly. I am creating it again; this costs
+  a few cents and takes about 5 minutes. Nothing for you." Only a second
+  failure goes to the person, and never with a request to read the
+  provider's console. Reason: a newcomer cannot judge a boot console, and
+  a new server costs nothing to replace.
 - When a Stack command fails twice, stop asking the person to run
   diagnostics. Say plainly that the Stack has a fault, and offer the way
   that keeps the person's work. Never hand the person a command the person
@@ -226,6 +243,136 @@ Share detail from a step's instructions only when the person needs the
 detail for an action or asks for detail. The reasons a person may ask
 about are in **Why the chapter works this way**.
 Keep every required check and safety condition.
+
+## Where the person is: the five parts
+
+The person must always know what is going to happen, where the setup is
+now, what has happened, and what is left, and, for each part, what you do
+and what the person does. So the person sees the setup as five parts, with
+these names everywhere: in the chat, in the terminal window, and in the
+README. The chapters are your own structure.
+
+| The person's part | What the person does | Your chapters |
+| --- | --- | --- |
+| Before the parts | Answers two questions and says "go" | Chapter 1, steps 1 to 3 |
+| 1. Your app | Approves your changes to the app | Chapter 1, steps 4 and 5; chapter 2 |
+| 2. Your accounts | Makes 3 accounts (the server provider, Cloudflare, Backblaze) and pastes 4 keys (one more for each key an app needs from an outside service), approves the real price, makes one private repository at GitHub when `gh` is not signed in, and changes the nameservers at the domain's registrar when they do not point at Cloudflare yet | Chapter 3, with chapter 6's steps 1 to 5, which create the three servers as soon as the systems desk is ready; chapter 4, steps 1 to 6 |
+| 3. Your keys locked away | Saves one recovery passphrase and scans one phone code | Chapter 4, steps 7 to 9 |
+| 4. Your servers | Nothing | Chapter 5; chapter 6, steps 6 and 7; chapter 7; chapter 8, part 1 |
+| 5. Live | Nothing | Chapter 9 |
+| Later: phone alerts | Makes the Pushover account, types its keys, and acknowledges one test alert | Chapter 8, part 2 |
+| When the team wants them: the triage agent, the status page, the written operating guide | Each part's own few answers | Chapter 8, parts 3 and 4; chapter 10 |
+
+[Chapter 0](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#the-map)
+holds the screens. Show them at these moments:
+
+- **The first screen** says, in one line, about how long the setup takes
+  in all and about how many minutes you need the person, mostly at the
+  start, as chapter 1's trust screen shows. Nothing more about the parts
+  comes before "go".
+- **The full map** is its own screen, right after "go". It ends your
+  reply only when the person must act next. Otherwise the first Now and
+  Next lines follow it, and the map and those lines together are the last
+  text of your reply.
+- **At each part's end, the compact map:** the done parts ticked, the
+  current part marked with an arrow, the rest listed. Between the ends of
+  parts, give only the Now and Next lines, with no map.
+- **A map ends your reply** ("Screen last"): text between tool calls is
+  collapsed, so a map there is lost. When your own work goes on after the
+  map, first start that work, or its wait, as a background command, so its
+  end wakes you. When nothing long runs yet, such as at the end of "Your
+  keys locked away", start a short one, such as `sleep 5`.
+- **"Where are we", or the person comes back,** such as in a new session,
+  after the laptop slept, or the next day: your first reply is the compact
+  map, with the Now and Next lines. Work out the part from the checklist
+  and the files, as chapter 0's
+  ["Where are we"](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md#where-are-we)
+  says, never by asking the person.
+- **Trouble inside a part:** say that the part is unchanged, what failed,
+  what happens now, and whether you need the person. For example: "Still
+  in Your servers. The first restore test could not reach its temporary
+  server. I am running it again, about 3 minutes. Nothing for you."
+
+**Never "chapter", a chapter number, or a guide file's name in anything the
+person reads:** your replies and your own narration between tool calls,
+the screens, the terminal window, tool call descriptions, and the comments
+and fields that the person may open in the systems repository, such as
+`mmx_project_settings.yml`, `inventories/servers.yml`,
+`mmhotline_settings.yml`, and the checklist's `title`, `waits_for`,
+`trigger`, `deviation` and `last_result`. Name what happens instead:
+"when I order your systems desk", not "in chapter 3". When you open the
+next chapter, say nothing about it, or "I am reading up on the next part".
+The chapter files and their numbers stay your own structure: an
+instruction for an agent, such as this skill or a chapter's own steps, may
+say "chapter 3". Reason: in a newcomer test run, the agent said "Chapter 3
+starts here" and "Chapter 2 is complete", and a chapter number tells the
+person nothing about what happens or what is left.
+
+## The person's words
+
+The same rule as for chapters holds for every name of your own work. **A
+name the person was never shown is not used.** Reason: in a newcomer test
+run, the short notes between the agent's work said "the desk's copy
+carries the production key instead of the example one and lacks my
+laptop-only bootstrap edits" and "public_sites now exists on util01", and
+told the person nothing.
+
+- **Progress lines are for the person.** The one-line notes between your
+  work, which Claude Code collapses to one short line, say in the person's
+  words what you are making for the person, never how: "Setting up your
+  database server", "Your three servers are created". When a line needs
+  one of your own names, leave the line out.
+- **Say the person's word, never the internal name:**
+
+  | Never say | Say |
+  | --- | --- |
+  | chapter 3, chapter 7, the chapter | the part's name, or what happens: "when I order your systems desk" |
+  | run 1, run 2, the `every_server` run | what the step does: "I set up the database and start your app" |
+  | desk job | "the work runs on your systems desk, so your laptop may sleep" |
+  | the main copy | your systems repository |
+  | the inventory, the playbooks, the vault (before it is explained) | your settings; your systems repository |
+  | the checklist, unless you show it and say what it is | "the list of what is done and what is left" |
+  | bootstrap | "setting up your systems desk" |
+  | host key, `known_hosts` | "the server's identity" |
+  | peers, peering | "connected over your private network" |
+  | connector | "the connection from your app server to Cloudflare" |
+  | the apex | your main address, such as `example.com` |
+  | Access app, Access rule, Access application | the sign-in for your private pages |
+  | TCP port 7443, `mmx-https-api.service` | "MMX's own small service, which only `util01` can reach" |
+  | systemd, a unit, a service file | "it starts by itself" |
+  | a type code, such as `cx23` | the size: "2 CPUs, 4 GB" |
+  | ghcr.io | "GitHub, where your app's image is kept" |
+  | CI | "the automatic tests at GitHub" the first time; "the tests at GitHub" after |
+  | operating procedure, before it is explained | "the tested steps for that job" |
+  | `desk01-setup`, `desk01-agent` outside a command the person types | "the window where you typed the key"; "my login on your systems desk" |
+  | restore drill, before it is explained | "prove a restore", "the restore test" |
+
+  Introduce MMX, MMWatchdog and MMHotline once each, with what each does
+  for the person: "MMX, the program that sets up your servers from your
+  systems repository"; "MMWatchdog, the program that watches every
+  server"; "MMHotline, which reaches the person on call". Then use the
+  names sparingly. `app001`, `db01` and `util01` are fine once introduced
+  with their job.
+- **Never narrate your own slips,** such as "My earlier rename dropped a
+  space" or "The wait ended too early". Fix them silently, unless the slip
+  changed something the person owns or was told; then say what changed in
+  one line.
+- **Say each thing once.** "Your site has no phone alerts yet" belongs on
+  the map ("Later: phone alerts"), in each compact map, on the live
+  screen, and when the person asks whether anyone would hear about a
+  problem; never in every reply. Explain "your systems desk, the small
+  server that holds your keys" once, then say "your systems desk".
+- **No words that sound like trouble when nothing is wrong.** Check "but",
+  "though" and "however" in every status line. "Chapter 4 is finished, but
+  the systems desk is locked" becomes "Your systems desk is now locked.
+  That is the protection working."
+- **One estimate per wait, and the times agree.** A part's time on the map
+  is the sum of the times you then give inside the part. Never give two
+  estimates for the same stretch, such as "allow about an hour" and then
+  "about 10 to 15 minutes".
+- **A part's result comes before the next part's screen,** as the compact
+  map does: the person reads that "Your app" is done before the first
+  account screen.
 
 ## The two windows agree
 
@@ -408,7 +555,7 @@ and gets there one way: [Secrets in chapter 3 (make your server account and your
 
 ## The instruction files
 
-- [Chapter 0: Before you start: what we build and how long it takes](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md)
+- [Chapter 0: Before you start: the five parts of the setup, and how long they take](systems_repository_template/initial_setup/00_before_you_start_what_we_build_and_how_long_it_takes.md)
 - [Chapter 1: Answer two questions](systems_repository_template/initial_setup/01_answer_two_questions.md)
 - [Chapter 2: Get your app ready to deploy](systems_repository_template/initial_setup/02_get_your_app_ready_to_deploy.md)
 - [Chapter 3: Make your server account and your systems desk](systems_repository_template/initial_setup/03_make_your_server_account_and_your_systems_desk.md)
@@ -448,8 +595,9 @@ and run MMX on `util01` from the desk, normally with the `server_management_scri
 desk job when the run is long. A push alone changes no server. CI tests, builds, and pushes the app's images.
 Before `util01` exists and while `util01` is broken or rebuilt, run MMX
 on the systems desk through `sudo -n -u servers-mmx run-mmx-on-the-servers` with `--connection ssh_only`.
-On a server MMX has never reached, tell the person in one line that the first dryrun copies MMX's program there
-(over SSH, with no service and no open port), and before the first run that the run sets up MMX's HTTPS service on TCP port 7443.
+On a server MMX has never reached, tell the person in one line that the first preview copies MMX's program there,
+with no service and no open port, and before the first run that the run adds MMX's own small service, which only `util01` can reach,
+in the person's words ("The person's words" above). For you: the service is `mmx-https-api.service` on TCP port 7443.
 
 MMHotline runs `mmx` at the judged commit in the utility server's shared
 copy, under the shared lock. Before every run, MMHotline checks triage-key

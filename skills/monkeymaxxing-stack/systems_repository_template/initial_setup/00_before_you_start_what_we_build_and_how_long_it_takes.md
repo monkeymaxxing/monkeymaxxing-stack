@@ -1,19 +1,26 @@
-# Chapter 0: Before you start: what we build and how long it takes
+# Chapter 0: Before you start: the five parts of the setup, and how long they take
 
-**When:** whenever the person asks what the setup builds, or how long it
-takes. The setup itself starts at chapter 1 with its first question, not
-with this map.
+**When:** right after the person's "go" in chapter 1, for the full map; at
+the end of each part, for the compact map; and whenever the person asks
+where the setup stands, or comes back to it, such as in a new session, after
+the laptop slept, or the next day.
 
-**What this chapter does:** the person sees what the setup builds, from a
-web app and no servers to the system the initial setup builds: `app001`, `db01`, and
-`util01`, a systems desk per person, plus `staging01` and `app002` if the team chooses the fuller
-system. The person also sees the chapters, the parts of the setup, and how long they take.
-The first page of the [team's `README.md`](../README.md#what-the-monkeymaxxing-stack-builds)
-describes that system; this chapter's map follows the first page's words.
+**What this chapter does:** the person always knows four things: what is
+going to happen, where the setup is now, what has happened, and what is
+left. The person also knows, for each part, what you do and what the person
+does. The person sees the setup as five parts, with the same names in the
+chat, in the terminal window and in the team's `README.md`. The chapters
+are your own structure, and the person never sees them: the Monkeymaxxing
+Stack skill's `SKILL.md`, "Where the person is: the five parts", maps each chapter to its part, and holds the rules for when each screen
+below comes.
 
-**Who acts:** you, the coding agent, show the map and the time estimate when asked.
-The person reads them and asks questions. Nothing changes on a server or an
-account, so this chapter has no numbered steps.
+When the person asks what the setup builds, show the first page of the
+team's [`README.md`](../README.md#what-the-monkeymaxxing-stack-builds) in a
+few lines, and explain each tool further when the person first needs it.
+
+**Who acts:** you, the coding agent, show the map. The person reads it and
+asks questions. Nothing changes on a server or an account, so this chapter
+has no numbered steps.
 
 ## Before you start
 
@@ -39,121 +46,155 @@ account, so this chapter has no numbered steps.
 
 ## The map
 
-Show this map and the time estimate only when the person asks. The person
-has already chosen the stack, so the map gives the system in brief and
-the route. When the person asks for the whole
-picture, show the first page of the team's `README.md`. Explain each tool
-further when the person first needs it.
+Show the full map once, right after the person's "go" in chapter 1, as its
+own screen. Fill in the team's own facts, as the list below the screen
+says. The time figures come from a full newcomer test run, which went live
+in 55 minutes; say "about", never an exact time.
 
-**Show the person the map,** as the chapter's opening message:
+**Show the person,** after "go", for a Hetzner setup:
 
-> This setup builds a production system for your app. I build and run the
-> system, and your team owns every account, every server, and all the data.
->
-> - Your users' requests reach Cloudflare first. Cloudflare passes the
->   requests to your app servers through Cloudflare tunnels, so no server
->   has an open web port.
-> - The smallest system has three production servers: the app server
->   `app001`, the database server `db01`, and the utility server `util01`,
->   which runs MMX, MMWatchdog, and MMHotline. The setup starts with the
->   smallest system. You can choose the fuller system, which adds a second app server,
->   `app002`, and a test server, `staging01`.
-> - Every change to the servers is a commit to your systems repository.
->   I push the commit and start an MMX run on `util01`.
-> - I work on your laptop. I reach production only through your systems desk, a small server of your own that keeps the production key, the secrets, and your tokens locked away.
-> - MMWatchdog checks every server. MMHotline runs the triage agent, which
->   investigates each problem and proposes a fix. Then MMHotline alerts the
->   phone of the person on call. We test that alerts reach your phone.
-> - Your database backups go to Backblaze, a separate company, and are
->   locked against deletion for a number of days that a setting names,
->   14 days by default. Every week, the
->   restore drill restores the backups onto a temporary server and checks
->   the data.
-> - The system grows through operating procedures: tested steps that I
->   follow when a trigger arrives, such as MMWatchdog's warning that the app
->   server is busy. When your team lets the triage agent do server work, the
->   triage agent also adds an app server when the app servers stay busy, and
->   removes one when the load drops, within your limits and after a warning
->   that anyone can stop.
-> - The first growth step for most teams is a second app server, which keeps
->   the site up while one app server fails. After that, with server work on,
->   the triage agent adds and removes app servers with the load. Without
->   server work, the triage agent tells you when the app servers are busy,
->   and I add one.
->
-> You decide about money at the start. In chapter 1, I show you an estimate
-> of the servers' cost. Right after you make your server account, I check
-> what the provider has in stock and show you the real monthly price,
-> before anything is bought. You also approve the limits for growth, such as the smallest and the
-> largest number of app servers. Inside your limits, servers are added and
-> removed without asking you, and you get a report of what each one costs.
-> I ask you only for something outside your limits.
-> You approve each change to your app.
->
-> The setup comes in parts. The first part puts your app live, protected and backed up:
->
-> 1. Chapter 1: Answer two questions: your domain and your server provider.
-> 2. Chapter 2: Get your app ready to deploy. You approve my changes to your app once.
-> 3. Chapter 3: Make your server account and your systems desk.
-> 4. Chapter 4: Set up your accounts and lock your systems desk: Cloudflare, your domain's registrar, Backblaze, one GitHub token, one recovery passphrase, and one phone code.
-> 5. Chapter 5: Put your site behind Cloudflare and lock your private pages.
-> 6. Chapter 6: Create your three production servers.
-> 7. Chapter 7: Install everything on the production servers.
-> 8. Chapter 8, first part: Check that your backups restore. Chapter 8's other parts come later, in the alerts part of the setup and after it.
-> 9. Chapter 9: Go live. You approve nothing again here: you already approved my changes to your app in chapter 2.
->
-> The alerts part of the setup adds phone alerts, the same day, in about 15 minutes.
-> Later short parts add the triage agent, the status page for your customers, and chapter 10, your written operating guide.
->
-> The smallest system has one app server and one database server. If
-> `app001` or `db01` fails, your site stops until the failed server is
-> replaced. When your site stops answering, MMWatchdog sends an SOS, the
-> urgent alert. The SOS first gives the triage agent time to investigate,
-> three minutes by default, and then
-> wakes the person on call. While the triage agent replaces a failed server,
-> the SOS waits longer and wakes the person only if the replacement fails or
-> takes too long. A warn alert that the triage agent takes up waits the
-> same way, three minutes by default: you hear the triage agent's own
-> message instead, or nothing when the agent fixes the problem and reports
-> it quietly. When your team lets the triage agent do server
-> work, the triage agent replaces a failed app server by itself and tells
-> you, and the same goes for jobs servers and load-balancer servers once
-> your system has them. Otherwise, the person on call approves the
-> replacement once, and the triage agent does the rest. A failed database server or a failed `util01`
-> always needs a person: the person on call tells me, and I replace the
-> server by an operating procedure. A second app server and a second database server let the site
-> keep running through such a failure. The checklist says when to add
-> them, such as when your first paying customers arrive.
+```text
+Here is the whole setup, in five parts.  About an hour in all.
+
+  1. Your app                  about 5 minutes
+     I get your app ready to deploy.  You approve my changes.
+  2. Your accounts             about 25 minutes
+     You make 3 accounts and paste 4 keys, approve the real price,
+     and change one setting at your domain's registrar.
+     I build your systems desk, order your servers right after your yes, and do the rest.
+  3. Your keys locked away     about 3 minutes
+     You save one passphrase and scan one code with your phone.
+  4. Your servers              about 30 minutes
+     I install everything on your servers, back up your data, and prove a restore.
+     Nothing for you.
+  5. Live
+     I tell you the moment your site is up.
+
+  Later, about 15 minutes:     phone alerts.
+  Then, when you want them:    the triage agent, the status page, and your written operating guide.
+
+Now: I am installing two small tools and reading your app, about 5 minutes.
+Next for you: approve my changes to your app, in about 5 minutes.  I show them here.
+```
+
+The facts on the screen:
+
+- **The 3 accounts** are the server provider, Cloudflare and Backblaze.
+  They are the 3 accounts that the terminal window counts, "account 1 of
+  3" to "account 3 of 3".
+- **The 4 keys** are the server provider's key, Cloudflare's token,
+  Backblaze's key (two values, the key's ID and the key) and the GitHub
+  token that lets the servers download the app. Add one key for each value
+  that an app needs from an outside service, such as a Stripe key: "paste
+  5 keys". The person sees each extra key as its own screen in "Your
+  accounts".
+- **The registrar's setting** is the domain's nameservers. Leave the words
+  "and change one setting at your domain's registrar" out when
+  `dig NS example.com +short` already names Cloudflare's nameservers, or
+  when the person registers a new domain at Cloudflare. When the clause is
+  in, add one line under part 5: "Your domain's move to Cloudflare can
+  take a few hours, and nothing speeds it up. I tell you if part 5 waits
+  for it."
+- **The private backup repository at GitHub:** when `gh` is not signed in
+  on the laptop, the person makes it on one screen in "Your accounts", so
+  add "and make one empty repository at GitHub" before "I do the rest".
+- **An app that needs bigger changes first,** such as a move from SQLite
+  to PostgreSQL: part 1's time reads "longer: your app needs bigger
+  changes, which I show you first", and the "about an hour" line says that
+  part 1 can take days.
+- **The Now and Next lines** follow the skill's "Now and next" rule. Before
+  you end your reply with the map, start the two tools' install as a
+  background command, as the skill's "Screen last" rule says, so the
+  install's end wakes you.
+
+## The compact map
+
+At the end of each part, show the compact map: the parts that are done
+ticked, the current part marked with an arrow, and the rest listed, with
+the line "Later: phone alerts.  Your site has none yet." until the alerts
+part of the setup is done. That line, the map and the live screen are where
+the person hears that the site has no phone alerts yet; not every reply.
+Its first line is the finished part's result, in one line. The next screen or
+the Now and Next lines follow it. For example, at the end of "Your app":
+
+```text
+Your app is ready: my changes are on main, and GitHub is building your app.
+
+  ✓ 1. Your app
+  → 2. Your accounts            now, about 25 minutes
+    3. Your keys locked away
+    4. Your servers
+    5. Live
+    Later: phone alerts.  Your site has none yet.
+```
+
+Then the account screen of chapter 3 follows in the same reply, as its last
+text.
+
+The end of "Your accounts" comes in the person's terminal window, which
+goes on to "Your keys locked away" by itself. `set-up-outside-services
+go-live` prints the compact map there:
+
+```text
+Your accounts are done.
+
+  ✓ 1. Your app
+  ✓ 2. Your accounts
+  → 3. Your keys locked away    now: 2 steps, about 3 minutes
+    4. Your servers
+    5. Live
+    Later: phone alerts.  Your site has none yet.
+```
+
+At the end of "Your keys locked away", your reply shows the compact map
+with three parts ticked, as chapter 4's last step gives it.
+
+Between the ends of parts, give only the Now and Next lines, with no map.
+
+## Where are we
+
+When the person asks where the setup stands, or comes back to it, such as
+in a new session, after the laptop slept, or the next day, your first
+reply is the compact map, with the current part's next step in the Now and
+Next lines. Work out where the setup is from the files, never from the
+person:
+
+| What you find | Where the setup is |
+| --- | --- |
+| No systems repository on the laptop, such as `~/code/example_systems` | Before part 1: start chapter 1 |
+| `deployed_image_tags` in `inventories/servers.yml` still holds the template's example | In part 1, "Your app" |
+| The app's pushed commit in `deployed_image_tags`, and no `setup_results.json` on the systems desk, or one with an account step that is not `done` or `not_needed` | In part 2, "Your accounts" |
+| Every account step in `/var/lib/monkeymaxxing-stack/setup_results.json` on the systems desk is `done` or `not_needed`, and `finished` is not `true`, or `ssh root@desk01 true` still works | In part 3, "Your keys locked away" |
+| `finished: true`, and `backups_restore_every_week` in `monkeymaxxing_stack_checklist.yml` is not `done` | In part 4, "Your servers" |
+| `backups_restore_every_week` is `done`, and `tunnel_and_the_public_host_name` is not | In part 5, "Live" |
+| `tunnel_and_the_public_host_name` is `done` | The five parts are done. Name what is left of the later parts: phone alerts until `mmhotline_reaches_the_person_on_call` is `done`, then `triage_agent_investigates_alerts`, `status_page_for_customers` and `operating_handover_saved` |
+
+The account steps of `setup_results.json` are every step before
+`recovery_passphrase`.
 
 ## How long it takes
 
-Give this estimate with the map. At each wait, say its cause and the next
-check.
+The map gives the times. When the person asks for more, say:
 
-**Tell the person, with the map:**
-
-> The first part takes a few hours. You are busy for about an hour of it:
-> answering two questions, approving changes to your app, signing up at four websites, and saving one passphrase.
-> If your app needs bigger changes first, such as moving from SQLite to
-> PostgreSQL or its uploads to R2, chapter 2 can take days, and the day's
-> plan moves with it.
+> The setup takes about an hour in all, and I need you for about 20 minutes of it, mostly at the start.
 >
-> Two waits are long, and you have nothing to do during them:
+> Two waits can be long, and you have nothing to do during them:
 >
 > - Your domain's move to Cloudflare takes from minutes to about a day,
->   and nothing speeds it up. The move starts in chapter 4, and I keep
->   working meanwhile. Chapter 9 needs the move to be finished.
-> - The first server setup, in chapter 7, takes most of an hour, mostly
->   for the servers' security updates. Your laptop may sleep: the work
->   continues on your systems desk.
+>   and nothing speeds it up. The move starts in "Your accounts", and I
+>   keep working meanwhile. Your site goes live only once the move is
+>   finished.
+> - Installing everything on your servers, in "Your servers", takes most
+>   of half an hour, mostly for the servers' security updates. Your laptop
+>   may sleep: the work continues on your systems desk.
 >
-> After the first part and the alerts part, your site is live, alerts reach your phone, and your
-> backups are proven to restore. After the setup, your team has one
-> regular duty. Each week, one person and I do the weekly system review:
-> the week's alerts, the waiting updates, the restore drill's result, and
-> the checklist items that are due. If you want extra confidence afterward,
-> you can ask me to check your system's protections. Those checks are
-> optional, and some of them wake whoever is on call, so they wait for a
-> quiet time that you choose.
+> If your app needs bigger changes first, such as moving from SQLite to
+> PostgreSQL or its uploads to R2, "Your app" can take days.
+>
+> After the five parts and the phone alerts, your site is live, alerts
+> reach your phone, and your backups are proven to restore. After that,
+> your team has one regular duty. Each week, one person and I do the
+> weekly system review: the week's alerts, the waiting updates, the
+> weekly restore test's result, and what else is due.
 
 Next: [Chapter 1: Answer two questions](01_answer_two_questions.md).

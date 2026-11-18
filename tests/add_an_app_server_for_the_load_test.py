@@ -126,12 +126,12 @@ class AddAnAppServerForTheLoad(unittest.TestCase):
                             '      public_ipv4_address: 203.0.113.113\n      server_type: cx33\n      location: fsn1\n',
                             '  app003:\n    address: 10.20.1.3\n    https_address: https://10.20.1.3:7443\n    ssh_user: root\n'
                             '    ssh_known_hosts: ssh/known_hosts\n    ssh_config: ssh/config\n    vars:\n'
-                            '      public_ipv4_address: 203.0.113.113\n      server_type: cx43\n      location: nbg1\n')
-        self.commit_all('A bigger app003')
+                            '      public_ipv4_address: 203.0.113.113\n      server_type: cx33\n      location: nbg1\n')
+        self.commit_all('app003 in another location')
         result, commands = self.run_program([node('app001'), node('app003'), node('db01')])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         create = next(c for c in commands if c[0] == 'create_a_server_at_the_provider')
-        for flag, value in (('--server-name', 'app004'), ('--server-type', 'cx43'), ('--location', 'nbg1'),
+        for flag, value in (('--server-name', 'app004'), ('--server-type', 'cx33'), ('--location', 'nbg1'),
                             ('--image', 'debian-13'), ('--wireguard-private-ip', '10.20.1.4'), ('--wireguard-public-key', NEW_KEY)):
             self.assertEqual(create[create.index(flag) + 1], value, flag)
         self.assertNotIn('power_off_a_server_at_the_provider', [c[0] for c in commands])
@@ -140,13 +140,13 @@ class AddAnAppServerForTheLoad(unittest.TestCase):
         # The new block follows the pool's last server, and the rest of the inventory is unchanged.
         self.assertIn('      location: nbg1\n      private_ip: 10.20.1.3\n', inventory)
         self.assertRegex(inventory, r'(?s)  app003:\n.*?\n\n  app004:\n    address: 10.20.1.4\n.*?\n\n  db01:\n')
-        self.assertIn('      server_type: cx43\n      location: nbg1\n      private_ip: 10.20.1.4\n', inventory)
+        self.assertIn('      server_type: cx33\n      location: nbg1\n      private_ip: 10.20.1.4\n', inventory)
         self.assertIn('10.20.1.4 ssh-ed25519 new-host-key', self.main_at_the_git_host('ssh/known_hosts'))
         self.assertEqual(git(self.origin, 'log', '-1', '--format=%s', 'main').strip(), 'Add app004 to app_servers for the load')
         trailers = git(self.origin, 'log', '-1', '--format=%(trailers:only,unfold)', 'main')
         self.assertEqual(trailers.strip().splitlines(), ['Server-pool: app_servers', 'Added-server: app004',
                                                          'Added-server-provider-id: created-app004'])
-        self.assertIn('app004, cx43 in nbg1, costs 7.49 EUR a month with its public address', result.stdout)
+        self.assertIn('app004, cx33 in nbg1, costs 7.49 EUR a month with its public address', result.stdout)
         self.assertIn('app_servers holds 3 of at most 4 servers', result.stdout)
         self.assertTrue(result.stdout.rstrip().endswith('which installs app004 and sends it requests'), result.stdout)
         self.assertEqual(git(self.repository, 'status', '--porcelain'), '')
@@ -156,12 +156,12 @@ class AddAnAppServerForTheLoad(unittest.TestCase):
         result, commands = self.run_program([node('app001'), node('db01')])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('  app_servers:\n    nodes: [app001, app002]\n', self.main_at_the_git_host())
-        self.assertIn(['read_the_monthly_price_at_the_provider', '--server-type', 'cx33', '--location', 'fsn1'], commands)
+        self.assertIn(['read_the_monthly_price_at_the_provider', '--server-type', 'cx23', '--location', 'fsn1'], commands)
 
     def test_a_price_that_cannot_be_read_does_not_stop_the_add(self):
         result, _ = self.run_program([node('app001'), node('db01')], PRICE_EXIT='1')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('app002 is cx33 in fsn1; its monthly price could not be read', result.stdout)
+        self.assertIn('app002 is cx23 in fsn1; its monthly price could not be read', result.stdout)
 
     def test_no_load_adds_nothing(self):
         result, commands = self.run_program([node('app001'), node('db01')], load={
@@ -178,7 +178,7 @@ class AddAnAppServerForTheLoad(unittest.TestCase):
     def test_the_largest_number_is_refused(self):
         result, commands = self.run_program([node('app001'), node('db01')],
                                             GROWTH_LIMITS={'app_servers': {'smallest_number_of_servers': 1, 'largest_number_of_servers': 1,
-                                                                           'server_types': ['cx33']}})
+                                                                           'server_types': ['cx23']}})
         self.assert_refused(result, commands, 'app_servers holds 1 servers, its largest number, 1')
 
     def test_the_lock_out_is_refused(self):
@@ -203,7 +203,7 @@ class AddAnAppServerForTheLoad(unittest.TestCase):
         result, commands = self.run_program([node('app001'), node('db01')],
                                             GROWTH_LIMITS={'app_servers': {'smallest_number_of_servers': 1, 'largest_number_of_servers': 4,
                                                                            'server_types': ['cx43']}})
-        self.assert_refused(result, commands, 'the newest app server, app001, has the server type cx33, which is not in growth_limits.app_servers.server_types')
+        self.assert_refused(result, commands, 'the newest app server, app001, has the server type cx23, which is not in growth_limits.app_servers.server_types')
 
     def test_the_postgres_connection_budget(self):
         # The template's shop: 2 CPUs x 3 connections on two servers is 12, 24 during a deploy; jobs 3 x 2; 15: 45.

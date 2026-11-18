@@ -251,13 +251,13 @@ func TestGoLiveWalksEveryScreenAndLocksTheDesk(t *testing.T) {
 	}
 
 	// Each screen in the design's order, with its four parts.
-	order := []string{"Account 2 of 3: Cloudflare (your web address and protection)", "4. Turn on R2", "It costs nothing up to 10 GB of files a month.",
+	order := []string{"Your accounts: account 2 of 3, Cloudflare (your web address and protection)", "4. Turn on R2", "It costs nothing up to 10 GB of files a month.",
 		"5. Open this link.", "Cloudflare accepted the token.", "R2 is not on yet",
-		"One change at your domain's registrar (Namecheap, Inc.)", "TURN OFF DNSSEC FIRST.", "Account 3 of 3: Backblaze (your backups)",
-		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "One more key: so your servers can download your app.",
-		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Key for shop: STRIPE_API_KEY",
-		"Stripe takes your customers' card payments with it.", "1. Open  https://dashboard.stripe.com/apikeys", "Stripe accepted the key.", "Step 1 of 2: your recovery passphrase", "SAVE IT NOW.",
-		"[the screen is cleared]", "Step 2 of 2: your phone code", "Done.  Your phone code is ready.  Your coding agent locks your systems desk next."}
+		"Your accounts: one change at your domain's registrar (Namecheap, Inc.)", "TURN OFF DNSSEC FIRST.", "Your accounts: account 3 of 3, Backblaze (your backups)",
+		"THE REGION CANNOT BE CHANGED LATER.", "Backblaze accepted the key.", "Your accounts: one more key, so your servers can download your app.",
+		`SET EXPIRATION TO "NO EXPIRATION".`, "GitHub accepted the token.", "Your accounts: a key for shop, STRIPE_API_KEY",
+		"Stripe takes your customers' card payments with it.", "1. Open  https://dashboard.stripe.com/apikeys", "Stripe accepted the key.", "Your accounts are done.", "→ 3. Your keys locked away", "Your keys locked away: step 1 of 2, your recovery passphrase", "SAVE IT NOW.",
+		"[the screen is cleared]", "Your keys locked away: step 2 of 2, your phone code", "Done.  Your phone code is ready.  Your coding agent locks your systems desk next, then builds your servers."}
 	at := 0
 	for _, line := range order {
 		next := strings.Index(output[at:], line)
@@ -446,7 +446,7 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 		t.Errorf("the rerun's first results still say it stopped: %q", rerun.StoppedWith)
 	}
 	output := h.transcript.String()
-	for _, screen := range []string{"Account 2 of 3", "One change at your domain's registrar", "Account 3 of 3", "Get Started Free", "One more key", "Step 1 of 2"} {
+	for _, screen := range []string{"account 2 of 3", "one change at your domain's registrar", "account 3 of 3", "Get Started Free", "one more key", "step 1 of 2"} {
 		if strings.Contains(output, screen) {
 			t.Errorf("the rerun showed %q again", screen)
 		}
@@ -460,7 +460,7 @@ func TestGoLiveContinuesWhereARunStopped(t *testing.T) {
 			t.Errorf("the rerun's Backblaze screen lacks %q", line)
 		}
 	}
-	if !strings.Contains(output, "Step 2 of 2: your phone code") {
+	if !strings.Contains(output, "Your keys locked away: step 2 of 2, your phone code") {
 		t.Fatalf("the rerun did not ask for the phone code:\n%s", output)
 	}
 	keys := h.bundleKeys()

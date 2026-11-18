@@ -20,8 +20,8 @@ chapter.
 > Now MMX sets up the servers from your systems repository: the firewall, the private network between the servers, Postgres, your app, and the tools on `util01`.
 > Later, I commit, push, and run MMX on `util01` for each change.
 > `util01` is not set up yet, so your systems desk runs MMX for the first server setup.
-> Plan for most of an hour, mostly for the servers' security updates.
-> I tell you when each run starts and about how long it takes.
+> This takes about 25 minutes, mostly for the servers' security updates.
+> I tell you when each step starts and about how long it takes.
 
 ## Before you start
 
@@ -215,13 +215,12 @@ chapter.
 
    **Tell the person first:**
 
-   > Next, the first MMX run prepares `util01`, the server that runs the system tools.
-   > The first MMX run on a server also sets up MMX's HTTPS service there, `mmx-https-api.service`, on TCP port 7443. Each server's firewall admits that port only from `util01` over WireGuard.
-   > WireGuard already carries SSH from your systems desk to every server. MMX reuses each server's first-boot key and adds the private connections that each server's job needs. WireGuard encrypts the connections between the servers.
+   > Next, I prepare `util01`, the server that runs the system tools.
+   > MMX also adds its own small service on each server, which only `util01` can reach, over your private network. Your servers talk to each other only over that private network, which is encrypted.
 
    **Tell the person while waiting:**
 
-   > This run installs each server's waiting security updates first, which takes about 3 to 7 minutes.
+   > This step installs each server's waiting security updates first, which takes about 3 to 7 minutes.
 
    **Tell the person after:**
 
@@ -315,8 +314,8 @@ chapter.
 
    **Tell the person first:**
 
-   > Next, the second run installs `util01`'s SSH keys on every server, sets up the database, and starts your app and the system tools.
-   > MMWatchdog, the program that watches every server, starts in this run. MMWatchdog checks your app's public address only from chapter 9, when your site goes live, so your app raises no alert before then.
+   > Next, I set up the database, and start your app and the system tools on every server.
+   > MMWatchdog, the program that watches every server, starts now. MMWatchdog checks your app's public address only once your site goes live, so your app raises no alert before then.
    > Other alerts from the servers reach nobody yet. They can ring your phone after the alerts part of the setup.
 
    Do not call an unrelated failure an expected alert.
@@ -325,7 +324,7 @@ chapter.
    `every_server` run at about 5 to 7 minutes (284 seconds until a new app
    server served, 397 seconds for the whole run).
 
-   > The second run takes several minutes. I tell you when the run ends.
+   > This takes about 10 minutes. I tell you when it is done.
 
    The shared root console password is in the recovery bundle. The
    console login test, in the provider guide's "Console and rescue access"
@@ -338,7 +337,7 @@ chapter.
    **Tell the person after:**
 
    > Your servers are set up. These services passed their checks: [the services].
-   > The first backup and the first restore drill start by themselves. I read both results in chapter 8.
+   > The first backup, and the first test that your backup restores, start by themselves. I read both results next.
 
    **Check:** run 2's summary shows every task passed, and a fresh SSH
    connection over wg0 from the systems desk reaches every server.
@@ -382,7 +381,7 @@ chapter.
 
    > Some of the installed security fixes, such as fixes to the kernel, take effect only after a server restarts.
    > No users use your system yet, so I restart the servers now, before your site goes live.
-   > First, I wait for the first restore drill to finish.
+   > First, I wait for the first restore test to finish.
 
    ```sh
    # This systems desk, in the systems repository; these runs execute on the systems desk,
@@ -399,7 +398,7 @@ chapter.
    back from its reboot in under a minute, and the app was down for about
    20 seconds.
 
-   > The restore drill takes a few minutes. Then each server restarts in turn, in about a minute each.
+   > The restore test takes a few minutes. Then each server restarts in turn, in about a minute each.
 
    Then reboot `util01` itself:
 
@@ -443,7 +442,7 @@ chapter.
 
    **Tell the person:**
 
-   > Your app runs on `app001`. Chapter 9 checks it from the internet and turns the checks on.
+   > Your app runs on `app001`. Next, I check it from the internet, the way your users reach it.
 
    **Check:** step 8's check answered.
 
@@ -502,8 +501,8 @@ with the fuller system:
 
 > From now on, each change to a server goes the same way: I commit and push the change you approved, then run MMX on `util01` and check the result. Runs take turns.
 > Pushing alone changes no server. Nobody changes a server by hand, because a later run can undo an unrecorded change.
-> One limit for now: `db01` has no replica yet, so a failure of `db01` stops your site until a replacement database is ready.
-> Next, I read the first backup and the first restore drill.
+> One limit for now: `db01` has no second database server beside it yet, so a failure of `db01` stops your site until a replacement database is ready.
+> Next, I read the first backup and the first restore test.
 
 ## If something is different
 

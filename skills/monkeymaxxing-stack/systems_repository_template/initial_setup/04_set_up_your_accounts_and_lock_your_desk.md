@@ -48,7 +48,10 @@ domain at Cloudflare, its DNS records, and the lock.
 
 ## Steps
 
-1. **Open your shared login before the lock.** Before the phone code
+1. **Open your shared login before the lock.** You did this step at the
+   end of chapter 3, before the three servers were created
+   ([Create the three production servers now](03_make_your_server_account_and_your_systems_desk.md#create-the-three-production-servers-now));
+   check it, and do it now only when it was not done. Before the phone code
    exists, your login needs only the laptop key. Open the shared
    connection now. When the person takes longer than the desk's one-hour
    idle limit, the login closes, and step 8 says how to open it again.
@@ -87,7 +90,9 @@ domain at Cloudflare, its DNS records, and the lock.
    Your systems desk, the small server that holds your keys, is ready.
 
    The window where you typed the Hetzner key goes on by itself now.
-   It shows the next 2 accounts, one at a time, and a change at your domain's registrar if one is needed.
+   It shows the rest of "Your accounts", one screen at a time: 2 more accounts, one more key,
+   and a change at your domain's registrar if one is needed.
+   Then it goes on to "Your keys locked away": one passphrase and one code for your phone.
    I carry on by myself when it is done.
    Ask me here at any time if a step is unclear.
 
@@ -140,7 +145,7 @@ domain at Cloudflare, its DNS records, and the lock.
 3. **Cloudflare.** The command shows:
 
    ```text
-   Account 2 of 3: Cloudflare (your web address and protection)
+   Your accounts: account 2 of 3, Cloudflare (your web address and protection)
 
    What this is for:
      Cloudflare puts your site on the internet and keeps your private pages private.
@@ -220,10 +225,11 @@ domain at Cloudflare, its DNS records, and the lock.
    screen has no account number: the account screens count only the
    accounts the person makes in this setup (Hetzner 1 of 3, Cloudflare 2
    of 3, Backblaze 3 of 3), so a skipped registrar screen never leaves a
-   gap in the count.
+   gap in the count. Every screen's title starts with "Your accounts:",
+   the person's part.
 
    ```text
-   One change at your domain's registrar (Namecheap)
+   Your accounts: one change at your domain's registrar (Namecheap)
 
    What this is for:
      Your domain must point at Cloudflare.
@@ -267,7 +273,7 @@ domain at Cloudflare, its DNS records, and the lock.
    as `EU Central` for servers in Europe. The command shows:
 
    ```text
-   Account 3 of 3: Backblaze (your backups)
+   Your accounts: account 3 of 3, Backblaze (your backups)
 
    What this is for:
      Your database backups are stored at Backblaze, away from your servers.
@@ -320,7 +326,7 @@ domain at Cloudflare, its DNS records, and the lock.
    read-only token. The command shows:
 
    ```text
-   One more key: so your servers can download your app.
+   Your accounts: one more key, so your servers can download your app.
 
    Do this now:
      1. Open this link.  It fills in the key for you:
@@ -392,13 +398,22 @@ domain at Cloudflare, its DNS records, and the lock.
    later parts of the setup, such as Pushover's and the triage agent's, stay
    `not defined` until their part of the setup.
 
-7. **The lock.** The command shows two last steps. First the recovery
+7. **The lock.** The command ends "Your accounts" with
+   [chapter 0's compact map](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-compact-map),
+   and shows the two steps of "Your keys locked away". First the recovery
    passphrase:
 
    ```text
-   Last two steps.
+   Your accounts are done.
 
-   Step 1 of 2: your recovery passphrase
+     ✓ 1. Your app
+     ✓ 2. Your accounts
+     → 3. Your keys locked away    now: 2 steps, about 3 minutes
+       4. Your servers
+       5. Live
+       Later: phone alerts.  Your site has none yet.
+
+   Your keys locked away: step 1 of 2, your recovery passphrase
 
    What this is for:
      If you lose your systems desk (the small server that holds your keys), this one passphrase brings everything back.
@@ -417,7 +432,7 @@ domain at Cloudflare, its DNS records, and the lock.
    Then the phone code:
 
    ```text
-   Step 2 of 2: your phone code
+   Your keys locked away: step 2 of 2, your phone code
 
    What this is for:
      From now on, your systems desk (the small server that holds your keys) needs your laptop AND a code from your phone.
@@ -452,7 +467,7 @@ domain at Cloudflare, its DNS records, and the lock.
    The command ends:
 
    ```text
-   Done.  Your phone code is ready.  Your coding agent locks your systems desk next.
+   Done.  Your phone code is ready.  Your coding agent locks your systems desk next, then builds your servers.
 
    Go back to your coding agent.
    ```
@@ -551,11 +566,26 @@ domain at Cloudflare, its DNS records, and the lock.
    [`AGENTS.md`](../AGENTS.md#making-a-change) says, so the laptop may
    sleep.
 
-   **Tell the person:**
+   **Tell the person:** the end of part 3, "Your keys locked away", with
+   the compact map, as the last text of your reply. Before you write it,
+   start a short background command, such as `sleep 5`, so its end wakes
+   you to start chapter 5, as the skill's "Where the person is: the five
+   parts" says:
 
-   > Thank you. Now I create your servers, install everything, set up your backups, prove a restore, and put your app live.
-   > That takes about an hour. Your laptop may sleep: the work continues on your systems desk.
-   > I tell you what I am doing, one line at a time.
+   ```text
+   Your keys are locked away.  Your systems desk now needs your laptop and a code from your phone.
+
+     ✓ 1. Your app
+     ✓ 2. Your accounts
+     ✓ 3. Your keys locked away
+     → 4. Your servers             now, about 30 minutes
+       5. Live
+       Later: phone alerts.  Your site has none yet.
+
+   Now: I am setting up Cloudflare for your site and installing everything on your servers, about 30 minutes.
+   Your laptop may sleep: the work continues on your systems desk.
+   Next for you: nothing.  I tell you the moment your site is up.
+   ```
 
    **Check:** you started chapter 5.
 

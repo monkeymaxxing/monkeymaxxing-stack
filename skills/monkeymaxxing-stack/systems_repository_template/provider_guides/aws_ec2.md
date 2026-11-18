@@ -208,7 +208,7 @@ aws_security_group_id=sg-0123456789abcdef0             # the group that admits U
 aws_stack_system_id=example_systems                    # every server's stack-system-id tag
 
 # aws_root_disk_gib SERVER_TYPE: the root disk's size, from chapter 6's sizes:
-# 80 GiB for the app server's type, 40 GiB for the others.
+# 80 GiB for the bigger app server type, 40 GiB for the others.
 aws_root_disk_gib() {
   case "$1" in t3.xlarge) echo 80 ;; *) echo 40 ;; esac
 }
@@ -590,8 +590,8 @@ to the user `admin`; the first-boot data sets `disable_root: false`, so cloud-in
 chosen image, because Debian 13 renamed the network stage.
 
 Within [T3](https://aws.amazon.com/ec2/instance-types/t3/), `t3.medium` supplies 2 vCPUs and 4 GiB for the
-database, utility and staging servers, and `t3.xlarge` 4 vCPUs and 16 GiB for the app server, with root disks
-of 40 GiB and 80 GiB of gp3, as `aws_root_disk_gib` gives. Reason: smaller T3 sizes fail the shared initial
+app, database, utility and staging servers, and `t3.xlarge` 4 vCPUs and 16 GiB is the price screen's bigger
+option for a heavier app, with root disks of 40 GiB and 80 GiB of gp3, as `aws_root_disk_gib` gives. Reason: smaller T3 sizes fail the shared initial
 requirements, and EC2 disks are separate purchases. T3 is x86; Graviton (T4g) needs ARM images and programs
 throughout. The create sets T3's `CpuCredits=standard`, which never charges for extra CPU credits and slows
 the server once its credits run out.

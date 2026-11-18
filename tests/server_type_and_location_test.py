@@ -67,9 +67,9 @@ class ServerTypeAndLocation(unittest.TestCase):
 
     def test_a_server_without_them_is_refused_with_what_to_add(self):
         def remove_app001s(text):
-            old = '      server_type: cx33\n      location: fsn1\n'
+            old = '      public_ipv4_address: 203.0.113.11\n      server_type: cx23\n      location: fsn1\n'
             self.assertEqual(text.count(old), 1)
-            return text.replace(old, '')
+            return text.replace(old, '      public_ipv4_address: 203.0.113.11\n')
         result = self.run_the_check(remove_app001s)
         self.assertEqual(result.returncode, 1)
         self.assertIn('app001 has no server_type and location in inventories/servers.yml.', result.stderr)

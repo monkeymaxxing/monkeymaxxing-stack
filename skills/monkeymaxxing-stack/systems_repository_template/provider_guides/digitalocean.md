@@ -354,8 +354,9 @@ because the Stack's server binaries and container images are x86-64, also with a
 `GET regions` each region's `available`: on the laptop with the key file in chapter 3, and through
 `http://127.0.0.1:8081/` on the desk. Chapter 3 reads it, for the desk and every server of the plan, before its one price screen, as
 [the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says.
-Use the full region slug, such as `ams3`. Basic `s-4vcpu-8gb` for `app001` and
-`s-2vcpu-4gb` for the remaining ordinary roles meet the shared setup's minimums.
+Use the full region slug, such as `ams3`. Basic `s-2vcpu-4gb` for `app001` and the
+other ordinary roles meets the shared setup's minimums; `s-4vcpu-8gb` is the price screen's bigger option for
+a heavier app.
 
 **Prices.** `curl -sS 'http://127.0.0.1:8081/sizes?per_page=200' | jq '.sizes[] | select(.slug == "s-2vcpu-4gb") | {slug, price_monthly, price_hourly, disk, regions}'`
 gives each size's `price_monthly` and `price_hourly` in US dollars, without the tax DigitalOcean adds in
