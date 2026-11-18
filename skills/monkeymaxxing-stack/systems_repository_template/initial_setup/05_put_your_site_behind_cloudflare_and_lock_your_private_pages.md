@@ -209,11 +209,16 @@ first sign-in at the private pages comes in the alerts part of the setup, in
        "http://127.0.0.1:8082/zones/ZONE_ID/rulesets/phases/http_request_cache_settings/entrypoint" \
        -d '{"rules": [{"description": "The apps: cache what each app marks with Cache-Control",
             "expression": "(http.host in {\"shop.example.com\"})", "action": "set_cache_settings",
-            "action_parameters": {"cache": true, "edge_ttl": {"mode": "respect_origin"}, "browser_ttl": {"mode": "respect_origin"}}}]}'
+            "action_parameters": {"cache": true, "edge_ttl": {"mode": "bypass_by_default"}, "browser_ttl": {"mode": "respect_origin"}}}]}'
    ```
 
    The entrypoint is the zone's cache ruleset, which holds the cache rules
-   Cloudflare runs for the zone.
+   Cloudflare runs for the zone. `bypass_by_default` caches a response
+   only when the app's `Cache-Control` header allows it, and never a
+   response without the header. Reason: with `respect_origin`, Cloudflare
+   keeps a response without the header for its own default time, about two
+   hours, so an app that sends no header shows pages up to two hours old,
+   such as a list without the note just added.
 
    **Tell the person first:**
 
@@ -235,8 +240,10 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    > Your tunnels, DNS records, Access application, and cache rule now exist at Cloudflare.
    > Your servers connect only after their setup in chapter 7.
 
-   **Check:** the zone's cache ruleset has a rule with `respect_origin`
-   for every production host name. Then Cloudflare's API must list the
+   **Check:** the zone's cache ruleset has a rule whose edge TTL mode is
+   `bypass_by_default` for every production host name. An existing rule
+   with `respect_origin` for one of them is the older form: replace it with
+   this rule, telling the person in one line. Then Cloudflare's API must list the
    tunnels, the tunnels' DNS records, the Access applications, and the
    cache rule, before you tell the person the settings exist at
    Cloudflare. Chapter 9 (go live) marks

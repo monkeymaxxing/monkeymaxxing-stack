@@ -643,7 +643,8 @@ items:
     verification: >-
       the coding agent read the zone's cache ruleset through Cloudflare's API
       and found a Cache Rule that covers every production host name and follows
-      the apps' Cache-Control headers (`respect_origin`); the person has the
+      the apps' Cache-Control headers and skips a response without one
+      (`bypass_by_default`); the person has the
       link to the rule in Cloudflare's dashboard. The behavior test is an
       optional extra check: a public page that an app marks with
       `Cache-Control: public, max-age=60` answers `cf-cache-status: HIT` on
