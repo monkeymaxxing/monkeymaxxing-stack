@@ -243,7 +243,7 @@ account screen of step 1 is the opening.
    this order. "Use OVHcloud instead" comes first, and only at Hetzner,
    while the person has made no account other than Hetzner's for the
    setup, and where OVHcloud's guide covers the servers' region (today
-   OVHcloud US): check OVHcloud's stock first, as its guide says, and give
+   OVHcloud US and OVHcloud Europe): check OVHcloud's stock first, as its guide says, and give
    its real total. "Order now" is the next bigger size at its real price.
    "Wait" is last. Reason: the person has nothing yet to undo at Hetzner,
    so a move costs nothing, and the cheap size may not come back soon.

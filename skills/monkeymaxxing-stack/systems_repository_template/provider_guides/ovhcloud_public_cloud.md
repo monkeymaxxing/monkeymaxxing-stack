@@ -25,6 +25,11 @@ daily backup that OVHcloud requires with it:
 | 2 vCPU, 4 GB | VPS-1, $5.85 a month | d2-4, $0.0256 an hour | about 9.5 days |
 | 4 vCPU, 8 GB, the bigger app server option | VPS-2, $10.60 a month | b2-15, $0.1663 an hour | about 2.7 days |
 
+In Europe the same plans cost, before VAT, VPS-1 €4.84 a month against
+d2-4 at €0.0206 an hour (about 9.8 days), and VPS-2 €8.99 against b2-15
+at €0.1342 (about 2.8 days), read on 2026-11-19 for Germany
+([OVHcloud Europe](#ovhcloud-europe-what-differs)).
+
 Before you create a server, show the person both prices, and say which
 kind you chose and why.
 
@@ -39,8 +44,12 @@ Two things to know about a VPS:
 
 **Stock:** the public, credential-free
 `GET https://api.us.ovhcloud.com/1.0/vps/order/rule/datacenter?ovhSubsidiary=US&planCode=PLAN`
-lists each datacenter as available or out of stock for a VPS plan; the US
-has two, `US-EAST-VA` and `US-WEST-OR`. Chapter 1 plans only with VPS
+lists each datacenter of a VPS plan; the US has two, `US-EAST-VA` and
+`US-WEST-OR`. Read each datacenter's `linuxStatus`, never its `status`:
+`status` says `available` when only Windows servers are in stock (VPS-2
+in both US datacenters on 2026-11-19, with `linuxStatus` `out-of-stock`).
+A datacenter has stock for the Stack only when `linuxStatus` is
+`available`. Chapter 1 plans only with VPS
 plans that a datacenter can sell now. Chapter 3 reads it again, for the
 desk and every server of the plan, before its one price screen, as
 [the real price, approved once](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#the-real-price-approved-once) says.
@@ -63,6 +72,8 @@ after the person approves the price:
    total leaves out sales tax, which OVHcloud adds to the bill, so write
    "plus sales tax" beside each US price: a person who approved $17.55
    and then saw a higher total thought the agent had changed the price.
+   In Europe the cart's total includes VAT: show its `withTax` price
+   ([OVHcloud Europe](#ovhcloud-europe-what-differs)).
    End with the price screen as the last text of your
    reply, with no tool call after it, so your turn ends on the price.
    Only after the person's yes, read the total again and send `POST /order/cart/CART_ID/checkout`
@@ -130,6 +141,48 @@ it creates a Public Cloud flavor at least as large: `d2-4` for VPS-1,
 `b2-15` for VPS-2. After the repair, recommend moving the replacement back
 to a VPS with [Replace a server](../operating_procedures/replace_a_server.md):
 it is permanent now.
+
+## OVHcloud Europe: what differs
+
+A team in Europe makes its account at OVHcloud's European site,
+`ovhcloud.com`, whose API is `https://eu.api.ovh.com/1.0/`
+([the credential table](#credentials-on-the-systems-desk)). Everything
+on this page works there the same way, with these differences, checked
+against the live API on 2026-11-19:
+
+- **Your account's country** is the `ovhSubsidiary` of every catalog,
+  stock and cart request, such as `DE`, `FR`, `GB`, `ES`, `IT`, `PL` or
+  `NL`, never `US`. Prices are in the country's currency, such as euros,
+  pounds for `GB`, or złoty for `PL`.
+- **VPS datacenters in Europe:** `GRA` (Gravelines), `SBG` (Strasbourg)
+  and `EU-WEST-RBX` (Roubaix) in France, `DE` (Limburg, Germany), `UK`
+  (London), `WAW` (Warsaw, Poland) and `EU-SOUTH-MIL` (Milan, Italy). Put
+  the production servers in the datacenter nearest the app's users that
+  has stock, and the desk in another one, as this page says for the US.
+  The same stock request answers at
+  `https://eu.api.ovh.com/1.0/vps/order/rule/datacenter?ovhSubsidiary=DE&planCode=PLAN`,
+  with the account's country in place of `DE`. It also lists Canadian
+  and Asian datacenters; leave them out for a team in Europe.
+- **The plans and add-ons are the US ones:** `vps-2027-model1` (VPS-1:
+  2 vCores, 4 GB, 40 GB) and `vps-2027-model2` (VPS-2: 4 vCores, 8 GB,
+  75 GB), with the same required `os`, `storage` and `automatedBackup`
+  options. VPS-1 is €4.49 a month plus €0.35 for the one-day backup;
+  VPS-2 is €8.49 plus €0.50 (Germany, before VAT).
+- **The cart's `region` setting is `europe`.** The item's other required
+  settings are the US ones; `GET /order/cart/CART_ID/item/ITEM_ID/requiredConfiguration`
+  lists each with its allowed values.
+- **Prices include VAT on the price screen.** The catalog's prices are
+  without VAT; its `locale.taxRate` gives the country's rate, such as 19
+  for Germany. The cart's summary and checkout show `withTax` and
+  `withoutTax`: show the person `withTax`, such as "€5.34 the first
+  month, then €5.76 a month, VAT included" for a VPS-1 in Germany, where
+  the first month's backup is free. Write no "plus sales tax" in Europe.
+- **The credential page** is `https://www.ovh.com/auth/api/createToken`,
+  with the same access rules in the link as above; the link keeps them
+  through OVHcloud's redirect to its sign-in page.
+- **Public Cloud regions:** read the project's own list with
+  `GET /cloud/project/PROJECT_ID/region`, and pick the one in the same
+  country as the production servers' VPS datacenter.
 
 ## The provider's web console
 
