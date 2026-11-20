@@ -4,13 +4,15 @@ This page is for people and coding agents who change the Stack itself.
 The contracts below state the required outcomes for changes to the stack.
 
 - **The goal.** A startup founder or developer who is new to running
-  servers sets up a production system with their coding agent in about a
-  working day. At the end, the person's site is live, alerts reach the
-  person's phone, and backups are proven to restore. The person is
-  confident that the system works and understands how. Setup feels like
-  steady progress, not an exam. Reason: this is the most secure stack the
-  person will use, but only if the person uses the Stack. A setup that
-  feels hard sends people to a system they build themselves, full of holes.
+  servers sets up a production system with their coding agent in a few
+  hours: the app is live, protected, and backed up in about an hour and a
+  half, and phone alerts follow in about 15 minutes. At the end, the
+  person's site is live, alerts reach the person's phone, and backups are
+  proven to restore. The person is confident that the system works and
+  understands how. Setup feels like steady progress, not an exam. Reason:
+  this is the most secure stack the person will use, but only if the person
+  uses the Stack. A setup that feels hard sends people to a system they
+  build themselves, full of holes.
 
   Three rules follow from the goal. Every setup chapter, every item of the
   checklist, and every operating procedure must meet the rules.
@@ -31,8 +33,8 @@ The contracts below state the required outcomes for changes to the stack.
      proof as an optional check, "Check my system's protections" in
      [`operating_procedures/assess_a_running_system_and_recommend_changes.md`](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/assess_a_running_system_and_recommend_changes.md#check-my-systems-protections).
      Reason: a person who repeats the Stack's own tests on every system
-     spends the working day on an exam, and the Stack's tests already proved
-     the software.
+     spends hours on an exam, and the Stack's tests already proved the
+     software.
   3. **Defaults fit a small team.** Each default works for a team of one or
      two people with ordinary tools. A stronger option, such as a hardware
      security key or an alert that wakes someone, is a setting that a team

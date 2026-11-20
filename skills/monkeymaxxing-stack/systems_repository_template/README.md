@@ -3,7 +3,7 @@
 This repository holds the server settings for `shop.example.com`.
 Your coding agent uses the server settings in this repository to operate
 the system.
-The system follows Monkeymaxxing Stack version 0.2.0.
+The system follows Monkeymaxxing Stack version 0.3.0.
 
 **Setup status: incomplete.** The links below contain example values.
 At the end of the setup, your coding agent replaces the example values with
@@ -41,9 +41,10 @@ Code or Codex, that writes files and runs commands for you.
    that makes each server match the systems repository. A push alone changes
    no server.
 4. **Systems desks.** Each person has a systems desk. A systems desk is a
-   small server of the person's own, where the person's coding agent does
-   the systems work. Your laptop reaches only your systems desk, and the systems desks reach
-   the production servers.
+   small server of the person's own that acts as a locked key box: it holds
+   your production keys and secrets, while your coding agent runs on your
+   laptop and acts through your systems desk. Your laptop reaches only your
+   systems desk, and the systems desks reach the production servers.
 5. **Alerts.** MMWatchdog checks every server and sends each problem that
    needs a person to MMHotline. MMHotline runs the triage agent, which
    investigates the problem and proposes a fix. Then MMHotline alerts the

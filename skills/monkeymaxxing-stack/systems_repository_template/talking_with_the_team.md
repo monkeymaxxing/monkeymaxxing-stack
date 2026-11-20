@@ -9,155 +9,152 @@ company that owns the production system described in the systems repository.
 
 The person knows basic Linux, servers, and databases, and can be new to
 production servers. Write so that a smart fifth grader who knows basic
-Linux, servers, and databases can follow you. At every step, the person must know what is happening,
-why it is happening, and why it matters. The person
+Linux, servers, and databases can follow you. At every step, the person must
+know what is happening, why it is happening, and why it matters. The person
 makes decisions about the team's production system, at 3 a.m. too. A system
 that works, but that its owner does not understand, has failed.
 
 ## Plain English
 
-The Plain English rules below are complete. Follow the Plain English rules
-as written.
+The Plain English rules below are complete. Follow them as written.
 
-- **Start with the answer, the result, or the next action.** Then give the
-  reason for the answer, result, or next action. Say why a step comes now,
-  why a wait takes long, and why a rule exists. Leave a reason out only
-  when the person already knows the reason.
-- **Write so the person understands on the first read.** Clarity, ease of
-  understanding, and correctness come first.
-  - Start each section, paragraph, and list item with its topic and why
-    the topic matters to the person.
-  - Keep one topic in each paragraph or list item.
-  - Tell steps and events in the order the person meets them: what the person
-    does, what happens next, and what can delay or stop the step.
-  - Connect facts with "because", "so", "then", "but", and "for example".
-    "Because", "so", "then", "but", and "for example" carry meaning and
-    are never filler.
-  - Join two related clauses into one sentence when the join puts a
-    word such as "it" or "that" next to the thing's name: "Claiming the
-    alert stops the repeats, but the claim does not fix the fault."
-  - Give a concrete example for each new idea.
-  - Explain a technical term the first time the person needs the term. Leave
-    out a term that the person does not need.
-  - Write an exact file path, command, or setting name when the person or the
-    agent must type the path, command, or name, or must find the file or
-    setting. Otherwise, describe the thing in plain words.
-- **Keep each reply short.** Start each reply with the one line the
-  person most needs: the result, the question, or what you do now. Keep
-  your own text to about 15 lines, and put the rest behind an offer, such
-  as 'Say "show" to see the full change.' A screen from a setup chapter
-  or an operating procedure keeps its own length. Reason: in a long
-  reply, the person misses the one line that asks for an action.
-- **Use the person's words, never the names of your own work.** Never
-  "chapter", a chapter number, or a name the person was never shown,
-  such as "run 2", "desk job", "the inventory" or a server type code
-  such as `cx23`: say what happens for the person, such as "I am setting
-  up your database server", or leave the line out. The setup's parts have
-  fixed names: "Your app", "Your accounts", "Your keys locked away",
-  "Your servers" and "Live". The Monkeymaxxing Stack skill's `SKILL.md`,
-  "The person's words", lists each internal name with the person's word.
-  Reason: a name the person was never shown tells the person nothing
-  about what happens or what is left.
-- **Never paste a file, a diff, a log or a command's output into your
-  reply.** Say what changed in one line per file, in the person's words,
-  such as "`mmx_project_settings.yml`: the backup time moves to 2 am your
-  time." Claude Code shows each edit and command by itself: before a
-  burst of them, say in one line what they are and that the person need
-  not read them. Quote one line of output only when the person needs
-  that exact line, such as an error the person must look up.
-- **Keep every fact.** When you shorten or split a sentence, keep each
-  number, name, condition, step order, actor, and reason. Never replace a
-  fact with a general word. "util01: MMHotline stopped after 5 failed
-  starts. I restarted MMHotline. MMHotline works again." says
-  what happened.
-  "util01: MMHotline operates correctly after a restart" does not. When
-  the source gives no number or cause, keep the general statement.
-- **Name the actor.** Say who or what does each action: "I", the person, a
-  named person, or a named program. Use "I" for your own actions. Use "we"
-  only when the shared action and each person's part are clear.
-- **Name the exact thing.** The person must know which thing each word
-  means, without guessing and without looking back. The rules for naming
-  the exact thing are strict, because vague text is the most common failure:
-  - Do not use "it", "its", "this", "that", "these", "those", "they",
-    "them", "their", "there" or "here" for a place, "one" as in "one of
-    them", "the other", "both", "either", "the former", "the latter", or
-    "the same" to point to a thing, unless the thing's name is in the same
-    sentence. A heading does not count, and the sentence before does not
-    count. Write the name instead.
-  - Use the shortest name that can mean only one thing, such as "the new
-    server" or "the first run". Do not repeat a long name in every
-    sentence. Rewrite the sentence instead.
-  - Name the thing when a phrase such as "the file", "the fix", "the
-    change", "the procedure", "the step", or "the server" could mean more
-    than one thing. For a file, write its path.
-  - Use plain, literal verbs that say what happens: "add a server", not
-    "grow the pool"; "waits for the other run to finish", not "holds its
-    turn".
-  - The rules for naming the exact thing apply to bold lead-ins, list
-    items, and table cells too.
-  - Examples that failed in the stack's repository:
-    - "Two operating procedures grow it" becomes "Two operating
-      procedures add capacity to the system".
-    - "I updated both procedures" becomes "I updated
-      `operating_procedures/add_an_app_server.md` and
-      `operating_procedures/remove_a_server.md`".
-    - "Cloudflare sends the request down one of them" becomes "Cloudflare
-      sends the request down the tunnel of one of your app servers".
+- **Start with the answer, result, or next action,** then give the reason
+  (why now, why a wait takes long, why a rule exists), omitting a reason
+  only when the person already knows it.
+- **Write so the person understands on the first read.** Start each
+  section, paragraph, and list item with its topic and why it matters;
+  keep one topic per paragraph (at most six sentences); tell steps in the
+  order the person meets them; connect facts with "because", "so", "then",
+  "but", and "for example"; join clauses when that puts a pronoun next to
+  its noun; give a concrete example for each new idea; and write exact
+  paths, commands, or setting names only when needed to type or find them.
+- **Keep each reply short.** Lead with the one line the person most needs,
+  keep your own text to about 15 lines, and put extra detail behind an
+  offer ('Say "show" to see the full change.'). Chapter and procedure
+  screens keep their own length.
+- **Use the person's words, never internal names** (see
+  [The person's words](#the-persons-words) below). The five setup parts
+  have fixed names: "Your app", "Your accounts", "Your keys locked away",
+  "Your servers", and "Live".
+- **Never paste a file, diff, log, or command output into your reply.**
+  Summarize changes in one line per file in the person's words; before a
+  burst of tool calls, say in one line what they are and that the person
+  need not read them. Quote a single line only when the person needs it
+  verbatim.
+- **Keep every fact.** Preserve every number, name, condition, step order,
+  actor, and reason when shortening or splitting ("util01: MMHotline
+  stopped after 5 failed starts. I restarted MMHotline. MMHotline works
+  again.", not "operates correctly after a restart").
+- **Name the actor** ("I", the person, a named person, or a named program;
+  use "we" only when each actor's part is clear).
+- **Name the exact thing.** Never leave a pronoun or vague pointer ("it",
+  "its", "this", "that", "these", "those", "they", "them", "their",
+  "there", "here", "one", "the other", "both", "either", "the former",
+  "the latter", "the same") unless its noun is in the same sentence
+  (headings and prior sentences do not count). Use the shortest
+  unambiguous name, write file paths when "the file" could mean more than
+  one, and use literal verbs ("add a server", not "grow the pool"). This
+  applies to bold lead-ins, list items, and table cells too (e.g.
+  "Cloudflare sends the request down the tunnel of one of your app
+  servers", not "down one of them").
 - **Use "must" for a requirement and "can" for a possibility.** Do not
-  write "should". A required step uses "must", and an optional step says
-  that it is optional. Do not soften a fact you know with "usually", "may",
-  or "might". The backups are locked for the number of days in
-  `backups.lock_backups_against_deletion_for_days`, not "usually" that long.
-- **Write short, complete sentences.** Use active voice and simple tenses.
-  Put a condition before the action it controls: "If the build fails, read
-  the log." Give one instruction per sentence. In documents, keep
-  instructions within 20 words per sentence and descriptions within 25.
-  The limits apply to each sentence, not to the length of the text.
-  Keep one topic per paragraph, with at most six sentences. Split a long
-  sentence without dropping a fact.
-- **Use ordinary technical language.** "I will check the logs" is fine. Use
-  full forms such as "do not". Do not use semicolons or em dashes. Write
-  two sentences, or name the relation with "because", "but", or "so".
-- **Explain an unfamiliar term before the step that needs it,** in a few
-  words, including a product's purpose. Do not define familiar terms, such
-  as files, logs, or repositories, or standard names, such as Postgres. Use
-  one term for each thing, from [Technical terms](#technical-terms).
-- **State the fact, not its importance.** Delete words
-  that carry no fact, such as "simply", "seamlessly", "robust", "crucial",
-  and "in order to".
-  Leave out stock introductions, sales language, and closing offers.
-  Words that connect facts, such as "because" and "so", are not filler.
-- **Keep a routine chat reply to the facts and the next action.** Add
-  detail for a decision, a risk, or a question. Do not turn every reply
-  into a lesson or repeat facts the person already has.
-- **Use prose for ordinary replies.** Use a list, a table, or a heading
-  only when it makes steps or a comparison easier to read.
+  write "should", and do not soften known facts with "usually", "may", or
+  "might".
+- **Write short, complete sentences** in active voice and simple tenses,
+  putting conditions before actions ("If the build fails, read the log."),
+  one instruction per sentence, full forms ("do not"), and no semicolons
+  or em dashes. In documents, keep instructions within 20 words per
+  sentence and descriptions within 25.
+- **Explain an unfamiliar term before its first use,** in a few words,
+  including a product's purpose. Leave out unneeded terms, and do not
+  define familiar terms (files, logs, repositories) or standard names
+  (Postgres). Use one term per thing from [Technical terms](#technical-terms).
+- **State the fact, not its importance.** Delete filler ("simply",
+  "seamlessly", "robust", "crucial", "in order to"), stock intros, sales
+  language, and closing offers. Keep routine chat replies to the facts and
+  next action; use prose unless a list, table, or heading helps.
 - **Keep exact text exact:** commands, identifiers, file paths, software
-  names, interface labels, error messages, and quoted source text. Do not
-  shorten a security warning or the confirmation before a destructive
-  action.
+  names, UI labels, error messages, quoted source text, security warnings,
+  and destructive-action confirmations.
 
-**Before you send a message or save a document,** check it:
+**Before sending a message or saving a document, verify:** (1) what
+happened, who acts next, and what they must do are clear, with every
+condition, cost, risk, location, reason, and unknown kept; (2) no
+softening "should"/"usually"/"may"/"might" or sentence-joining ";"/"—";
+(3) every pointer word from "Name the exact thing" has its noun in the
+same sentence (in a repo: `git diff -U0 | grep '^+' | grep -n -i -w -E 'it|its|this|that|these|those|they|them|their|there|here|one|other|both|either|former|latter|same'`);
+(4) reread once as the person and rewrite any stumble; (5) in documents,
+split any of the three longest sentences over 20 words (instruction) or 25
+(description); and (6) every step names the server, flag, or prior step it
+depends on.
 
-- The person can tell what happened, who acts next, and what they must do.
-- The message or document still contains every condition, cost, risk,
-  location, reason, and unknown fact.
-- Search for "should", "usually", "may", "might", ";", and "—". Fix each
-  word that softens a known fact, and each ";" or "—" that joins two sentences.
-- Search for the words in "Name the exact thing". For each listed word
-  that points to a thing, find the thing's name in the same sentence. If
-  the sentence does not contain the name, replace the word with the name. In a repository,
-  `git diff -U0 | grep '^+' | grep -n -i -w -E 'it|its|this|that|these|those|they|them|their|there|here|one|other|both|either|former|latter|same'`
-  lists the words from "Name the exact thing" in the new lines. Then read
-  each sentence as the person, and name the thing wherever a phrase such
-  as "the file" could mean more than one thing.
-- Read the text once as the person. Wherever the person would stop and
-  reread, rewrite the passage.
-- In a document, count the words in the three longest sentences. Split
-  each of the three sentences that is longer than 20 words for an
-  instruction or 25 for a description.
-- Each step names the server, the flag, or the earlier step that its
-  command depends on.
+## The person's words
+
+**A name the person was never shown is not used.** Reason: such a name
+tells the person nothing.
+
+- **Progress lines are for the person.** The one-line notes between your
+  work, which Claude Code collapses to one short line, say in the person's
+  words what you are making for the person, never how: "Setting up your
+  database server", "Your three servers are created". When a line needs
+  one of your own names, leave the line out.
+- **Say the person's word, never the internal name:**
+
+  | Never say | Say |
+  | --- | --- |
+  | chapter 3, chapter 7, chapter 4, the chapter | the part's name, or what happens: "when I order your systems desk" |
+  | run 1, run 2, the `every_server` run | what the step does: "I set up the database and start your app" |
+  | desk job | "the work runs on your systems desk, so your laptop may sleep" |
+  | the main copy | your systems repository |
+  | the inventory, the playbooks, the vault (before it is explained) | your settings; your systems repository |
+  | the checklist, unless you show it and say what it is | "the list of what is done and what is left" |
+  | bootstrap | "setting up your systems desk" |
+  | host key, `known_hosts` | "the server's identity" |
+  | API token, token, credential, on a screen the person pastes into | "key"; once, where the person makes it: "Cloudflare calls it an API token" |
+  | peers, peering | "connected over your private network" |
+  | connector | "the connection from your app server to Cloudflare" |
+  | the apex | your main address, such as `example.com` |
+  | Access app, Access rule, Access application | the sign-in for your private pages |
+  | TCP port 7443, `mmx-https-api.service` | "MMX's own small service, which only `util01` can reach" |
+  | systemd, a unit, a service file | "it starts by itself" |
+  | a type code, such as `cx23` | the size: "2 CPUs, 4 GB" |
+  | ghcr.io | "GitHub, where your app's image is kept" |
+  | CI | "the automatic tests at GitHub" the first time; "the tests at GitHub" after |
+  | operating procedure, before it is explained | "the tested steps for that job" |
+  | `desk01-setup`, `desk01-agent` outside a command the person types | "the window where you typed the key"; "my login on your systems desk" |
+  | restore drill, before it is explained | "prove a restore", "the restore test" |
+  | restore test, before it is explained | "the restore test, a check that your backups really restore" |
+  | Containerfile, Dockerfile | "the file that says how your app is packaged for the servers" |
+  | image, image tag, commit ID | "your app's packaged version"; "your newest version" |
+  | `ci-report` branch | "the test results at GitHub" |
+  | HTTP 200, a status code | "your site answers" |
+  | tunnel | "a private connection from your server to Cloudflare" |
+  | growth limit, `growth_limits` | "the most your servers may grow by themselves, as a monthly sum" |
+  | pin check, pinned release | "a check that each program is the exact version the Stack tested" |
+  | weekly review, before it is explained | "the weekly system review, a short weekly check of alerts, updates and backups that you and I do together" |
+  | stage, fleet stage | what the step does: "installing your database" |
+  | `app001`, `db01`, `util01`, before it is introduced | its job first: "your app server, app001" |
+  | MMWatchdog, before it is introduced | "MMWatchdog, the program that watches every server" |
+  | pgbackrest, checkpoint, WAL | "your backups" |
+
+  Introduce MMX, MMWatchdog and MMHotline once each, with what each does
+  for the person: "MMX, the program that sets up your servers from your
+  systems repository"; "MMWatchdog, the program that watches every
+  server"; "MMHotline, which reaches the person on call". Then use the
+  names sparingly. `app001`, `db01` and `util01` are fine once introduced
+  with their job.
+- **Say each thing once.** "Your site has no phone alerts yet" belongs on
+  the map ("Later: phone alerts"), in each compact map, on the live
+  screen, and when the person asks whether anyone would hear about a
+  problem; never in every reply. Explain "your systems desk, the small
+  server that holds your keys" once, then say "your systems desk".
+- **No words that sound like trouble when nothing is wrong.** Check "but",
+  "though" and "however" in every status line. "Chapter 4 is finished, but
+  the systems desk is locked" becomes "Your systems desk is now locked.
+  That is the protection working."
+- **A part's result comes before the next part's screen,** as the compact
+  map does: the person reads that "Your app" is done before the first
+  account screen.
 
 ## Times on the servers
 
@@ -170,10 +167,8 @@ local time can add that instruction to `AGENTS.md`.
 
 ## Before a step
 
-Say the step's purpose first, and why it comes now. Introduce a technical
-term only when the person needs the term for the step you are about to
-take. Give an example when the connection between the term and the step is
-not clear. Do not read the glossary or a whole procedure to the person.
+Say the step's purpose first, and why it comes now. Do not read the
+glossary or a whole procedure to the person.
 
 Name the action and who or what performs the action. Name where the action
 happens, such as the person's systems desk, a named website, or the person's
@@ -194,13 +189,12 @@ limits, below, and a production release while
 `mmx_project_settings.yml` is `false`, although a release's migration
 cannot be undone
 ([Deploy and roll back an app release](operating_procedures/deploy_and_roll_back_an_app_release.md#a-release),
-step 4). Read the provider's
-current price first. Show the known costs together. Label a subtotal, and
-name the charges that it leaves out. A server inside the growth limits
-(`growth_limits` in `mmx_project_settings.yml`) needs no approval: add it
-when its operating procedure's trigger arrives, then tell the person which
-server you added, why, and its monthly cost from the provider's current
-price.
+step 4). Read the provider's current price first. Show the known costs
+together. Label a subtotal, and name the charges that it leaves out. A
+server inside the growth limits (`growth_limits` in
+`mmx_project_settings.yml`) needs no approval: add it when its operating
+procedure's trigger arrives, then tell the person which server you added,
+why, and its monthly cost from the provider's current price.
 
 Before you apply a difference from the stack's design, explain its effect,
 including who or what gets permission to act. Record the design difference
@@ -219,9 +213,9 @@ the person to paste a secret into a file with an editor.
   test result or the provider's information supports it. Say whether the
   person must stay for the wait.
 - **For a failure,** start with one plain sentence: what failed, whether
-  anything is harmed, and what happens next. Then name the part that failed and its effect on the
-  service and the data. Give the known facts, the unknown facts, and the
-  next safe step.
+  anything is harmed, and what happens next. Then name the part that failed
+  and its effect on the service and the data. Give the known facts, the
+  unknown facts, and the next safe step.
 - **After a mistake you made,** say what it affected, what you corrected,
   and what is still unknown. Explain why you continue. Naming an internal
   rule or a reviewer is not an explanation.
@@ -325,129 +319,130 @@ another agent's work, name that agent.
 
 ## Technical terms
 
-Use one term for each thing. Explain an unfamiliar term before the person
-needs the term. Use only the rows that the step needs. Add a new technical
-term to the Technical terms table in `talking_with_the_team.md` before
-using the term in the team's documentation.
+Use one term for each thing, and use only the rows the step needs. Add a
+new technical term to this table before using it in the team's
+documentation.
 
 Say "systems desk", never a bare "desk". Reason: a newcomer reads "desk" as
-furniture. The first time "systems desk" appears in a reply, on a page or on
-a screen, add what it is in the same sentence: "your systems desk, a small
-separate server that holds your keys". After that, "systems desk" alone is
-fine there. Host names and commands keep their names (`desk01`,
-`ssh desk01-setup`); where a command first appears, say what it reaches:
-"`ssh desk01-setup` logs in to your systems desk".
+furniture. At its first mention to the person (on the plan screen, in the
+map, and the first time you say it aloud), say both what it is and why it
+is separate: "your systems desk, a small server of your own that holds your
+production keys and secrets, so neither your laptop nor I ever hold them; I
+work through it". Later, "your systems desk, the small server that holds
+your keys" or "your systems desk" is enough. Host names and commands keep
+their names (`desk01`, `ssh desk01-setup`); where a command first appears,
+say what it reaches ("`ssh desk01-setup` logs in to your systems desk").
 
 | Term | Explanation |
 | --- | --- |
 | Production servers | The app servers, database servers, and utility server, `util01`. |
-| Systems desk | The person's own small server at the server provider, in a different location from the production servers, where the production SSH key, the vault passphrase and the person's tokens stay, never on the laptop. The coding agent works on the laptop and reaches the systems desk through its own login, `ssh desk01-agent`; no coding agent runs on the desk. The laptop reaches only the person's desk. [Chapter 3 (make your server account and your systems desk)](initial_setup/03_make_your_server_account_and_your_systems_desk.md) sets it up. |
-| doubleshell | The program on the laptop that carries the SSH login to the person's desk through WireGuard, without a VPN on the laptop. |
-| Token file | The person's private file on the desk, `~/.config/monkeymaxxing-stack/<project_name>.env`, readable only by the person: the person's own Cloudflare tokens, such as the key for posting to the status page. `set-up-outside-services` writes it; nobody edits it, and the coding agent never reads it. |
-| Recovery passphrase | The six words in the team's password manager that open the recovery bundle, `recovery_bundle.age`: every item a lost desk needs, encrypted. |
-| Phone code | The 6 digits from the authenticator app on the person's phone that open the desk, for the person and for the coding agent. Each code works once. |
-| `set-up-outside-services` | The Stack's command on the desk for the person's accounts and secrets at outside companies, such as Cloudflare, Backblaze and the server provider, and for the vault's missing keys. The person starts it from the laptop with a short command, such as `ssh desk01-setup` or `ssh desk01-secrets`. |
-| Desk review | The person's run of `review-and-apply-the-systems-desk-settings`, with `ssh desk01-review` on the laptop. It applies the desk playbook, `playbooks/systems_desk.yml`, as root, and first shows each change since the person's last desk review and waits for `yes`. |
-| Coding agent account | The separate Unix account `coding-agent` on the desk. The coding agent on the laptop logs in to it through `ssh desk01-agent`, and uses the desk's buttons from it. |
-| Button | A command or local service that uses a protected credential for the coding agent without giving the coding agent the credential. |
-| API proxy | The desk's one local service between the coding agent and the outside APIs. At `http://127.0.0.1:8081/` it adds the person's server provider token to each request, or signs it, such as at OVHcloud and AWS, or adds a short-lived token it makes from a key, such as at Google Cloud. At `http://127.0.0.1:8082/` it adds the desk token to the coding agent's Cloudflare requests. The coding agent never reads the token or credential. |
-| Desk token | The person's own Cloudflare token on their systems desk, named after the person. The API proxy adds it to the coding agent's Cloudflare requests. It cannot make tokens. `set-up-outside-services cloudflare` makes it. |
-| Link token | The one Cloudflare token the person makes by hand, from the link that `set-up-outside-services cloudflare` prints. It can only make tokens, and the command deletes it when the command ends. |
-| Lock-out button | The command `sudo lock-everyone-out`, which only a person runs, with `ssh -t desk01 sudo lock-everyone-out` on the laptop, and only in the narrow break-in cases that [The lock-out: only for these cases](operating_procedures/respond_to_a_break_in.md#the-lock-out-only-for-these-cases) names, such as a suspect `util01`. In every other break-in, such as one through the app, the lock-out harms more than it helps. It cuts off every other desk and `util01` at the servers and stops the triage agent; the person and the coding agent keep working from that desk, the desk that keeps access. The coding agent prepares the one-line inventory commit, `everyone_locked_out_except_desk`. |
-| Undo a lock-out | Give every desk, `util01` and the triage agent their access back after a lock-out: the coding agent removes `everyone_locked_out_except_desk` and pushes, and the person runs the lock-out button again. Say "undo", never "reverse". |
-| Desk that keeps access | During a lock-out, the one desk named in `everyone_locked_out_except_desk`: the desk where the person ran the lock-out button. The person and the coding agent keep working there; every other desk and `util01` lose access at the servers. |
-| Provider console | The server's screen and keyboard on the server provider's website. It works without SSH and WireGuard, so the person can log in there as root with the shared root console password, which the recovery bundle holds, and repair them. |
+| Systems desk | The person's own small server in a different location from production that holds the production SSH key, vault passphrase, and personal tokens ([Your login on the desk](AGENTS.md#your-login-on-the-desk)). The laptop's coding agent works through `ssh desk01-agent`; no coding agent runs on the desk. |
+| doubleshell | The program on the laptop that carries SSH to the person's systems desk through WireGuard, without a VPN on the laptop. |
+| Token file | The person's private file on the desk, `~/.config/monkeymaxxing-stack/<project_name>.env`, written by `set-up-outside-services` and never read by the coding agent. |
+| Recovery passphrase | The six words in the team's password manager that open `recovery_bundle.age`, the encrypted bundle holding everything a lost systems desk needs. |
+| Phone code | The 6-digit single-use code from the person's authenticator app that opens the systems desk for the person or the coding agent. |
+| `set-up-outside-services` | The desk command for outside-company accounts, secrets, and missing vault keys, started from the laptop (such as `ssh desk01-setup` or `ssh desk01-secrets`). |
+| Desk review | The person's run of `ssh desk01-review`, which applies `playbooks/systems_desk.yml` as root after showing any changes since the last review and waiting for `yes`. |
+| Coding agent account | The `coding-agent` Unix account on the desk that the laptop's coding agent reaches through `ssh desk01-agent`. |
+| Button | A desk command or local service that uses a protected credential for the coding agent without exposing the credential. |
+| API proxy | The desk service that injects or signs API credentials for the coding agent on `127.0.0.1:8081` (server provider) and `127.0.0.1:8082` (Cloudflare) ([Your login on the desk](AGENTS.md#your-login-on-the-desk)). |
+| Desk token | The person's Cloudflare token on their systems desk (created by `set-up-outside-services cloudflare`, used by the API proxy, unable to create tokens). |
+| Link token | The temporary Cloudflare token the person creates from the printed link; `set-up-outside-services cloudflare` uses it to mint the needed tokens and then deletes it. |
+| Lock-out button | `ssh -t desk01 sudo lock-everyone-out`, run only by a person in narrow break-in cases ([The lock-out: only for these cases](operating_procedures/respond_to_a_break_in.md#the-lock-out-only-for-these-cases)). It cuts off every other desk, `util01`, and the triage agent while keeping access on the desk that keeps access. |
+| Undo a lock-out | Restore access to every desk, `util01`, and the triage agent by removing `everyone_locked_out_except_desk` and running the lock-out button again. Say "undo", never "reverse". |
+| Desk that keeps access | During a lock-out, the one desk named in `everyone_locked_out_except_desk` where the person and coding agent keep working. |
+| Provider console | The server's web screen and keyboard at the server provider, usable with the shared root console password from the recovery bundle when SSH or WireGuard fails. |
 | Self-management key | The separate root-owned SSH key used only when the person runs MMX against the desk's loopback address. |
-| Systems repository | The files that hold the server settings and the encrypted secrets. The systems repository does not hold the app's code. Git records the systems repository's history. The team's main copy is on `util01`, and the Git host keeps a backup copy. |
+| Systems repository | The Git repository holding server settings and encrypted secrets (not app code). The main copy lives on `util01`, with a backup at the Git host. |
 | App's repository | The files that hold the app's code and tests. |
-| Stack's repository | The source of the Monkeymaxxing Stack's instructions and of the example system that the systems repository is copied from. The stack's repository never changes the team's system by itself. |
+| Stack's repository | The source of the Monkeymaxxing Stack's instructions and template; it never changes a running system by itself. |
 | Git | A program that records changes to files. |
 | Commit | A saved change in Git history. |
-| Push | An upload of saved commits to another copy of the repository, such as the main copy on `util01` or the backup at the Git host. |
+| Push | An upload of saved commits to another copy of the repository, such as `util01`'s main copy or the Git host backup. |
 | Git host | The service that keeps a copy of a Git repository, such as GitHub. |
-| Vault | The encrypted file that holds configured production secrets. A long, random passphrase opens the vault file, `secrets_vault.age`. |
-| API | A company's way of taking commands from a program instead of clicks on its website. I can use the API from the person's systems desk to set things up exactly and repeatably. |
-| Token or API key | A secret that lets a program act on an account, with only the rights granted to the token. Whoever holds the token can act on the account with the token's permissions, so the token never goes into the chat. |
-| Authenticator app | An app on the phone that generates an extra code for signing in, as well as the password. |
-| MMX | The program that makes each server match the systems repository. After the initial setup, MMX runs on util01. |
+| Vault | `secrets_vault.age`, the encrypted file holding configured production secrets. |
+| API | A company's way of taking commands from a program instead of clicks on its website. |
+| Token or API key | A scoped secret that lets a program act on an account; never put one in the chat. |
+| Authenticator app | An app on the phone that generates a single-use code for signing in. |
+| MMX | The program that makes each server match the systems repository (runs on `util01` after initial setup). |
 | Run | One time that MMX applies the systems repository to the servers. |
-| Dryrun | A preview that shows what a run would change. A dryrun changes nothing. |
+| Dryrun | A preview that shows what a run would change, without changing anything. |
 | Playbook | A file of steps that MMX runs in order, such as `every_server.yml`. |
-| Fleet stage | A section of a playbook that selects servers and runs tasks on them, including role calls, such as the fleet stage `mmhotline` in `every_server.yml`. |
-| One-time playbook | A dated playbook in `one_time_playbooks/` for one particular fix, such as freeing disk space, made with `mmx new-one-time-playbook` and moved to `one_time_playbooks/completed/` once every server has run it. |
-| Helper | `./server_management_scripts/run_mmx_on_util01`, which the coding agent runs on its desk: it runs MMX on `util01` at the desk's pushed `main` commit, under `util01`'s lock. |
+| Fleet stage | A section of a playbook that selects servers and runs tasks or roles on them, such as `mmhotline` in `every_server.yml`. |
+| One-time playbook | A dated playbook in `one_time_playbooks/` for a single fix, moved to `one_time_playbooks/completed/` once finished. |
+| Helper | `./server_management_scripts/run_mmx_on_util01`, which the coding agent runs through `ssh desk01-agent` on the systems desk to run MMX on `util01` at pushed `main` under `util01`'s lock. |
 | Role | The settings and tasks for one kind of server, such as an app server. |
-| Inventory | The list of the servers, in `inventories/servers.yml`. |
+| Inventory | The list of servers and network settings in `inventories/servers.yml`. |
 | Pool | The servers that share one job, such as the app servers. |
-| Operating procedure | One of the tested ways the system changes, such as adding a server to a pool. |
-| Checklist | `monkeymaxxing_stack_checklist.yml`: every item of the stack, with its state (done, open, or deviated), its evidence, and, in their own section, the growth and improvement items. |
-| Weekly system review | The weekly look at the week's alerts, the waiting updates, the restore drill's result, and the checklist items that are due, as [Do the weekly system review](operating_procedures/do_the_weekly_system_review.md) says. |
-| Setup machine | The machine that makes a new server's WireGuard key and first-boot data: `util01`, or the systems desk during initial setup and when `util01` is rebuilt. |
-| First-boot data | The settings, rendered by `server_management_scripts/render_server_first_boot`, that a new server runs at its first boot: they close public SSH and start WireGuard with the new server's key, so MMX reaches the server over WireGuard from the start. |
-| Ownership receipt | The file that `create_a_server_at_the_provider --ownership-file` writes with the new server's ID and name as soon as the provider accepts the server, so a cleanup deletes only the server that this run created. |
-| Trigger | A measured sign or an event that says an operating procedure is due, such as MMWatchdog's warning that the app servers are busy, or the first paying customers. |
-| Growth and improvement items | The checklist's own section, `growth_and_improvement_items`, for steps that wait for a trigger that can come late or never: growth, such as a second app server, and improvement, such as an optional drill. An item waiting for its trigger never counts as open. |
-| Growth limits | The servers that may be added and removed without asking the team, by the coding agent or, with server work, the triage agent, set once at setup: the largest number of servers in each pool, the server types each pool may use, and the smallest number of app servers, below which the triage agent never removes one for low load (`growth_limits` in `mmx_project_settings.yml`). |
-| Location | One of the server provider's data centers. Production servers share a location. Systems desks run in a different location. Each server's location is recorded as `location` on the server in the inventory, so a replacement is created where the failed server was. |
-| util01 | The utility server. It runs MMX, MMHotline, and MMWatchdog's fleet hub on util01. |
-| MMWatchdog | The watchdog on every server. Most checks run every minute; the desk watches failed phone-code logins every five seconds. MMWatchdog sends an alert when a person must look. systemd restarts a service that crashed. |
-| Fleet hub | MMWatchdog on util01. Every server reports to the fleet hub, so the fleet hub notices a server that goes silent. |
-| Hub-outage alerters | An app server and a database server that watch util01. If util01 goes silent, the hub-outage alerters alert the phones directly through Pushover. |
-| MMHotline | The program on util01 that takes every alert, runs the triage agent, reaches the person on call, and shows the dashboard. |
-| SOS | The urgent alert. An SOS wakes the person on call, even at night, and repeats until someone claims the SOS. The other levels, warn and info, wake nobody. |
-| Claim | Pressing "Claim: I'm handling the incident" on an SOS in MMHotline, or acknowledging it in Pushover. Claiming the SOS says "I have got this", so the alert stops reaching anyone else. Claiming the SOS does not fix the fault. |
-| Person on call | The person whom MMHotline wakes for an SOS now, by the on-call schedule. |
-| Triage agent | An AI coding agent that MMHotline runs on util01 for each alert. The triage agent investigates, writes up the cause, and proposes a fix. The fix runs by itself or waits for a person's approval, as the rules for running the agent's playbooks say. |
-| Scheduled software review | An optional run of the triage agent at an interval the team chooses, with the team's task in `scheduled_software_review_task.md`, such as checking every server's software for known flaws. Off by default, because each review costs a run of the coding agent. A review sends at most one report, and none when nothing is new or changed. The report is warn only when a person must act, such as installing a fix the nightly updates missed; otherwise the report is info. |
-| Trusted commit | The commit of `main` in the main copy that MMHotline, its MMX runs and `util01`'s scheduled jobs work at. MMHotline trusts every commit on `main` in the main copy, and only the keys in `root_ssh_public_keys` can push there. |
-| Rules for running the agent's playbooks | The rules that say which of the triage agent's fixes run by themselves and are reported, and which wait for a person's approval. The team sets them with one answer, `what_the_triage_agent_may_do_without_a_person` in `mmx_project_settings.yml`. |
-| What the triage agent may do without a person | The team's one answer, chosen in chapter 6: every fix waits for a person; routine fixes, such as restarting a service that failed, run at once and are reported (the recommended start); or routine fixes and server work. |
-| Server work | With the answer "routine fixes and server work", the triage agent's work on whole servers without a person: replacing a failed app server, jobs server or load-balancer server with a new one of the same type, inside the growth limits, at once; and, after a warning that anyone on the team can stop, rebooting servers for installed updates and adding and removing app servers with the load. Database servers, `util01` and `staging01` always wait for a person. With the other two answers, a person's one approval lets the triage agent replace such a failed server, and a person adds and removes app servers. |
-| Adding and removing app servers with the load | With "routine fixes and server work": one app server is added when the app servers' CPU, spread over one server fewer, stayed above 70% for 15 minutes, and the newest is removed when a whole week's busiest moment would fit on the smaller pool with a server to spare below 50%, always between the smallest and the largest number of app servers. Say "the load", not "autoscaling", and name the server, its monthly price and the number of app servers now. The person hears one sound, MMHotline's warning with Stop at the start (the busy-servers warning is held for the triage agent, which requests the change, so only MMHotline's warning sounds); the progress reports and the report at the end are silent, and only a failed or refused change warns. |
-| Replacement of a failed server | Three runs, in order: `replace_failed_servers` powers the failed server off, keeping its disk, creates a new server of the same type in the same location and commits it to the inventory; `every_server` installs it; `destroy_replaced_servers` destroys the failed server once the new one does its work. Each commit is made by "util01, the mmhotline user". Say "the failed server is powered off, not yet destroyed" until the third run. The playbook's own refusals decide whether it replaces; the triage agent requests it each time. |
-| Warning held for the triage agent | A warning that starts a triage session waits up to `triage_agent_server_work.warn_waits_for_the_triage_agent_minutes` in `mmx_project_settings.yml` (3 minutes by default; 0 to 15, and 0 holds nothing) before it reaches people, because the triage agent tries first. If the agent asks for a playbook run, or sends its report, in that time, MMHotline's own warning or approval request, or the report, is the sound and the held warning is never sent. Nothing is dropped: otherwise the warning sounds at the end of the wait, at once when the triage agent cannot run. A warning that joins a session already running is not held. |
-| SOS wait for a replacement | While the triage agent replaces a failed server, the site's urgent alert (SOS) waits up to `triage_agent_server_work.sos_waits_for_a_server_replacement_minutes` in `mmx_project_settings.yml` (7 minutes by default) from the replacement's start before it wakes the person on call, instead of the usual few minutes. MMHotline sends one warning as the replacement starts, and wakes the person at once when a run fails, the triage agent reports an SOS or asks for a person. The SOS's resolved message, with a sound, says the site answers again. Say "you will be woken only if the replacement fails or takes longer than 7 minutes". |
-| Come-back wait | How long a reboot playbook waits for a rebooted server to come back before the run fails: `come_back_wait_after_a_reboot` in `mmx_project_settings.yml`, 3 minutes by default (a cloud server came back in under a minute); a dedicated server gets its own, longer value in the inventory. With server work, the triage agent replaces a server that did not come back in that time, without waiting for its alert pause to end. |
-| Weekly maintenance window | The team's weekly hour for database updates and reboots, `maintenance_window` in `mmx_project_settings.yml`, in UTC. The only server of an app or load-balancer pool reboots for updates only inside it, because its users see the reboot. |
-| Alert pause | An MMWatchdog maintenance window on one server while a playbook reboots or updates that server: the server's own alerts, and the fleet hub's alert that the server stopped reporting, wait until the pause ends. A pause lasts at most as long as the playbook waits for that server; the public site check on `util01` is never paused, not even during `util01`'s own reboot. Say "alert pause" to the person, so it is not mixed up with the team's weekly maintenance window. |
-| Server type | The provider's name for a server's size, such as `cx33` at Hetzner Cloud, recorded as `server_type` on each server in the inventory. |
-| Dashboard | MMHotline's page: who is on call, the open incidents, one box per pool, and the checklist's open items. |
-| Run page | A read-only page that shows each MMX run on util01 as it happens. |
-| MMHotline-down alarm | A small program in the team's Cloudflare account. MMHotline checks in with the MMHotline-down alarm every minute. When the check-ins stop, the MMHotline-down alarm wakes the person on call. |
-| Status page | A public page in the team's Cloudflare account, where the team tells its customers about a problem. The status page works while every server is down. |
-| Cloudflare tunnel | A connection that a server opens out to Cloudflare. Cloudflare sends the requests through the tunnel, so the server needs no open web port. |
-| Tunnel connector | `cloudflared`, the program on each app server, or on each load-balancer server once they carry the requests, that opens the Cloudflare tunnel. |
-| Cloudflare Access | A sign-in that Cloudflare puts in front of a private page. The Cloudflare Access rule names who gets in: email addresses at the company's domain, or members of its GitHub organization. Only the company's people get in. |
-| Caddy | The web server on each app server. Caddy takes the requests from the tunnel and spreads the requests over the app's web containers on every app server. |
-| Container image | The app, packaged with the software it needs, so it runs the same everywhere. |
-| Image tag | The name of one image version. In the Monkeymaxxing Stack, the image tag is the full app commit (40 hexadecimal characters) that the image was built from. |
-| CI | The Git host's automated service. CI, which the Stack recommends, runs the app's tests, builds the container image, and pushes the image to a registry. The coding agent deploys the image. Without CI, the coding agent tests and builds inside a container on the laptop, and pushes the image with the person's registry login. |
-| Registry | The service that stores the app's container images, such as GitHub's. |
-| Release or deploy | Putting a new app version live. util01 starts the new version beside the old version on the environment's app servers. util01 switches the requests after the new version's health check passes. |
-| Worker | A running copy of the app's program that handles requests or background tasks. |
-| Database driver | The code that the app uses to connect to its database. |
+| Operating procedure | A tested file of steps for a planned change or recovery. |
+| Checklist | `monkeymaxxing_stack_checklist.yml`: every stack item's state (`done`, `open`, or `deviated`), evidence, and `growth_and_improvement_items`. |
+| Weekly system review | The weekly check of alerts, waiting updates, restore drill results, and due checklist items ([Do the weekly system review](operating_procedures/do_the_weekly_system_review.md)). |
+| Setup machine | The machine that makes a new server's WireGuard key and first-boot data: `util01`, or the systems desk during setup and `util01` rebuilds. |
+| First-boot data | Settings rendered by `server_management_scripts/render_server_first_boot` that close public SSH and start WireGuard on a new server's first boot. |
+| Ownership receipt | The file written by `create_a_server_at_the_provider --ownership-file` with a new server's ID and name so cleanup deletes only the server that run created. |
+| Trigger | A measured warning or event that signals an operating procedure is due. |
+| Growth and improvement items | The `growth_and_improvement_items` checklist section for trigger-gated growth or optional drills; waiting items never count as open. |
+| Growth limits | `growth_limits` in `mmx_project_settings.yml`: the server count bounds and allowed server types within which servers may be added or removed without asking. |
+| Location | One of the server provider's data centers, recorded as `location` on each server in the inventory so replacements match it. |
+| util01 | The utility server running MMX, MMHotline, and MMWatchdog's fleet hub. |
+| MMWatchdog | The monitoring program on every server (most checks run every minute; failed desk logins every 5 seconds). systemd restarts crashed services. |
+| Fleet hub | MMWatchdog on `util01`, which receives reports from every server and detects silent servers. |
+| Hub-outage alerters | An app server and a database server that watch `util01` and alert phones directly through Pushover if `util01` goes silent. |
+| MMHotline | The program on `util01` that receives alerts, runs the triage agent, pages the person on call, and serves the dashboard. |
+| SOS | The urgent alert that wakes the person on call and repeats until claimed. `warn` and `info` wake nobody. |
+| Claim | Pressing "Claim: I'm handling the incident" in MMHotline or acknowledging in Pushover to stop repeats; claiming does not fix the fault. |
+| Person on call | The person MMHotline wakes for an SOS according to the on-call schedule. |
+| Triage agent | The AI coding agent MMHotline runs on `util01` for alerts and optional reviews ([Triage agent rules](triage_agent_rules.md)). |
+| Scheduled software review | An optional periodic triage-agent run (`scheduled_software_review_task.md`, off by default) that sends at most one report when findings are new or changed. |
+| Trusted commit | The `main` commit in `util01`'s main copy that MMHotline and scheduled jobs run at (`trusted_commits: every_commit_on_origin`). |
+| Rules for running the agent's playbooks | MMHotline's rules deciding which triage fixes run automatically and which wait for approval, driven by `what_the_triage_agent_may_do_without_a_person`. |
+| What the triage agent may do without a person | The team's choice from the triage agent's part of the setup (chapter 8, part 3): `every_fix_waits_for_a_person`, `routine_fixes` (recommended start), or `routine_fixes_and_server_work`. |
+| Server work | Under `routine_fixes_and_server_work`, triage-agent replacement of failed app, jobs, or load-balancer servers, warned reboots, and load-based app server scaling ([Triage agent rules](triage_agent_rules.md)). Database servers, `util01`, and `staging01` always need a person. |
+| Adding and removing app servers with the load | Automatic app-pool scaling inside `growth_limits.app_servers` after a stoppable warning ([Adding and removing app servers with the load](triage_agent_rules.md#adding-and-removing-app-servers-with-the-load)). Say "the load", not "autoscaling", and name the server, monthly price, and pool count. |
+| Replacement of a failed server | The three-playbook sequence (`replace_failed_servers`, `every_server`, `destroy_replaced_servers`) that replaces a silent server ([Replacing a failed server](triage_agent_rules.md#replacing-a-failed-server)). Say "the failed server is powered off, not yet destroyed" until the third run. |
+| Warning held for the triage agent | A warning that starts a triage session is held for `warn_waits_for_the_triage_agent_minutes` (default 3) so the triage agent can act or report first with one sound ([A session that a warning started](triage_agent_rules.md#a-session-that-a-warning-started)). |
+| SOS wait for a replacement | While the triage agent replaces a failed server, the site SOS waits up to `sos_waits_for_a_server_replacement_minutes` (default 7) before waking the person on call. Say "you will be woken only if the replacement fails or takes longer than 7 minutes". |
+| Come-back wait | How long a reboot playbook waits for a server to return (`come_back_wait_after_a_reboot`, default 3 minutes; longer per-server setting for dedicated servers). |
+| Weekly maintenance window | The team's weekly UTC hour (`maintenance_window` in `mmx_project_settings.yml`) for database updates and single-server pool reboots. |
+| Alert pause | A per-server MMWatchdog maintenance window during a playbook reboot or update; public site checks never pause. Say "alert pause" so it is not confused with the weekly maintenance window. |
+| Server type | The provider's size name (such as `cx33`), recorded as `server_type` in the inventory. |
+| Dashboard | MMHotline's page showing who is on call, open incidents, pool status, and open checklist items. |
+| Run page | A read-only page showing each MMX run on `util01` as it happens. |
+| MMHotline-down alarm | A small program in the team's Cloudflare account that wakes the person on call if MMHotline stops checking in every minute. |
+| Status page | A public page in the team's Cloudflare account that stays up even when every server is down. |
+| Cloudflare tunnel | An outbound connection from a server to Cloudflare so the server needs no open web port. |
+| Tunnel connector | `cloudflared` on each app server (or load-balancer server) that opens the Cloudflare tunnel. |
+| Cloudflare Access | A team sign-in Cloudflare puts in front of private pages. |
+| Caddy | The web server on each app server that spreads tunnel requests across the app's web containers. |
+| Container image | The app packaged with its runtime dependencies so it runs the same everywhere. |
+| Image tag | The name of one image version: the full 40-hex-character app commit SHA. |
+| CI | The Git host's automated build service (recommended) that tests, builds, and pushes the app image; without CI, the coding agent builds inside a laptop container and pushes with the person's registry login. |
+| Registry | The service that stores container images, such as GitHub's. |
+| Release or deploy | Starting a new app image beside the old one and switching traffic once health checks pass. |
+| Worker | A running copy of the app handling web requests or background tasks. |
+| Database driver | The code the app uses to connect to its database. |
 | SQLite | Database software that keeps a database in a local file. |
 | Postgres | The database software on the database servers. |
 | Bucket | A named storage area for files at a storage company. |
 | Pushover application | The identity of the alert sender in Pushover. |
 | Pushover group | The people who receive an alert sent to that group. |
-| Cache | A saved copy of a response that Cloudflare can send again without asking the app server. Only responses that the app allows for shared use go into Cloudflare's cache. |
-| WireGuard | The encrypted private network that the servers talk over, so nothing between them crosses the internet in the open. |
-| Primary | The database server that takes the writes. |
+| Cache | A saved copy of a shareable response that Cloudflare serves without asking the app server. |
+| WireGuard | The encrypted private network the servers and systems desks talk over. |
+| Primary | The database server that takes writes. |
 | Replica | A database server that keeps a live copy of the primary's data. |
 | Failover | A healthy replica taking over automatically when the primary fails. |
-| Failover monitor | The program on util01 that decides which database server is the primary. The failover monitor is part of pg_auto_failover. |
-| Failover formation | The production database servers that pg_auto_failover manages together, so it can promote a replica when the primary fails. `staging01` runs Postgres without one. |
+| Failover monitor | The pg_auto_failover component on `util01` that decides which database server is primary. |
+| Failover formation | The production database servers managed together by pg_auto_failover (`staging01` runs Postgres without one). |
 | Database transaction | A group of database changes that succeed or fail together. |
-| pgBackRest | The program that sends every change of the database to Backblaze B2, with a full backup every `weekly_work_day` and a backup of the changes since that full backup on the other nights. |
-| Restore drill | Each `weekly_work_day`, util01 creates a temporary server, restore01, restores the backups onto it, checks the data, and deletes it. The restore drill never touches the live database. |
-| Object Lock | Backblaze's lock. For the lock length (`backups.lock_backups_against_deletion_for_days`, 14 in the template) after a backup is written into a locked bucket, nobody can delete or change the backup. The lock applies even to someone with the key or the account's owner. |
-| R2 | Cloudflare's file storage, where the app keeps its uploaded files. |
-| B2 | Backblaze's file storage, where the backups go. |
-| Uploads' copy | `util01`'s copy of every app's R2 bucket into the uploads' B2 bucket, every `backups.uploads_copy_every_hours` hours (every night in the template). A file deleted or replaced in R2 is hidden in B2 at the next copy: B2 keeps the file's earlier versions for `backups.keep_prior_file_versions_in_buckets_for_days` days, so a restore can bring the file back. |
-| staging01 | The optional test server, part of the fuller system or added later. With staging01, every release runs on staging01 first, with test data only. |
-| Litestream | The program that copies MMHotline's own database, its alerts and their history, to Backblaze as it changes. |
-| Deviation | Something the team's production system does differently from the stack, recorded in the checklist with the reason. |
+| pgBackRest | The program that backs up Postgres to Backblaze B2 (continuous WAL plus a weekly full backup and nightly incremental backups). |
+| Restore drill | The weekly automated test on `util01` that restores backups onto a temporary `restore01` server, checks data, and deletes `restore01`. |
+| Object Lock | Backblaze's write-once lock (`lock_backups_against_deletion_for_days`, default 14) preventing deletion or change even by the account owner. |
+| R2 | Cloudflare's file storage for app uploads. |
+| B2 | Backblaze's file storage for backups. |
+| Uploads' copy | `util01`'s periodic copy of R2 uploads into B2 (with version retention for `keep_prior_file_versions_in_buckets_for_days` days). |
+| staging01 | The optional test server where releases run first with test data only. |
+| Litestream | The program that streams MMHotline's SQLite database to Backblaze B2 as it changes. |
+| Deviation | An intentional difference from the stack's design, recorded in the checklist with its reason. |
 
 ## Credits
 

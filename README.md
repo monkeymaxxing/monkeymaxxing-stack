@@ -4,10 +4,10 @@
 
 The Monkeymaxxing Stack is a full production system for web services: web
 apps, websites, and APIs, from a first product to a company's heavy
-production traffic. Your coding agent, such as [Claude Code](https://claude.com/claude-code) or [Codex](https://openai.com/codex/),
+production traffic. Your coding agent, such as [Claude](https://claude.com/claude-code) or [Codex](https://openai.com/codex/),
 builds the system in a few hours and then runs it. Everything is in your own
 accounts, on plain Linux servers that cost 10 to 30 times less than
-hosting at a platform such as Heroku.
+hosting at a platform such as Heroku or Railway.
 
 > [!NOTE]
 > **This is an alpha version.** The system's design is solid. The setup may still have a few rough spots, but your coding agent can get you past them. If anything confuses you or breaks, please tell us: [how to report it](CONTRIBUTING.md). Thanks!
@@ -83,9 +83,10 @@ running simple server systems.
 | [MMX](https://github.com/monkeymaxxing/mmx) | Sets up your servers, and makes every later change to them |
 | [MMWatchdog](https://github.com/monkeymaxxing/mmwatchdog) | Watches your servers, restarts what fails, and alerts you |
 | [MMHotline](https://github.com/monkeymaxxing/mmhotline) | Gets each urgent alert to the person on call, and can let your coding agent investigate first |
-| **Monkeymaxxing Stack** (this repository) | Instructions for your coding agent that build and run a whole production system with the three tools above |
+| [doubleshell](https://github.com/monkeymaxxing/doubleshell) | Carries SSH over WireGuard so you can close port 22 to the internet without a laptop VPN |
+| **Monkeymaxxing Stack** (this repository) | Instructions for your coding agent that build and run a whole production system with the tools above |
 
-Each tool also works by itself. The Stack is the three tools put together
+Each tool also works by itself. The Stack is the four tools put together
 with a Postgres database, backups to Backblaze B2, a WireGuard private
 network, Cloudflare in front of the servers, and a tested procedure for
 each job. You do not need to learn the tools first: your coding agent installs
@@ -343,16 +344,16 @@ The other costs:
   month. Cloudflare asks for a payment method before R2 turns on.
 - **Pushover:** $4.99 once for each person and kind of phone, after a
   30-day free trial.
-- **Your coding agent:** your own Claude Code or Codex access. The triage
+- **Your coding agent:** your own Claude or Codex access. The triage
   agent runs only when an alert arrives, on an API key or on a plan that
   your team already pays for.
 - **The weekly restore drill:** a server of the database server's size,
   once a week, for minutes.
 
-For comparison, Heroku lists $300 a month for its "Compute 4CPU-8GB" plan
-and $50 a month for its "Standard-0" Postgres plan with 4 GB of memory.
-Those two do the work of `app001` and `db01`, which cost €14.98 at
-Hetzner above.
+For comparison, Heroku lists $150 a month for a 2 vCPU, 4 GB app server
+and $50 a month for its "Standard-0" Postgres plan with 4 GB of memory
+($200 a month total). Those two do the work of `app001` and `db01`, which
+cost €11.98 a month at Hetzner (or $11.70 at OVHcloud) above.
 
 You decide about money at setup. Your coding agent shows you the servers'
 prices, and you set the largest number of servers in each pool. If you let
@@ -376,6 +377,7 @@ Stack is open source: you can copy it and change any part to fit your needs.
 | Load balancer | [Caddy](https://caddyserver.com/) | It spreads your users' requests over all the app servers, so each app server that you add takes its share of the load. It switches to a new release of your app without dropping a connection, and its configuration is one short file. |
 | In front of the servers | [Cloudflare](https://www.cloudflare.com/) | The servers connect out to Cloudflare, so no server has an open web port, and attack traffic stays off your servers. One account covers the tunnel, the sign-in for private pages, caching, attack filtering, and file storage. |
 | Network between servers | [WireGuard](https://www.wireguard.com/) | Every connection between servers is encrypted. The network is a list of keys in your repository, with no outside service that controls it. |
+| SSH access without open port 22 | [doubleshell](https://github.com/monkeymaxxing/doubleshell) | Carries SSH over WireGuard from your laptop without needing a laptop VPN, so no server exposes port 22 to the internet. |
 | Monitoring | [MMWatchdog](https://github.com/monkeymaxxing/mmwatchdog) | One program on each server. Each check comes with the next action to take, and its settings are readable files that your coding agent writes and you can read. |
 | Alerting and on-call | [MMHotline](https://github.com/monkeymaxxing/mmhotline) | It runs in your own accounts, with no price for each person, and gives each alert to the triage agent first. |
 | Alerts to your phone | [Pushover](https://pushover.net/) | Easy to start with, cheap, and its emergency alert sounds through Do Not Disturb and repeats until someone acknowledges it. Each person can add or choose other contact methods, such as a phone call. |
@@ -478,7 +480,7 @@ and when each growth step is due.
 ## Give it to your coding agent
 
 A skill is a directory of instructions for a coding agent. The stack skill
-tells Claude Code or Codex how to build and run your team's production
+tells Claude or Codex how to build and run your team's production
 system. The stack skill lives in
 [`skills/monkeymaxxing-stack`](skills/monkeymaxxing-stack).
 

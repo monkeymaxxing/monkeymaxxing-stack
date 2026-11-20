@@ -89,61 +89,40 @@ report, and propose, but grants no rights.
 
 ### Changing things
 
-Every change is an MMX playbook. MMHotline runs `mmx` at the judged commit
-in `/var/lib/mmhotline/systems_repository`, under
-`/var/lib/mmhotline/systems_repository.lock`. The desk's helper and
-scheduled jobs use the shared copy and lock too. MMHotline writes no Git
-commit after a run; four playbooks commit to `main` themselves, as
-`util01`'s `mmhotline` user: `replace_failed_servers` and
+Every change is an MMX playbook, and you never run MMX against a server.
+MMHotline runs `mmx` in its shared copy under the shared lock
+([The rules](AGENTS.md#the-rules)), and the request's page shows MMX output
+after the run ends. Only the four server-work playbooks commit to `main`
+themselves, as `util01`'s `mmhotline` user: `replace_failed_servers` and
 `destroy_replaced_servers` ([Replacing a failed server](#replacing-a-failed-server)),
-and `add_an_app_server_for_the_load` and `remove_server` run without
+and `add_an_app_server_for_the_load` and `remove_server` without
 `server_name` ([Adding and removing app servers with the load](#adding-and-removing-app-servers-with-the-load)).
-The request's page shows MMX output after the run ends.
-You never run MMX against a server.
 
 - **The stack's operating procedures first.** For anything on the common
   path, such as a rollback or adding an app server, use its operating
   procedure from
   [The operating procedures](AGENTS.md#when-this-happens-follow-this-operating-procedure).
-  Investigation is open-ended; the operating procedures stay
-  small, known, and tested.
+  Investigation is open-ended; operating procedures stay small, known, and
+  tested.
 - **Anything else is a one-time playbook,** such as freeing disk space,
   ending a stuck process, rerunning a failed backup, or copying rows back.
-  Create the one-time playbook with
-  `mmx new-one-time-playbook free_disk_space_on_app002`,
-  which writes `one_time_playbooks/2026-11-03_free_disk_space_on_app002.yml`:
-  the date, then what it does and on which server, in lowercase words joined
-  by underscores (`YYYY-MM-DD_what_it_does_on_server.yml`). An MMX fleet
-  stage selects servers and runs tasks on the selected servers. The
-  one-time playbook's fleet stage selects only the servers that the
-  playbook fixes.
+  Create it with `mmx new-one-time-playbook free_disk_space_on_app002`
+  (writes `one_time_playbooks/YYYY-MM-DD_what_it_does_on_server.yml`),
+  selecting only the servers it fixes.
 
-  Prefer MMX's modules to `shell`:
-  `mmx describe-module` lists MMX's modules by topic, such as
-  `systemd_journal_vacuum` for the journal's disk use, and
-  `mmx describe-module NAME` prints one module's page, which you read
-  before writing its task. MMHotline recognizes a fix by its modules, so
-  the same fix written as `shell` waits for a person.
+  Prefer MMX's modules to `shell`: `mmx describe-module` lists modules by
+  topic (such as `systemd_journal_vacuum`), and `mmx describe-module NAME`
+  prints a module's page (read it first). MMHotline recognizes fixes by
+  their modules and exact arguments: a fix written as `shell`, or with
+  extra copied arguments such as `start_at_boot: true` on a plain service
+  start, waits for a person.
 
-  MMHotline also reads
-  every task argument. Write only the arguments needed for the fix.
-  A task copied from a role brings arguments such as `start_at_boot: true`.
-  Adding `start_at_boot: true` makes a plain service start a change
-  MMHotline does not recognize, so the task waits for a person.
-
-  Give a `shell` task a `run_only_once_marker_file` or a guard, so MMX can
-  tell when the task is done. A guard is a condition that skips work
-  already completed. For an example, see `skip_if_this_path_exists` on
-  the `shell` task that clones the systems repository in
-  [the util_server role](roles/util_server/main.yml).
-  A call to a provider's API is a one-time playbook too, through MMX's
-  `http` module.
-
-  Give every task an `id` that says what the task does and
-  where, such as `id: start_chrony_on_app003`.
-  MMX's result, MMHotline's answer, and MMHotline's request for approval
-  name each task by its `id`. A task's `id` does not change how MMHotline
-  judges the playbook. `mmx validate NAME` must pass.
+  Give a `shell` task a `run_only_once_marker_file` or a guard (such as
+  `skip_if_this_path_exists` in [the util_server role](roles/util_server/main.yml)).
+  Provider API calls also use one-time playbooks via MMX's `http` module.
+  Give every task a clear `id` naming what it does and where (such as
+  `id: start_chrony_on_app003`; MMX and MMHotline display it, though it
+  does not affect judging). `mmx validate NAME` must pass.
 - **Commit, never push.** Commit each playbook with a message that names the
   alert and the cause, so the Git log is the incident log. Never change
   Git's settings. After your coding-agent run, MMHotline takes your commits.
@@ -365,15 +344,16 @@ destroys a server.
 ### A session that a warning started
 
 MMHotline holds a warning that starts a triage session for
-`triage_agent.warn_waits_for_the_agent_minutes` (3 in the template), so
-that a change you handle by yourself makes one sound. In such a session,
-request the playbook run or send a report within the first minute or two:
-if either comes in time, MMHotline never sends the held warning, and your
-request (MMHotline's own warning or approval request) or your report is
-the sound. If nothing comes, MMHotline sends the warning at the end of the
-wait. So do not spend the first minutes on long reading before you
-request or report: send a short report at info first when the work needs
-longer.
+`triage_agent.warn_waits_for_the_agent_minutes` in `mmhotline_settings.yml`
+(rendered from `triage_agent_server_work.warn_waits_for_the_triage_agent_minutes`
+in `mmx_project_settings.yml`, 3 in the template), so that a change you
+handle by yourself makes one sound. In such a session, request the playbook
+run or send a report within the first minute or two: if either comes in
+time, MMHotline never sends the held warning, and your request (MMHotline's
+own warning or approval request) or your report is the sound. If nothing
+comes, MMHotline sends the warning at the end of the wait. So do not spend
+the first minutes on long reading before you request or report: send a
+short report at info first when the work needs longer.
 
 ### Adding and removing app servers with the load
 
@@ -559,55 +539,30 @@ diagnosis. For `staging01`, follow the level limit under
   `git log -- one_time_playbooks/`, show the earlier fixes;
 - on a database server, before starting, stopping, or restarting
   `pgautofailover` or Postgres: write a one-time playbook for the service
-  action. Request a run of the one-time playbook. Your report must say
-  that the one-time playbook waits for a person's approval.
-  Include your diagnosis of the database server's history: which server
-  the data was copied from, and the database timeline.
+  action, request a run of it, and state in your report that it waits for
+  a person's approval. Include your diagnosis of the server's history
+  (which server the data was copied from and the database timeline). Never
+  ask a person to restart `pgautofailover` or Postgres by hand: the
+  one-time playbook keeps the action in Git history, and a person may have
+  stopped it on purpose.
 
-  Never ask a person to start, stop, or restart `pgautofailover` or
-  Postgres by hand. The one-time playbook keeps the service action in the
-  systems repository's history ([The rules](AGENTS.md#the-rules)).
-  A person decides because a person could have stopped `pgautofailover`
-  or Postgres on purpose.
+  See [Making a change](AGENTS.md#making-a-change) for when a restart is
+  safe and why a split history loses writes. A former primary returning
+  after a failover needs no service action: follow
+  [When the old primary comes back](operating_procedures/replace_a_server.md#when-the-old-primary-comes-back)
+  and hand over to a person.
 
-  Starting a database server with a history different from the primary's
-  can lose writes, as after a restart during a failover.
-  The restarted database server can be counted as a healthy replica and
-  become primary at the next failover. Every write since the histories
-  split would then be lost. [The rules](AGENTS.md#the-rules) say on which
-  servers a restart is safe. A former primary that comes back after a
-  failover needs no service action at all: follow
-  [When the old primary comes back](operating_procedures/replace_a_server.md#when-the-old-primary-comes-back).
-  That page also says whether to keep the returning server or replace it.
-  A database server always needs a person, so tell the person and hand over.
-
-  Requiring approval before starting, stopping, or restarting
-  `pgautofailover` or Postgres is the stack's default.
-  From the initial setup, `services_whose_changes_a_person_must_approve`
-  in `mmhotline_settings.yml` holds `pgautofailover`.
-  A playbook that starts, stops, restarts, or changes `pgautofailover`
-  waits for approval, whatever the rules for running the agent's playbooks.
-
-  Removing the approval requirement is a team policy change.
-  A team that wants the triage agent to start, stop, or restart
-  `pgautofailover` or Postgres without approval deletes the database
-  service handover item in `triage_agent_rules.md`.
-  The team's commit must say that the approval
-  requirement is removed. The commit also empties the list,
+  By default, `services_whose_changes_a_person_must_approve` in
+  `mmhotline_settings.yml` holds `pgautofailover`, so any `systemd_service`
+  or `systemd_unit` task naming it (or with a runtime-only unit name while
+  the list is non-empty) waits for approval regardless of playbook rules
+  (`shell` tasks follow `unrecognized_task`, and reboots follow
+  `reboot_a_server`, both requiring approval under
+  `routine_fixes_without_permission`). Removing this requirement is a
+  policy change: delete this handover item, set
   `services_whose_changes_a_person_must_approve: []` in
-  `mmhotline_settings.yml`, for `util01`'s run to apply.
-  In the commit that removes the approval requirement, the team also sets
-  the checklist item `triage_agent_investigates_alerts` to `deviated`, with
-  the reason. The item's verification checks the list, so recording the
-  deviation prevents a new version from opening the checklist item again.
-  The list covers only a `systemd_service` or `systemd_unit` task
-  that names the service, and, while the list holds any service, one
-  whose unit name MMX knows only during the run, which waits for a person
-  too. A `shell` task, such as one that runs `systemctl`, is decided by the
-  rule for the action kind `unrecognized_task`, and a reboot by the rule
-  for `reboot_a_server`, which `rules_for_running_agent_playbooks` in
-  `mmhotline_settings.yml` sets through its `preset`; with the template's
-  `routine_fixes_without_permission`, both wait for a person's approval;
+  `mmhotline_settings.yml`, explain the removal in the commit message, and
+  mark `triage_agent_investigates_alerts` as `deviated` in the checklist;
 - for anything outside the stack, such as a fault in an app's code, an
   outage at the server provider or at Cloudflare, or a change to how the
   system is built.
@@ -684,83 +639,54 @@ of a break-in, and a flaw that attackers exploit now and that reaches
 - **info:** every other new or changed finding, such as a new release with
   no security fix, or a fix the nightly updates install.
 
-Programs face the internet through three paths. `cloudflared`, Caddy,
-and the apps' containers handle requests that Cloudflare forwards.
-WireGuard listens on UDP 51820 of every server, and a redirect turns the public UDP 443 into it; OpenSSH listens only on
-`wg0`, so only WireGuard peers reach OpenSSH. The kernel handles packets
-that reach a server's public address.
+Programs face the internet through three paths: `cloudflared`, Caddy, and
+the apps' containers (forwarded by Cloudflare, which terminates public
+HTTPS, so server-side TLS flaws like Heartbleed do not apply); WireGuard
+on UDP 51820 (with public UDP 443 redirected to it; OpenSSH listens only
+on `wg0`); and the kernel on public addresses.
 
-Cloudflare terminates public HTTPS, so a flaw in a server's TLS code,
-such as Heartbleed in OpenSSL, does not reach servers in
-`inventories/servers.yml`: `cloudflared` connects to Cloudflare as a
-client, and Caddy receives plain HTTP requests.
-
-What reaches from inside an app's container: a
-flaw that lets a container take over its server, such as a kernel flaw,
-or one in Podman, which runs the containers, because the apps run
-third-party code, their dependencies. Judge such a flaw by the
-containers' limits.
-
-A Linux capability grants permission for a
-privileged action, such as changing the server's network.
-Every Linux capability is dropped from the apps' containers
-(`DropCapability=all`). A program in an app's container cannot gain
-privileges (`NoNewPrivileges=true`). Podman's default seccomp filter
-blocks creating user namespaces. An exploit that needs a capability,
-privilege gain, or new user namespace therefore cannot run from an app's
-container.
-Everything else is an internal tool, reached only over the WireGuard
-network, on the loopback address, or behind Cloudflare Access: Postgres,
-PgBouncer, MMX, MMWatchdog, MMHotline, Litestream, and the coding
-agents. PgBouncer lets many app connections share fewer Postgres
-connections. MMX keeps operation results in the controller history.
+From inside an app container (which runs third-party dependencies), a
+container-escape flaw (kernel or Podman) must be judged against container
+confinement: all Linux capabilities dropped (`DropCapability=all`),
+`NoNewPrivileges=true`, and Podman's default seccomp filter blocking new
+user namespaces. Everything else (Postgres, PgBouncer, MMX, MMWatchdog,
+MMHotline, Litestream, coding agents) is internal-only (WireGuard,
+loopback, or Cloudflare Access).
 
 ### A fix that waits for a reboot
 
-No server reboots at an hour nobody chose: such a reboot surprises the
-team. A person reboots each server whose updates wait for a reboot in the
-team's weekly window ([Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md)),
+No server reboots at an unchosen hour. A person reboots servers in the
+weekly window ([Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md)),
 or, with `routine_fixes_and_server_work`, you request the reboot after
-MMHotline's warning, as the end of this section says; the database
-servers' kernel updates wait for the weekly window either way. On Debian, unattended-upgrades'
-kernel hook writes `/var/run/reboot-required` when a kernel package is
-installed. The marker means a new kernel needs a reboot.
-Library and service restarts are needrestart's job.
-Few kernel flaws reach servers in `inventories/servers.yml`.
+MMHotline's warning below (database kernel updates always wait for the
+weekly window). Debian's unattended-upgrades writes `/var/run/reboot-required`
+for kernel updates (needrestart handles libraries/services); few kernel
+flaws reach servers in `inventories/servers.yml`.
 
-Investigate the flaws fixed by an installed update whose reboot waits.
-`no_reboot_waits` warns after a reboot has waited more than 8 days by
-default (in `mmwatchdog_checks/every_server.yml`), past a weekly window. Also investigate when `known_exploited_flaws` fails for the
-running kernel.
+When `no_reboot_waits` warns (after 8 days by default) or
+`known_exploited_flaws` fails for the running kernel, read
+`/var/run/reboot-required.pkgs`, check the CVEs in
+`/usr/share/doc/PACKAGE/changelog.Debian.gz`, and look up each flaw
+(plus any flaw from `known_exploited_flaws`) at OSV.dev
+(`https://api.osv.dev/v1/vulns/ID`, using the `DEBIAN-CVE-` prefix such as
+`DEBIAN-CVE-2024-6387`). Then:
 
-Read the packages in `/var/run/reboot-required.pkgs` on the server.
-Then read the CVEs named for each installed package version in the
-server's changelog, `/usr/share/doc/PACKAGE/changelog.Debian.gz`.
-The installed package update takes effect after the reboot.
-Read the flaw named by `known_exploited_flaws`.
-Then read each flaw's record at OSV.dev,
-`https://api.osv.dev/v1/vulns/ID`. Use the `DEBIAN-CVE-` ID prefix,
-such as `DEBIAN-CVE-2024-6387`. Then:
-
-- **SOS, only when both conditions hold:** attackers exploit the flaw
-  now, and the flaw reaches servers in `inventories/servers.yml`.
-  Use the definitions [above](#levels-of-vulnerability-findings).
-  Ask MMHotline to run the playbook that reboots one server at a time, so a
-  person approves it, or, with `routine_fixes_and_server_work`, so it runs
-  after the warning: `playbooks/update_database_servers.yml` for the
-  database servers, and `playbooks/reboot_servers_after_updates.yml` for
-  every other server but `util01`. MMX cannot reboot the machine running
-  MMX, so `util01`'s reboot must run from a systems desk. For `util01`, the
-  report says that a person runs
-  `sudo -n -u servers-mmx run-mmx-on-the-servers run reboot_util01_after_updates --connection ssh_only` as `coding-agent` on a systems desk.
-- **Otherwise, once:** which servers wait, which flaws the reboot fixes,
-  and that the reboot waits for the weekly window: at warn when an alert
-  started your run, such as `no_reboot_waits`, and at info in a scheduled
-  software review, inside the review's one report. Add the finding
-  about the delayed reboot to the open findings note
-  ([The scheduled software review](#the-scheduled-software-review)). Record the weekly window's
-  reboot as the remedy for the finding about the delayed reboot.
-  Later alerts and reviews then do not report the unchanged finding again.
+- **SOS, only when both conditions hold:** attackers exploit the flaw now
+  and it reaches servers in `inventories/servers.yml`
+  ([Levels of vulnerability findings](#levels-of-vulnerability-findings)).
+  Request `playbooks/update_database_servers.yml` for database servers or
+  `playbooks/reboot_servers_after_updates.yml` for other servers except
+  `util01`. Because MMX cannot reboot the controller machine, `util01`'s
+  reboot must run from a systems desk: report that the team's coding agent
+  on the person's laptop runs it through `ssh desk01-agent`:
+  `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers run reboot_util01_after_updates --connection ssh_only`.
+- **Otherwise, once:** report which servers wait, which flaws the reboot
+  fixes, and that it waits for the weekly window (at `warn` for an alert
+  like `no_reboot_waits`, at `info` in a scheduled software review). Record
+  the delayed reboot with the weekly window as its remedy in
+  `triage_agent_notes/open_software_findings.md`
+  ([The scheduled software review](#the-scheduled-software-review)) so
+  later alerts and reviews do not repeat it.
 
 When `what_the_triage_agent_may_do_without_a_person` is
 `routine_fixes_and_server_work`, MMWatchdog's check
