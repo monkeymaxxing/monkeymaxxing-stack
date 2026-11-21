@@ -201,6 +201,7 @@ and when.
    **Tell the person after:**
 
    > Your guide and checklist are saved, and MMHotline's dashboard shows the final checklist: [MMHotline's link].
+   > To hear about new releases and security fixes for the Stack and its tools, and about new videos, sign up for Monkeymaxxing updates by email: https://monkeymaxxing.com/updates/
 
    **Check:** `operating_handover_saved` is `done` after its verification
    passed, and the push reached the main copy on `util01`.
@@ -217,5 +218,10 @@ and when.
 **The hub-outage alerters' sentence stands without a test here.** The
 Stack's own tests prove how the hub-outage alerters behave, so their outage
 test on this system is an optional check, assigned to nobody.
+
+**The last message names Monkeymaxxing updates.** A security fix for the
+Stack helps only a team that hears about the fix. The person reads the
+agent's last message, and may never read the Stack's own README, so the
+signup address is in that message.
 
 Next: follow the system's [operating procedures](../AGENTS.md#when-this-happens-follow-this-operating-procedure).

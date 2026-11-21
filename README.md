@@ -571,6 +571,12 @@ in Codex.
 | [App platform migration guides](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/README.md) (Monkeymaxxing Recipes) | How to move from the platform that you use now |
 | [The design](docs/design.md) | The reason for each of the Stack's decisions, in full |
 
+## New releases and security fixes
+
+To hear about new releases and security fixes for the Stack and its tools,
+and about new videos, sign up for
+[Monkeymaxxing updates by email](https://monkeymaxxing.com/updates/).
+
 ## Contributing
 
 Report a bug or propose a change on GitHub, as
