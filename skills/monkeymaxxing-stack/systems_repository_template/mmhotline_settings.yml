@@ -304,10 +304,11 @@ mmhotline_down_alarm:
   # anyone else is woken.
   wake_the_backup_after_minutes_without_a_check_in: 10
 
-# The status page uses two files in an R2 bucket of the team's own account:
-# index.html is the public page, and status.json holds the notices. Customers
-# reach the page at host_name, which Cloudflare connects to the bucket, so
-# the page works while util01 is down.
+# The status page is three static files in an R2 bucket of the team's own
+# account: index.html is the public page, status.json holds the page's
+# settings and every notice, and feed.xml is the Atom feed that customers
+# can subscribe to. Customers reach the page at host_name, which Cloudflare
+# connects to the bucket, so the page works while util01 is down.
 # r2_bucket_url is what the desk's mmhotline status-page set-up printed.
 # The R2 account API token provides an access-key ID and a secret access
 # key for r2_access_key_id and r2_secret_access_key. The token has Object
@@ -320,3 +321,26 @@ status_page:
   r2_bucket_url: https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/mmhotline-status-status-example-com-18a8ea11
   r2_access_key_id: {{ .secrets.mmhotline_status_page_r2_access_key_id | toJson }}
   r2_secret_access_key: {{ .secrets.mmhotline_status_page_r2_secret_access_key | toJson }}
+  # The three keys below are optional. Leave them out, and the page has no
+  # links in its header and no components list. Each mmhotline settings
+  # apply copies them into status.json, so a person's systems desk posts a
+  # notice with the same links and components while util01 is down.
+  #
+  # website_url: https://example.com
+  #   The company's site. The page's header links to it as "Website". It
+  #   must be an https:// address, up to 500 characters.
+  # support_url: mailto:support@example.com
+  #   Where customers get help. The page's header links to it as "Support".
+  #   It must be an https:// address or a mailto: address with one email
+  #   address, up to 500 characters.
+  # components:
+  #   The parts of the service that a notice can name, such as the website
+  #   and the API. When this list is not empty, the page shows each
+  #   component with its own status, and a person picks the affected
+  #   components when posting a notice. At most 50 components. Reason for
+  #   50: the page stays easy to scan, and the posting form fits a phone.
+  #   - component_id: website              # lower case letters, digits, - and _; at most 64 characters; unique
+  #     name: Website                      # up to 100 characters, on one line
+  #     description: The main site and the customer dashboard  # optional, up to 200 characters
+  #   - component_id: api
+  #     name: API

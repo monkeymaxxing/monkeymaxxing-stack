@@ -95,9 +95,11 @@ The MMHotline-down alarm then alerts the backup after the minutes in
 the named backup, or, under `backup_option: everyone_available` (the template's default),
 everyone else who is available.
 
-The **status page**, such as `https://status.example.com/`, consists of two files in an R2 bucket.
-MMHotline rewrites the two status page files at each post. The page shows
-only what a person posts.
+The **status page**, such as `https://status.example.com/`, consists of three files in an R2 bucket:
+`index.html` is the public page, `status.json` holds the page's settings and notices,
+and `feed.xml` is the Atom feed that customers can subscribe to.
+MMHotline rewrites the three status page files at each post, edit, deletion or resolution.
+The page shows only what a person posts.
 
 The stack's initial setup configured the MMHotline-down alarm and status page.
 The MMHotline-down alarm's settings are the `mmhotline_down_alarm` part of `mmhotline_settings.yml`.

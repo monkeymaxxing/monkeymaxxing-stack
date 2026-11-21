@@ -724,8 +724,11 @@ items:
       `mmhotline status-page set-up` passed on a systems desk, and util01's run
       applied the status_page part of mmhotline_settings.yml, with an R2 key
       that can only read and write the page's bucket; https://status.example.com/ said
-      "Everything is working."; a test notice posted on util01 with
-      `mmhotline status-page post` showed on the page with its time in UTC;
+      "Everything is working."; https://status.example.com/feed.xml answered
+      with an Atom feed; a titled test notice posted on util01 with
+      `mmhotline status-page post --title ... --message ...` showed on the page
+      under its title, with its time in the browser's own time zone (UTC in the
+      page's raw HTML and without JavaScript) and in `feed.xml`;
       and a person's systems desk, with only that person's own R2 key for the
       bucket, resolved it with `mmhotline status-page resolve`, so a post
       works while util01 is down.

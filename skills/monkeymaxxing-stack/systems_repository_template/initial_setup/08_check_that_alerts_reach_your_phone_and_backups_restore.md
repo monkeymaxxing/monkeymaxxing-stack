@@ -635,14 +635,20 @@ command on the desk, looks at the page, and resolves one test notice.
     `secrets usage` shows both R2 vault keys as defined.
 
 18. **Add the `status_page` section.** Copy it back from the Stack
-    template's `mmhotline_settings.yml`, from the comment line
-    `# The status page uses two files` to the end. Set `page_title` to
-    the company's name, and `r2_bucket_url` to
+    template's `mmhotline_settings.yml`: the whole `status_page` section,
+    which is the last section of the file, with the comment above it. Set
+    `page_title` to the company's name, and `r2_bucket_url` to
     `https://ACCOUNT_ID.r2.cloudflarestorage.com/BUCKET`, with the bucket's
-    name from the R2 bucket list. Publish, then run `every_server` with the
-    helper. MMHotline checks that the key can write the bucket, and
-    publishes "Everything is working." on the page. A key that cannot
-    write fails the run, with MMHotline's reason in its results.
+    name from the R2 bucket list. Leave the optional `website_url`,
+    `support_url` and `components` keys commented out, unless the person
+    has already named the company's site, a support address, or the parts
+    of the service that customers know (they can add them later with
+    [Change MMHotline settings](../operating_procedures/change_mmhotline_settings.md)).
+    Publish, then run `every_server` with the helper. MMHotline checks
+    that the key can write the bucket, and publishes the page's three
+    files, `index.html`, `status.json` and `feed.xml`, with "Everything is
+    working." on the page. A key that cannot write fails the run, with
+    MMHotline's reason in its results.
 
     **Check:** `mmhotline settings show` on `util01` shows the
     `status_page` part applied.
@@ -654,8 +660,26 @@ command on the desk, looks at the page, and resolves one test notice.
 
     ```sh
     # On the laptop:
-    ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 mmhotline status-page post --json --message "This is a test of our status page. Nothing is wrong."'
+    ssh desk01-agent 'cd systems_repository && ssh -F ssh/config root@10.20.0.1 "mmhotline status-page post --json --title \"Test of our status page\" --message \"This is a test of our status page. Nothing is wrong.\""'
     ```
+
+    The command passes through two shells, the desk's and `util01`'s, so
+    the quotes around the command and the `\"` around each title and
+    message keep every multi-word value in one piece. A title or message
+    sent this way must not contain `'`, `"`, `$`, or a backtick. For such
+    text, post in MMHotline's browser screen, or use the desk-direct
+    command from
+    [Post from a systems desk while util01 is down](../operating_procedures/post_to_the_status_page.md#post-from-a-systems-desk-while-util01-is-down).
+
+    Every notice needs a `--title` and a `--message`. The post has no
+    `--impact`, so it takes the default, `outage`, and the page's banner
+    turns red until the person closes the test. To make the test calmer,
+    add `--impact degraded`, or `--impact maintenance` for a notice that
+    announces planned work. Leave out `--component` and `--stage` for this
+    test: `--component` names an affected component from the `components`
+    list, and `--stage` names the notice's step, such as `investigating`.
+    [Post to the status page](../operating_procedures/post_to_the_status_page.md)
+    describes every option.
 
     **Tell the person first:**
 
@@ -664,10 +688,12 @@ command on the desk, looks at the page, and resolves one test notice.
 
     **Ask the person,** with the `notice_id` the post printed:
 
-    > Please open https://status.example.com/. You see the test notice.
+    > Please open https://status.example.com/. You see the test notice, with its title. Your browser shows its time in your own time zone.
     > Then type this in your terminal, plus a code from your phone:
     >
-    > `ssh -t desk01 '. ~/.config/monkeymaxxing-stack/example_systems.env && mmhotline status-page resolve --notice-id 1 --closing-message "The test is over."'`
+    > `ssh -t desk01 '. ~/.config/monkeymaxxing-stack/example_systems.env && mmhotline status-page resolve --notice-id N --closing-message "The test is over."'`
+    >
+    > (Write the `notice_id` the post printed in place of `N`.)
     >
     > Then reload the page. It says "Everything is working." again.
 
@@ -675,12 +701,29 @@ command on the desk, looks at the page, and resolves one test notice.
     once, the same way as the post, because customers must not see an open
     test. Then fix the person's posting key with step 17's command.
 
+    To take the test off the page for good, delete it with
+    `mmhotline status-page delete --notice-id N`, on `util01` or on the
+    desk as above. Replace `N` with the exact `notice_id` the test post
+    printed, the same one you passed to `resolve`. Never type a number
+    from memory: a repeated setup proof makes a new test notice with a new
+    `notice_id`, and a wrong number deletes a real notice for good. Run
+    `mmhotline status-page show` first and check that the notice with that
+    `notice_id` is your test. The test then leaves the page and the Atom feed at
+    once. Deleting is optional: five later notices push the test off the
+    page.
+
     **Tell the person after,** which ends the status page's part of the setup:
 
     > Your status page works: [the page's link]. You can post to it from MMHotline, and from your systems desk while `util01` is down.
 
     **Check:** the page says "Everything is working." again, with the
-    test under "Recently resolved". Mark `status_page_for_customers` done.
+    test, under its title, in "Recently resolved". Browsers show each time
+    in the visitor's own time zone. The page's raw HTML, which
+    `curl -fsS https://status.example.com/` prints, and any browser
+    without JavaScript show the times in UTC. The `index.html`,
+    `status.json` and `feed.xml` files all answer at the page's address:
+    `curl -fsS https://status.example.com/feed.xml` prints an Atom feed
+    that lists the test, unless the person deleted it. Mark `status_page_for_customers` done.
 
 ## If something is different
 
