@@ -58,9 +58,10 @@ var proxyAPIs = map[string]struct {
 }
 
 // providerGuideAPIAddresses are the API addresses of the provider guides
-// whose providers take a token in a header (provider_guides/*.md, "Set
-// systems_desk_provider_api_url"). The person's typed token goes only to
-// one of them. Reason: the coding agent can push mmx_project_settings.yml,
+// whose providers take a token in a header (provider_guides/*.md here and
+// providers/*.md in monkeymaxxing-recipes, "Set systems_desk_provider_api_url").
+// The person's typed token goes only to one of them. A new header-token
+// provider needs its API address added here by a one-line change. Reason: the coding agent can push mmx_project_settings.yml,
 // and an address taken from it as it is would send the token to any host
 // the agent chose.
 var providerGuideAPIAddresses = []string{
