@@ -46,7 +46,13 @@ class FirstBoot(unittest.TestCase):
             for target in re.findall(r'\b(?:root|triage)@((?:[0-9]{1,3}\.){3}[0-9]{1,3}|\[[0-9A-Fa-f:]+\])', text):
                 address = ipaddress.ip_address(target.strip('[]'))
                 addresses.append(address)
-                self.assertTrue(address.is_loopback or address in ipaddress.ip_network('10.20.0.0/16'),
+                # 10.20.0.0/16 is the template's example WireGuard network;
+                # 10.21.0.0/16 is used beside it in upgrade_from_monkeymaxxing_solo.md.
+                in_example_wg = (
+                    address in ipaddress.ip_network('10.20.0.0/16')
+                    or address in ipaddress.ip_network('10.21.0.0/16')
+                )
+                self.assertTrue(address.is_loopback or in_example_wg,
                                 f'{path.relative_to(TEMPLATE)} uses public SSH target {target}')
         self.assertTrue(addresses)
 
