@@ -75,6 +75,7 @@ monkeymaxxing-stack/
   docs/app-platform-migrations/           migration guides with variances, export steps, and test boundaries
   tests/run_mmx_on_util01_test.py        the helper that runs MMX on util01, with fake external commands
   tests/sudoers_triage_test.py            that the triage user may confirm a fix of every MMWatchdog check group
+  tests/custom_extensions_test.py         that a custom MMWatchdog check file is rendered, installed and kept by every role, and that a bad file name is refused
 ```
 
 The systems repository template sits inside the skill's directory, so an
@@ -1606,7 +1607,7 @@ groups:
     nodes: [app001]
     vars:
       is_app_server: true
-      mmwatchdog_check_file: app_servers.yml
+      mmwatchdog_check_files: [every_server.yml, app_servers.yml]
 ```
 
 ```yaml
@@ -1636,22 +1637,62 @@ set the same variable for a node.
 
 ### Each pool's MMWatchdog checks
 
-Each pool's group also names its own MMWatchdog check file, with the
-same name in every group: `mmwatchdog_check_file: app_servers.yml`, a file
-in `mmwatchdog_checks/`. Each server is in one pool, so no node gets two
-values. The four MMWatchdog stages of `every_server.yml` pass
-`{{ .vars.mmwatchdog_check_file }}` to `mmwatchdog_joined_node`, which
-writes, checks, and installs `every_server.yml` and that one file, and
-deletes any other file in `/etc/mmwatchdog/check_groups`. `staging01`
-names `database_servers.yml`, because it runs Postgres. `util01`'s own
-role installs `util_server.yml`, and `playbooks/systems_desk.yml` passes
-`systems_desks.yml`, because the desk is named on the command line, which
-`mmx validate` cannot read.
+Each group also lists its own MMWatchdog check files, with the same name
+in every group: `mmwatchdog_check_files: [every_server.yml, app_servers.yml]`,
+files in `mmwatchdog_checks/`. Each server is in one pool, so no node gets
+two values. The four MMWatchdog stages of `every_server.yml` pass
+`{{ .vars.mmwatchdog_check_files }}` and `{{ .vars.custom }}` to
+`mmwatchdog_joined_node`, which refuses a name that is not a plain file name
+(`^[a-z0-9][a-z0-9_-]*\.yml$`, so no folder part), writes each listed file to
+the candidate directory, checks them, installs them, and deletes any other
+file in the candidate directory and in `/etc/mmwatchdog/check_groups`.
+`staging01` lists `database_servers.yml`, because it runs Postgres.
+`util01`'s `util_server` role takes the same two inputs from its group,
+and `playbooks/systems_desk.yml` owns the desk's list
+(`[every_server.yml, systems_desks.yml]`): the `systems_desks` group lists
+none, so the list has one source. A change to it reaches the desk only
+through the desk review (`ssh desk01-review`).
+
+The list holds every file, `every_server.yml` included, rather than the
+Stack's files plus a second list of the team's. MMX's playbook values take
+references only, with no list joining, so one whole-list reference is the
+one form that works for `delete_everything_inside_except` and for a loop
+over the files. A team's check file starts with `custom_`, so a later
+Stack file never takes its name, and the team's file reads its settings
+from `custom:` in `mmx_project_settings.yml`, which the playbooks pass as
+the role input `custom`. One regex line in `sudoers_triage` lets the
+triage user confirm a fix of any check group, the team's included
+(`tests/sudoers_triage_test.py`).
 
 So a new pool adds its check file and one line in its group, and no role
 or playbook changes ([Add a new kind of server pool](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/add_a_new_kind_of_server_pool.md),
 decision 5). Without this setting, each pool would need an input, two file
 tasks, a list entry, and a flag in five stages.
+
+### Extension seams for recipes
+
+The Stack's core stays narrow. The additions a team makes on top of it
+(a Redis pool, an extra check, a provider guide) follow a recipe from
+[monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes)
+and use these places, which a Stack upgrade leaves alone:
+
+- `# --- Custom extensions ---` block in `playbooks/every_server.yml`, before
+  `mmwatchdog_joins_the_fleet_hub_after_the_roles`, for the recipe's
+  fleet stages.
+- `custom: {}` in `mmx_project_settings.yml`, away from `stack_software`
+  (which changes in every release), for the recipe's settings.
+- `mmwatchdog_checks/custom_*.yml`, listed in `mmwatchdog_check_files`.
+- `custom_extensions: []` in the checklist, and `custom_recipes/`, the
+  record of what a recipe added and where it came from. MMHotline's
+  dashboard reads only `items` and `apps`, so the list needs no change
+  there.
+
+Each block has three comment lines that never change above and below the
+team's lines. `git apply --3way` (or `--reject`) merges an upgrade with
+three lines of context, so an upstream edit next to a block cannot touch
+the team's lines. The word is `custom`, never `team`, which already means
+the people who run the system. The triage agent never fetches or applies
+a recipe and reads `custom_recipes/` as notes only.
 
 - **Choosing the file from the pool's name alone was rejected:** MMX's
   references have no "is this node in that group" test, and a node record
@@ -1987,33 +2028,34 @@ groups:
     nodes: [app001]
     vars:
       is_app_server: true
-      mmwatchdog_check_file: app_servers.yml
+      mmwatchdog_check_files: [every_server.yml, app_servers.yml]
   database_servers:
     nodes: [db01]
     vars:
       is_database_server: true
-      mmwatchdog_check_file: database_servers.yml
+      mmwatchdog_check_files: [every_server.yml, database_servers.yml]
   jobs_servers:                   # a later step: jobs001 and up
     nodes: []
     vars:
       is_jobs_server: true
-      mmwatchdog_check_file: jobs_servers.yml
+      mmwatchdog_check_files: [every_server.yml, jobs_servers.yml]
   util_server:
     nodes: [util01]
     vars:
       is_util_server: true
+      mmwatchdog_check_files: [every_server.yml, util_server.yml]
   staging_server:                     # staging01, once Add staging01 adds it
     nodes: []
     vars:
       is_staging_server: true
-      mmwatchdog_check_file: database_servers.yml
+      mmwatchdog_check_files: [every_server.yml, database_servers.yml]
   database_restore_servers:           # restore01 during a drill or a recovery of lost rows; a recovery's new database server
     nodes: []
   load_balancer_servers:          # lb01 and lb02, a later step
     nodes: []
     vars:
       is_load_balancer_server: true
-      mmwatchdog_check_file: load_balancer_servers.yml
+      mmwatchdog_check_files: [every_server.yml, load_balancer_servers.yml]
 ```
 
 - **`ssh_user: root`,** because server providers create a server with the

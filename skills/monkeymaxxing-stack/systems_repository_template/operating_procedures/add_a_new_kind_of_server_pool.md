@@ -107,14 +107,14 @@ the decisions change.
    check that the pool's own service runs and answers. Give each severity
    its reason, as the other check files do. A severity of `sos` wakes a
    person, so use it only when customers are affected.
-   Then name the file in the pool's group in `inventories/servers.yml`,
-   beside the flag: `mmwatchdog_check_file: cache_servers.yml`. Every
-   server of the pool then gets `every_server.yml` and the pool's file,
-   and no role or playbook changes. A pool's group without
-   `mmwatchdog_check_file` fails `mmx validate`, naming
-   `.vars.mmwatchdog_check_file`.
+   Then list the files in the pool's group in `inventories/servers.yml`,
+   beside the flag:
+   `mmwatchdog_check_files: [every_server.yml, cache_servers.yml]`. Every
+   server of the pool then gets exactly those files, and no role or
+   playbook changes. A pool's group without `mmwatchdog_check_files`
+   fails `mmx validate`, naming `.vars.mmwatchdog_check_files`.
    Reason for the setting: a role cannot ask which pool its server is in,
-   so the pool's group names its file once, as it sets its flag.
+   so the pool's group lists its files once, as it sets its flag.
 6. **The measurement that says to add another.** Name the reading that
    says the pool is full, such as "memory above 75% for 15 minutes" or
    "the cache evicts keys every minute", and the check that reports it.
@@ -130,7 +130,7 @@ When the six decisions are agreed and the files are changed:
 
 1. Run `mmx validate`, commit, and push.
    **Check:** `mmx validate` passes. A pool's group without
-   `mmwatchdog_check_file` fails it, naming `.vars.mmwatchdog_check_file`.
+   `mmwatchdog_check_files` fails it, naming `.vars.mmwatchdog_check_files`.
 2. Add the first server, such as `cache001`, with
    [Add a server](add_a_server.md), as step 1 of
    [Adding jobs servers](add_jobs_servers.md#adding-jobs-servers) does,
@@ -151,6 +151,51 @@ When the six decisions are agreed and the files are changed:
    and update the README's list of servers.
    No check here: the record is the result of steps 3 and 4.
 
+## Adding a pool from a recipe
+
+**When:** the pool, its role, and its checks come from a recipe, such as
+a Redis or Meilisearch recipe from
+[monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes).
+First follow [Using a recipe](../AGENTS.md#using-a-recipe): fetch it at a
+pinned commit, check it, and get the person's approval. Then follow the
+six decisions above, with the recipe as the draft of each one. A recipe
+changes no file by itself, and adds no pool the person did not approve.
+
+The Stack leaves a place for each part of a recipe, so no Stack file
+changes beyond these places:
+
+- **The recipe's fleet stage** goes between the two `# --- Custom
+  extensions ---` comment lines in `playbooks/every_server.yml`, before
+  MMWatchdog joins. It names its own role, such as
+  `roles/custom_redis_server/main.yml`.
+- **The recipe's settings** go under `custom:` in `mmx_project_settings.yml`,
+  such as `custom.redis.maxmemory_megabytes`, with a default and a reason.
+  The roles and the check files read them as `{{ .inputs.custom.<key> }}`,
+  such as `{{ .inputs.custom.redis.maxmemory_megabytes }}`: the playbook
+  passes `custom` as the role input of the same name.
+- **The recipe's checks** go in `mmwatchdog_checks/custom_NAME.yml`. A
+  check file the team adds always starts with `custom_`, so a later Stack
+  file can never take the same name. List it at the end of
+  `mmwatchdog_check_files` in the pool's group, such as
+  `[every_server.yml, cache_servers.yml, custom_redis.yml]`. The triage
+  user can confirm a fix of a custom check group with no sudo change: one
+  line of `roles/every_server/files/sudoers_triage` covers every group.
+  That line matches only group names of lower-case letters, digits, and
+  underscores (`[a-z0-9_]+`, no hyphens), so name each check group under
+  `check_groups:` that way, such as `custom_redis`, or triage's
+  `sudo mmwatchdog check-now` cannot run it.
+- **The record** is a copy of the recipe in `custom_recipes/ID.md`, with
+  `source_url`, `source_commit`, and `applied_on`, and an entry in
+  `custom_extensions:` in `monkeymaxxing_stack_checklist.yml`.
+
+**Check:** `mmx validate` passes, `mmx dryrun every_server` proposes only
+the pool's changes, and the recipe's own verification step passes after
+the run. `mmx validate` refuses a check file name with a path part (`..` or
+a `/`) and a name of a file that does not exist in `mmwatchdog_checks/`,
+naming `mmwatchdog_check_files`. The role's own first task, which runs on
+the server before any change, refuses a name outside
+`^[a-z0-9][a-z0-9_-]*\.yml$`: lower case, and a `.yml` ending.
+
 ## If something is different
 
 - **More servers:** add `cache002` and up with
@@ -159,6 +204,6 @@ When the six decisions are agreed and the files are changed:
 - **Removing the pool:** stop its users from using it first, then remove each
   server with [Remove a server](remove_a_server.md). Then, in one commit,
   remove the pool's lines in `connections_between_server_pools`, its address
-  block, its group with its flag and `mmwatchdog_check_file`, the role, the
+  block, its group with its flag and `mmwatchdog_check_files`, the role, the
   stage, and the check file. The run refuses a line that names a pool which
   no longer exists, so a leftover line can't slip through.

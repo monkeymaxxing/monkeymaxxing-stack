@@ -118,7 +118,7 @@ each term.
        nodes: [app001, app002]
        vars:
          is_app_server: true
-         mmwatchdog_check_file: app_servers.yml
+         mmwatchdog_check_files: [every_server.yml, app_servers.yml]
    ```
 
    Commit and push the inventory, then run `every_server` on `util01`

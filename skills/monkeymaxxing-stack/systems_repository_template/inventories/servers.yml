@@ -109,11 +109,15 @@ vars:
   # roles that choose a server's software and settings by its group. The
   # firewall and the WireGuard peers come from
   # connections_between_server_pools instead.
-  # Each pool's group also names its MMWatchdog check file with
-  # mmwatchdog_check_file, such as app_servers.yml in mmwatchdog_checks/.
-  # Every server gets every_server.yml and its pool's file; util01's own
-  # role installs util_server.yml, and playbooks/systems_desk.yml installs
-  # systems_desks.yml.
+  # Each group also lists its MMWatchdog check files with
+  # mmwatchdog_check_files, such as [every_server.yml, app_servers.yml],
+  # files of mmwatchdog_checks/. The list holds every file the group's
+  # servers get, every_server.yml first. A check file the team adds starts
+  # with custom_ (such as custom_redis.yml) and goes at the end of the list.
+  # The roles install exactly the listed files and delete any other file
+  # from the server's check groups. The systems_desks group lists no files:
+  # playbooks/systems_desk.yml owns the desk's list, and a change to it goes
+  # through the desk review (ssh desk01-review).
   is_systems_desk: false
   is_app_server: false
   is_database_server: false
@@ -208,12 +212,12 @@ groups:
     nodes: [app001]
     vars:
       is_app_server: true
-      mmwatchdog_check_file: app_servers.yml
+      mmwatchdog_check_files: [every_server.yml, app_servers.yml]
   database_servers:
     nodes: [db01]
     vars:
       is_database_server: true
-      mmwatchdog_check_file: database_servers.yml
+      mmwatchdog_check_files: [every_server.yml, database_servers.yml]
   # The jobs servers, a later step: each runs production's job containers.
   # A new jobs server joins WireGuard at first boot and receives its role
   # peers in the first MMX run.
@@ -224,11 +228,12 @@ groups:
     nodes: []
     vars:
       is_jobs_server: true
-      mmwatchdog_check_file: jobs_servers.yml
+      mmwatchdog_check_files: [every_server.yml, jobs_servers.yml]
   util_server:
     nodes: [util01]
     vars:
       is_util_server: true
+      mmwatchdog_check_files: [every_server.yml, util_server.yml]
   # staging01, the test server: every role on one server. The Stack starts
   # without it; operating_procedures/add_staging01.md adds it. While the
   # group is empty, each fleet stage that selects only staging_server
@@ -238,7 +243,7 @@ groups:
     vars:
       is_staging_server: true
       # staging01 runs Postgres like a database server, so it gets their checks.
-      mmwatchdog_check_file: database_servers.yml
+      mmwatchdog_check_files: [every_server.yml, database_servers.yml]
   # lb01 and lb02 are added in a later step to run production's tunnel
   # connector and Caddy. At first, the app servers keep running the tunnel
   # connector and Caddy alongside lb01 and lb02. Once
@@ -252,7 +257,7 @@ groups:
     nodes: []
     vars:
       is_load_balancer_server: true
-      mmwatchdog_check_file: load_balancer_servers.yml
+      mmwatchdog_check_files: [every_server.yml, load_balancer_servers.yml]
   # restore01 never appears here: the restore drill and the row recovery
   # (playbooks/recover_rows_from_a_restored_copy.yml) add it only to a
   # throwaway clone of util01's copy, for the length of one run.

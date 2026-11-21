@@ -163,6 +163,15 @@ vars:
   public_site_checks_run: false
   status_page_host_name:                     # the setup fills it: chapter 1, such as status.acme.com
   cloudflare_account_id:                     # the setup fills it: chapter 4, the 32-character account ID
+
+  # --- Custom extensions (start) ---
+  # custom holds the settings of the custom extensions, one key for each recipe.
+  # Keep these three boundary comment lines intact for clean upgrades.
+  custom: {}
+  # Keep these three boundary comment lines intact for clean upgrades.
+  # End of custom settings.
+  # --- Custom extensions (end) ---
+
   apps:
     shop:
       image: ghcr.io/example/shop

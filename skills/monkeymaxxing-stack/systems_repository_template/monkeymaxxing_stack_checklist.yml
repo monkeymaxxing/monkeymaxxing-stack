@@ -1368,6 +1368,21 @@ growth_and_improvement_items:
       marks this item deviated, with no email as the reason.
     trigger: the app sending email, such as sign-up or password-reset messages, or receipts; no part of the initial setup sets up an email sending service, so the coding agent and the person set it up when an app first needs it
 
+# custom_extensions lists what the team added from a recipe or by its own
+# design; the Stack's own items stay in items. MMHotline's dashboard does
+# not read it. Each entry holds:
+#   id            a short name, the same as custom_recipes/<id>.md
+#   title         what the extension does, in the person's words
+#   recipe        the recipe's name, or "own design" when no recipe was used
+#   source_url    where the recipe came from; empty for an own design
+#   source_commit the recipe repository's commit SHA the coding agent read
+#   applied_on    the UTC date of the commit that applied it
+#   state         done (verification passed) or open
+#   verification  how the coding agent proved it works
+# An extension that really differs from one of the Stack's items also
+# marks that item deviated, with its reason.
+custom_extensions: []
+
 # what_this_system_does_not_survive is a section, not a checklist item.
 # The section never has an open state, so MMHotline's dashboard never
 # lists what_this_system_does_not_survive as an open checklist item.

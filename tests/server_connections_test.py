@@ -324,8 +324,8 @@ class ServerConnections(unittest.TestCase):
         lines = ('    - {from_pool: app_servers, to_pool: cache_servers, tcp_ports: [11211], why: The apps cache pages in memcached.}\n'
                  '    - {from_pool: report_workers, to_pool: database_servers, tcp_ports: [5432], why: The report workers read Postgres.}\n')
         new_servers = {'cache001': server_block('cache001', '10.20.5.1'), 'report001': server_block('report001', '10.20.6.1')}
-        groups = {'cache_servers': (['cache001'], '      mmwatchdog_check_file: cache_servers.yml'),
-                  'report_workers': (['report001'], '      mmwatchdog_check_file: report_workers.yml')}
+        groups = {'cache_servers': (['cache001'], '      mmwatchdog_check_files: [every_server.yml, cache_servers.yml]'),
+                  'report_workers': (['report001'], '      mmwatchdog_check_files: [every_server.yml, report_workers.yml]')}
         with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
             root = Path(temporary)/'systems'
             make_project(root, extra_vars=lines, extra_servers=new_servers, extra_groups=groups)
@@ -380,7 +380,7 @@ class ServerConnections(unittest.TestCase):
             if not stage['path'].startswith('mmwatchdog_joins_the_fleet_hub_after_the_roles'):
                 continue
             for task in stage.get('node_tasks') or []:
-                if '/install_the_check_groups_of_' in task['path']:
+                if '/install_the_check_groups[' in task['path']:
                     path = next(a['value'] for a in task['arguments'] if a['field'] == 'file.path')
                     installed.setdefault(task['node'], set()).add(path.rsplit('/', 1)[1])
         return installed

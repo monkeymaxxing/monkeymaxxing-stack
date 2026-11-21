@@ -168,9 +168,12 @@ def shown_name(repository, path):
 def referenced_files(repository, task):
     """Repository files a task copies as they are, named by an argument
     such as file.source or apt_repository.signing_key_source. A template's
-    rendered text is already in the explain output, so templates are
-    skipped. Other arguments, such as a service named ssh, name no file."""
-    rendered = {template['field'] for template in task.get('rendered_templates', [])}
+    rendered text is already in the explain output, so a template that
+    explain rendered is skipped. A template whose rendered text is empty
+    (explain does not render a template that a loop names) is not skipped:
+    its repository file is shown whole, so a change to it is never
+    unreviewed. Other arguments, such as a service named ssh, name no file."""
+    rendered = {template['field'] for template in task.get('rendered_templates', []) if template.get('text')}
     bases = [repository]
     source = task.get('source', {}).get('file')
     if source:
@@ -226,8 +229,10 @@ def desk_run_view(repository, explain, inventory):
             for argument in task.get('arguments', []) + task.get('timing', []):
                 lines += value_lines(argument['field'], argument.get('value'))
             for template in task.get('rendered_templates', []):
-                if 'text' in template:
+                if template.get('text'):
                     lines += ['  %s renders as:' % visible(template['field'])] + block(template['text'])
+                elif 'text' in template:
+                    lines.append('  %s rendered empty in explain; repository file included below' % visible(template['field']))
                 else:
                     lines.append('  %s does not render: %s' % (visible(template['field']), visible(template.get('not_rendered_because', ''))))
             for path in referenced_files(repository, task):

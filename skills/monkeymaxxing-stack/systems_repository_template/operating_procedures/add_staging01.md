@@ -95,7 +95,7 @@ explains each term.
      nodes: [staging01]
      vars:
        is_staging_server: true
-       mmwatchdog_check_file: database_servers.yml
+       mmwatchdog_check_files: [every_server.yml, database_servers.yml]
    ```
 
    **Check:** the checks of steps 1 to 4 of [Add a server](add_a_server.md).

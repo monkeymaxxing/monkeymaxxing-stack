@@ -69,6 +69,41 @@ def fill_the_values_the_setup_fills(root):
         path.write_text(text)
 
 
+LOOPED_CANDIDATE_CHECK_GROUPS = """        - id: write_the_candidate_check_groups
+          loop: "{{ .inputs.mmwatchdog_check_files }}"
+          as: check_file
+          file:
+            path: "/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .check_file }}"
+            template: "../../mmwatchdog_checks/{{ .check_file }}"
+            owner: root
+            group: root
+            permissions_mode: "0644"
+"""
+UNROLLED_CANDIDATE_CHECK_GROUPS = ''.join("""        - id: write_the_candidate_check_groups_of_%s
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups/%s.yml
+            template: ../../mmwatchdog_checks/%s.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+""" % (name, name, name) for name in ('every_server', 'util_server'))
+
+
+def show_util01_check_files_to_explain(root):
+    """Makes `mmx explain` print the rendered check files of util01.
+
+    roles/util_server renders util01's check files in a loop over
+    mmwatchdog_check_files, and explain leaves the rendered text of a looped
+    file task empty (mmx validate still renders each one). A test that reads
+    that text in explain's output unrolls the loop in its own copy, for
+    the two files util01's group lists by default.
+    """
+    path = Path(root)/'roles/util_server/main.yml'
+    text = path.read_text()
+    assert text.count(LOOPED_CANDIDATE_CHECK_GROUPS) == 1, 'roles/util_server changed its candidate check files task'
+    path.write_text(text.replace(LOOPED_CANDIDATE_CHECK_GROUPS, UNROLLED_CANDIDATE_CHECK_GROUPS))
+
+
 _filled_copy = None
 
 

@@ -263,8 +263,11 @@ class ThePlaybookAndTheCheck(unittest.TestCase):
             self.assertIn('a reboot for installed updates waits: may reboot now: inside the maintenance window', inside.stdout)
 
     def test_the_triage_user_may_confirm_the_new_check_group(self):
-        self.assertIn('/usr/local/bin/mmwatchdog check-now reboots_that_may_run_now --count-as-scheduled-run',
-                      (T/'roles/every_server/files/sudoers_triage').read_text())
+        # One regex line lets the triage user check any group's name now.
+        line = next(l for l in (T/'roles/every_server/files/sudoers_triage').read_text().splitlines()
+                    if not l.startswith('#') and 'check-now' in l)
+        regex = line[line.index('^check-now'):]
+        self.assertRegex('check-now reboots_that_may_run_now --count-as-scheduled-run', regex)
 
     def test_every_server_accepts_windows_from_30_to_1440_minutes(self):
         playbook = (T/'playbooks/every_server.yml').read_text()

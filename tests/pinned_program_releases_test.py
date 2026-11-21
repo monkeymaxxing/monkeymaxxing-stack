@@ -123,6 +123,7 @@ class PinnedProgramReleases(unittest.TestCase):
             root = Path(directory)/'systems'
             shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
             template_values.fill_the_values_the_setup_fills(root)
+            template_values.show_util01_check_files_to_explain(root)
             settings = (root/'mmx_project_settings.yml').read_text()
             for old, new in settings_changes:
                 assert settings.count(old) == 1, old

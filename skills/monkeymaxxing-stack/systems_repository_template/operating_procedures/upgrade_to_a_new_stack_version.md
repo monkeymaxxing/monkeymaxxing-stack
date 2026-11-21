@@ -94,15 +94,58 @@ laptop's clone, `~/code/example_systems`:
    two commits, and merge each part that doesn't apply by hand, keeping
    the team's values and deviations. When a change of the new version
    conflicts with a recorded deviation, tell the person what each choice
-   means, and keep the deviation until the person decides:
+   means, and keep the deviation until the person decides.
+
+   The team's custom extensions stay as they are. Never overwrite or
+   delete them: the folder `custom_recipes/`, the list `custom_extensions:`
+   in the checklist, every file `mmwatchdog_checks/custom_*.yml` and its
+   `custom_*.yml` entry inside each group's `mmwatchdog_check_files` in
+   `inventories/servers.yml`, the `## Custom extensions` section of
+   `AGENTS.md`, the team's `custom:` settings, and each block between the
+   `# --- Custom extensions (start) ---` and
+   `# --- Custom extensions (end) ---` comment lines in `playbooks/` and
+   `mmx_project_settings.yml`. The new template ships those blocks empty,
+   so a change that would empty one is a change to undo. A new version
+   never applies a recipe again: the stamp in `custom_recipes/` says which
+   commit of the recipe the team applied.
+
+   The patch names each file's old version by its Git object, so Git can
+   merge a part that changed both in the template and in the team's file.
+   Start with a clean working tree (`git status` lists nothing), bring the
+   Stack's objects into the clone, and apply with a three-way merge:
 
    ```sh
    git -C STACK_REPOSITORY diff --binary OLD_COMMIT NEW_COMMIT --relative=skills/monkeymaxxing-stack/systems_repository_template > VERSION_CHANGE_DIRECTORY/new_version.patch
-   git apply --reject VERSION_CHANGE_DIRECTORY/new_version.patch    # a part that doesn't apply is left in a .rej file beside its file
+   git fetch STACK_REPOSITORY OLD_COMMIT NEW_COMMIT    # only brings in objects: no branch or remote changes
+   git apply --3way VERSION_CHANGE_DIRECTORY/new_version.patch
    ```
 
-   **Check:** every `.rej` file is merged by hand; step 5 commits with no
-   `.rej` file left.
+   `git apply --3way` exits with 1 both for a conflict and for a refusal, so
+   read what it printed and what `git status` shows:
+
+   - **A conflict** prints `Applied patch ... with conflicts`. Conflict
+     markers are now in those files, and the rest of the patch is applied.
+     Merge the markers by hand. Do not run `--reject`: the patch is already
+     applied, and a second apply would repeat it.
+   - **A refusal** prints `error:` (such as `repository lacks the necessary
+     blob`, or an older Git) and leaves `git status` clean, because it
+     changed nothing. Only then fall back to `--reject`. It applies every
+     part that fits and leaves each part that doesn't in a `.rej` file
+     beside its file:
+
+   ```sh
+   git apply --reject VERSION_CHANGE_DIRECTORY/new_version.patch
+   ```
+
+   A conflict or a `.rej` part that lands inside a custom extension block
+   is a sign the block's boundary lines changed. Merge it by hand with the
+   team's lines kept, and restore the three boundary comment lines above
+   and below the block.
+
+   **Check:** every conflict marker and every `.rej` file is merged by
+   hand; step 5 commits with no `.rej` file and no conflict marker left;
+   `git diff HEAD | grep -nE '^-.*[Cc]ustom'` prints no line you did not
+   remove on purpose, so each custom extension is still there.
 3. **The checklist:**
    - Add each new item missing from
      `monkeymaxxing_stack_checklist.yml` as `open`.

@@ -35,6 +35,7 @@ class ScheduleSettings(unittest.TestCase):
             root = Path(temporary)/'systems'
             shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
             template_values.fill_the_values_the_setup_fills(root)
+            template_values.show_util01_check_files_to_explain(root)
             settings = (root/'mmx_project_settings.yml').read_text()
             for old, new in changes.items():
                 self.assertIn(old, settings, old)

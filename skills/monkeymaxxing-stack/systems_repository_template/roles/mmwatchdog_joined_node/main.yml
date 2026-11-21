@@ -9,14 +9,22 @@
 # maintenance window and restarts MMWatchdog, so the restart sends no false
 # alerts.
 inputs:
-  # mmwatchdog_check_file in the server's pool group in
-  # inventories/servers.yml: the file of mmwatchdog_checks/ with the pool's
-  # own checks, such as app_servers.yml. Every server also gets
-  # every_server.yml. A role cannot ask which pool its server is in, so the
-  # pool's group names the file once, and a new pool needs no edit here.
-  mmwatchdog_check_file:
-    type: string
+  # mmwatchdog_check_files in the server's pool group in
+  # inventories/servers.yml: every file of mmwatchdog_checks/ the server
+  # gets, such as [every_server.yml, app_servers.yml]. A role cannot ask
+  # which pool its server is in, so the pool's group lists the files once,
+  # and a new pool or a custom check file (custom_*.yml) needs no edit here.
+  # Each name is a plain file name with no folder part: the role refuses
+  # any other.
+  mmwatchdog_check_files:
+    type: list
     required: true
+  # From custom in mmx_project_settings.yml. Only a check file the team
+  # added reads it, such as custom_example.yml reading
+  # .inputs.custom.example_threshold. {} when the team adds none.
+  custom:
+    type: mapping
+    default: {}
   person_unix_username:                                  # the desk owner; unused on production nodes
     type: string
     default: ""
@@ -92,6 +100,29 @@ inputs:
     secret: true
 
 node_tasks:
+  # An empty list would delete every check group from the server, so no
+  # check would run and no alert could fire. Refuse it.
+  - id: refuse_an_empty_list_of_check_files
+    assert:
+      that:
+        not: {equals: ["{{ .inputs.mmwatchdog_check_files }}", []]}
+      message: >-
+        mmwatchdog_check_files is empty, which would delete every MMWatchdog
+        check from this server. List at least every_server.yml and this
+        server's own file, such as app_servers.yml.
+  # A file name reaches a path on the server, so refuse any name that is not
+  # a plain file name: a name with a folder part could write outside
+  # check_groups.
+  - id: refuse_a_check_file_name_that_is_not_plain
+    loop: "{{ .inputs.mmwatchdog_check_files }}"
+    as: check_file
+    assert:
+      that:
+        matches: ["{{ .check_file }}", '^[a-z0-9][a-z0-9_-]*\.yml$']
+      message: >-
+        mmwatchdog_check_files holds "{{ .check_file }}". Write a plain file
+        name of mmwatchdog_checks/ in lower case, such as app_servers.yml,
+        with no folder part. Nothing changed.
   - task_block:
       id: mmwatchdog_reports_to_the_fleet_hub
       changes:
@@ -103,12 +134,15 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0700"
+        # The candidate holds exactly the files for this server, so a file
+        # dropped from mmwatchdog_check_files stops being validated too.
         - id: create_the_candidate_check_groups_directory
           directory:
             path: /usr/local/lib/mmwatchdog/candidate_config/check_groups
             owner: root
             group: root
             permissions_mode: "0700"
+            delete_everything_inside_except: "{{ .inputs.mmwatchdog_check_files }}"
         - id: write_the_candidate_node_settings
           file:
             path: /usr/local/lib/mmwatchdog/candidate_config/mmwatchdog_node_settings.yml
@@ -116,17 +150,12 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0644"
-        - id: write_the_candidate_check_groups_of_every_server
+        - id: write_the_candidate_check_groups
+          loop: "{{ .inputs.mmwatchdog_check_files }}"
+          as: check_file
           file:
-            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml
-            template: ../../mmwatchdog_checks/every_server.yml
-            owner: root
-            group: root
-            permissions_mode: "0644"
-        - id: write_the_candidate_check_groups_of_the_pool
-          file:
-            path: "/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .inputs.mmwatchdog_check_file }}"
-            template: "../../mmwatchdog_checks/{{ .inputs.mmwatchdog_check_file }}"
+            path: "/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .check_file }}"
+            template: "../../mmwatchdog_checks/{{ .check_file }}"
             owner: root
             group: root
             permissions_mode: "0644"
@@ -193,18 +222,13 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0755"
-            delete_everything_inside_except: [every_server.yml, "{{ .inputs.mmwatchdog_check_file }}"]
-        - id: install_the_check_groups_of_every_server
+            delete_everything_inside_except: "{{ .inputs.mmwatchdog_check_files }}"
+        - id: install_the_check_groups
+          loop: "{{ .inputs.mmwatchdog_check_files }}"
+          as: check_file
           file:
-            path: /etc/mmwatchdog/check_groups/every_server.yml
-            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml]
-            owner: root
-            group: root
-            permissions_mode: "0644"
-        - id: install_the_check_groups_of_the_pool
-          file:
-            path: "/etc/mmwatchdog/check_groups/{{ .inputs.mmwatchdog_check_file }}"
-            content_from_node_paths: ["/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .inputs.mmwatchdog_check_file }}"]
+            path: "/etc/mmwatchdog/check_groups/{{ .check_file }}"
+            content_from_node_paths: ["/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .check_file }}"]
             owner: root
             group: root
             permissions_mode: "0644"

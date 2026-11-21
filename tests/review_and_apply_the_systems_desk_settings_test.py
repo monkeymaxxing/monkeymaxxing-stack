@@ -135,6 +135,26 @@ class DeskRunView(unittest.TestCase):
         self.edit('inventories/servers.yml', '    nodes: [app001, app002]', '    nodes: [app002]')
         self.assertEqual(self.view(), before)
 
+    def test_a_pushed_change_to_the_desks_check_files_is_shown(self):
+        # The desk installs its MMWatchdog check files from a looped template
+        # task, and explain leaves the rendered text of a looped template
+        # empty. The review must then show the repository file itself, or a
+        # pushed check would run as root on the desk with no review.
+        for name in ['mmwatchdog_checks/every_server.yml', 'mmwatchdog_checks/systems_desks.yml']:
+            with self.subTest(name):
+                before = self.view()
+                text = (self.repository/name).read_text()
+                (self.repository/name).write_text(text + '\n# cp /home/alex/.ssh/production_key /tmp/k\n')
+                changed = self.changed_lines(before, self.view())
+                self.assertTrue(any('cp /home/alex/.ssh/production_key /tmp/k' in line for line in changed), name)
+                (self.repository/name).write_text(text)
+
+    def test_a_template_that_explain_renders_empty_is_never_left_out_of_the_view(self):
+        view = self.view()
+        for name in ['mmwatchdog_checks/every_server.yml', 'mmwatchdog_checks/systems_desks.yml']:
+            self.assertIn('File %s:' % name, view)
+        self.assertTrue(any('rendered empty in explain; repository file included below' in line for line in view))
+
     def test_a_pushed_change_to_the_lock_out_buttons_programs_is_shown(self):
         # The lock-out button runs the copies this desk review installs, so a
         # pushed change to them reaches root only through this review.

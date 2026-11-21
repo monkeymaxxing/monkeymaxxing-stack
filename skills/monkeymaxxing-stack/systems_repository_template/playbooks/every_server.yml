@@ -867,6 +867,8 @@ fleet_stages:
           stack_software: "{{ .vars.stack_software }}"
           mmx_release: "{{ .vars.stack_software.mmx }}"
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
+          mmwatchdog_check_files: "{{ .vars.mmwatchdog_check_files }}"
+          custom: "{{ .vars.custom }}"
           mmx_vault_passphrase: "{{ .secrets.mmx_vault_passphrase }}"
           phone_alerts_are_set_up: "{{ .vars.phone_alerts_are_set_up }}"
           mmhotline_signing_secret_of_the_fleet_hub: "{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub }}"
@@ -1146,7 +1148,8 @@ fleet_stages:
       - role: mmwatchdog_joined_node
         when: {path_exists: /etc/mmwatchdog/mmwatchdog_node_settings.yml}
         inputs:
-          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          mmwatchdog_check_files: "{{ .vars.mmwatchdog_check_files }}"
+          custom: "{{ .vars.custom }}"
           is_app_server: "{{ .vars.is_app_server }}"
           is_database_server: "{{ .vars.is_database_server }}"
           is_staging_server: "{{ .vars.is_staging_server }}"
@@ -1300,7 +1303,8 @@ fleet_stages:
     node_tasks:
       - role: mmwatchdog_joined_node
         inputs:
-          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          mmwatchdog_check_files: "{{ .vars.mmwatchdog_check_files }}"
+          custom: "{{ .vars.custom }}"
           is_app_server: "{{ .vars.is_app_server }}"
           is_database_server: "{{ .vars.is_database_server }}"
           is_staging_server: "{{ .vars.is_staging_server }}"
@@ -1318,13 +1322,23 @@ fleet_stages:
             what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
             public_site_checks_run: "{{ .vars.public_site_checks_run }}"
             maintenance_window: "{{ .vars.maintenance_window }}"
+
+  # --- Custom extensions (start) ---
+  # Add custom fleet stages from recipes inside this block, each with its own id.
+  # Keep these three boundary comment lines intact for clean upgrades.
+
+  # Keep these three boundary comment lines intact for clean upgrades.
+  # End of custom fleet stages.
+  # --- Custom extensions (end) ---
+
   - id: mmwatchdog_joins_the_fleet_hub_after_the_roles
     nodes: all
     except_nodes: [util_server, database_restore_servers, database_servers, load_balancer_servers, systems_desks]
     node_tasks:
       - role: mmwatchdog_joined_node
         inputs:
-          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          mmwatchdog_check_files: "{{ .vars.mmwatchdog_check_files }}"
+          custom: "{{ .vars.custom }}"
           is_app_server: "{{ .vars.is_app_server }}"
           is_database_server: "{{ .vars.is_database_server }}"
           is_staging_server: "{{ .vars.is_staging_server }}"
@@ -1622,7 +1636,8 @@ fleet_stages:
     node_tasks:
       - role: mmwatchdog_joined_node
         inputs:
-          mmwatchdog_check_file: "{{ .vars.mmwatchdog_check_file }}"
+          mmwatchdog_check_files: "{{ .vars.mmwatchdog_check_files }}"
+          custom: "{{ .vars.custom }}"
           is_app_server: "{{ .vars.is_app_server }}"
           is_database_server: "{{ .vars.is_database_server }}"
           is_staging_server: "{{ .vars.is_staging_server }}"

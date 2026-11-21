@@ -103,6 +103,17 @@ inputs:
   mmwatchdog_release:
     type: mapping
     required: true
+  # From util_server in inventories/servers.yml: every file of
+  # mmwatchdog_checks/ that util01 gets, [every_server.yml, util_server.yml]
+  # plus any custom_*.yml the team adds. Same rules as in
+  # roles/mmwatchdog_joined_node.
+  mmwatchdog_check_files:
+    type: list
+    required: true
+  # From custom in mmx_project_settings.yml, for custom check files.
+  custom:
+    type: mapping
+    default: {}
   mmx_vault_passphrase:
     type: string
     required: true
@@ -849,11 +860,31 @@ node_tasks:
       owner: root
       group: root
       permissions_mode: "0755"
+  # An empty list would delete every check group from the server, so no
+  # check would run and no alert could fire. Refuse it.
+  - id: refuse_an_empty_list_of_check_files
+    assert:
+      that:
+        not: {equals: ["{{ .inputs.mmwatchdog_check_files }}", []]}
+      message: >-
+        mmwatchdog_check_files is empty, which would delete every MMWatchdog
+        check from this server. List at least every_server.yml and this
+        server's own file, such as util_server.yml.
   # MMX prepares the hub's settings and check groups in a candidate directory.
   # Then the new release's mmwatchdog validates the candidate files.
   # Only after validation passes does MMX put the release and checked files
   # into use. Then MMX restarts MMWatchdog inside a maintenance window, as
   # on every other server (roles/mmwatchdog_joined_node).
+  - id: refuse_a_check_file_name_that_is_not_plain
+    loop: "{{ .inputs.mmwatchdog_check_files }}"
+    as: check_file
+    assert:
+      that:
+        matches: ["{{ .check_file }}", '^[a-z0-9][a-z0-9_-]*\.yml$']
+      message: >-
+        mmwatchdog_check_files holds "{{ .check_file }}". Write a plain file
+        name of mmwatchdog_checks/ in lower case, such as util_server.yml,
+        with no folder part. Stopped before changing MMWatchdog on util01.
   - task_block:
       id: mmwatchdog_fleet_hub
       changes:
@@ -869,6 +900,7 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0700"
+            delete_everything_inside_except: "{{ .inputs.mmwatchdog_check_files }}"
         - id: write_the_candidate_node_settings
           file:
             path: /usr/local/lib/mmwatchdog/candidate_config/mmwatchdog_node_settings.yml
@@ -883,17 +915,12 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0600"
-        - id: write_the_candidate_check_groups_of_every_server
+        - id: write_the_candidate_check_groups
+          loop: "{{ .inputs.mmwatchdog_check_files }}"
+          as: check_file
           file:
-            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml
-            template: ../../mmwatchdog_checks/every_server.yml
-            owner: root
-            group: root
-            permissions_mode: "0644"
-        - id: write_the_candidate_check_groups_of_util01
-          file:
-            path: /usr/local/lib/mmwatchdog/candidate_config/check_groups/util_server.yml
-            template: ../../mmwatchdog_checks/util_server.yml
+            path: "/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .check_file }}"
+            template: "../../mmwatchdog_checks/{{ .check_file }}"
             owner: root
             group: root
             permissions_mode: "0644"
@@ -955,18 +982,13 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0755"
-            delete_everything_inside_except: [every_server.yml, util_server.yml]
-        - id: install_the_check_groups_of_every_server
+            delete_everything_inside_except: "{{ .inputs.mmwatchdog_check_files }}"
+        - id: install_the_check_groups
+          loop: "{{ .inputs.mmwatchdog_check_files }}"
+          as: check_file
           file:
-            path: /etc/mmwatchdog/check_groups/every_server.yml
-            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/check_groups/every_server.yml]
-            owner: root
-            group: root
-            permissions_mode: "0644"
-        - id: install_the_check_groups_of_util01
-          file:
-            path: /etc/mmwatchdog/check_groups/util_server.yml
-            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/check_groups/util_server.yml]
+            path: "/etc/mmwatchdog/check_groups/{{ .check_file }}"
+            content_from_node_paths: ["/usr/local/lib/mmwatchdog/candidate_config/check_groups/{{ .check_file }}"]
             owner: root
             group: root
             permissions_mode: "0644"

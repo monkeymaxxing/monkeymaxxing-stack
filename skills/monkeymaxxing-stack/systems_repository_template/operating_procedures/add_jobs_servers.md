@@ -70,7 +70,7 @@ each term.
        nodes: [jobs001]
        vars:
          is_jobs_server: true
-         mmwatchdog_check_file: jobs_servers.yml
+         mmwatchdog_check_files: [every_server.yml, jobs_servers.yml]
    ```
 
    Replace the example public key with `jobs001`'s setup-generated key,

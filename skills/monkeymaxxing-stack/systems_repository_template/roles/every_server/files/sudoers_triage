@@ -28,34 +28,12 @@ triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog events --json
 # After a fix: a check group's scheduled runs, now, whose results count, so
 # a fixed check's warning closes once the check has been healthy for its
 # recovered_after_healthy_for, instead of at its next scheduled run, up to
-# an hour later. It does nothing that MMWatchdog wouldn't do at those runs'
-# own time, such as a restart that a failing check asks for. One line for
-# each check group in mmwatchdog_checks/; MMWatchdog refuses a group that
-# this server doesn't have. Never --without-daemon or --config-dir, which
-# would run checks from any directory as root.
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now systemd_units --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now disks --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now software_raid --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now security_updates --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now reboots_that_may_run_now --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now installed_packages --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now clock --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now out_of_memory_kills --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now app_server_capacity --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now job_containers --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now database_server_capacity --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now postgres --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now pgbouncer --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now write_ahead_log_archiving --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now backups --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now jobs_server_capacity --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now load_balancer_server_capacity --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now tunnel_connector_and_caddy --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now util_server_capacity --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now public_sites --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now restore_drill --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now pinned_program_releases --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now mmhotline_backup --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now uploads_backup --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now app_servers_to_add_for_the_load --count-as-scheduled-run
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now app_servers_to_remove_for_the_load --count-as-scheduled-run
+# an hour later. One regex line covers every check group, the Stack's own
+# and the team's custom ones (mmwatchdog_checks/custom_*.yml), so a new check
+# file needs no edit here. That is safe, because check-now runs only checks
+# that MMWatchdog already runs as root on its schedule, and MMWatchdog
+# refuses a group that this server doesn't have. The check file, committed
+# to main by people who may change this server, is the real trust boundary,
+# not this line. The regex allows no other option: never --without-daemon or
+# --config-dir, which would run checks from any directory as root.
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog ^check-now [a-z0-9_]+ --count-as-scheduled-run$

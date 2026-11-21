@@ -233,9 +233,12 @@ fleet_stages:
     node_tasks:
       - role: mmwatchdog_joined_node
         inputs:
-          # This playbook runs only on a systems desk, so the file is fixed; and
-          # the desk is named on the command line, which validation cannot read.
-          mmwatchdog_check_file: systems_desks.yml
+          # This playbook owns the desk's list of check files; the
+          # systems_desks group in inventories/servers.yml lists none. A
+          # change here, like any change to this playbook, reaches the desk
+          # only through the desk review (ssh desk01-review).
+          mmwatchdog_check_files: [every_server.yml, systems_desks.yml]
+          custom: "{{ .vars.custom }}"
           person_unix_username: "{{ .vars.person_unix_username }}"
           phone_code_lockout: "{{ .vars.phone_code_lockout }}"
           is_app_server: false

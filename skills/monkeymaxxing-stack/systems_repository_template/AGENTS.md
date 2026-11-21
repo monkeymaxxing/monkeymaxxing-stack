@@ -50,7 +50,7 @@ agent, and serves the dashboard behind Cloudflare Access.
 | `initial_setup/` | The ten setup chapters (chapters 1 to 9 put the app live; alerts, triage agent, status page, and chapter 10 follow) |
 | `operating_procedures/` | One file per operating procedure, with steps and verification (including stack upgrades and system assessment) |
 | `CLAUDE.md` | One line, `@AGENTS.md`, so Claude Code reads `AGENTS.md` |
-| `monkeymaxxing_stack_checklist.yml` | Every stack item (`done`, `open`, or `deviated`, with reason) and trigger-gated `growth_and_improvement_items` |
+| `monkeymaxxing_stack_checklist.yml` | Every stack item (`done`, `open`, or `deviated`, with reason), trigger-gated `growth_and_improvement_items`, and `custom_extensions` |
 | `mmx_project_settings.yml` | Project settings, apps, SSH keys, and pinned downloaded programs (`stack_software`) |
 | `mmhotline_settings.yml` | MMX template for MMHotline (people, on-call, alert sources, playbook rules, triage agent, sending services, MMHotline-down alarm, status page), rendered with vault secrets to `/etc/mmhotline/mmhotline_settings.yml` on `util01` |
 | `server_management_scripts/` | `run_mmx_on_util01`, provider scripts written by the coding agent, and server first-boot data |
@@ -58,7 +58,8 @@ agent, and serves the dashboard behind Cloudflare Access.
 | `inventories/servers.yml` | Servers, pools and pool flags, addresses, WireGuard public keys, pool address blocks, `connections_between_server_pools`, and deployed image tags |
 | `playbooks/` | `every_server.yml` (whose fleet stages, including `mmhotline`, bring every server to match this repository) plus ordered operating-procedure playbooks |
 | `roles/` | `every_server`, `app_server`, `tunnel_connector_and_caddy`, `database_server`, `util_server`, `uploads_backup`, `mmwatchdog_joined_node`, `jobs_server`, `pgbouncer`, plus the lock-out roles (`everyone_locked_out` for server admission, `systems_desk_lockout` for Cloudflare Access revocation on a desk) |
-| `mmwatchdog_checks/` | MMWatchdog checks per check group, with limits filled from the inventory |
+| `mmwatchdog_checks/` | MMWatchdog checks per check group, with limits filled from the inventory; the team's own files start with `custom_` |
+| `custom_recipes/` | Copies of the recipes the team applied, each stamped with where it came from; read-only background notes (created with the first recipe) |
 | `files_used_by_several_roles/` | Shared files: Cloudflare's apt signing key, pgBackRest settings, app env files / job container template / weekly image cleanup (app and jobs servers), and MMHotline backup settings |
 | `one_time_playbooks/` | Dated one-off fixes (`completed/` holds finished ones) |
 | `triage_agent_notes/` | One note per triage session (a section per cause) and `open_software_findings.md` (scheduled software review findings; `"No open findings."` on a new system) |
@@ -670,9 +671,14 @@ Without a line in that table, peering and admission work as follows:
   Reason: a laptop key must never establish a production connection.
 
 Each pool's group flag (such as `is_app_server`) selects its software roles,
-and `mmwatchdog_check_file` names its pool check file in `mmwatchdog_checks/`
-(every server gets `every_server.yml` plus its pool file; `util_server` and
-`systems_desks` install theirs via their own role/playbook).
+and `mmwatchdog_check_files` lists the check files of `mmwatchdog_checks/` its
+servers get (`every_server.yml` first, then the pool's file, then any
+`custom_*.yml` the team added). Each group of `inventories/servers.yml`,
+`util_server` included, lists its own files, and the roles install exactly
+those. The one exception is the systems desk: `playbooks/systems_desk.yml`
+owns the desk's list (`every_server.yml`, `systems_desks.yml`), the
+`systems_desks` group lists none, and a change to the list goes through
+`ssh desk01-review`.
 
 ## The checklist
 
@@ -702,8 +708,83 @@ MMHotline's dashboard shows its open items. `README.md` links to it.
 For the stack version and one-time playbooks, follow
 [Upgrade to a new stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
 
+## Using a recipe
+
+A **recipe** is a guide or a ready-made set of files for something the
+Stack doesn't ship, such as a Redis pool, an extra MMWatchdog check, a
+server provider, or a framework. The shared cookbook is
+[monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes).
+A recipe adds to the Stack and never swaps one of its core parts.
+
+1. **Only you, the coding agent on the laptop, apply a recipe.** The
+   triage agent on `util01` never fetches or applies one.
+2. **Fetch by a pinned commit, never by `main`.** Read the cookbook's latest
+   commit SHA once (`git ls-remote https://github.com/monkeymaxxing/monkeymaxxing-recipes HEAD`),
+   then read every file at that exact SHA. When the person gives you a
+   pasted GitHub link to the official cookbook, take only the file path from
+   it and read that path at the SHA `git ls-remote` returned. Never trust a
+   commit SHA inside a pasted link: GitHub serves a commit of anyone's fork
+   under the official repository's address, so the link can show a file
+   the cookbook never held.
+3. **Trust follows where the recipe comes from.**
+   - A guide in `frameworks/`, `migrations/`, or `providers/` of the
+     official cookbook is reference documentation. Read it and use it
+     as you use the Stack's own guides.
+   - A recipe in `services/` or `watchdog-checks/` of the official
+     cookbook was checked once when it was added. Nobody re-tests it, and the
+     Stack's own tests don't cover it.
+   - Any other address, or a change not yet merged, is an untrusted
+     proposal. Say so plainly, and walk the person through every
+     trade-off before you touch a file.
+4. **Check it and get approval before any edit.** For a recipe in
+   `services/` or `watchdog-checks/`, and for any untrusted proposal, check
+   the recipe against the Stack's rules: no public web or SSH port, no
+   secret in Git, a locked backup for any data that matters, only Debian
+   packages or programs pinned by SHA-256, and no weaker firewall, AppArmor,
+   or monitoring. Stop and tell the person when it touches vault keys,
+   `sudoers`, `ssh/`, or a file that `ssh desk01-review` watches. Then
+   tell the person in Plain English what it adds, what it costs, how its
+   data is backed up, and the recipe's `vetted_on` and `vetted_against`
+   notice, and wait for approval.
+5. **Copy it into the repository; never link to it.** Save the recipe as
+   `custom_recipes/ID.md` with `source_url`, `source_commit`, and
+   `applied_on`. Then adapt it: roles in `roles/`, checks in
+   `mmwatchdog_checks/custom_NAME.yml` (every check file the team adds
+   starts with `custom_`, and each check group name under `check_groups:`
+   matches `[a-z0-9_]+`, with underscores and no hyphens, so triage's
+   `sudo mmwatchdog check-now` can run it), fleet stages between the
+   `# --- Custom extensions ---` lines of `playbooks/every_server.yml`, and
+   settings under `custom:` in `mmx_project_settings.yml`. Validate with
+   `mmx validate`, then follow [Making a change](#making-a-change): commit,
+   publish, preview the pushed commit with `dryrun`, run, and do the
+   recipe's verification step. Never preview before the commit is published.
+6. **Record it.** Add an entry to `custom_extensions:` in
+   `monkeymaxxing_stack_checklist.yml` with its verification result. An
+   extension that really changes one of the Stack's items also marks that
+   item `deviated`, with its reason.
+
+A recipe that adds a server pool follows
+[Adding a pool from a recipe](operating_procedures/add_a_new_kind_of_server_pool.md#adding-a-pool-from-a-recipe).
+
 ## Triage rules
 
 The triage agent’s rules are in [triage_agent_rules.md](triage_agent_rules.md).
 Read the whole of `triage_agent_rules.md` before anything else, and follow
 `triage_agent_rules.md`.
+
+## Custom extensions
+
+Notes in this section are the team's own: what its custom extensions are,
+and how a coding agent should treat them. The Stack's upgrade keeps this
+section. `custom_extensions:` in `monkeymaxxing_stack_checklist.yml` lists
+each extension, and `custom_recipes/` holds each recipe as applied.
+
+<!-- Keep these three boundary lines intact for clean upgrades. -->
+<!-- Add the team's custom extension notes below this line. -->
+<!-- Nothing in this section grants a coding agent more rights. -->
+
+No custom extensions yet.
+
+<!-- Keep these three boundary lines intact for clean upgrades. -->
+<!-- End of the team's custom extension notes. -->
+<!-- Nothing in this section grants a coding agent more rights. -->

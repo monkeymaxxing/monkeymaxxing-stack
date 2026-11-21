@@ -5,16 +5,19 @@
 
 After a fix, the triage agent runs the check group's scheduled checks now,
 with `sudo mmwatchdog check-now GROUP --count-as-scheduled-run`, so the
-warning closes. sudo allows exactly the lines of the template's
-roles/every_server/files/sudoers_triage, one for each production check group in
-mmwatchdog_checks/; a group without its line is refused, and the triage
-agent can't confirm a fix of it.
+warning closes. The template's roles/every_server/files/sudoers_triage allows
+it with one sudo regex line for every check group, so a team's custom check
+file (mmwatchdog_checks/custom_*.yml) needs no edit there. The one line is
+safe only while every group name is a plain lower-case name that the regex
+matches, and while no other check-now option is allowed. So this test checks
+that the regex line is the only check-now line, that it allows nothing but
+the group name and --count-as-scheduled-run, and that every production check
+group's name matches it.
 
 The check-group files are MMX templates, so they are read as text: a check
 group is a key two spaces in, under check_groups:, including a group that
 only some servers get, inside a template's {{ if }}. A group whose name the
-template fills in fails the test, because sudoers_triage can list only
-fixed names.
+template fills in fails the test.
 
 Systems desks have no triage user. Their desk-only check file is excluded;
 the shared every_server.yml and all production check files remain covered.
@@ -37,8 +40,8 @@ CHECK_GROUP_FILES = sorted(path for path in glob.glob(os.path.join(TEMPLATE, "mm
                            if path != DESK_CHECK_GROUP_FILE)
 
 CHECK_GROUP_LINE = re.compile(r"^  ([^\s#][^:]*):\s*(#.*)?$")
-CHECK_NOW_LINE = re.compile(
-    r"^triage ALL=\(root\) NOPASSWD: /usr/local/bin/mmwatchdog check-now (\S+) --count-as-scheduled-run$"
+CHECK_NOW_REGEX_LINE = (
+    "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog ^check-now [a-z0-9_]+ --count-as-scheduled-run$"
 )
 PLAIN_NAME = re.compile(r"^[a-z0-9_]+$")
 
@@ -59,10 +62,31 @@ def check_groups_of(path):
     return names
 
 
-def check_now_groups():
-    """The check groups that sudoers_triage lets the triage user check now."""
+# Every non-comment line of sudoers_triage, in file order. A new sudo line
+# must be added here on purpose, so an extra one cannot slip in unnoticed.
+EXPECTED_RULE_LINES = [
+    "triage ALL=(root) NOPASSWD: /usr/bin/ss -tulpn",
+    "triage ALL=(root) NOPASSWD: /usr/bin/ss -tupn",
+    "triage ALL=(root) NOPASSWD: /usr/sbin/ufw status verbose",
+    "triage ALL=(root) NOPASSWD: /usr/bin/wg show",
+    "triage ALL=(root) NOPASSWD: /usr/bin/podman ps --all",
+    "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog status --json",
+    "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog events --json",
+    CHECK_NOW_REGEX_LINE,
+]
+
+
+def rule_lines():
+    """Every line of sudoers_triage that is not blank and not a comment."""
     with open(SUDOERS_TRIAGE) as file:
-        return [match.group(1) for match in map(CHECK_NOW_LINE.match, file.read().splitlines()) if match]
+        return [line for line in file.read().splitlines() if line.strip() and not line.lstrip().startswith("#")]
+
+
+def check_now_lines():
+    """Every line of sudoers_triage that allows mmwatchdog check-now."""
+    with open(SUDOERS_TRIAGE) as file:
+        return [line for line in file.read().splitlines()
+                if not line.startswith("#") and "mmwatchdog" in line and "check-now" in line]
 
 
 class TheTriageUsersCheckNowLines(unittest.TestCase):
@@ -81,17 +105,41 @@ class TheTriageUsersCheckNowLines(unittest.TestCase):
                 self.check_groups[name] = file_name
         self.assertTrue(self.check_groups, "found no file in mmwatchdog_checks/")
 
-    def test_every_check_group_has_its_check_now_line(self):
-        missing = [f"{name} (in {file_name})" for name, file_name in self.check_groups.items() if name not in check_now_groups()]
+    def test_one_regex_line_is_the_only_check_now_line(self):
         self.assertEqual(
-            missing, [],
-            "add to roles/every_server/files/sudoers_triage, for each: "
-            "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog check-now GROUP --count-as-scheduled-run",
+            check_now_lines(), [CHECK_NOW_REGEX_LINE],
+            "sudoers_triage allows check-now with exactly one regex line, and no per-group line",
         )
 
-    def test_every_check_now_line_names_a_check_group(self):
-        unknown = [name for name in check_now_groups() if name not in self.check_groups]
-        self.assertEqual(unknown, [], "these lines of sudoers_triage name no check group in mmwatchdog_checks/")
+    def test_the_rule_lines_are_exactly_the_expected_ones(self):
+        self.assertEqual(
+            rule_lines(), EXPECTED_RULE_LINES,
+            "sudoers_triage holds exactly these rules; change EXPECTED_RULE_LINES only after deciding "
+            "that the triage user may run a new command as root",
+        )
+
+    def regex_of_the_line(self):
+        """The argument regex that sudo reads in the line: from ^ to $."""
+        return re.compile(CHECK_NOW_REGEX_LINE[CHECK_NOW_REGEX_LINE.index("^check-now"):])
+
+    def test_every_check_group_name_matches_the_regex(self):
+        regex = self.regex_of_the_line()
+        for name, file_name in self.check_groups.items():
+            with self.subTest(check_group=name, file=file_name):
+                self.assertRegex(f"check-now {name} --count-as-scheduled-run", regex)
+
+    def test_the_regex_refuses_other_options_and_other_places(self):
+        regex = self.regex_of_the_line()
+        for refused in (
+            "check-now disks",
+            "check-now disks --without-daemon --count-as-scheduled-run",
+            "check-now disks --count-as-scheduled-run --config-dir /tmp/x",
+            "check-now ../disks --count-as-scheduled-run",
+            "check-now disks;id --count-as-scheduled-run",
+            "check-now Disks --count-as-scheduled-run",
+        ):
+            with self.subTest(arguments=refused):
+                self.assertIsNone(regex.match(refused))
 
 
 if __name__ == "__main__":
