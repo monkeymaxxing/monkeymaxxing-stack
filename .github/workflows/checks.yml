@@ -50,17 +50,37 @@ jobs:
           # The row-recovery tests run initdb and pg_ctl against two local clusters.
           ls -d /usr/lib/postgresql/*/bin | sort -V | tail -n 1 >> "$GITHUB_PATH"
       - name: Run every test in tests/
-        shell: bash
+        shell: python3 {0}
         run: |
-          failed=()
-          for test in tests/*_test.py; do
-            echo "::group::$test"
-            if ! python3 "$test"; then failed+=("$test"); fi
-            echo "::endgroup::"
-          done
-          if [ "${#failed[@]}" -gt 0 ]; then
-            printf 'Failed: %s\n' "${failed[@]}" >&2; exit 1
-          fi
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import glob, os, subprocess, sys, time
+
+          tests = sorted(glob.glob("tests/*_test.py"))
+          # Start the largest files first (longest suites alphabetically start
+          # with r) so no single slow file sits at the tail.
+          tests.sort(key=os.path.getsize, reverse=True)
+          workers = min(8, (os.cpu_count() or 4) + 2)
+
+          def run_one(path):
+              start = time.monotonic()
+              proc = subprocess.run([sys.executable, path], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+              return path, proc.returncode, time.monotonic() - start, proc.stdout
+
+          failed = []
+          with ThreadPoolExecutor(max_workers=workers) as pool:
+              for future in as_completed(pool.submit(run_one, path) for path in tests):
+                  path, code, elapsed, output = future.result()
+                  status = "OK" if code == 0 else f"FAILED (exit {code})"
+                  print(f"::group::{path} — {status} ({elapsed:.1f}s)", flush=True)
+                  if output:
+                      print(output, end="" if output.endswith("\n") else "\n", flush=True)
+                  print("::endgroup::", flush=True)
+                  if code != 0:
+                      failed.append(path)
+
+          if failed:
+              print("Failed:", " ".join(sorted(failed)), file=sys.stderr)
+              sys.exit(1)
       - name: Check set-up-outside-services with go vet, go test and gofmt
         working-directory: set_up_outside_services
         shell: bash
