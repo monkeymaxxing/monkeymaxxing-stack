@@ -835,9 +835,9 @@ vars:
       download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.1.3/mmwatchdog-0.1.3-linux-amd64.tar.gz
       sha256: "20f71ca17974e96fb7a04ba68ca82a1862b02df45cae7ed4fee5fe515b33c948"
     mmhotline:
-      version: "0.5.0"
-      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.5.0/mmhotline-0.5.0-linux-amd64.tar.gz
-      sha256: "4e819f8668bfad057bf289a91812d1506da8a0b0699401c7f8b213e14b344121"
+      version: "0.6.0"
+      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.6.0/mmhotline-0.6.0-linux-amd64.tar.gz
+      sha256: "00d82c3f37715690f246584893b09d457b9278103e1e0d0e84fc1030d161cfea"
     # The Stack's command for the account and secret setup on the systems
     # desk (initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
     # Its release is the Stack version's, built reproducibly by the Stack
