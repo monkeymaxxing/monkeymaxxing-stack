@@ -557,6 +557,7 @@ operating procedure.
 | The team wants to try each release on a test server before production, or no longer wants one | [Add staging01](operating_procedures/add_staging01.md) |
 | A deploy lacks memory for the live and new releases together | [Memory for both releases](operating_procedures/deploy_and_roll_back_an_app_release.md#memory-for-both-releases) |
 | An existing app and its database move into the Stack | [Move a database into the Stack](operating_procedures/move_a_database_into_the_stack.md) |
+| An app on Monkeymaxxing Solo's `solo01` moves onto the Stack | [Upgrade from Monkeymaxxing Solo](operating_procedures/upgrade_from_monkeymaxxing_solo.md) |
 | The first paying customers arrive, or reads need a replica | [Add a second database server](operating_procedures/add_a_second_database_server.md) |
 | Postgres warns about the number of connections | [Add PgBouncer](operating_procedures/add_pgbouncer.md) |
 | Jobs compete with requests for app-server CPU | [Add jobs servers](operating_procedures/add_jobs_servers.md) |
