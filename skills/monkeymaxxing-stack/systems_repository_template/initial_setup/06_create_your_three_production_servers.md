@@ -373,8 +373,9 @@ a minute. The deploy checks first, before changing anything, that
 `app001` has enough memory ([deploy_and_roll_back_an_app_release.md](../operating_procedures/deploy_and_roll_back_an_app_release.md#memory-for-both-releases), "Memory for both
 releases").
 For how many apps of each framework fit on one app server, by
-measured memory, see "How many apps fit on an app server" in the stack
-repository's `docs/app-frameworks/README.md`.
+measured memory, see "How many apps fit on an app server" in
+[`frameworks/README.md`](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/README.md) of
+monkeymaxxing-recipes.
 
 **The drill's cost has a ceiling, with exceptions.** A drill stops after
 `restore_drill_time_limit_hours`, six in the template. Provider cleanup

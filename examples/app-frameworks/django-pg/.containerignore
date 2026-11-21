@@ -1,6 +1,0 @@
-tests
-.git
-.lead
-__pycache__
-staticfiles
-.venv

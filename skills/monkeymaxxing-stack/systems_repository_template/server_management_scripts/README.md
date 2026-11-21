@@ -124,7 +124,11 @@ commands for a person.
 ## Write the team's provider scripts
 
 Read the provider's guide in [provider_guides/](../provider_guides/) first;
-each provider that setup offers has one. Without a guide, read the
+each provider that setup offers has one. Hetzner Cloud and OVHcloud ship with
+this repository; the others (DigitalOcean, Vultr, Scaleway, AWS EC2, Google
+Compute Engine) are in the `providers/` folder of
+[monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main/providers), and the setup copies the chosen
+guide into `provider_guides/`. Without a guide, read the
 provider's current API or command-line documentation. Write Bash scripts
 the way the guide says. Most guides give the five scripts whole, with
 `curl` and `jq` and the guide's request function: copy them, with the

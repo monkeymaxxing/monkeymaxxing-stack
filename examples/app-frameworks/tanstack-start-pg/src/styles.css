@@ -1,4 +1,0 @@
-body { font: 17px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 54rem; padding: 0 1rem; color: #19332b; background: #f5f6ef; }
-section { margin: 1.5rem 0; padding: 1rem; background: white; border: 1px solid #ccd9d0; border-radius: .5rem; }
-label { display: block; margin: .5rem 0; } input, textarea, button { font: inherit; padding: .4rem; max-width: 100%; }
-button { cursor: pointer; } .actions { display: flex; flex-wrap: wrap; gap: .5rem; } pre { white-space: pre-wrap; } [role="status"] { min-height: 2rem; }

@@ -67,12 +67,8 @@ monkeymaxxing-stack/
     files_for_your_app/                   what the team's apps take from the stack, into their own repositories
       database_driver_finds_the_primary.md   how an app in each language follows a database failover
       node/                               the files a Node.js app copies to follow a database failover, the switchover check, and the files' tests
-  examples/app-frameworks/                independent apps a team can copy, with tests and pinned build inputs
-  docs/app-frameworks/                    each framework's Stack integration guide and test-record links
   reference_app/                          the app the stack's tests and courses deploy
   set_up_outside_services/                the Go command the person runs on a systems desk for the account and secret setup, with its tests and release build
-  examples/app-platform-migrations/       standalone application files and migration rehearsal checks
-  docs/app-platform-migrations/           migration guides with variances, export steps, and test boundaries
   tests/run_mmx_on_util01_test.py        the helper that runs MMX on util01, with fake external commands
   tests/sudoers_triage_test.py            that the triage user may confirm a fix of every MMWatchdog check group
   tests/custom_extensions_test.py         that a custom MMWatchdog check file is rendered, installed and kept by every role, and that a bad file name is refused
@@ -111,18 +107,21 @@ The reference app's [README](../reference_app/README.md) gives the
 reference app's values for `apps.<app>` in the project settings, including
 its `restore_drill_check_queries`.
 
-The framework examples sit outside the skill because a team copies an app into
+The framework examples sit outside the skill, in the separate
+[monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes)
+repository, because a team copies an app into
 its own app repository. Each framework directory carries its own migrations,
 templates, dependencies, container recipe, HTTP check, and test record. Independent
 copies keep each build context complete. The Go and Rust SQL starts with the same
 schema, but neither app needs files from the other app. The guides under
-`docs/app-frameworks/` explain additional-app settings and native database
+[`frameworks/`](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main/frameworks)
+in monkeymaxxing-recipes explain additional-app settings and native database
 reconnection. A recorded isolated service test is distinct from a live Stack proof.
 
 Migration examples also live outside the skill because an application owns
 its code and exported data. Each example provides copied application files,
 a guide, and a versioned test record. The
-[Railway guide](app-platform-migrations/from-railway.md) separates read-only
+[Railway guide](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-railway.md) separates read-only
 export and standalone rehearsal from production cutover. Export archives,
 credentials, password hashes, and private documents stay outside Git.
 An independent replay checks that the guide needs no hidden setup knowledge.
@@ -162,15 +161,17 @@ the clone's commit.
 
 ## Framework examples
 
-`examples/app-frameworks/<name>/` holds an independent app a team can copy into
-its app repository. Each app carries source, templates, assets, dependency locks,
+The separate [monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes)
+repository holds the framework examples and guides: `frameworks/<name>/` holds an
+independent app a team can copy into its app repository. Reason: the guides track
+frameworks that change faster than the Stack's tested core, and the Stack and Solo share them. Each app carries source, templates, assets, dependency locks,
 migrations, runtime commands, a Containerfile, synthetic staging data, tests and
 a test record. No app needs sibling examples or systems template files at build
 or runtime. App code belongs in the team's app repository, so examples stay
 outside the skill and systems repository template. The infrastructure reference
 app remains separate.
 
-The [framework index](app-frameworks/README.md) links every integration guide
+The [framework index](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/README.md) links every integration guide
 and compares recorded results. Each guide explains framework differences,
 copying, building, deployment, recovery and additional-app settings on a running
 Stack system. FastAPI and Express also carry design notes in the app directories.
@@ -192,7 +193,7 @@ Web, migrations, the test-data seed (`seed-test-data`, for laptops and
 staging) and workers have separate commands.
 The guides explain worker counts, query deadlines and graceful request draining.
 
-- [Laravel, Livewire and Eloquent](app-frameworks/laravel-livewire-eloquent.md):
+- [Laravel, Livewire and Eloquent](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/laravel-livewire-eloquent.md):
   Eloquent owns accounts, records, document metadata and report jobs. Livewire
   owns the interactive records screen. PostgreSQL stores shared web sessions.
   A small transactional job table replaces Laravel's database queue because
@@ -204,20 +205,20 @@ The guides explain worker counts, query deadlines and graceful request draining.
   `PORT` sets the only listening port,
   and `WEB_CONCURRENCY` sets PHP threads. Classic request mode and disconnecting
   between jobs let later work open a new connection.
-- [Rails](app-frameworks/rails-pg.md): Active Record uses libpq-parsed settings,
+- [Rails](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/rails-pg.md): Active Record uses libpq-parsed settings,
   Puma runs web workers, Propshaft builds assets, and PostgreSQL row locks
   protect report transactions. Primary reads keep shared sessions and recent
   writes current.
-- [Django](app-frameworks/django-pg.md): native auth and database sessions use
+- [Django](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/django-pg.md): native auth and database sessions use
   psycopg settings. Gunicorn runs workers, WhiteNoise serves `collectstatic`
   assets, and PostgreSQL row locks protect report transactions.
-- [SvelteKit](app-frameworks/sveltekit-pg.md) and [Nuxt](app-frameworks/nuxt-pg.md):
+- [SvelteKit](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/sveltekit-pg.md) and [Nuxt](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/nuxt-pg.md):
   SvelteKit uses adapter-node. Nuxt uses Nitro's node-server preset. Each
   framework owns pages, routes and Node output. Each app uses `pg` and the
   unchanged Stack multi-host helper. PostgreSQL owns sessions, ownership and
   job state. A Node cluster launcher maps `WEB_CONCURRENCY` to processes
   sharing `PORT`.
-- [FastAPI](app-frameworks/fastapi-pg.md) and [Express](app-frameworks/express-pg.md):
+- [FastAPI](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/fastapi-pg.md) and [Express](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/express-pg.md):
   FastAPI passes the unchanged URL to psycopg/libpq. Express copies the Stack's
   `pg` helper unchanged. PostgreSQL stores hashed, revocable session tokens.
   Gunicorn/Uvicorn and Node cluster honor worker counts,
@@ -233,10 +234,11 @@ The guides explain worker counts, query deadlines and graceful request draining.
 
 ## App platform migrations
 
-`examples/app-platform-migrations/` holds complete destination apps and
-commands to transfer protected data that a team can copy. App code and exported data
+The separate [monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes)
+repository holds the migration guides, and `migrations/<name>/` there holds complete
+destination apps and commands to transfer protected data that a team can copy. App code and exported data
 belong to the application, so migration examples stay outside the skill.
-The [migration index](app-platform-migrations/README.md) links export,
+The [migration index](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/README.md) links export,
 rehearsal, cutover and cleanup guides, plus feasibility assessments.
 Each destination app carries a versioned test record and checks on a disposable copy.
 An independent replay checks that a guide needs no hidden setup knowledge.
@@ -252,19 +254,19 @@ A standalone rehearsal does not prove production routing, real object-provider
 permissions, database failover or full Stack backup recovery. Final cutover
 requires paused source writes and exactly one job execution location.
 
-- [Replit](app-platform-migrations/from-replit.md): preserve the PostgreSQL
+- [Replit](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-replit.md): preserve the PostgreSQL
   schema, stable UUIDs, bcrypt verifiers, sessions, queue and schedule state.
   Keeping the schema avoids unnecessary ownership and identity translation.
   S3 API calls replace App Storage, and the destination uses the unchanged
   Stack Node database helper. Web, ordered migrations and background jobs use
   separate commands. A native read-only database snapshot and separate object
   export preserve the source for rehearsal.
-- [Fly.io](app-platform-migrations/from-fly.md): preserve application-owned
+- [Fly.io](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-fly.md): preserve application-owned
   authentication, the PostgreSQL schema, stable owner IDs and object keys to
   reduce translation risks. The copied Node database module uses the unchanged
   Stack helper so new connections find the writable primary.
-- [Firebase](app-platform-migrations/from-firebase.md): the
-  [destination](../examples/app-platform-migrations/from-firebase/README.md)
+- [Firebase](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-firebase.md): the
+  [destination](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-firebase/README.md)
   replaces accounts, owned records, private files, reports and a scheduled
   task with PostgreSQL 17 and private S3-compatible storage. No Firebase
   service remains at runtime.
@@ -287,7 +289,7 @@ requires paused source writes and exactly one job execution location.
   Job locks, output and completion share a transaction.
   Daily task occurrences and the next due time also commit together. A source
   export, independent restore and fresh replay establish phase 1.
-- [Heroku](app-platform-migrations/from-heroku.md): the portable portal uses
+- [Heroku](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-heroku.md): the portable portal uses
   application-owned bcrypt accounts, PostgreSQL records and queues, separate
   S3-compatible files and a code-defined clock process. Preserve the schema and
   migration checksums instead of translating rows into another reference
@@ -299,11 +301,11 @@ requires paused source writes and exactly one job execution location.
   link, queued and completed job, schedule receipt and current object.
   Heroku-owned database diagnostics stay outside the application schema and
   never become destination dependencies. A PostgreSQL 18-to-17 claim requires
-  an actual restore. The [example README](../examples/app-platform-migrations/from-heroku/README.md)
+  an actual restore. The [example README](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-heroku/README.md)
   holds acceptance contracts. Remove source services and objects only after
   protected export and fresh-agent replay pass.
-- [Netlify](app-platform-migrations/from-netlify.md): the
-  [example](../examples/app-platform-migrations/from-netlify/README.md)
+- [Netlify](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-netlify.md): the
+  [example](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-netlify/README.md)
   preserves native account IDs, emails, ownership, records, private bytes and
   queued work. Native Identity verifier export is not a normal customer route,
   so imported accounts require a password reset. Expiring one-time tokens let
@@ -2094,10 +2096,13 @@ groups:
   reads: the caller knows whether "gone" is fine. Where the provider has
   only a stop that shuts the operating system down (OVHcloud, and Vultr's
   halt until an abrupt cut is confirmed), the script uses that stop; the
-  guide says so. The DigitalOcean, Vultr, Scaleway and OVHcloud guides
-  give the five scripts whole, and `tests/*_provider_scripts_test.py` run
-  them against a stand-in of each provider's API; the other guides name the
-  command and the permission `util01` needs.
+  guide says so. The OVHcloud guide gives the five scripts whole, and
+  `tests/ovhcloud_provider_scripts_test.py` runs them against a stand-in of
+  the provider's API. The guides for DigitalOcean, Vultr, Scaleway, AWS EC2
+  and Google Compute Engine live in
+  [monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main/providers)
+  under `providers/`, give the five scripts whole too, and carry their own
+  `*_provider_scripts_test.py` tests there.
 
 ## The project settings
 

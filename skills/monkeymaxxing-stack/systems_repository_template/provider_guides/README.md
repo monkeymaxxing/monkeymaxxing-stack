@@ -15,12 +15,24 @@ AWS EC2, whose APIs need each request signed, and Google Compute Engine, whose A
 made from a key, signs the request:
 
 - [Hetzner Cloud](hetzner_cloud.md)
-- [DigitalOcean](digitalocean.md)
 - [OVHcloud Public Cloud](ovhcloud_public_cloud.md)
-- [Vultr](vultr.md)
-- [Scaleway](scaleway.md)
-- [AWS EC2](aws_ec2.md)
-- [Google Compute Engine](google_compute_engine.md)
+- [DigitalOcean](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/digitalocean.md)
+- [Vultr](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/vultr.md)
+- [Scaleway](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/scaleway.md)
+- [AWS EC2](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/aws-ec2.md)
+- [Google Compute Engine](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/google-compute-engine.md)
+
+The first two guides are in this folder. The other five are in the
+`providers/` folder of
+[monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main/providers),
+the shared cookbook, with their script tests. Reason: those five are not
+re-tested with each Stack release, so they live where the Stack and Solo
+can share them. When the person picks one, read it as
+[Using a recipe](../AGENTS.md#using-a-recipe) says (a pinned commit, never
+`main`), copy it into this folder as `<provider>.md`, and use it as you use the
+guides above. Once copied here, any link inside it that points to a Stack
+template file refers to the matching file in this repository. The script tests
+there prove the five scripts against a stand-in of the provider's API.
 
 Not tested:
 

@@ -73,8 +73,9 @@ the person's. Then you push the changes and watch the first build.
      `mmx_project_settings.yml`;
    - the app's database pool size, set explicitly under `env`
      rather than left to the framework's default, so the app's Postgres
-     connections are known. Each framework guide in the stack repository's
-     `docs/app-frameworks/`, under "Set the database connection budget",
+     connections are known. Each framework guide in the `frameworks/` folder of
+     [monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main/frameworks) (read at a pinned commit,
+     as [Using a recipe](../AGENTS.md#using-a-recipe) says), under "Set the database connection budget",
      names the setting. Count every app's connections, as
      [Add an app server](../operating_procedures/add_an_app_server.md)
      describes before adding a server, and keep the total under 70, the
@@ -84,7 +85,7 @@ the person's. Then you push the changes and watch the first build.
      disk, such as Rails' `tmp/` and `storage/`, or Laravel's compiled views
      in `/app/storage/framework/views`, fails at the first deploy with
      "read-only file system". Find where the app writes scratch files
-     (the framework guide in `docs/app-frameworks/` names them) and list
+     (the framework guide in monkeymaxxing-recipes' `frameworks/` names them) and list
      each directory. Each becomes a memory-backed directory, empty at every
      start, so list no directory that holds data that must last. Leave the
      key out when the app writes nowhere else;

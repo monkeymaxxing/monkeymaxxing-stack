@@ -73,12 +73,15 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
   the coding agent can use the rescue system instead. The provider guide's
   section "Console and rescue access" says which:
   [Hetzner Cloud](../provider_guides/hetzner_cloud.md#console-and-rescue-access),
-  [DigitalOcean](../provider_guides/digitalocean.md#console-and-rescue-access),
-  [Vultr](../provider_guides/vultr.md#console-and-rescue-access),
-  [Scaleway](../provider_guides/scaleway.md#console-and-rescue-access),
+  [DigitalOcean](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/digitalocean.md#console-and-rescue-access),
+  [Vultr](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/vultr.md#console-and-rescue-access),
+  [Scaleway](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/scaleway.md#console-and-rescue-access),
   [OVHcloud](../provider_guides/ovhcloud_public_cloud.md#console-and-rescue-access),
-  [AWS EC2](../provider_guides/aws_ec2.md#console-and-rescue-access),
-  [Google Compute Engine](../provider_guides/google_compute_engine.md#console-and-rescue-access).
+  [AWS EC2](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/aws-ec2.md#console-and-rescue-access),
+  [Google Compute Engine](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/providers/google-compute-engine.md#console-and-rescue-access).
+  The guides for the five providers other than Hetzner Cloud and OVHcloud
+  are in monkeymaxxing-recipes; the team's copy, if it made one, is in
+  `provider_guides/`.
 
 ## 0. Check the desk first
 

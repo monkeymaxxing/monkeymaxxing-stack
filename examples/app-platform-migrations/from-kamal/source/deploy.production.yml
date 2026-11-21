@@ -1,4 +1,0 @@
-# Destination-specific settings are merged with deploy.yml by `-d production`.
-env:
-  clear:
-    APP_ORIGIN: <%= ENV.fetch("SOURCE_APP_ORIGIN", "https://portal.example.com") %>

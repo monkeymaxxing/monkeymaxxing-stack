@@ -64,9 +64,9 @@ each term.
      Leave `sslmode` out of the app's settings, or use `prefer`.
    - Each framework's own PgBouncer settings, such as where its timeouts
      go and which prepared-statement setting it needs, are in the
-     "PgBouncer settings needed" column of the stack repository's
-     `docs/app-frameworks/README.md`, with the details in that
-     framework's guide.
+     "PgBouncer settings needed" column of
+     [`frameworks/README.md`](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/README.md) in
+     monkeymaxxing-recipes, with the details in that framework's guide.
 
    A fix goes to the app's repository as a change the person reviews, and the fixed release must be deployed before step 3 sends the apps through PgBouncer.
 

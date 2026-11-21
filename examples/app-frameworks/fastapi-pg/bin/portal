@@ -1,8 +1,0 @@
-#!/bin/sh
-set -eu
-cd "$(dirname "$0")/.."
-case "${1:-}" in
- web) exec gunicorn --config gunicorn.conf.py app:app ;;
- migrate|jobs|seed-test-data) exec python manage.py "$@" ;;
- *) echo 'Usage: bin/portal web|migrate|jobs|seed-test-data' >&2; exit 2 ;;
-esac

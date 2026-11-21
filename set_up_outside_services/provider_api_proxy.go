@@ -128,7 +128,7 @@ var requestSigningMethods = map[string]requestSigningMethod{
 		apiAddress:          regexp.MustCompile(`^https://ec2\.[a-z]{2}(-[a-z]+)+-[0-9]+\.amazonaws\.com/$`),
 		apiAddressesInWords: "https://ec2.REGION.amazonaws.com/, with the region of the servers, such as https://ec2.eu-north-1.amazonaws.com/",
 		newSigner:           newAWSSigner,
-		util01TokenPage:     "https://console.aws.amazon.com/iam/home#/users, the user util01-restore-drill that provider_guides/aws_ec2.md, \"util01's credential\", describes, Security credentials, Create access key (Command Line Interface)",
+		util01TokenPage:     "https://console.aws.amazon.com/iam/home#/users, the user util01-restore-drill that the AWS EC2 guide (monkeymaxxing-recipes, providers/aws-ec2.md), \"util01's credential\", describes, Security credentials, Create access key (Command Line Interface)",
 		readRefusal:         readAWSRefusal,
 	},
 	"google_cloud_service_account_tokens": {
@@ -140,7 +140,7 @@ var requestSigningMethods = map[string]requestSigningMethod{
 		// The public price catalog, for the price request.
 		otherAPIs:       map[string]string{"cloudbilling": "https://cloudbilling.googleapis.com/"},
 		newSigner:       newGoogleTokenSigner,
-		util01TokenPage: "Cloud Shell, with the commands of provider_guides/google_compute_engine.md, \"util01's credential\"; then cat util01-restore-drill.json there",
+		util01TokenPage: "Cloud Shell, with the commands of the Google Compute Engine guide (monkeymaxxing-recipes, providers/google-compute-engine.md), \"util01's credential\"; then cat util01-restore-drill.json there",
 		readRefusal:     readGoogleRefusal,
 	},
 }

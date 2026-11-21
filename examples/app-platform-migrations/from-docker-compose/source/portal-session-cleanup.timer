@@ -1,7 +1,0 @@
-[Unit]
-Description=Run portal session cleanup hourly
-[Timer]
-OnCalendar=hourly
-Persistent=true
-[Install]
-WantedBy=timers.target

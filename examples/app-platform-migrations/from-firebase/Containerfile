@@ -1,8 +1,0 @@
-FROM docker.io/library/node:24.22.1-alpine
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund && mkdir /app/assets
-COPY --chown=node:node . .
-USER node
-EXPOSE 8001
-CMD ["node", "web.mjs"]

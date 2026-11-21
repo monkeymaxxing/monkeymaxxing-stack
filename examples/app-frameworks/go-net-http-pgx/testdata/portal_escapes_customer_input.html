@@ -1,8 +1,0 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>Your customer portal</title>
-<h1>Your records</h1><form method="post" action="/logout"><button>Log out</button></form>
-<ul><li><form method="post" action="/records/1/update"><label>Title <input name="title" value="&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;" maxlength="200" required></label><label>Description <textarea name="description">&lt;/textarea&gt;&lt;script&gt;alert(2)&lt;/script&gt;</textarea></label><button>Save</button></form><form method="post" action="/records/1/delete"><button>Delete &#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;</button></form></li></ul>
-<h2>Add a record</h2><form method="post" action="/records"><label>Title <input name="title" maxlength="200" required></label><label>Description <textarea name="description"></textarea></label><button>Add record</button></form>
-<h2>Upload a private document</h2><form method="post" action="/documents" enctype="multipart/form-data"><label>File, up to 5 MiB <input name="file" type="file" required></label><button>Upload</button></form>
-<ul><li><a href="/documents/2">Download &lt;img src=x onerror=alert(3)&gt;.pdf</a></li></ul>
-<h2>Reports</h2><form method="post" action="/reports"><button>Request record-count report</button></form>
-<ul><li>Report 5: <pre>&lt;/pre&gt;&lt;script&gt;alert(4)&lt;/script&gt;</pre></li></ul></html>

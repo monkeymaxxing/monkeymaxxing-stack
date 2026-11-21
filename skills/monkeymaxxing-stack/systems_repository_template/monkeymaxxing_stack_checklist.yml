@@ -202,7 +202,7 @@ apps:
       # shop must serve every file in its asset_directory, the previous
       # release's files included, not only the files its own build lists.
       # TanStack Start, SvelteKit, and Nuxt need a change for this; the
-      # stack repository's docs/app-frameworks/ guides give the fix.
+      # monkeymaxxing-recipes' frameworks/ guides give the fix.
       - id: shop_deploys_without_dropping_requests
         title: shop deploys without dropping requests
         state: open

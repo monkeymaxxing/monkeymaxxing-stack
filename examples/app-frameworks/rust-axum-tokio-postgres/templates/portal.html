@@ -1,8 +1,0 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>Your customer portal</title>
-<h1>Your records</h1><form method="post" action="/logout"><button>Log out</button></form>
-<ul>{% for record in records %}<li><form method="post" action="/records/{{record.id}}/update"><label>Title <input name="title" value="{{record.title}}" maxlength="200" required></label><label>Description <textarea name="description">{{record.description}}</textarea></label><button>Save</button></form><form method="post" action="/records/{{record.id}}/delete"><button>Delete {{record.title}}</button></form></li>{% else %}<li>No records yet.</li>{% endfor %}</ul>
-<h2>Add a record</h2><form method="post" action="/records"><label>Title <input name="title" maxlength="200" required></label><label>Description <textarea name="description"></textarea></label><button>Add record</button></form>
-<h2>Upload a private document</h2><form method="post" action="/documents" enctype="multipart/form-data"><label>File, up to 5 MiB <input name="file" type="file" required></label><button>Upload</button></form>
-<ul>{% for document in documents %}<li><a href="/documents/{{document.id}}">Download {{document.file_name}}</a></li>{% else %}<li>No documents yet.</li>{% endfor %}</ul>
-<h2>Reports</h2><form method="post" action="/reports"><button>Request record-count report</button></form>
-<ul>{% for report in reports %}<li>Report {{report.id}}: <pre>{{report.output}}</pre></li>{% else %}<li>No reports yet.</li>{% endfor %}</ul></html>

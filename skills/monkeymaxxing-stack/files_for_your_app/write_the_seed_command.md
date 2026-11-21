@@ -145,8 +145,9 @@ Each generated customer gets one order. Running the seed command again
 with the same `N` adds nothing. A larger `N` adds only the missing rows.
 With 200,000 orders, the two statements took a few seconds.
 
-For complete working seed commands, see the Stack repository's example
-apps, in `examples/app-frameworks/` and `examples/app-platform-migrations/`.
+For complete working seed commands, see the example apps in the
+[monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main) repository, in `frameworks/` and
+`migrations/`.
 Each example's `seed-test-data` command and its test follow this page.
 
 ## Seed tools by framework

@@ -1,4 +1,0 @@
-release: node migrate.mjs
-web: node web.mjs
-worker: node jobs.mjs
-clock: node clock.mjs

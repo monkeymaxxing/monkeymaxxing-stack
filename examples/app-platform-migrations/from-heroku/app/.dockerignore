@@ -1,6 +1,0 @@
-node_modules
-secrets
-*.env
-*.dump
-*.log
-tests

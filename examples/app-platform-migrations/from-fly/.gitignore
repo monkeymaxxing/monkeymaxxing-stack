@@ -1,9 +1,0 @@
-node_modules/
-exports/
-export/
-secrets/
-.env
-.env.*
-*.env
-*.dump
-*.tar.gz

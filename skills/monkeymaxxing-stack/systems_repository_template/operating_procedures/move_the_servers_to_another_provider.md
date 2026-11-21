@@ -33,7 +33,11 @@ settings, and do the replacements. Only a person:
 
 1. **Prepare access if the new provider is another company.**
    For a move between locations at the current provider, continue with step 2.
-   Read the new provider's [Stack guide](../provider_guides/), or the new
+   Read the new provider's [Stack guide](../provider_guides/) (Hetzner Cloud and
+   OVHcloud), or its guide in the `providers/` folder of
+   [monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main/providers) (DigitalOcean, Vultr,
+   Scaleway, AWS EC2, Google Compute Engine; fetch it as
+   [Using a recipe](../AGENTS.md#using-a-recipe) says), or the new
    provider's documentation when no guide exists. Write the create,
    destroy, and list scripts as the guide says: with the provider's own
    command-line tool, or with the guide's request function.

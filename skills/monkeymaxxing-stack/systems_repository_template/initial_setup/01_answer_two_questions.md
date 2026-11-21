@@ -102,6 +102,13 @@ answers.
    **Check:** you recorded the domain.
 
 2. **The server provider.** Read the [provider guides](../provider_guides/README.md).
+   This repository has the guides for Hetzner Cloud and OVHcloud. The guides
+   for the other providers (DigitalOcean, Vultr, Scaleway, AWS EC2, Google
+   Compute Engine) are in the `providers/` folder of
+   [monkeymaxxing-recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/tree/main/providers).
+   When the person picks one of those, follow
+   [Using a recipe](../AGENTS.md#using-a-recipe) to read its guide at a
+   pinned commit, and copy it into `provider_guides/` in this repository.
 
    **Recommend by where the person is,** from the laptop's time zone
    (`readlink /etc/localtime`, as step 3 reads it; the person can change
@@ -142,7 +149,8 @@ answers.
    is cheap and simple, and it has bigger servers in Europe for when your
    app grows." and "Other choices:  OVHcloud, DigitalOcean, ...".
 
-   **Check:** you recorded the provider, and read its guide.
+   **Check:** you recorded the provider, and read its guide (for a provider
+   outside this repository, its guide from monkeymaxxing-recipes).
 
 3. **The defaults, on one screen.** Work out each value, then show the
    screen.

@@ -69,9 +69,10 @@ day with the whole system and understands it.
 Your team owns every account, every server, and all the data.
 
 To see the Stack at work, the
-[app framework examples](docs/app-frameworks/README.md) are working apps
-made for the Stack, in Rails, Django, Laravel, Next.js, Go, and other
-frameworks. Each example has a guide and a test record.
+[app framework examples](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/README.md) in
+[Monkeymaxxing Recipes](https://github.com/monkeymaxxing/monkeymaxxing-recipes)
+are working apps made for the Stack, in Rails, Django, Laravel, Next.js, Go,
+and other frameworks. Each example has a guide and a test record.
 
 ## The Monkeymaxxing tools
 
@@ -164,8 +165,8 @@ without a cluster to operate: the servers are plain [Debian](https://www.debian.
 coding agent follows a tested procedure for each job.
 
 If your app runs on Kubernetes now, the guide
-[Move from Kubernetes](docs/app-platform-migrations/from-kubernetes.md) has
-the steps.
+[Move from Kubernetes](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/from-kubernetes.md) in Monkeymaxxing
+Recipes has the steps.
 
 ### If you use a hosting platform
 
@@ -190,8 +191,8 @@ better in three ways:
   have proof that they restore. The alerting, the on-call schedule, and the
   security in the list above are part of the system, not extra products.
 
-The [app platform migration guides](docs/app-platform-migrations/README.md)
-have the steps for a move from Heroku, Railway, Replit, Vercel, Render,
+The [app platform migration guides](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/README.md)
+in Monkeymaxxing Recipes have the steps for a move from Heroku, Railway, Replit, Vercel, Render,
 Fly.io, and other platforms.
 
 ## One shape, from three servers to thousands
@@ -566,8 +567,8 @@ in Codex.
 | [A running Stack system, day to day](docs/day-to-day-operation.md) | What happens when a server fails, what an intruder can reach, how you hear about a problem, how a release goes live, and how the system grows |
 | [The setup's instructions](skills/monkeymaxxing-stack/systems_repository_template/initial_setup) | Exactly what your coding agent does in each part of the setup |
 | [The operating procedures](skills/monkeymaxxing-stack/systems_repository_template/operating_procedures) | The tested steps for every later job, such as replacing a server |
-| [App framework examples](docs/app-frameworks/README.md) | How an app in your framework fits the Stack, with a working example |
-| [App platform migration guides](docs/app-platform-migrations/README.md) | How to move from the platform that you use now |
+| [App framework examples](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/frameworks/README.md) (Monkeymaxxing Recipes) | How an app in your framework fits the Stack, with a working example |
+| [App platform migration guides](https://github.com/monkeymaxxing/monkeymaxxing-recipes/blob/main/migrations/README.md) (Monkeymaxxing Recipes) | How to move from the platform that you use now |
 | [The design](docs/design.md) | The reason for each of the Stack's decisions, in full |
 
 ## Contributing

@@ -1,8 +1,0 @@
-FROM docker.io/library/python:3.13-slim-trixie@sha256:aaf08c5490d52cd92bc27142a5215b1e47355a5eaf9adfad2a0fbc022d0b5490
-WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-RUN SECRET_KEY=build-only-not-a-runtime-key APP_ORIGIN=https://portal.example.com python manage.py collectstatic --noinput && useradd --uid 1000 --create-home portal && chown -R portal:portal /app
-USER portal
-CMD ["bin/portal", "web"]

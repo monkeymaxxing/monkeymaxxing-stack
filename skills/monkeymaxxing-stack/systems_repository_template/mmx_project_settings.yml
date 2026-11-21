@@ -558,7 +558,8 @@ vars:
 
   # The coding agent reaches the provider's API at 127.0.0.1:8081 on the
   # desk, which sends each request here. Use the chosen provider guide's
-  # API URL, with its trailing slash. Cloudflare has its own fixed API URL
+  # API URL, with its trailing slash. Guides for providers other than
+  # Hetzner Cloud and OVHcloud are in monkeymaxxing-recipes, providers/. Cloudflare has its own fixed API URL
   # on 127.0.0.1:8082.
   systems_desk_provider_api_url: https://api.hetzner.cloud/v1/
   # How the desk adds the person's provider credential to each request, as
