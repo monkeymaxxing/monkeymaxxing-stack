@@ -117,11 +117,12 @@ check_groups:
           file_age_days: 8
         alert_severity: warn
 
-  # New releases of the programs pinned in stack_software
-  # (mmx_project_settings.yml), without a coding agent: one check per pinned
-  # program that util01's settings install, written from stack_software
-  # below, compares the pin with the newest release at the program's release
-  # source, GitHub's releases/latest, taken from the pin's download_url.
+  # New releases of the third-party programs pinned in stack_software
+  # (mmx_project_settings.yml), and of the Stack itself, without a coding
+  # agent: one check per such program that util01's settings install,
+  # written from stack_software below, compares the pin with the newest
+  # release at the program's release source, GitHub's releases/latest,
+  # taken from the pin's download_url.
   # releases/latest leaves out pre-releases and drafts, so a pre-release
   # never warns; a program pinned at a pre-release warns when the release
   # it leads to is out. The triage agent starts only for a warning, and
@@ -130,10 +131,18 @@ check_groups:
   # Caddy, update themselves and need no check. A pin whose download_url is
   # not a GitHub release gets no check; the comment below names it, and the
   # scheduled software review covers it when the team turns the review on.
+  # mmx, mmwatchdog and mmhotline get no check: a team gets a newer release
+  # of them through a Stack release, and the Stack's own check,
+  # stack_version_is_the_newest_release (the set_up_outside_services pin
+  # is the Stack's version), tells the team that one is out. Reason: a
+  # warning minutes after a Stack release, because a program came out an
+  # hour later, is a weird thing to send people (owner, 2026-11-23); a
+  # release is no outage and nothing to wake anyone for.
   # codex gets no check: the team moves its pin when it wants a newer
   # model, and a newer Codex alone is nothing a person acts on (Codex
   # releases several times a week; a team's real setup got a warning
-  # minutes after setup, 2026-11-23). rclone is checked only while
+  # minutes after setup, 2026-11-23). doubleshell runs on laptops and gets
+  # none. rclone is checked only while
   # backups.uploads_backup_runs_on names util01, because only then does the
   # system install the program.
   #
@@ -154,16 +163,17 @@ check_groups:
   # check_every 1h by default. Reason: a release an hour late changes
   # nothing. GitHub allows 60 requests an hour from one address without a
   # sign-in; each program costs 2 requests an hour (its check and
-  # release_sources_answer), so the template's 6 checked programs make 12
-  # requests an hour, 48 under the limit; when every request fails and is
-  # tried 3 times, 36. Each further pinned
+  # release_sources_answer), so the template's 3 checked programs (the
+  # Stack, litestream, rclone) make 6 requests an hour, 54 under the
+  # limit; when every request fails and is tried 3 times, 18. Each further pinned
   # program adds 2, or 6 when every request fails.
   # time_limit_per_run 5m: release_sources_answer asks every source in turn,
   # at most 40 seconds each.
   # alert_after_failing_for 0s for a newer release: the release is there
   # until the pin moves, so waiting adds nothing.
-  # Reason for warn: a new release is no outage; the triage agent's report
-  # raises a release that fixes a flaw attackers exploit now to sos.
+  # Reason for warn: a new release is no outage; the check only starts the
+  # triage agent, whose report goes to a phone as sos only for a flaw
+  # attackers exploit now.
 {{- define "ask_for_the_newest_release" }}
             # ask_for_the_newest_release OWNER/REPO: sets newest_tag and
             # release_page and returns 0 when the source answered, or sets
@@ -207,7 +217,7 @@ check_groups:
 {{- $checked_programs := dict }}
 {{- range $program, $release := .inputs.stack_software }}
 {{- $installed := true }}
-{{- if eq $program "codex" }}{{ $installed = false }}{{ end }}
+{{- if has $program (list "codex" "mmx" "mmwatchdog" "mmhotline") }}{{ $installed = false }}{{ end }}
 {{- if eq $program "rclone" }}{{ $installed = not (empty $.inputs.backups.uploads_backup_runs_on) }}{{ end }}
 {{- if eq $program "doubleshell" }}{{ $installed = false }}{{ end }}
 {{- if $installed }}
@@ -220,7 +230,7 @@ check_groups:
 {{- end }}
 {{- range $program, $repository := $checked_programs }}
 {{- $release := index $.inputs.stack_software $program }}
-      {{ $program }}_pin_is_the_newest_release:
+      {{ if eq $program "set_up_outside_services" }}stack_version_is_the_newest_release{{ else }}{{ $program }}_pin_is_the_newest_release{{ end }}:
         shell:
           script: |
 {{- template "ask_for_the_newest_release" }}
@@ -247,10 +257,18 @@ check_groups:
             fi
             newest=${newest_tag#"${newest_tag%%[0-9]*}"}
             if version_is_newer "$newest" "$pinned"; then
+{{- if eq $program "set_up_outside_services" }}
+              echo "A newer Stack release is out, $newest; this system runs Stack $pinned (stack_software.set_up_outside_services in mmx_project_settings.yml). Release notes: $release_page. Upgrade with operating_procedures/upgrade_to_a_new_stack_version.md."
+{{- else }}
               echo "{{ $program }} has a newer release, $newest; stack_software.{{ $program }} in mmx_project_settings.yml pins $pinned. Release notes: $release_page. Update it with operating_procedures/add_or_update_a_program_from_outside_the_distribution.md, \"Updating a program from outside the distribution\"."
+{{- end }}
               exit 1
             fi
+{{- if eq $program "set_up_outside_services" }}
+            echo "This system runs Stack $pinned, the newest release."
+{{- else }}
             echo "{{ $program }}: the pin, $pinned, is the newest release, $newest."
+{{- end }}
         alert_severity: warn
 {{- end }}
       # Fails when a release source above did not answer, after 3 tries,

@@ -3392,9 +3392,9 @@ pages in `software_outside_the_distribution.yml`.** The entries say that
 the team gets each release from the archive pinned in `stack_software`,
 and the task file has the agent compare the installed version with the
 pin and fetch no page. MMHotline lists no host for an empty page. Reason:
-the check group `pinned_program_releases` already warns about each new
-release of these programs, and the triage agent reads its release notes
-then ([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
+a team gets a new release of these programs through a Stack release, and
+`stack_version_is_the_newest_release` tells the team that one is out
+([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
 When a product publishes an advisory page, the product's entry gets the
 address.
 
@@ -3512,20 +3512,43 @@ when GitHub is down.
 ### New releases of the pinned programs
 
 MMWatchdog's check group `pinned_program_releases` on `util01` has one
-shell check per program pinned in `stack_software` that the settings
-install, `PROGRAM_pin_is_the_newest_release`, and one check
-`release_sources_answer`. Each program's check asks GitHub's
-`releases/latest` for the newest release and fails at warn when it is newer
-than the pin, with a message that names the program, both versions, the
-release's page, and the update procedure. The warning starts the triage
-agent like any warning; `triage_agent_rules.md`, "A newer release of a
-pinned program", has the agent read the release notes, judge the security
-fixes, and hand over to a person with the new pin's values. The agent
-never changes a pin: the pin is in `mmx_project_settings.yml`, outside the
-folders the triage key may change. Reason (no agent without work): with the scheduled software review off, nothing else
-would notice a new release of the Stack's own programs, and a plain
-comparison needs no coding agent; the agent starts only when there is a
-release to read.
+shell check per third-party program pinned in `stack_software` that the
+settings install, `PROGRAM_pin_is_the_newest_release`, one check for the
+Stack itself, `stack_version_is_the_newest_release`, and one check
+`release_sources_answer`. Each check asks GitHub's `releases/latest` for the
+newest release and fails at warn when it is newer than the pin, with a
+message that names the program (or both Stack versions), the release's
+page, and the update procedure (for the Stack,
+`operating_procedures/upgrade_to_a_new_stack_version.md`). The warning
+starts the triage agent like any warning; `triage_agent_rules.md`, "A newer
+release of a pinned program", has the agent read the release notes, judge
+the security fixes, and hand over to a person with the facts and the new
+pin's values. The agent never changes a pin: the pin is in
+`mmx_project_settings.yml`, outside the folders the triage key may change.
+Reason (no agent without work): with the scheduled software review off,
+nothing else would notice a new release of a downloaded program, and a
+plain comparison needs no coding agent; the agent starts only when there
+is a release to read.
+
+- **A release is no outage and nothing to wake anyone for, so only a flaw
+  exploited now reaches a phone.** The triage agent reports a newer release
+  at info, including a release with a security fix that attackers do not
+  exploit now, and at SOS only for a flaw exploited now that reaches the
+  servers. The report hands over to a person and the release goes into
+  `open_software_findings.md`, so the weekly review still sees it. Reason
+  (owner, 2026-11-23, after a warning on his phone when MMHotline 0.6.1 came
+  out an hour after Stack 0.4.0, which pins it): "kind of confusing that I
+  would get an alert if hotline got updated ... a weird thing to send
+  people".
+- **`mmx`, `mmwatchdog` and `mmhotline` get no check; the Stack's own check
+  covers them.** A team gets a newer release of these programs through a
+  Stack release, which pins the releases it was tested with. The
+  `set_up_outside_services` pin's version is the Stack version itself (its
+  `download_url` is the Stack's own GitHub release), so its check is the one
+  check that a newer Stack release is out, and its message names both Stack
+  versions, the release's page, and the upgrade procedure. Reason: a
+  warning about a program that a Stack release has not yet pinned tells the
+  team to do something the Stack's own upgrade does better.
 
 - **The checks come from `stack_software`, not from
   `software_outside_the_distribution.yml`.** MMX templates cannot read
@@ -3533,7 +3556,8 @@ release to read.
   program's pin and download address under the entry's name. The template
   repeats the uploads copy's install condition: `rclone` only while
   `backups.uploads_backup_runs_on` is not empty, so a program the system
-  does not install raises no warning. `codex` gets no check: the team moves
+  does not install raises no warning. `mmx`, `mmwatchdog` and `mmhotline`
+  get no check (see above). `codex` gets no check: the team moves
   its pin when it wants a newer model, and a newer Codex alone is nothing
   a person acts on. Codex releases several times a week; a team's real setup
   got a warning minutes after its setup (2026-11-23). `doubleshell` runs on
@@ -3545,8 +3569,8 @@ release to read.
   real playbook gives one check per installed downloaded program.
 - **Pre-releases never warn.** `releases/latest` leaves out pre-releases
   and drafts, and answers 404 for a project with only pre-releases, which
-  counts as an answer with no release. A pin at a pre-release of
-  MMHotline `0.1.0` warns once `0.1.0`, or any later release, is out. No list of skipped releases exists, so none was added.
+  counts as an answer with no release. A pin at a pre-release
+  `0.1.0` of a checked program warns once `0.1.0`, or any later release, is out. No list of skipped releases exists, so none was added.
 - **A source that does not answer is not a new release.** A check tries 3
   times, 5 seconds apart, then passes. `release_sources_answer` asks every
   source again and fails when one still does not answer: a refused,
@@ -3555,9 +3579,9 @@ release to read.
   that program's releases; a shorter outage changes nothing.
 - **Once an hour.** GitHub allows 60 requests an hour from one address
   without a sign-in. Each program costs 2 requests an hour, so the
-  template's 6 checked programs make 12 requests an hour, 48 under the
-  limit; with Codex, 7 programs make 14. When every request fails and is
-  tried 3 times, 7 programs make 42, still 18 under the limit. Each further
+  template's 3 checked programs (the Stack, `litestream`, `rclone`) make 6
+  requests an hour, 54 under the limit. When every request fails and is
+  tried 3 times, they make 18, still 42 under the limit. Each further
   pinned program adds 2, or 6 when every request fails. A release an hour
   late changes nothing.
 - **One alert per release, until the pin moves.** MMWatchdog sends one

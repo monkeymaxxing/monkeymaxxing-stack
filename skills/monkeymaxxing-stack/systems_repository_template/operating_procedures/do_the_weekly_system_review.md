@@ -37,7 +37,8 @@ proposal.
    A warning that is still open can be a waiting update (part 2) or a
    trigger (part 4).
 2. **The waiting updates.** Each server's waiting security updates and
-   reboots, and each pinned program with a newer release:
+   reboots, and each pinned third-party program or the Stack itself with a
+   newer release:
 
    ```sh
    ssh -F ssh/config root@10.20.1.1 "mmwatchdog check-now security_updates"

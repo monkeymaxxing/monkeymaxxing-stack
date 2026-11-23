@@ -92,8 +92,9 @@ inputs:
     type: mapping
     required: true
   # The pinned_program_releases checks (mmwatchdog_checks/util_server.yml)
-  # compare every pin in stack_software with its newest release; codex is
-  # checked only while triage_agent_coding_agent is codex.
+  # compare the pins of third-party programs and the Stack's own version
+  # (set_up_outside_services) with their newest releases; mmx, mmwatchdog,
+  # mmhotline, codex and doubleshell get no check.
   stack_software:                           # vars.stack_software
     type: mapping
     required: true

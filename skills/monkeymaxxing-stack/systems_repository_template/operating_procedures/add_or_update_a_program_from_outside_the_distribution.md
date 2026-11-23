@@ -186,9 +186,16 @@ Codex runs a new model with fallback settings.
 ### The pinned-release warning
 
 MMWatchdog's check group `pinned_program_releases` on `util01` warns when a
-pinned program has a newer release, and the triage agent's report gives the
-release's security fixes and the new pin's `version`, `download_url`, and
-`sha256`.
+pinned third-party program, such as `rclone`, has a newer release, and the
+triage agent's report gives the release's security fixes and the new pin's
+`version`, `download_url`, and `sha256`. The report reaches a phone only for
+a flaw that attackers exploit now; every other release is an info note for
+the weekly review.
+
+The Stack's own programs, `mmx`, `mmwatchdog`, and `mmhotline`, have no
+check: a team gets a newer release of them through a Stack release, and the
+check `stack_version_is_the_newest_release` says when one is out
+([Upgrade to a new Stack version](upgrade_to_a_new_stack_version.md)).
 
 The warning stays open, without repeating, until the pin names the newest
 release, and a later release while it is open sends no new alert. A team

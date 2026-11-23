@@ -762,11 +762,24 @@ review reads the note.
 ### A newer release of a pinned program
 
 MMWatchdog's check group `pinned_program_releases` on `util01` asks each
-downloaded program's release source once an hour for the newest release,
+checked program's release source once an hour for the newest release,
 and compares it with the program's pin in `stack_software` in
 `mmx_project_settings.yml`. Its warning names the program, the pinned and
-the newest version, and the release's page.
+the newest version, and the release's page. The Stack's own programs
+(`mmx`, `mmwatchdog`, `mmhotline`) have no check: the team gets them
+through a Stack release.
 
+A newer release is no outage and nothing to wake anyone for. Only a flaw
+that attackers exploit now reaches a phone.
+
+- **`stack_version_is_the_newest_release`:** a newer Stack release is
+  out. Read its release notes. Report at info, whatever the release
+  fixes, and hand over to a person with the two Stack versions, the
+  release's page, and the procedure,
+  [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
+  Add the release to `triage_agent_notes/open_software_findings.md`.
+  Report at SOS only when a release note names a flaw that attackers
+  exploit now and that reaches servers in `inventories/servers.yml`.
 - **`PROGRAM_pin_is_the_newest_release`:** read the release notes of
   every release between the pin and the newest, and the program's
   `security_advisories_page` in `software_outside_the_distribution.yml`.
@@ -774,7 +787,8 @@ the newest version, and the release's page.
   reaches the servers. Report at the finding's
   [level](#levels-of-vulnerability-findings): SOS only when attackers
   exploit the flaw now and it reaches servers in `inventories/servers.yml`;
-  warn for any other security fix; info for a release without one. The
+  info for every other release, including one with a security fix that
+  attackers do not exploit now. The
   report hands over to a person with the facts: the program, the pinned
   and the newest version, each security fix with its ID, the project edits
   the release notes require, the new pin's `version`, `download_url`, and

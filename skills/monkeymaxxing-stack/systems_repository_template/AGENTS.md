@@ -592,7 +592,7 @@ operating procedure.
 | The weekly system review is due | [Do the weekly system review](operating_procedures/do_the_weekly_system_review.md) |
 | The person wants extra confidence, such as "Check my system's protections" | [Check my system's protections](operating_procedures/assess_a_running_system_and_recommend_changes.md#check-my-systems-protections) |
 | The weekly database restore drill is due | [Run the weekly database restore drill](operating_procedures/run_the_weekly_database_restore_drill.md) |
-| Add or update a program not supplied by the distribution, or MMWatchdog's `pinned_program_releases` warns about a newer release | [Add or update a program from outside the distribution](operating_procedures/add_or_update_a_program_from_outside_the_distribution.md) |
+| Add or update a program not supplied by the distribution, or MMWatchdog's `pinned_program_releases` warns about a newer release of a third-party program | [Add or update a program from outside the distribution](operating_procedures/add_or_update_a_program_from_outside_the_distribution.md) |
 | The team wants the triage agent to review the servers' software at an interval | [Turn on the scheduled software review](operating_procedures/turn_on_the_scheduled_software_review.md) |
 | A new stack version is requested | [Upgrade to a new stack version](operating_procedures/upgrade_to_a_new_stack_version.md) |
 | An app starts keeping uploaded files | [Turn on nightly backups of uploaded files](operating_procedures/turn_on_nightly_backups_of_uploaded_files.md) |

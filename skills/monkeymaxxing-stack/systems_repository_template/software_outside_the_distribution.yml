@@ -3,7 +3,9 @@
 # MMWatchdog's vulnerability checks cover the distribution's packages only.
 # For the downloaded programs, pinned under stack_software in
 # mmx_project_settings.yml, MMWatchdog's check group pinned_program_releases
-# on util01 warns when a newer release exists (mmwatchdog_checks/util_server.yml).
+# on util01 warns when a newer release of a third-party program exists, and
+# when a newer Stack release is out (mmwatchdog_checks/util_server.yml).
+# mmx, mmwatchdog and mmhotline come with a Stack release and have no check.
 # A program from a vendor's apt repository updates itself.
 # The scheduled software review, when the team turns it on, reads
 # software_outside_the_distribution.yml too: the triage agent compares each

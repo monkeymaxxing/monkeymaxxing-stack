@@ -1270,7 +1270,7 @@ growth_and_improvement_items:
       the person chose. The review is optional: with
       software_review_interval_hours off, the template's setting, MMWatchdog
       still warns about security updates and newer releases of the pinned
-      programs.
+      third-party programs and of the Stack.
     trigger: the team choosing to turn on the scheduled software review; the review is optional
 
   - id: optional_protection_checks

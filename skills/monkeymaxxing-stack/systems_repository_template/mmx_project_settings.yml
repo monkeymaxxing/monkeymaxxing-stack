@@ -815,7 +815,9 @@ vars:
   # Stack checkout that is not a release: every_server and the desk
   # playbook refuse it before they change anything.
   # MMWatchdog's pinned_program_releases on util01 warns when a pin here is
-  # older than the program's newest release on GitHub
+  # older than the newest release on GitHub of a third-party program or of
+  # the Stack itself (the set_up_outside_services pin). mmx, mmwatchdog and
+  # mmhotline get no check; they come with a Stack release
   # (mmwatchdog_checks/util_server.yml).
   stack_software:
     mmx:
