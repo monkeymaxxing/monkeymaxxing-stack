@@ -879,7 +879,7 @@ vars:
     # team's own: move it whenever the team wants a newer model, as
     # operating_procedures/add_or_update_a_program_from_outside_the_distribution.md,
     # "Moving Codex to a newer release", says. It must be at least the
-    # minimum Codex version MMHotline's docs name, and it must know the
+    # oldest Codex version MMHotline supports, 0.166.0, and it must know the
     # model the triage agent uses: an older Codex starts each run with
     # "Model metadata for MODEL not found" and runs with fallback settings.
     # MMWatchdog does not warn about newer Codex releases, because Codex

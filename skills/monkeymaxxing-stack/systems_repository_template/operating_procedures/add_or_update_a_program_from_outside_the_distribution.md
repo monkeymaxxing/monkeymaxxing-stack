@@ -162,22 +162,26 @@ release. Reason: Codex and its models change every week, and an older
 Codex runs a new model with fallback settings.
 
 1. **Read Codex's release notes** for every release between the pin and the
-   new version (`https://github.com/openai/codex/releases`). Stop and tell
-   the person when a release adds a settings file or folder that Codex
-   reads from its home, or a new address Codex connects to. Reason:
-   MMHotline clears the triage agent's known Codex settings files before
-   each run, so a log the triage agent reads cannot leave a file that
-   changes its next run; a new settings file needs MMHotline to clear it
-   first. A new address needs MMHotline to allow it, or the triage agent's
-   runs fail.
-   **Check:** the new version is at least the minimum Codex version that
-   MMHotline's documentation names for the pinned MMHotline release.
+   new version (`https://github.com/openai/codex/releases`), as MMHotline's
+   [Moving to a newer coding agent version](https://github.com/monkeymaxxing/mmhotline/blob/main/docs/how-to/set-up-the-triage-agent.md#moving-to-a-newer-coding-agent-version)
+   says: a removed or renamed `codex exec` or `exec resume` option, a
+   change to the `--json` events, or a new address Codex connects to. Tell
+   the person what you found before you change the pin. Settings files need
+   no check: MMHotline clears the triage agent's home before each run,
+   keeping only its SSH key, Git settings, and session files, so a new
+   settings location cannot carry over between runs.
+   **Check:** the new version is at least the oldest Codex version
+   MMHotline supports (0.166.0).
 2. **Change the pin.** Set `version`, `download_url` (the release's
    `codex-package-x86_64-unknown-linux-musl.tar.gz`), and `sha256`, which
    the release page shows beside the file's name. Commit, push, and run
    `every_server` on `util01`.
-   **Check:** the run passes, and the next triage run's first lines have
-   no "Model metadata for MODEL not found".
+   **Check:** the run passes, and one run of Codex on `util01` succeeds:
+   `sudo mmhotline triage-agent check-sign-in` with a subscription, an
+   access token, or a ChatGPT sign-in, or
+   `sudo mmhotline triage-agent run-software-review` with an API key. Its
+   first lines have no "Model metadata for MODEL not found". When it
+   fails, move the pin back.
 
 ### The pinned-release warning
 
