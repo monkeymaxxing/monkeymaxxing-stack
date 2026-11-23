@@ -16,7 +16,9 @@
 #      then requests replace_failed_servers, which counts as the next try.
 #   2. Each failed server of the chain is destroyed by the provider ID in its
 #      replacement commit's trailer, never by a name. A server the provider no
-#      longer lists counts as destroyed. An ID the provider lists under the
+#      longer lists counts as destroyed, except an OVHcloud VPS (an ID such as
+#      vps-1a2b3c4d.vps.ovh.us): only the person ends one, and the list hides
+#      it once it leaves the inventory, so the run names it and fails. An ID the provider lists under the
 #      name of a server in the inventory is refused: a damaged trailer never
 #      destroys a server in use.
 #   3. One commit, "Destroy app001 at the provider: app002 does its work",
@@ -97,6 +99,14 @@ while IFS= read -r chain; do
     failed=1; continue
   fi
   while IFS=$'\t' read -r name id; do
+    # An OVHcloud VPS is ended only by the person, from an email OVHcloud
+    # sends, and the list hides it once its node leaves the inventory, so
+    # its absence never means it is gone: it is never counted as destroyed.
+    case "$id" in
+      *.vps.ovh.*)
+        say "$name (ID $id) is an OVHcloud VPS, which only the person can end: it still runs and is billed each month until they end it; not counted as destroyed"
+        failed=1; continue ;;
+    esac
     if [ "$id" != none ] && jq -e --arg id "$id" '.servers | any(.id == $id)' <<< "$provider_servers" > /dev/null; then
       listed_as=$(jq -r --arg id "$id" '[.servers[] | select(.id == $id) | .name][0]' <<< "$provider_servers")
       if jq -e --arg name "$listed_as" 'index($name)' <<< "$inventory_names" > /dev/null; then

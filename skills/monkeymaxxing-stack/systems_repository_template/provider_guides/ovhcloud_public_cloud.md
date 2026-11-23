@@ -154,10 +154,17 @@ Public Cloud flavor at least as large, as its script below says. After
 the repair, recommend moving the replacement back to a VPS with
 [Replace a server](../operating_procedures/replace_a_server.md): it is
 permanent now. The failed VPS itself stays at OVHcloud, billed each
-month: its node leaves the inventory, so the list script stops showing it
-and `destroy_replaced_servers` counts it as gone. Tell the person in one
+month. Its node leaves the inventory, so the list script stops showing
+it, and `destroy_replaced_servers` never counts it as gone: it names the
+VPS, says only the person can end it, and fails. Tell the person in one
 line that the failed VPS still runs, and end it with them as
 [Two things to know about a VPS](#vps-or-public-cloud-by-how-long-the-server-stays) says.
+Once `GET /vps/NAME` through the API proxy answers 404, record the end
+yourself with the commit `destroy_replaced_servers` makes for a server
+it destroyed: remove the VPS's lines from `ssh/known_hosts`, with the
+subject "Destroy app001 at the provider: the person ended the VPS" and
+the trailers `Server-pool`, `Destroyed-server` and
+`Destroyed-server-provider-id`, with the VPS's service name as the ID.
 
 ## OVHcloud Europe: what differs
 

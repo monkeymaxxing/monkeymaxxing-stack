@@ -232,5 +232,18 @@ class DestroyReplacedServers(unittest.TestCase):
         self.assertIn('Destroyed-server: app001', git(self.origin, 'log', '-1', '--format=%B', 'main'))
 
 
+    def test_an_ovhcloud_vps_that_the_list_hides_is_never_counted_as_destroyed(self):
+        # Once its node leaves the inventory, the OVHcloud list hides the VPS although it still runs and bills.
+        known_hosts = self.repository/'ssh/known_hosts'
+        known_hosts.write_text(known_hosts.read_text() + '10.20.1.1 ssh-ed25519 app001-key\n')
+        self.replacement_commit('app001', 'vps-1a2b3c4d.vps.ovh.us', 'app002', 2, 1)
+        before = self.commits()
+        result, commands = self.run_destroy([node('app002'), node('db01')], provider=())
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn('app001 (ID vps-1a2b3c4d.vps.ovh.us) is an OVHcloud VPS, which only the person can end', result.stdout)
+        self.assertNotIn('counted as destroyed\n', result.stdout.replace('not counted as destroyed', ''))
+        self.assertEqual(self.destroys(commands), [])
+        self.assertEqual(self.commits(), before)
+
 if __name__ == '__main__':
     unittest.main()
