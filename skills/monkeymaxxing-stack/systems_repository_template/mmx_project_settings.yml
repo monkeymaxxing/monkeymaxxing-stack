@@ -875,13 +875,15 @@ vars:
       download_url: https://github.com/rclone/rclone/releases/download/v1.75.2/rclone-v1.75.2-linux-amd64.zip
       sha256: "349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702"
     # The triage agent's coding agent when triage_agent_coding_agent is
-    # codex; util01 downloads nothing for Codex otherwise. Use the Codex
-    # version that the pinned MMHotline release was built against, which
-    # MMHotline's docs/validation.md names. That Codex must know the model
-    # the triage agent uses: an older Codex starts each run with "Model
-    # metadata for MODEL not found" and runs with fallback settings. The
-    # pin moves with a Stack upgrade, so MMWatchdog does not warn about newer
-    # Codex releases. Codex's release package holds
+    # codex; util01 downloads nothing for Codex otherwise. This pin is the
+    # team's own: move it whenever the team wants a newer model, as
+    # operating_procedures/add_or_update_a_program_from_outside_the_distribution.md,
+    # "Moving Codex to a newer release", says. It must be at least the
+    # minimum Codex version MMHotline's docs name, and it must know the
+    # model the triage agent uses: an older Codex starts each run with
+    # "Model metadata for MODEL not found" and runs with fallback settings.
+    # MMWatchdog does not warn about newer Codex releases, because Codex
+    # releases several times a week. Codex's release package holds
     # codex, its helper codex-code-mode-host, and rg. Codex's releases are
     # tagged rust-vVERSION
     # and publish no checksum file: the release page shows each file's

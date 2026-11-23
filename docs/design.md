@@ -3335,7 +3335,7 @@ Debian only.
 | `cloudflared` | Cloudflare's apt repository | Not in Debian |
 | MMX, MMWatchdog, MMHotline, Litestream (MMHotline's backup), rclone (the uploads' copy), and the systems desk's `set-up-outside-services` | the programs' release downloads, pinned by version and SHA-256 in `stack_software` | Not in Debian 13; Debian 13's rclone is 1.60, which can't sign in with today's bucket-restricted B2 keys ([Uploaded files](#uploaded-files)) |
 | Claude Code, the triage agent's coding agent | Anthropic's apt repository, its stable channel | Not in Debian. Not pinned, for two reasons. Claude Code releases several times a week, so a pin would always be out of date. And Claude Code is only the triage agent's harness, the program that runs the agent's sessions and tools, unlike the programs that run the system. The stable channel serves a version about a week old and skips releases with major regressions |
-| Codex, the triage agent's coding agent when the team chooses it | Codex's release package from GitHub, pinned by version and SHA-256 in `stack_software.codex` | Not in Debian, and Codex has no apt repository, so a pin is the only way to know what `util01` runs. The pin is the Codex version the pinned MMHotline release was built against |
+| Codex, the triage agent's coding agent when the team chooses it | Codex's release package from GitHub, pinned by version and SHA-256 in `stack_software.codex` | Not in Debian, and Codex has no apt repository, so a pin is the only way to know what `util01` runs. The pin is the team's own: its coding agent moves it when the team wants a newer model, at or above the minimum version MMHotline names, after reading Codex's release notes for a new settings file or service address (reason: Codex and its models move every week, and a team must not wait for a Stack release for a model; MMHotline clears the triage agent's known Codex settings files before each run, so a new one needs MMHotline first) |
 
 [Debian's security tracker](https://security-tracker.debian.org/tracker/source-package/pgbouncer)
 records which PgBouncer fixes Debian has supplied, rather than relying on
@@ -3533,10 +3533,9 @@ release to read.
   program's pin and download address under the entry's name. The template
   repeats the uploads copy's install condition: `rclone` only while
   `backups.uploads_backup_runs_on` is not empty, so a program the system
-  does not install raises no warning. `codex` gets no check: its pin
-  follows the Codex version the pinned MMHotline release was tested with,
-  so it moves with a Stack upgrade, and a newer Codex alone is nothing a
-  person acts on. Codex releases several times a week; a team's real setup
+  does not install raises no warning. `codex` gets no check: the team moves
+  its pin when it wants a newer model, and a newer Codex alone is nothing
+  a person acts on. Codex releases several times a week; a team's real setup
   got a warning minutes after its setup (2026-11-23). `doubleshell` runs on
   laptops, not `util01`, and gets none either. Programs from
   vendors' apt repositories update themselves and get no check. A pin whose

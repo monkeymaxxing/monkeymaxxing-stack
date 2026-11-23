@@ -154,6 +154,31 @@ Then commit, push and run `every_server` on `util01`, as
    **Check:** the run passes. For an MMX pin, see
    [A new MMX pin takes effect from the next run](#a-new-mmx-pin-takes-effect-from-the-next-run).
 
+### Moving Codex to a newer release
+
+The team's coding agent moves `stack_software.codex` whenever the team
+wants a newer model for the triage agent, without waiting for a Stack
+release. Reason: Codex and its models change every week, and an older
+Codex runs a new model with fallback settings.
+
+1. **Read Codex's release notes** for every release between the pin and the
+   new version (`https://github.com/openai/codex/releases`). Stop and tell
+   the person when a release adds a settings file or folder that Codex
+   reads from its home, or a new address Codex connects to. Reason:
+   MMHotline clears the triage agent's known Codex settings files before
+   each run, so a log the triage agent reads cannot leave a file that
+   changes its next run; a new settings file needs MMHotline to clear it
+   first. A new address needs MMHotline to allow it, or the triage agent's
+   runs fail.
+   **Check:** the new version is at least the minimum Codex version that
+   MMHotline's documentation names for the pinned MMHotline release.
+2. **Change the pin.** Set `version`, `download_url` (the release's
+   `codex-package-x86_64-unknown-linux-musl.tar.gz`), and `sha256`, which
+   the release page shows beside the file's name. Commit, push, and run
+   `every_server` on `util01`.
+   **Check:** the run passes, and the next triage run's first lines have
+   no "Model metadata for MODEL not found".
+
 ### The pinned-release warning
 
 MMWatchdog's check group `pinned_program_releases` on `util01` warns when a

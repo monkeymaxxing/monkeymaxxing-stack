@@ -130,11 +130,10 @@ check_groups:
   # Caddy, update themselves and need no check. A pin whose download_url is
   # not a GitHub release gets no check; the comment below names it, and the
   # scheduled software review covers it when the team turns the review on.
-  # codex gets no check: its pin follows the Codex version the pinned
-  # MMHotline release was tested with, so it moves with a Stack upgrade, and
-  # a newer Codex alone is nothing a person acts on (Codex releases several
-  # times a week; a team's real setup got a warning minutes after setup,
-  # 2026-11-23). rclone is checked only while
+  # codex gets no check: the team moves its pin when it wants a newer
+  # model, and a newer Codex alone is nothing a person acts on (Codex
+  # releases several times a week; a team's real setup got a warning
+  # minutes after setup, 2026-11-23). rclone is checked only while
   # backups.uploads_backup_runs_on names util01, because only then does the
   # system install the program.
   #
