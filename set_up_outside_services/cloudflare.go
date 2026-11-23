@@ -364,6 +364,17 @@ func (c *cloudflareClient) ensureR2Bucket(name string) (bool, error) {
 	return true, c.call(http.MethodPost, c.account("/r2/buckets"), map[string]any{"name": name}, nil)
 }
 
+// r2IsOn says whether R2 is turned on in the account, from the list of
+// its buckets, which Cloudflare refuses with code 10042 while R2 is off.
+// https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/list/
+func (c *cloudflareClient) r2IsOn() (bool, error) {
+	err := c.call(http.MethodGet, c.account("/r2/buckets"), nil, nil)
+	if r2IsTurnedOff(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // r2Credentials turns a new R2 token into its S3 key: the access key ID is
 // the token's ID, the secret access key the SHA-256 of its value.
 // https://developers.cloudflare.com/r2/api/tokens/
@@ -770,11 +781,26 @@ func (e *environment) setUpCloudflare(link *cloudflareClient, settings systemSet
 	if err != nil {
 		return cloudflareSetUp{}, err
 	}
+	// The page keeps its files in R2. Without an app that keeps uploads,
+	// nothing above checked R2, so a domain that is Active asks R2 here.
+	statusPageWaitsForR2 := r2IsOff
+	if zoneStatus == "active" && len(settings.appsWithUploads()) == 0 {
+		on, err := desk.r2IsOn()
+		if err != nil {
+			return cloudflareSetUp{}, err
+		}
+		statusPageWaitsForR2 = !on
+	}
 	var statusPage statusPageSetUp
-	if zoneStatus != "active" || r2IsOff {
-		e.say("  The status page waits until your domain %s is Active at Cloudflare and R2 is on; Cloudflare shows the domain as %s now.", zone, zoneStatus)
+	switch {
+	case zoneStatus != "active":
+		e.say("  The status page waits until your domain %s is Active at Cloudflare; Cloudflare shows the domain as %s now.", zone, zoneStatus)
 		e.say("  Run set-up-outside-services cloudflare again then: it makes only what is missing. See the domain's status: https://dash.cloudflare.com/%s/%s", accountID, zone)
-	} else {
+	case statusPageWaitsForR2:
+		e.say("  The status page keeps its files in R2, which is off in this account, so the page waits. The rest of this run carries on.")
+		e.say("  Turn R2 on once at %s: Cloudflare's checkout asks for a card, and the page's few files cost nothing.", r2OverviewPage(accountID))
+		e.say("  Then run set-up-outside-services cloudflare again, with a new link token: it adds only the status page.")
+	default:
 		statusPage, err = e.runMMHotlineStatusPageSetUp(accountID, settings.Vars.StatusPageHostName, desk.token)
 		if err != nil {
 			return cloudflareSetUp{}, err
@@ -884,8 +910,10 @@ const whereTheAccountIDIs = "the address bar of any page at https://dash.cloudfl
 // works, among the accounts Cloudflare lists for it. An account-owned token
 // works in its own account only. When Cloudflare lists none, or the token
 // works in several, the run stops and names the way to give --account-id.
-// A link token left behind that way ends with the next run, which deletes
-// earlier link tokens of the same name.
+// A token that works in several accounts is deleted before the stop, so no
+// token that can make tokens stays behind when the person never runs the
+// command again. A token Cloudflare lists no account for cannot be reached
+// to delete; the next run deletes it, as an earlier link token of its name.
 func findTheLinkTokensAccount(link *cloudflareClient) (string, error) {
 	accounts, err := link.accounts()
 	if err != nil && !refusedWith(err, http.StatusForbidden) {
@@ -895,13 +923,15 @@ func findTheLinkTokensAccount(link *cloudflareClient) (string, error) {
 		return "", fmt.Errorf("Cloudflare does not list the account of this link token. Run this command again with --account-id ID, with a new link token; %s", whereTheAccountIDIs)
 	}
 	var works []cloudflareAccount
+	tokenIDs := map[string]string{}
 	for _, account := range accounts {
 		link.accountID = account.ID
-		_, err := link.verifyAccountToken()
+		id, err := link.verifyAccountToken()
 		var refusal *apiError
 		switch {
 		case err == nil:
 			works = append(works, account)
+			tokenIDs[account.ID] = id
 		case !errors.As(err, &refusal):
 			return "", err
 		}
@@ -917,7 +947,16 @@ func findTheLinkTokensAccount(link *cloudflareClient) (string, error) {
 	for _, account := range works {
 		listed = append(listed, fmt.Sprintf("%s (%s)", screenText(account.Name), account.ID))
 	}
-	return "", fmt.Errorf("the link token works in %d Cloudflare accounts: %s. Run this command again with --account-id ID for the account this system uses, with a new link token", len(works), strings.Join(listed, ", "))
+	deleted := "Deleting this link token failed: delete it on Cloudflare's website, at the account's API Tokens page"
+	for _, account := range works {
+		link.accountID = account.ID
+		if link.deleteAccountToken(tokenIDs[account.ID]) == nil {
+			deleted = "This link token is deleted"
+			break
+		}
+	}
+	link.accountID = ""
+	return "", fmt.Errorf("the link token works in %d Cloudflare accounts: %s. %s. Run this command again with --account-id ID for the account this system uses, with a new link token", len(works), strings.Join(listed, ", "), deleted)
 }
 
 // errLinkTokenCannotMakeTokens says the token passed its check but lacks

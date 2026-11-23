@@ -323,7 +323,9 @@ Then read the results file, and carry on as after way A.
      ```
 
      Then ask for a new token from the same link, and run the command
-     again with `cloudflare --account-id ID`.
+     again with `cloudflare --account-id ID`. When the stop says that
+     deleting the link token failed, also ask the person to delete it at
+     the account's API Tokens page, `https://dash.cloudflare.com/ID/api-tokens`.
    - **R2 is off,** while an app keeps uploads. The command prints R2's
      price lines and page. Show the R2 step above, then ask for a new
      token from the same link.

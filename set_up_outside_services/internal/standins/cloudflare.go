@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -151,8 +152,12 @@ type Cloudflare struct {
 	// RefuseAccountsList makes GET /accounts refuse, as Cloudflare may for an
 	// account-owned token.
 	RefuseAccountsList bool
-	Tokens             []*CloudflareToken
-	ServiceTokens      []*AccessServiceToken
+	// TokenAlsoWorksIn lists other accounts where GET /accounts lists the
+	// account and the token's check passes, as for a token that reaches
+	// several accounts. Every other call there is refused.
+	TokenAlsoWorksIn []string
+	Tokens           []*CloudflareToken
+	ServiceTokens    []*AccessServiceToken
 	// IdentityProviders are Access's login methods. The stand-in answers
 	// 409 to a second One-time PIN. OneTimePINConflictsUnlisted makes it
 	// answer 409 although the list shows none, as a real Cloudflare account
@@ -334,7 +339,11 @@ func (c *Cloudflare) route(token *CloudflareToken, r *http.Request) (any, *cfRef
 		if c.RefuseAccountsList {
 			return nil, &cfRefusal{403, 9109, "Unauthorized to access requested resource"}
 		}
-		return []any{map[string]any{"id": c.AccountID, "name": "Stand-in account"}}, nil
+		accounts := []any{map[string]any{"id": c.AccountID, "name": "Stand-in account"}}
+		for _, id := range c.TokenAlsoWorksIn {
+			accounts = append(accounts, map[string]any{"id": id, "name": "Another account"})
+		}
+		return accounts, nil
 	}
 	if match := zonePath.FindStringSubmatch(path); match != nil {
 		return c.zoneRoute(token, r, match[1], match[2])
@@ -343,10 +352,13 @@ func (c *Cloudflare) route(token *CloudflareToken, r *http.Request) (any, *cfRef
 	if match == nil {
 		return nil, &cfRefusal{404, 7003, "No route for that URI"}
 	}
+	rest := match[2]
 	if match[1] != c.AccountID {
+		if slices.Contains(c.TokenAlsoWorksIn, match[1]) && rest == "/tokens/verify" {
+			return c.tokenRoute(token, r, rest)
+		}
 		return nil, denied
 	}
-	rest := match[2]
 	switch {
 	case strings.HasPrefix(rest, "/tokens"):
 		return c.tokenRoute(token, r, rest)
@@ -702,6 +714,12 @@ func (c *Cloudflare) tunnelRoute(r *http.Request, rest string) (any, *cfRefusal)
 func (c *Cloudflare) r2Route(r *http.Request, rest string) (any, *cfRefusal) {
 	parts := strings.Split(strings.TrimPrefix(rest, "/r2/buckets"), "/")
 	switch {
+	case len(parts) == 1 && r.Method == http.MethodGet:
+		buckets := []any{}
+		for name := range c.R2Buckets {
+			buckets = append(buckets, map[string]any{"name": name, "location": "WEUR"})
+		}
+		return map[string]any{"buckets": buckets}, nil
 	case len(parts) == 1 && r.Method == http.MethodPost:
 		var body struct {
 			Name string `json:"name"`

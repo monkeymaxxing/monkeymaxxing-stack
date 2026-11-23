@@ -746,6 +746,45 @@ func TestCloudflareAsksForTheAccountIDWhenCloudflareDoesNotListIt(t *testing.T) 
 	}
 }
 
+// With no app that keeps uploads, R2 may be off on an Active domain: the
+// status page waits with a note, and the rest of the run finishes, the
+// down alarm's token and the tunnels' tokens included.
+func TestCloudflareSkipsTheStatusPageWhileR2IsOffAndNoAppNeedsIt(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.cloudflare.R2Off = true
+	h.e.runMMHotlineStatusPageSetUp = func(accountID, hostName, token string) (statusPageSetUp, error) {
+		return statusPageSetUp{}, errors.New("Cloudflare refused the bucket with code 10042: R2 is off")
+	}
+	code, out, errorOut := h.fromTheCodingAgent(h.addLinkToken()+"\n", "cloudflare")
+	if code != 0 || !strings.Contains(out, "R2, which is off in this account, so the page waits") {
+		t.Fatalf("exit %d, want a finished run with the page's note:\n%s%s", code, out, errorOut)
+	}
+	for _, key := range []string{"mmhotline_down_alarm_cloudflare_api_token", "apps_cloudflare_tunnel_token", "util01_cloudflare_tunnel_token"} {
+		if h.vault.values[key] == "" {
+			t.Errorf("%s was not saved", key)
+		}
+	}
+	if h.vault.values["mmhotline_status_page_r2_access_key_id"] != "" || len(h.cloudflare.LiveTokensNamed(linkTokenNameForAlex)) != 0 {
+		t.Fatal("want no status page key and the link token deleted")
+	}
+}
+
+// A link token that works in several accounts stops the run, and the stop
+// deletes it, so no token that can make tokens stays live when the person
+// never runs the command again.
+func TestCloudflareDeletesALinkTokenThatWorksInSeveralAccounts(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.useTheTemplatesAccountID()
+	h.cloudflare.TokenAlsoWorksIn = []string{"fedcba9876543210fedcba9876543210"}
+	code, _, errorOut := h.fromTheCodingAgent(h.addLinkToken()+"\n", "cloudflare")
+	if code != 1 || !strings.Contains(errorOut, "works in 2 Cloudflare accounts") || !strings.Contains(errorOut, "This link token is deleted") {
+		t.Fatalf("exit %d, want the stop that lists the accounts and says the token is deleted: %s", code, errorOut)
+	}
+	if len(h.cloudflare.LiveTokensNamed(linkTokenNameForAlex)) != 0 {
+		t.Fatal("the link token is left live")
+	}
+}
+
 // R2 off: everything else is made, then the command stops with R2's price
 // and the page that turns it on. The rerun after the person turned it on
 // makes the upload buckets and keys.
