@@ -1999,41 +1999,13 @@ fleet_stages:
   # the desk's run.
   # A new util01 starts the restore drill only after the systems repository
   # is cloned at /var/lib/mmhotline/systems_repository, where the drill runs.
-  # The drill's two fleet stages run last, so a failure in them holds back
-  # no server work, and no later fleet stage of the run finds util01 busy
-  # with the drill: MMX refuses a node that runs another MMX job.
+  # The drill's start runs last, so a failure in it holds back no server
+  # work, and no later fleet stage of the run finds util01 busy with the
+  # drill: MMX refuses a node that runs another MMX job. The drill itself
+  # first makes the primary archive its newest changes
+  # (playbooks/weekly_database_restore_drill.yml), so a first drill right
+  # after the apps' first migrations restores their tables.
   #
-  # The drill restores the backup bucket as it stood when the drill started
-  # (playbooks/weekly_database_restore_drill.yml). On a new system, the
-  # run that starts the first drill also ran the apps' first migrations,
-  # and a database server sends its newest changes to the bucket only
-  # about once a minute (archive_timeout = 60, roles/database_server). A
-  # drill started at once restored a copy without the apps' tables, and its
-  # check queries failed (a test system, 2026-11-18). So the primary first
-  # runs pgBackRest's check, which switches to a new segment of the
-  # write-ahead log and waits until that segment is in the bucket. Once on
-  # each database server: a later drill starts long after the changes
-  # before it, and a later fault in archiving never fails every_server
-  # (MMWatchdog warns about archiving). A replica archives nothing.
-  - id: push_the_newest_database_changes_before_the_first_restore_drill
-    nodes: database_servers
-    node_tasks:
-      - id: push_the_write_ahead_log_to_the_backup_bucket_once
-        shell:
-          script: |
-            set -euo pipefail
-            in_recovery=$(/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/psql --no-psqlrc --tuples-only --no-align \
-              --port 5432 --dbname postgres --command 'select pg_is_in_recovery()')
-            if [ "$in_recovery" = t ]; then
-              echo "This server is a replica; the primary sends the changes."
-              exit 0
-            fi
-            exec pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main check
-          dryrun: printf 'would send the newest database changes to the backup bucket, once, before the first restore drill\n'
-          run_as_user_account: postgres
-          env:
-            POSTGRESQL_MAJOR_VERSION: "{{ .vars.postgresql_major_version }}"
-          run_only_once_marker_file: /var/lib/mmx/commands_run_once/push_the_newest_database_changes_before_the_first_restore_drill
   # A run that failed on another server, such as an app server, still
   # starts the drill here, because util01 went on. No requires on the
   # other servers' fleet stages: MMX then refuses every run with

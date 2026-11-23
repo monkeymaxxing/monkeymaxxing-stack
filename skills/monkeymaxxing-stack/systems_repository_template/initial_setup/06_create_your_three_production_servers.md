@@ -235,7 +235,11 @@ app, `db01` for its data, and `util01` for the system tools. After chapter
    the result's `server_type` and `location` as the node's
    `vars.server_type` and `vars.location`: a replacement of a failed
    server is created with the same type in the same location, and
-   `every_server` refuses a server without them.
+   `every_server` refuses a server without them. At OVHcloud, where these
+   servers are VPS servers, also record each VPS's service name, such as
+   `vps-77f3667b.vps.ovh.us`, as the node's `vars.provider_server_name`:
+   the list script lists a VPS only when the inventory names it, and the
+   restore drill refuses a list without `util01`.
    The first-boot script blocks public TCP 22 on IPv4 and IPv6 before
    sshd starts, opens UDP 51820 (servers and desks send to 51820; laptops send to 443, which a redirect written at first boot turns into 51820), writes the private key at
    `/etc/wireguard/wg0.private_key`, and starts `wg0`.
@@ -263,7 +267,7 @@ app, `db01` for its data, and `util01` for the system tools. After chapter
 
    **Check:** the provider's list shows each server under its inventory
    name, and each node has `vars.public_ipv4_address`, `vars.server_type`,
-   and `vars.location`.
+   and `vars.location`, and at OVHcloud `vars.provider_server_name`.
 
 5. **Update the desk, then trust each SSH host key over WireGuard.**
    Before connecting, commit and push the new inventory, then run `sudo -n update-this-desks-wireguard-peers`.

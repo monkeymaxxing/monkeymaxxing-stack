@@ -303,8 +303,10 @@ node_tasks:
         # On a server that runs no web container of the app yet, such as a
         # new one, the asset directory gets the image's own files. A filled
         # directory stays as it is: after a deploy it also holds the
-        # previous release's files.
+        # previous release's files. An app whose asset_directory is "" has
+        # no asset files and no asset directory.
         - id: fill_the_asset_directory_of_the_first_web_container
+          when: {not: {equals: ["{{ .inputs.apps[.web_container.key].asset_directory }}", ""]}}
           shell:
             script: /usr/local/sbin/fill_web_asset_directory
             env:
@@ -372,6 +374,7 @@ node_tasks:
         # The new release's asset files and the live release's, so a page
         # the live release rendered still loads after the switch.
         - id: fill_the_asset_directory_with_both_releases
+          when: {not: {equals: ["{{ .inputs.apps[.web_container.key].asset_directory }}", ""]}}
           shell:
             script: /usr/local/sbin/fill_web_asset_directory
             env:

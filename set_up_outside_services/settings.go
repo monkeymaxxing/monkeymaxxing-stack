@@ -450,11 +450,26 @@ var (
 		{"Access: Service Tokens Read", scopeAccount},
 		{"Workers R2 Storage Write", scopeAccount},
 	}
+	// Every zone right a team's site settings may need, so a new setting
+	// never needs a new token. Zone Write stays out: it can delete a zone.
 	deskZonePermissions = []permissionGroup{
-		{"DNS Write", scopeZone},
-		{"Cache Settings Write", scopeZone},
 		{"Zone Read", scopeZone},
+		{"DNS Write", scopeZone},
+		{"Zone Settings Write", scopeZone},
+		{"SSL and Certificates Write", scopeZone},
+		{"Cache Settings Write", scopeZone},
+		{"Cache Purge", scopeZone},
+		{"Dynamic URL Redirects Write", scopeZone},
+		{"Page Rules Write", scopeZone},
 		{"Zone Transform Rules Write", scopeZone},
+		{"Managed headers Write", scopeZone},
+		{"Config Settings Write", scopeZone},
+		{"Origin Write", scopeZone},
+		{"Zone WAF Write", scopeZone},
+		{"Firewall Services Write", scopeZone},
+		{"Bot Management Write", scopeZone},
+		{"Workers Routes Write", scopeZone},
+		{"Analytics Read", scopeZone},
 	}
 	// The short-lived Access token: it adds the One-time PIN login method
 	// and makes or renews staging's Access service token, then is deleted.
