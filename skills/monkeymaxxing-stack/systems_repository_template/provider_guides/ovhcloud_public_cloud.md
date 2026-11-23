@@ -791,11 +791,13 @@ before provisioning. Catalog availability does not reserve physical capacity.
 
 The coding agent registers a key from the desk, through the proxy, with v1 `POST /sshkey` beneath the
 project path and `name`, `publicKey` and `region`, such as `util01`'s `mmhotline` key from its line in
-`root_ssh_public_keys`:
+`root_ssh_public_keys`, under the name `util01_ssh_key_name_at_the_provider` gives. Give every key a name of
+letters, digits and hyphens, such as `desk01-alex`: OVHcloud refused the name `util01, the mmhotline user`
+for its space and comma (a real setup, 2026-11-23).
 
 ```sh
 body=$(mktemp)
-jq -n --arg name 'util01, the mmhotline user' --arg publicKey 'ssh-ed25519 AAAA... mmhotline@util01' \
+jq -n --arg name 'util01-mmhotline-user' --arg publicKey 'ssh-ed25519 AAAA... mmhotline@util01' \
   --arg region US-EAST-VA-1 '{name: $name, publicKey: $publicKey, region: $region}' > "$body"
 curl -sS --fail-with-body -X POST -H 'Content-Type: application/json' --data-binary "@$body" \
   http://127.0.0.1:8081/cloud/project/PROJECT_ID/sshkey | jq '{id, name, regions}'

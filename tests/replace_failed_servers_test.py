@@ -275,7 +275,7 @@ class ReplaceFailedServers(unittest.TestCase):
         self.assertIn(['power_off_a_server_at_the_provider', '--server-id', 'id-app001'], commands)
         create = next(c for c in commands if c[0] == 'create_a_server_at_the_provider')
         for flag, value in (('--server-name', 'app002'), ('--server-type', 'cx23'), ('--location', 'fsn1'),
-                            ('--image', 'debian-13'), ('--ssh-key-name', 'util01, the mmhotline user'),
+                            ('--image', 'debian-13'), ('--ssh-key-name', 'util01-mmhotline-user'),
                             ('--wireguard-private-ip', '10.20.1.2'), ('--wireguard-public-key', NEW_KEY)):
             self.assertEqual(create[create.index(flag) + 1], value, flag)
         # The runtime peer comes before the create; the power-off before both.

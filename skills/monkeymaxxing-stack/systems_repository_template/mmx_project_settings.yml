@@ -614,8 +614,9 @@ vars:
   # The name under which util01's mmhotline user's public key is registered
   # at the provider when the servers are set up. Every server util01 creates, restore01
   # included, starts with that key, and MMX on util01 logs in with the
-  # mmhotline user's matching private key.
-  util01_ssh_key_name_at_the_provider: util01, the mmhotline user
+  # mmhotline user's matching private key. Letters, digits and hyphens
+  # only: OVHcloud refuses a key name with a space or a comma.
+  util01_ssh_key_name_at_the_provider: util01-mmhotline-user
 
   # The growth limits: the servers the coding agent adds without asking.
   # The person approves them once, with "go" on the setup's first screen,
