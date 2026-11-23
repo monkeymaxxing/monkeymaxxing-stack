@@ -57,8 +57,10 @@ type fakeVault struct {
 	referenced []string
 	// file, when set, is the vault's file in a Git checkout.
 	file string
-	// failOn makes setting that key fail, as MMX refuses a key.
+	// failOn makes setting that key fail, as MMX refuses a key; onFail runs
+	// then, so a test can make the next provider call fail too.
 	failOn map[string]bool
+	onFail func()
 	sets   []string
 	// fileWhenListed is the vault file's text when keys() last ran.
 	fileWhenListed string
@@ -78,6 +80,9 @@ func (v *fakeVault) keys() (map[string]bool, error) {
 
 func (v *fakeVault) set(key, value string, replace bool) error {
 	if v.failOn[key] {
+		if v.onFail != nil {
+			v.onFail()
+		}
 		return fmt.Errorf("mmx secrets set %s failed: the vault is not writable", key)
 	}
 	if _, ok := v.values[key]; ok && !replace {
@@ -111,10 +116,15 @@ func (v *fakeVault) missing() ([]string, error) {
 }
 
 type harness struct {
-	t          *testing.T
-	e          *environment
-	out        *bytes.Buffer
-	vault      *fakeVault
+	t     *testing.T
+	e     *environment
+	out   *bytes.Buffer
+	vault *fakeVault
+	// bundle stands in for the recovery bundle's MMX vault.
+	bundle *fakeVault
+	github *github
+	// rootFiles are the desk's files only root reads, by path.
+	rootFiles  map[string]string
 	b2         *standins.B2
 	cloudflare *standins.Cloudflare
 	answers    []string
@@ -204,10 +214,51 @@ func newHarness(t *testing.T, staging, uploads bool) *harness {
 			return nil
 		},
 	}
+	// The registry token's and Stripe key's services, for the checks of
+	// save-a-key and secrets.
+	h.github = &github{scopes: map[string]string{registryToken: "read:packages", expiringRegistryToken: "read:packages", endsTooSoonRegistryToken: "read:packages"},
+		ends: map[string]string{expiringRegistryToken: tokenEnd(90), endsTooSoonRegistryToken: tokenEnd(10)}}
+	githubServer := httptest.NewServer(h.github)
+	t.Cleanup(githubServer.Close)
+	stripeServer := httptest.NewServer(stripe(stripeKey, stripeTestKey))
+	t.Cleanup(stripeServer.Close)
+	h.e.githubAPIURL, h.e.containerRegistryURL, h.e.stripeAPIURL = githubServer.URL, githubServer.URL, stripeServer.URL
+	h.bundle = &fakeVault{values: map[string]string{}, failOn: map[string]bool{}}
+	h.e.bundleStore = h.bundle
+	h.e.resultsFile = filepath.Join(t.TempDir(), "setup_results.json")
+	h.e.backupWriteKeyFile = filepath.Join(t.TempDir(), "backup_write_key_until_the_bundle_is_uploaded")
+	h.rootFiles = map[string]string{}
+	h.e.readRootFile = func(path string) ([]byte, error) {
+		if content, ok := h.rootFiles[path]; ok {
+			return []byte(content), nil
+		}
+		return os.ReadFile(path)
+	}
+	h.e.writeFileAsRoot = func(path string, mode os.FileMode, content []byte) error {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, content, mode); err != nil {
+			return err
+		}
+		return os.Chmod(path, mode)
+	}
+	h.e.removeFileAsRoot = func(path string) error {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
 	// Every run that saves keys commits and pushes the vault itself, so
 	// each test's directory is a signed checkout with an origin.
 	h.secretsRepository()
 	return h
+}
+
+// results reads the results file as the coding agent does.
+func (h *harness) results() setupResults {
+	h.t.Helper()
+	return h.e.readResults()
 }
 
 // commitAll commits a test's own edit to the repository and pushes it, as
@@ -499,7 +550,7 @@ func TestBackblazeRerunAfterALostAnswerLeavesOneKey(t *testing.T) {
 func TestBackblazeExplainsWrongKeysTakenNamesAndUnreadableAnswers(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.answers = []string{masterKeyID, "wrong"}
-	if err := runBackblaze(h.e, nil); err == nil || !strings.Contains(err.Error(), "HTTP 401, unauthorized") {
+	if err := runBackblaze(h.e, nil); err == nil || !strings.Contains(err.Error(), "HTTP 401, code unauthorized") {
 		t.Fatalf("want Backblaze's refusal, got %v", err)
 	}
 	h.b2.TakenBucketNames["acme-systems-backups"] = true
@@ -717,11 +768,11 @@ func TestBackblazeRefusesBackupLengthsBelowTheirMinimumsBeforeChangingAnything(t
 
 func TestAFailedCommandStartsWithOnePlainSentenceThenTheTechnicalLine(t *testing.T) {
 	var out, errorOut bytes.Buffer
-	if code := run([]string{"go-live"}, &out, &errorOut); code != 1 {
+	if code := run([]string{"lock-the-desk"}, &out, &errorOut); code != 1 {
 		t.Fatalf("exit code %d, want 1; output %q", code, errorOut.String())
 	}
 	text := errorOut.String()
-	plain := strings.Index(text, "The first setup stopped before it finished.")
+	plain := strings.Index(text, "Locking your systems desk stopped before it finished.")
 	technical := strings.Index(text, "Stopped: ")
 	if plain != 0 || technical < plain {
 		t.Fatalf("the plain sentence must come first, then the technical line: %q", text)

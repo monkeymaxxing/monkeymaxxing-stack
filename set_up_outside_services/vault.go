@@ -329,19 +329,35 @@ func (e *environment) commitFiles(message string, files ...string) (string, erro
 	return strings.TrimSpace(commit), err
 }
 
-// finishVaultChange commits the keys this run saved, pushes main to
-// origin's main, and says so. command names the run, such as
-// "set-up-outside-services backblaze", for the commit message.
+// finishVaultChange commits the keys this run saved, and the recovery
+// bundle when it changed, pushes main to origin's main, and says so.
+// command names the run, such as "set-up-outside-services backblaze", for
+// the commit message.
 func (e *environment) finishVaultChange(v *savedKeys, command string) error {
 	e.say("")
-	if len(v.made) == 0 && !v.leftover {
+	var files []string
+	message := fmt.Sprintf("Add %d vault keys with %s\n\nKeys: %s", len(v.made), command, strings.Join(v.made, ", "))
+	if len(v.made) > 0 {
+		files = append(files, vaultFile)
+	}
+	status, err := e.git("status", "--porcelain", "--", recoveryBundleFile)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(status) != "" {
+		files = append(files, recoveryBundleFile)
+		if len(v.made) == 0 {
+			message = "Update the recovery bundle with " + command
+		}
+	}
+	if len(files) == 0 && !v.leftover {
 		e.say("The vault needed nothing from this run, so nothing was committed.")
 		return nil
 	}
 	commit, err := e.git("rev-parse", "--short", "HEAD")
 	commit = strings.TrimSpace(commit)
-	if err == nil && len(v.made) > 0 {
-		commit, err = e.commitFiles(fmt.Sprintf("Add %d vault keys with %s\n\nKeys: %s", len(v.made), command, strings.Join(v.made, ", ")), vaultFile)
+	if err == nil && len(files) > 0 {
+		commit, err = e.commitFiles(message, files...)
 	}
 	where := ""
 	if err == nil {

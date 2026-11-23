@@ -430,144 +430,226 @@ func cloudflareReplaceableKeys(settings systemSettings, plan []cloudflareCredent
 
 var unixUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 
+// cloudflareArguments are the cloudflare command's arguments.
+type cloudflareArguments struct {
+	replace map[string]bool
+	atOnce  bool
+	// leaving names a person whose tokens the run deletes.
+	leaving string
+	// accountID names the Cloudflare account when the link token reaches
+	// several, or Cloudflare does not list the token's account.
+	accountID string
+}
+
 // readCloudflareArguments reads --replace-key NAME (repeated),
-// --replace-every-key, --delete-the-old-keys-at-once, and
-// --delete-tokens-of-person NAME.
-func readCloudflareArguments(arguments []string, known []string, person string) (map[string]bool, bool, string, error) {
-	replace := map[string]bool{}
-	atOnce := false
-	leaving := ""
+// --replace-every-key, --delete-the-old-keys-at-once,
+// --delete-tokens-of-person NAME, and --account-id ID.
+func readCloudflareArguments(arguments []string, known []string, person string) (cloudflareArguments, error) {
+	read := cloudflareArguments{replace: map[string]bool{}}
 	for i := 0; i < len(arguments); i++ {
 		switch {
 		case arguments[i] == deleteTheOldKeysAtOnceFlag:
-			atOnce = true
+			read.atOnce = true
 		case arguments[i] == "--replace-every-key":
 			for _, name := range known {
-				replace[name] = true
+				read.replace[name] = true
 			}
 		case arguments[i] == "--replace-key" && i+1 < len(arguments):
 			i++
 			if !contains(known, arguments[i]) {
-				return nil, false, "", fmt.Errorf("--replace-key %s names no Cloudflare key of this system. Give one of: %s", arguments[i], strings.Join(known, ", "))
+				return read, fmt.Errorf("--replace-key %s names no Cloudflare key of this system. Give one of: %s", arguments[i], strings.Join(known, ", "))
 			}
-			replace[arguments[i]] = true
+			read.replace[arguments[i]] = true
 		case arguments[i] == "--delete-tokens-of-person" && i+1 < len(arguments):
 			i++
-			leaving = arguments[i]
-			if !unixUserNamePattern.MatchString(leaving) {
-				return nil, false, "", fmt.Errorf("--delete-tokens-of-person takes the leaving person's account name on their systems desk, vars.person_unix_username, such as alex: %w", errUsage)
+			read.leaving = arguments[i]
+			if !unixUserNamePattern.MatchString(read.leaving) {
+				return read, fmt.Errorf("--delete-tokens-of-person takes the leaving person's account name on their systems desk, vars.person_unix_username, such as alex: %w", errUsage)
 			}
-			if leaving == person {
-				return nil, false, "", errors.New("--delete-tokens-of-person names you. A remaining team member runs it for the person who leaves")
+			if read.leaving == person {
+				return read, errors.New("--delete-tokens-of-person names you. A remaining team member runs it for the person who leaves")
 			}
+		case arguments[i] == "--account-id" && i+1 < len(arguments):
+			i++
+			if !cloudflareAccountIDPattern.MatchString(arguments[i]) {
+				return read, fmt.Errorf("--account-id takes the Cloudflare account's 32-character ID, such as %s: %w", exampleCloudflareAccountID, errUsage)
+			}
+			read.accountID = arguments[i]
 		default:
-			return nil, false, "", fmt.Errorf("cloudflare takes only --replace-key NAME, --replace-every-key, %s, or --delete-tokens-of-person NAME: %w", deleteTheOldKeysAtOnceFlag, errUsage)
+			return read, fmt.Errorf("cloudflare takes only --account-id ID, --replace-key NAME, --replace-every-key, %s, or --delete-tokens-of-person NAME: %w", deleteTheOldKeysAtOnceFlag, errUsage)
 		}
 	}
-	if leaving != "" && (len(replace) > 0 || atOnce) {
-		return nil, false, "", fmt.Errorf("--delete-tokens-of-person runs on its own, without --replace-key: %w", errUsage)
+	if read.leaving != "" && (len(read.replace) > 0 || read.atOnce) {
+		return read, fmt.Errorf("--delete-tokens-of-person runs on its own, without --replace-key: %w", errUsage)
 	}
-	return replace, atOnce, leaving, nil
+	return read, nil
 }
 
-func runCloudflare(e *environment, arguments []string) error {
-	settings, err := readSystemSettings(e.readRepositoryFile)
-	if err != nil {
-		return err
-	}
-	accountID, err := settings.cloudflareAccountID()
-	if err != nil {
-		return err
-	}
-	if err := plainSetting("vars.status_page_host_name", settings.Vars.StatusPageHostName); err != nil {
-		return err
-	}
-	plan, err := cloudflareAccountTokenPlan(settings, accountID)
-	if err != nil {
-		return err
-	}
-	replace, atOnce, leaving, err := readCloudflareArguments(arguments, cloudflareReplaceableKeys(settings, plan), e.person)
-	if err != nil {
-		return err
-	}
-	e.replaceKeys, e.deleteOldKeysAtOnce = replace, atOnce
-	oldKeys := e.oldKeysFilePath(settings)
-	if leaving != "" {
-		return e.deleteTheTokensOfALeavingPerson(settings, accountID, leaving)
-	}
-	saved, err := e.beginVaultChange()
-	if err != nil {
-		return err
-	}
-	if len(replace) > 0 {
-		e.say("Cloudflare: this command replaces these keys and saves each new one where the old one was:")
-		e.say("  %s", strings.Join(sortedNames(replace), ", "))
-		if atOnce {
-			e.say("It deletes each old key at Cloudflare at once, so the servers that use one fail until their next run.")
-		} else {
-			e.say("A key the servers use keeps its old key working until the servers' run passed and you press Enter.")
-		}
-	} else {
-		e.say("Cloudflare: this command makes your systems desk's Cloudflare token, your tunnels, R2 buckets, and the keys your servers use,")
-		e.say("the status page, and Access's One-time PIN login method. It saves every secret straight into the vault or your token file.")
-	}
-	link, err := e.askForTheLinkToken(settings, accountID)
-	if err != nil {
-		return err
-	}
-	linkDeleted := false
-	defer func() {
-		if !linkDeleted {
-			e.deleteTheLinkToken(link)
-		}
-	}()
-	done, err := e.setUpCloudflare(link, settings, accountID, plan, saved, oldKeys)
-	if err != nil {
-		return err
-	}
-	statusPage := done.statusPage
-	if done.r2IsOff {
-		e.say("")
-		e.say("R2 is not turned on in this Cloudflare account yet, so your apps' upload buckets and their keys wait.")
-		e.say("Turn R2 on once at https://dash.cloudflare.com/%s/r2/overview, then run this command again: it makes only what is missing.", accountID)
-	}
+// r2OverviewPage opens the account's R2 page, where Cloudflare's checkout
+// turns R2 on.
+func r2OverviewPage(accountID string) string {
+	return "https://dash.cloudflare.com/" + accountID + "/r2/overview"
+}
 
-	e.say("")
-	e.say("See the account's tokens: https://dash.cloudflare.com/%s/api-tokens", accountID)
-	e.say("See the R2 buckets: https://dash.cloudflare.com/%s/r2/overview", accountID)
-	e.say("See the tunnels: https://dash.cloudflare.com/one/, then Networks, Tunnels.")
-	e.say("")
-	e.say("For your coding agent's settings, none of which is a secret:")
-	if settings.uploadsAreBackedUp() {
-		e.say("  vars.backups.uploads_r2_s3_endpoint: https://%s.r2.cloudflarestorage.com", accountID)
-	}
-	if statusPage.R2BucketURL != "" {
-		e.say("  status_page.r2_bucket_url in mmhotline_settings.yml: %s", statusPage.R2BucketURL)
-	}
-	if len(replace) == 0 {
-		e.say("Before the MMHotline-down alarm's first upload, the account needs its workers.dev address: open Workers & Pages once if the account never had a Worker: https://dash.cloudflare.com/%s/workers-and-pages", accountID)
-	}
-	tokensPage := "https://dash.cloudflare.com/" + accountID + "/api-tokens"
-	if atOnce {
-		if err := e.deleteOldKeys(oldKeys, "cloudflare", false, link.deleteAccountToken, tokensPage); err != nil {
-			return err
+// r2CostLines states R2's price for a person who approves it, from
+// Cloudflare's R2 pricing page (https://developers.cloudflare.com/r2/pricing/,
+// read 2026-11-17, Standard storage): free up to 10 GB-month, 1 million
+// Class A and 10 million Class B requests a month; then $0.015 per
+// GB-month, $4.50 per million Class A (writes) and $0.36 per million Class B
+// (reads); no egress fee. Check it again when Cloudflare changes its prices.
+const r2CostLines = `  It costs nothing up to 10 GB of files a month.
+  Above that:  $0.015 for each GB a month,
+               $4.50 for each million file writes after the first million,
+               $0.36 for each million file reads after the first 10 million.
+  Downloads to your users cost nothing.`
+
+// runCloudflare sets up the Cloudflare account from the link token, the
+// first time and on each later run: it finds the account, adds the domain
+// and has Cloudflare copy its DNS records, gives the account its
+// workers.dev address, reads the registrar's facts while the domain is not
+// on Cloudflare yet, then makes the tokens, tunnels, and R2 buckets.
+func runCloudflare(e *environment, arguments []string) error {
+	e.named("cloudflare")
+	return e.asStep("cloudflare", func(notes map[string]string) (string, error) {
+		settings, err := readSystemSettings(e.readRepositoryFile)
+		if err != nil {
+			return "", err
 		}
-	}
-	if err := e.finishVaultChange(saved, "set-up-outside-services cloudflare"); err != nil {
-		return err
-	}
-	if atOnce && len(replace) > 0 {
-		e.say("The servers get the new keys at the next run of every_server: tell your coding agent to run it now.")
-	}
-	// The vault is pushed, so the run can bring the new keys to the servers.
-	// The link token stays in this command's memory only while it waits.
-	if err := e.deleteOldKeys(oldKeys, "cloudflare", true, link.deleteAccountToken, tokensPage); err != nil {
-		return err
-	}
-	linkDeleted = true
-	e.deleteTheLinkToken(link)
-	e.say(sayTheCodingAgentCarriesOn)
-	return nil
+		domain, err := settings.domain()
+		if err != nil {
+			return "", err
+		}
+		// The plan's checks and key names do not depend on the account, which
+		// may be known only once Cloudflare answers for the link token.
+		names, err := cloudflareAccountTokenPlan(settings, exampleCloudflareAccountID)
+		if err != nil {
+			return "", err
+		}
+		read, err := readCloudflareArguments(arguments, cloudflareReplaceableKeys(settings, names), e.person)
+		if err != nil {
+			return "", err
+		}
+		e.replaceKeys, e.deleteOldKeysAtOnce = read.replace, read.atOnce
+		oldKeys := e.oldKeysFilePath(settings)
+		if read.leaving != "" {
+			accountID, err := settings.cloudflareAccountID()
+			if err != nil {
+				return "", err
+			}
+			return stepDone, e.deleteTheTokensOfALeavingPerson(settings, accountID, read.leaving)
+		}
+		saved, err := e.beginAccountChange(settings)
+		if err != nil {
+			return "", err
+		}
+		if len(read.replace) > 0 {
+			e.say("Cloudflare: this command replaces these keys and saves each new one where the old one was:")
+			e.say("  %s", strings.Join(sortedNames(read.replace), ", "))
+			if read.atOnce {
+				e.say("It deletes each old key at Cloudflare at once, so the servers that use one fail until their next run.")
+			} else {
+				e.say("A key the servers use keeps its old key working until the servers' run passed and you press Enter.")
+			}
+		} else {
+			e.say("Cloudflare: this command adds your domain, makes your systems desk's Cloudflare token, your tunnels, R2 buckets, and the keys")
+			e.say("your servers use, the status page, and Access's One-time PIN login method. It saves every secret straight into the vault or your token file.")
+		}
+		accountID := read.accountID
+		if accountID == "" {
+			// A rotation or a joining person: the coding agent wrote the
+			// account's ID into the settings at the first setup.
+			accountID, _ = settings.cloudflareAccountID()
+		}
+		link, err := e.askForTheLinkToken(settings, accountID)
+		if err != nil {
+			return "", err
+		}
+		linkDeleted := false
+		defer func() {
+			if !linkDeleted {
+				e.deleteTheLinkToken(link)
+			}
+		}()
+		accountID = link.accountID
+		notes["cloudflare_account_id"] = accountID
+
+		e.say("")
+		e.say("Your domain %s at Cloudflare:", domain)
+		zone, err := e.addTheDomain(link, settings, domain)
+		if err != nil {
+			return "", err
+		}
+		notes["cloudflare_nameservers"] = strings.Join(zone.NameServers, " ")
+		notes["cloudflare_domain_status"] = zone.Status
+		if zone.Status != "active" {
+			// The domain moves to Cloudflare at its registrar, after the
+			// records are copied and with DNSSEC off.
+			registration := lookUpRegistration(e, domain)
+			if registration.registrar != "" {
+				notes["domain_registrar"] = registration.registrar
+			}
+			switch registration.dnssec {
+			case dnssecOn:
+				notes["domain_dnssec_on"] = "yes"
+			case dnssecOff:
+				notes["domain_dnssec_on"] = "no"
+			}
+			e.say("  The domain points at Cloudflare once its registrar names these two nameservers: %s.", strings.Join(zone.NameServers, ", "))
+		}
+
+		plan, err := cloudflareAccountTokenPlan(settings, accountID)
+		if err != nil {
+			return "", err
+		}
+		done, err := e.setUpCloudflare(link, settings, accountID, plan, saved, oldKeys)
+		if err != nil {
+			return "", err
+		}
+		statusPage := done.statusPage
+
+		e.say("")
+		e.say("See the account's tokens: https://dash.cloudflare.com/%s/api-tokens", accountID)
+		e.say("See the R2 buckets: %s", r2OverviewPage(accountID))
+		e.say("See the tunnels: https://dash.cloudflare.com/one/, then Networks, Tunnels.")
+		e.say("")
+		e.say("For your coding agent's settings, none of which is a secret:")
+		if settings.uploadsAreBackedUp() {
+			notes["uploads_r2_s3_endpoint"] = "https://" + accountID + ".r2.cloudflarestorage.com"
+			e.say("  vars.backups.uploads_r2_s3_endpoint: %s", notes["uploads_r2_s3_endpoint"])
+		}
+		if statusPage.R2BucketURL != "" {
+			notes["status_page_r2_bucket_url"] = statusPage.R2BucketURL
+			e.say("  status_page.r2_bucket_url in mmhotline_settings.yml: %s", statusPage.R2BucketURL)
+		}
+		tokensPage := "https://dash.cloudflare.com/" + accountID + "/api-tokens"
+		if read.atOnce {
+			if err := e.deleteOldKeys(oldKeys, "cloudflare", false, link.deleteAccountToken, tokensPage); err != nil {
+				return "", err
+			}
+		}
+		if err := e.finishVaultChange(saved, e.commandLine); err != nil {
+			return "", err
+		}
+		if read.atOnce && len(read.replace) > 0 {
+			e.say("The servers get the new keys at the next run of every_server: tell your coding agent to run it now.")
+		}
+		// The vault is pushed, so the run can bring the new keys to the servers.
+		// The link token stays in this command's memory only while it waits.
+		if err := e.deleteOldKeys(oldKeys, "cloudflare", true, link.deleteAccountToken, tokensPage); err != nil {
+			return "", err
+		}
+		linkDeleted = true
+		e.deleteTheLinkToken(link)
+		if done.r2IsOff {
+			// The upload buckets and their keys need R2, and turning it on asks
+			// for a card at Cloudflare's checkout, which only the person does.
+			return "", fmt.Errorf("R2 is off in this Cloudflare account, and your app keeps its uploaded files in R2. Everything else is set up.\n"+
+				"Turn R2 on once at %s: Cloudflare's checkout asks for a card.\n%s\n"+
+				"Then run this command again, with a new link token: it makes only what is missing", r2OverviewPage(accountID), r2CostLines)
+		}
+		e.say(sayTheCodingAgentCarriesOn)
+		return stepDone, nil
+	})
 }
 
 // cloudflareSetUp is what setUpCloudflare leaves for its caller to say.
@@ -578,10 +660,10 @@ type cloudflareSetUp struct {
 	r2IsOff bool
 }
 
-// setUpCloudflare makes, with the link token, everything both cloudflare and
-// go-live make: the person's desk token, the tunnels, the R2 buckets, the
-// status page once the domain is Active, the servers' tokens, the posting
-// key, and Access's login method. Each part keeps what exists already.
+// setUpCloudflare makes, with the link token, the person's desk token, the
+// tunnels, the R2 buckets, the status page once the domain is Active, the
+// servers' tokens, the posting key, and Access's login method. Each part
+// keeps what exists already.
 func (e *environment) setUpCloudflare(link *cloudflareClient, settings systemSettings, accountID string, plan []cloudflareCredentialPlan,
 	saved *savedKeys, oldKeys string) (cloudflareSetUp, error) {
 	groups := append(append(append([]permissionGroup{}, deskAccountPermissions...), deskZonePermissions...), accessSetUpPermissions...)
@@ -664,7 +746,7 @@ func (e *environment) setUpCloudflare(link *cloudflareClient, settings systemSet
 		}
 		e.say("  MMHotline set up the page's bucket %s, its host name, and the rule that serves the page.", statusPage.BucketName)
 		plan = append(plan, statusPageCredentialPlan(settings, accountID, statusPage.BucketName))
-		if err := updateTokenFile(e.tokenFilePath(settings), map[string]string{statusPageBucketURLVariable: statusPage.R2BucketURL}); err != nil {
+		if err := e.updateTokenFile(e.tokenFilePath(settings), map[string]string{statusPageBucketURLVariable: statusPage.R2BucketURL}); err != nil {
 			return cloudflareSetUp{}, err
 		}
 		e.say("  Wrote the page's bucket address, which is not a secret, into your token file as %s.", statusPageBucketURLVariable)
@@ -716,20 +798,25 @@ func sortedNames(set map[string]bool) []string {
 	return names
 }
 
-// askForTheLinkToken prints the prepared link, takes the link token at a
-// hidden prompt, checks it, and deletes any earlier link token of the same
-// name that a stopped run left.
+// askForTheLinkToken takes the link token, from a hidden prompt with the
+// prepared link above it, or from the coding agent's standard input; finds
+// its account when accountID is empty; checks it; and deletes any earlier
+// link token of the same name that a stopped run left.
 func (e *environment) askForTheLinkToken(settings systemSettings, accountID string) (*cloudflareClient, error) {
-	e.say("")
-	e.say("Making tokens needs one token that only you can make, on Cloudflare's website: the link token.")
-	e.say("Open this link, which fills in its one permission, Account API Tokens Edit, and its name:")
-	e.say("  %s", tokenMakingLink(settings, e.person))
-	e.say("If Cloudflare asks which account, pick the one whose ID is %s (cloudflare_account_id).", accountID)
-	e.say("Keep the link's settings. The page is long: scroll to the bottom, below the list of permissions.")
-	e.say("Select Review token, then Create token.")
-	e.say("Cloudflare shows the token only once: copy all of it and paste it below.")
-	e.say("This command sets the link token to end by itself after 24 hours and deletes it when the run ends, so no token that can make tokens stays behind.")
-	e.say("")
+	if !e.forTheCodingAgent {
+		e.say("")
+		e.say("Making tokens needs one token that only you can make, on Cloudflare's website: the link token.")
+		e.say("Open this link, which fills in its one permission, Account API Tokens Edit, and its name:")
+		e.say("  %s", tokenMakingLink(settings, e.person))
+		if accountID != "" {
+			e.say("If Cloudflare asks which account, pick the one whose ID is %s (cloudflare_account_id).", accountID)
+		}
+		e.say("Keep the link's settings. The page is long: scroll to the bottom, below the list of permissions.")
+		e.say("Select Review token, then Create token.")
+		e.say("Cloudflare shows the token only once: copy all of it and paste it below.")
+		e.say("This command sets the link token to end by itself after 24 hours and deletes it when the run ends, so no token that can make tokens stays behind.")
+		e.say("")
+	}
 	value, err := e.prompt("Link token (hidden): ")
 	if err != nil {
 		return nil, err
@@ -738,16 +825,64 @@ func (e *environment) askForTheLinkToken(settings systemSettings, accountID stri
 		return nil, err
 	}
 	link := &cloudflareClient{baseURL: e.cloudflareAPIURL, token: value, accountID: accountID, who: "the link token"}
+	if accountID == "" {
+		if link.accountID, err = findTheLinkTokensAccount(link); err != nil {
+			return nil, err
+		}
+	}
 	id, err := link.verifyAccountToken()
 	if err != nil {
 		return nil, fmt.Errorf("%v. Most likely the token was not copied whole, or it was made in another account than %s. "+
-			"Make the link token with the link above, in account %s, copy all of it, and run this command again", err, accountID, accountID)
+			"Make a new link token with the link, in account %s, copy all of it, and run this command again", err, link.accountID, link.accountID)
 	}
-	e.say("The link token works in account %s.", accountID)
+	e.say("The link token works in account %s.", link.accountID)
 	if err := e.acceptLinkToken(settings, link, id); err != nil {
 		return nil, err
 	}
 	return link, nil
+}
+
+// whereTheAccountIDIs says where a person reads a Cloudflare account's ID.
+const whereTheAccountIDIs = "the address bar of any page at https://dash.cloudflare.com shows it as the 32 letters and digits right after dash.cloudflare.com/"
+
+// findTheLinkTokensAccount finds the one account where the link token
+// works, among the accounts Cloudflare lists for it. An account-owned token
+// works in its own account only. When Cloudflare lists none, or the token
+// works in several, the run stops and names the way to give --account-id.
+// A link token left behind that way ends with the next run, which deletes
+// earlier link tokens of the same name.
+func findTheLinkTokensAccount(link *cloudflareClient) (string, error) {
+	accounts, err := link.accounts()
+	if err != nil && !refusedWith(err, http.StatusForbidden) {
+		return "", err
+	}
+	if len(accounts) == 0 {
+		return "", fmt.Errorf("Cloudflare does not list the account of this link token. Run this command again with --account-id ID, with a new link token; %s", whereTheAccountIDIs)
+	}
+	var works []cloudflareAccount
+	for _, account := range accounts {
+		link.accountID = account.ID
+		_, err := link.verifyAccountToken()
+		var refusal *apiError
+		switch {
+		case err == nil:
+			works = append(works, account)
+		case !errors.As(err, &refusal):
+			return "", err
+		}
+	}
+	link.accountID = ""
+	switch len(works) {
+	case 1:
+		return works[0].ID, nil
+	case 0:
+		return "", errors.New("Cloudflare does not know this link token in any account it lists. Most likely the token was not copied whole. Make a new link token with the link and run this command again")
+	}
+	var listed []string
+	for _, account := range works {
+		listed = append(listed, fmt.Sprintf("%s (%s)", screenText(account.Name), account.ID))
+	}
+	return "", fmt.Errorf("the link token works in %d Cloudflare accounts: %s. Run this command again with --account-id ID for the account this system uses, with a new link token", len(works), strings.Join(listed, ", "))
 }
 
 // errLinkTokenCannotMakeTokens says the token passed its check but lacks
@@ -868,7 +1003,7 @@ func (e *environment) ensureDeskToken(link *cloudflareClient, settings systemSet
 		if err := e.writeProxyFile(proxyFileRequest{API: "cloudflare", Token: token.Value, CloudflareAccountID: accountID}); err != nil {
 			return err
 		}
-		if err := updateTokenFile(path, map[string]string{deskTokenVariable: token.Value, accountIDVariable: accountID}); err != nil {
+		if err := e.updateTokenFile(path, map[string]string{deskTokenVariable: token.Value, accountIDVariable: accountID}); err != nil {
 			return fmt.Errorf("the API proxy has the new token, but writing %s failed: %v", path, err)
 		}
 		return nil
@@ -901,7 +1036,7 @@ func (e *environment) ensureStatusPagePostingKey(link *cloudflareClient, setting
 	}
 	token, made, err := e.ensurePersonsToken(link, plan, ids, heldID, e.replaceKeys[postingKeyIDVariable], func(token cloudflareToken) error {
 		accessKeyID, secretAccessKey := r2Credentials(token)
-		return updateTokenFile(path, map[string]string{postingKeyIDVariable: accessKeyID, postingSecretVariable: secretAccessKey})
+		return e.updateTokenFile(path, map[string]string{postingKeyIDVariable: accessKeyID, postingSecretVariable: secretAccessKey})
 	})
 	if err != nil {
 		return err
@@ -1214,7 +1349,7 @@ func (e *environment) addAccessLoginMethodAndStagingToken(access *cloudflareClie
 	if values.ClientID == "" || values.ClientSecret == "" {
 		return fmt.Errorf("Cloudflare answered for the service token %q (ID %s) without its values. Delete it at %s and run this command again", stagingName, values.ID, stagingServiceTokensPage)
 	}
-	if err := updateTokenFile(path, map[string]string{stagingAccessClientIDVariable: values.ClientID, stagingAccessClientSecretVariable: values.ClientSecret}); err != nil {
+	if err := e.updateTokenFile(path, map[string]string{stagingAccessClientIDVariable: values.ClientID, stagingAccessClientSecretVariable: values.ClientSecret}); err != nil {
 		return fmt.Errorf("%v. Cloudflare made the service token %q (ID %s), whose secret nobody can read again: delete it at %s and run this command again", err, stagingName, values.ID, stagingServiceTokensPage)
 	}
 	if stagingToken == nil {
@@ -1225,7 +1360,7 @@ func (e *environment) addAccessLoginMethodAndStagingToken(access *cloudflareClie
 		e.say("  Gave the service token %q (ID %s) a new secret; the old one stopped working. Wrote it into your token file as %s.", stagingName, values.ID, stagingAccessClientSecretVariable)
 		e.say("  Each team member enters it from the password manager with set-up-outside-services personal-token staging-access; replace CI's two secrets too.")
 	}
-	e.say("  Save both in your password manager, and in CI's secrets when CI tests staging. go-live keeps both in the recovery bundle.")
+	e.say("  Save both in your password manager, and in CI's secrets when CI tests staging. lock-the-desk keeps both in the recovery bundle.")
 	return nil
 }
 
@@ -1278,22 +1413,37 @@ func (e *environment) deleteTheTokensOfALeavingPerson(settings systemSettings, a
 	return nil
 }
 
-// accountIDs lists the IDs of the accounts a token reaches.
+// cloudflareAccount is an account a token reaches, by its ID and name.
+type cloudflareAccount struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// accounts lists the accounts a token reaches.
 // https://developers.cloudflare.com/api/resources/accounts/methods/list/
-func (c *cloudflareClient) accountIDs() ([]string, error) {
-	var accounts []struct {
-		ID string `json:"id"`
-	}
-	if err := c.call(http.MethodGet, "/accounts", nil, &accounts); err != nil {
+func (c *cloudflareClient) accounts() ([]cloudflareAccount, error) {
+	var listed []cloudflareAccount
+	if err := c.call(http.MethodGet, "/accounts", nil, &listed); err != nil {
 		return nil, err
 	}
-	var ids []string
-	for _, account := range accounts {
+	var accounts []cloudflareAccount
+	for _, account := range listed {
 		if cloudflareAccountIDPattern.MatchString(account.ID) {
-			ids = append(ids, account.ID)
+			accounts = append(accounts, account)
 		}
 	}
-	return ids, nil
+	return accounts, nil
+}
+
+// screenText keeps a line from a provider or the settings to printable
+// text, so it cannot move the cursor or clear the screen.
+func screenText(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r < ' ' || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, strings.TrimSpace(text))
 }
 
 // cloudflareZone is a domain at Cloudflare, with the two nameservers

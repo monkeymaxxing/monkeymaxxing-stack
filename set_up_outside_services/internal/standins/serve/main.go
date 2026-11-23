@@ -28,7 +28,7 @@ func main() {
 	masterKeyID, masterKey := os.Getenv("STANDIN_B2_MASTER_KEY_ID"), os.Getenv("STANDIN_B2_MASTER_KEY")
 	accountID := flag.String("cloudflare-account-id", "", "")
 	zone := flag.String("cloudflare-zone", "example.org", "")
-	zoneStatus := flag.String("cloudflare-zone-status", "active", "active, pending before the domain moved, or absent before go-live adds it")
+	zoneStatus := flag.String("cloudflare-zone-status", "active", "active, pending before the domain moved, or absent before the cloudflare command adds it")
 	providerToken := os.Getenv("STANDIN_PROVIDER_TOKEN")
 	flag.Parse()
 

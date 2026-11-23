@@ -103,7 +103,7 @@ func TestSecretsSkipsSavedKeysMakesRandomOnesAndPushesASignedCommit(t *testing.T
 	asked := h.answerSecrets(
 		// util01's token, the group key, the triage key, the registry token,
 		// then the two Stripe keys.
-		[]string{"util01-token-value", "group-key-value", "triage-key-value", "registry-token-value", "sk_live_value", "sk_test_value"},
+		[]string{"util01-token-value", "group-key-value", "triage-key-value", registryToken, stripeKey, stripeTestKey},
 		// The triage credential's kind; the app's secrets ask nothing.
 		[]string{""})
 	if err := runSecrets(h.e, nil); err != nil {
@@ -117,8 +117,8 @@ func TestSecretsSkipsSavedKeysMakesRandomOnesAndPushesASignedCommit(t *testing.T
 		t.Fatalf("a key the vault had was asked for or changed:\n%s", strings.Join(*asked, "\n"))
 	}
 	for key, want := range map[string]string{"util01_provider_api_token": "util01-token-value", "mmwatchdog_pushover_user_or_group_key": "group-key-value",
-		"mmhotline_triage_agent_credential": "triage-key-value", "container_registry_read_only_token": "registry-token-value",
-		"shop_STRIPE_API_KEY": "sk_live_value", "staging_shop_STRIPE_API_KEY": "sk_test_value"} {
+		"mmhotline_triage_agent_credential": "triage-key-value", "container_registry_read_only_token": registryToken,
+		"shop_STRIPE_API_KEY": stripeKey, "staging_shop_STRIPE_API_KEY": stripeTestKey} {
 		if h.vault.values[key] != want {
 			t.Errorf("%s = %q, want the pasted value", key, h.vault.values[key])
 		}
@@ -351,10 +351,17 @@ func (h *harness) consolePasswordRun(arguments ...string) ([]string, string, err
 	return events, password(), err
 }
 
-func TestSecretsMakesTheConsolePasswordAndSavesOnlyItsHash(t *testing.T) {
+func TestSecretsReplacesTheConsolePasswordAndSavesOnlyItsHash(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.vault.referenced = []string{"shared_root_console_password_hash"}
-	events, password, err := h.consolePasswordRun()
+	// At the setup, lock-the-desk makes it in the person's own window, so
+	// secrets leaves a missing one alone.
+	events, _, err := h.consolePasswordRun()
+	if err != nil || len(events) > 0 || h.vault.values["shared_root_console_password_hash"] != "" {
+		t.Fatalf("secrets made the console password without --replace: %v, %v", events, err)
+	}
+	h.out.Reset()
+	events, password, err := h.consolePasswordRun("--replace", "shared_root_console_password_hash")
 	if err != nil {
 		t.Fatalf("secrets: %v\n%s", err, h.out)
 	}

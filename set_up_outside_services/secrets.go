@@ -50,7 +50,7 @@ type secretPlan struct {
 	Length    int    // randomSecret: mmx secrets add-random --length
 	HexLength int
 	// App and Variable name an app's secret from an outside service, which
-	// go-live asks on its own screen with its Steps and CheckedWith.
+	// save-a-key checks with CheckedWith, and secrets shows with its Steps.
 	App, Variable string
 	Staging       bool
 	Steps         []string
@@ -275,7 +275,7 @@ func secretsPlan(s systemSettings) []secretPlan {
 			Why:   "Your servers download your app's images with it. It can only read, so a broken-into server cannot replace an image.",
 			Where: "https://github.com/settings/tokens/new?scopes=read:packages&description=" + s.ProjectName + "+servers+read+images, a classic token with read:packages only. Your coding agent sets container_registry_read_only_username, which is not a secret, to the account that owns it."},
 	}
-	plan = append(plan, secretPlan{Key: "shared_root_console_password_hash", Kind: consolePasswordSecret, What: "the servers' shared root console password",
+	plan = append(plan, secretPlan{Key: consolePasswordVaultKey, Kind: consolePasswordSecret, What: "the servers' shared root console password",
 		Why: "Every server lets root log in with it at your server provider's web console, the way in when SSH and the private network fail. SSH never accepts it. The vault keeps only its hash."})
 	var apps []string
 	for name := range s.Vars.Apps {
@@ -324,7 +324,7 @@ func secretsPlan(s systemSettings) []secretPlan {
 		{Key: "pg_auto_failover_autoctl_node_password", What: "the failover monitor's login"},
 		{Key: "pg_auto_failover_replication_password", What: "the database replicas' login"},
 		{Key: "pgbackrest_repository_cipher_passphrase", What: "production's backup passphrase",
-			Why: "pgBackRest encrypts every backup with it. go-live keeps a copy in the recovery bundle."},
+			Why: "pgBackRest encrypts every backup with it. The recovery bundle keeps a copy."},
 		{Key: "mmhotline_signing_secret_of_the_fleet_hub", What: "the fleet hub's signing secret",
 			Why: "The fleet hub signs MMWatchdog's alerts with it, so MMHotline takes alerts only from your servers.", HexLength: 64},
 	}
@@ -344,12 +344,19 @@ func secretsPlan(s systemSettings) []secretPlan {
 }
 
 func runSecrets(e *environment, arguments []string) error {
+	e.named("secrets")
 	flags := flag.NewFlagSet("secrets", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	replace := flags.String("replace", "", "")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() > 0 {
 		return fmt.Errorf("secrets takes only --replace KEY: %w", errUsage)
 	}
+	// Each key only a person gives is its own step in the results file, as
+	// save-a-key records it, so the coding agent sees the same after either.
+	return e.asStep("", func(map[string]string) (string, error) { return "", e.saveSecrets(*replace) })
+}
+
+func (e *environment) saveSecrets(replace string) error {
 	settings, err := readSystemSettings(e.readRepositoryFile)
 	if err != nil {
 		return err
@@ -358,19 +365,19 @@ func runSecrets(e *environment, arguments []string) error {
 		return err
 	}
 	plan := secretsPlan(settings)
-	if *replace != "" {
+	if replace != "" {
 		found := false
 		for _, item := range plan {
-			found = found || item.Key == *replace
+			found = found || item.Key == replace
 		}
 		if !found {
-			if where := madeElsewhere(*replace); where != "" {
-				return fmt.Errorf("%s is made by %s, not by this step", *replace, where)
+			if where := madeElsewhere(replace); where != "" {
+				return fmt.Errorf("%s is made by %s, not by this step", replace, where)
 			}
-			return fmt.Errorf("%s is not a key this step makes. It makes: %s", *replace, planKeys(plan))
+			return fmt.Errorf("%s is not a key this step makes. It makes: %s", replace, planKeys(plan))
 		}
 	}
-	saved, err := e.beginVaultChange()
+	saved, err := e.beginAccountChange(settings)
 	if err != nil {
 		return err
 	}
@@ -383,8 +390,8 @@ func runSecrets(e *environment, arguments []string) error {
 		missing[key] = true
 	}
 	e.say("Vault secrets: this step saves each secret your servers read that the vault still lacks.")
-	e.say("You paste the ones that only a website gives, at hidden prompts. It makes the servers' console password and shows it")
-	e.say("once, for your password manager. It makes the rest itself, with random values that nobody needs to see.")
+	e.say("You paste the ones that only a website gives, at hidden prompts. It makes the rest itself, with random values that nobody")
+	e.say("needs to see. The servers' console password comes with lock-the-desk, or with --replace %s to replace it.", consolePasswordVaultKey)
 	e.say("Then it commits and pushes the vault for you. Your coding agent never sees a value.")
 	var made, later, kept []string
 	var triageChoices []triageChoice
@@ -392,7 +399,11 @@ func runSecrets(e *environment, arguments []string) error {
 		if err := e.stopIfInterrupted(); err != nil {
 			return err
 		}
-		wanted := missing[item.Key] || item.Key == *replace
+		wanted := missing[item.Key] || item.Key == replace
+		if item.Kind == consolePasswordSecret && item.Key != replace {
+			// lock-the-desk makes it at the setup, in the person's own window.
+			wanted = false
+		}
 		if !wanted {
 			if saved.names[item.Key] {
 				kept = append(kept, item.Key)
@@ -455,7 +466,7 @@ func runSecrets(e *environment, arguments []string) error {
 				triageChoices = append(triageChoices, choice)
 			}
 		case randomSecret:
-			if err := saveRandom(saved, item.Key, item.Length, item.HexLength); err != nil {
+			if err := saveRandomSecret(saved, item); err != nil {
 				return err
 			}
 			e.say("")
@@ -466,7 +477,7 @@ func runSecrets(e *environment, arguments []string) error {
 			made = append(made, item.Key)
 			continue
 		case consolePasswordSecret:
-			if err := e.saveConsolePassword(saved, item); err != nil {
+			if err := e.saveConsolePassword(saved, item, nil); err != nil {
 				return err
 			}
 			made = append(made, item.Key)
@@ -484,11 +495,29 @@ func runSecrets(e *environment, arguments []string) error {
 		if strings.ContainsAny(value, "\r\n") {
 			return fmt.Errorf("the value for %s has more than one line. Paste the one value only, then run this step again", item.Key)
 		}
+		_, checked := keyOnlyAPersonGives(settings, item.Key)
+		notes := map[string]string{}
+		if checked {
+			if err := e.checkAKeyBeforeSaving(settings, item, value, notes); err != nil {
+				return err
+			}
+		}
 		if err := saved.save(item.Key, value); err != nil {
 			return err
 		}
 		e.say("  Saved it as %s.", item.Key)
 		made = append(made, item.Key)
+		if checked {
+			err := e.updateResults(func(r *setupResults) {
+				r.setState(item.Key, stepDone)
+				for key, value := range notes {
+					r.ForTheCodingAgent[key] = value
+				}
+			})
+			if err != nil {
+				return err
+			}
+		}
 	}
 	var elsewhere, unknown []string
 	inPlan := map[string]bool{}
@@ -505,7 +534,7 @@ func runSecrets(e *environment, arguments []string) error {
 			unknown = append(unknown, key)
 		}
 	}
-	if err := e.finishVaultChange(saved, "set-up-outside-services secrets"); err != nil {
+	if err := e.finishVaultChange(saved, e.commandLine); err != nil {
 		return err
 	}
 	e.say("Saved now: %s.", listOrNone(made))
@@ -533,6 +562,34 @@ func planKeys(plan []secretPlan) string {
 	return strings.Join(keys, ", ")
 }
 
+// saveRandomSecret makes one random vault secret. A key the recovery bundle
+// copies is made here and handed to MMX, so the bundle gets it too; the
+// others are made inside MMX, so their value never passes through here.
+func saveRandomSecret(saved *savedKeys, item secretPlan) error {
+	if !copiedIntoTheBundle[item.Key] {
+		return saveRandom(saved, item.Key, item.Length, item.HexLength)
+	}
+	value, err := randomText(item.Length)
+	if err != nil {
+		return err
+	}
+	return saved.save(item.Key, value)
+}
+
+// randomText makes length random letters and digits.
+func randomText(length int) (string, error) {
+	const characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	text := make([]byte, length)
+	for i := range text {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(characters))))
+		if err != nil {
+			return "", err
+		}
+		text[i] = characters[n.Int64()]
+	}
+	return string(text), nil
+}
+
 // saveRandom makes a random value that nobody sees: MMX's add-random, or,
 // for a reader that needs hexadecimal characters, a value made here and
 // handed to MMX on standard input.
@@ -548,9 +605,12 @@ func saveRandom(saved *savedKeys, key string, length, hexLength int) error {
 }
 
 // consolePasswordItem is the password manager item that keeps the servers'
-// shared root console password, when the secrets step makes it. go-live
-// keeps it in the recovery bundle instead.
+// shared root console password. The recovery bundle keeps the one
+// lock-the-desk makes too.
 const consolePasswordItem = "Shared root console password"
+
+// consolePasswordVaultKey keeps the password's hash, which the servers read.
+const consolePasswordVaultKey = "shared_root_console_password_hash"
 
 // consolePasswordLetters are lowercase letters that sit in the same place on
 // the common keyboard layouts (QWERTY, QWERTZ, AZERTY): a provider's web
@@ -579,9 +639,10 @@ func newConsolePassword() (string, error) {
 
 // saveConsolePassword makes the servers' shared root console password,
 // shows it once for the team's password manager, has the person type it
-// back from there, and saves only its hash. Every way out clears the
+// back from there, and saves only its hash in the vault, and the password
+// itself in the recovery bundle when one is open. Every way out clears the
 // screen.
-func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan) error {
+func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan, bundle *savedKeys) error {
 	password, err := newConsolePassword()
 	if err != nil {
 		return err
@@ -612,6 +673,12 @@ func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan) err
 	hash, err := consolePasswordHash(password)
 	if err != nil {
 		return err
+	}
+	// The bundle first: the vault keeps only the hash.
+	if bundle != nil {
+		if err := bundle.save(bundleConsolePassword, password); err != nil {
+			return err
+		}
 	}
 	if err := saved.save(item.Key, hash); err != nil {
 		return err

@@ -31,44 +31,42 @@ var version = "development"
 
 const usage = `set-up-outside-services sets up your system's accounts at Backblaze and
 Cloudflare, the vault's other secrets, your own tokens on this systems desk, and the
-recovery bundle. You start it from your laptop, plus a code from your phone:
-the first setup with ssh desk01-setup, new secrets with ssh desk01-secrets,
-and the other commands with ssh -t desk01, such as:
+recovery bundle. During the setup your coding agent runs the account commands for
+you, with each key passed straight from your clipboard; you run the lock yourself
+with ssh desk01-lock. You run the other commands from your laptop with
+ssh -t desk01, plus a code from your phone once the desk is locked, such as:
 
   ssh -t desk01 set-up-outside-services backblaze
 
 Every command works in the systems desk's checkout of the systems repository,
-/home/coding-agent/systems_repository, from any folder.
+/home/coding-agent/systems_repository, from any folder. backblaze, cloudflare,
+secrets and the coding agent's commands write which steps are done, never a
+secret, to /var/lib/monkeymaxxing-stack/setup_results.json.
 
 Commands:
-  go-live                       The first setup, one screen at a time: Cloudflare, your
-                                domain's registrar, Backblaze, the registry's token, your apps'
-                                keys from outside services, every other vault secret without
-                                a question, then the lock: your
-                                recovery passphrase and your phone code. It saves the
-                                recovery bundle, recovery_bundle.age, commits and pushes it
-                                with the vault, and copies it into the locked backup
-                                bucket. It writes which steps are done, never a secret, to
-                                /var/lib/monkeymaxxing-stack/setup_results.json. A rerun
-                                continues where a run stopped.
   backblaze [--replace-key VAULT_KEY]... [--delete-the-old-keys-at-once]
                                 Create every B2 bucket with its lock and lifecycle rule,
-                                check each lock, and save each server's key in the vault.
-                                --replace-key makes a new key for a saved one, to rotate it,
-                                such as --replace-key pgbackrest_b2_write_key_id. The old
-                                key keeps working until the servers' run passed and you press
-                                Enter; --delete-the-old-keys-at-once deletes it without waiting,
+                                check each lock, and save each server's key in the vault,
+                                from the account's master key. --replace-key makes a new
+                                key for a saved one, to rotate it, such as --replace-key
+                                pgbackrest_b2_write_key_id. The old key keeps working until
+                                the servers' run passed and you press Enter;
+                                --delete-the-old-keys-at-once deletes it without waiting,
                                 after a break-in.
-  cloudflare [--replace-key NAME]... [--replace-every-key] [--delete-the-old-keys-at-once]
-                                From one link token you make with the link it prints, make
-                                your systems desk's Cloudflare token (in the API proxy and your
-                                token file), the tunnels, the R2 buckets and keys, the
+  cloudflare [--account-id ID] [--replace-key NAME]... [--replace-every-key] [--delete-the-old-keys-at-once]
+                                From one link token you make with the link it prints: find
+                                the account (--account-id names it when the token reaches
+                                several), add your domain and copy its DNS records, give the
+                                account its workers.dev address, then make your systems
+                                desk's Cloudflare token (in the API proxy and your token
+                                file), the tunnels, the R2 buckets and keys, the
                                 MMHotline-down alarm's token, the status page and your own
-                                key for posting to it, and the One-time PIN login method; save
-                                the servers' keys in the vault. With staging01, also make
-                                staging's Access service token, saved in your token file.
-                                The status page waits until your domain is Active. The link
-                                token is deleted when the command ends.
+                                key for posting to it, and the One-time PIN login method;
+                                save the servers' keys in the vault. With staging01, also
+                                make staging's Access service token, saved in your token
+                                file. The status page waits until your domain is Active, and
+                                the R2 buckets until R2 is on. The link token is deleted when
+                                the command ends.
                                 --replace-key makes a new key for a saved one and saves it,
                                 such as --replace-key shop_R2_ACCESS_KEY_ID; --replace-every-key
                                 replaces all. A key the servers use keeps its old key working
@@ -77,6 +75,19 @@ Commands:
   cloudflare --delete-tokens-of-person NAME
                                 Delete, by name, the Cloudflare tokens this command made for a
                                 person who leaves the team. NAME is their systems desk account name.
+  secrets [--replace KEY]       Save every vault secret the servers read that the vault lacks:
+                                the ones only a website gives, at hidden prompts, with the page
+                                where you make each, and random ones nobody needs to see.
+                                --replace KEY enters one again; --replace
+                                shared_root_console_password_hash makes a new console
+                                password, shown once for your password manager.
+  lock-the-desk                 The setup's last step, in your own window (ssh desk01-lock):
+                                the servers' shared root console password, shown once; your
+                                recovery passphrase, shown once; your phone code. Then it
+                                checks that the recovery bundle, recovery_bundle.age, holds
+                                every item, commits and pushes it with the vault, and copies
+                                it into the locked backup bucket. A rerun continues where a
+                                run stopped.
   personal-token server-provider --server-listing-path PATH [--token-header NAME]
                                 Replace your server provider token in the systems desk's API proxy,
                                 such as after a rotation. PATH is the provider guide's server
@@ -88,16 +99,21 @@ Commands:
                                 service account's key file.
   personal-token staging-access Save staging's Access service token, from your password manager,
                                 in your token file, on a systems desk where cloudflare did not make it.
-  secrets [--replace KEY]       Save every vault secret the servers read that the vault lacks:
-                                the ones only a website gives, at hidden prompts, with the page
-                                where you make each, the servers' console password, shown once
-                                for your password manager, and random ones nobody needs to see.
-                                --replace KEY enters one again.
-                                go-live, backblaze, cloudflare and secrets each commit and push
-                                the vault to the main copy on util01, and refuse a
-                                repository with other changes not pushed. Before util01
-                                exists, the systems desk's checkout is the main copy: they commit there.
+  from-the-coding-agent backblaze | cloudflare [--account-id ID] | save-a-key KEY | random-secrets
+                                Your coding agent's way to run an account command, as root
+                                through the desk's sudo rule, with each key on standard input,
+                                one value per line, so the key never shows in its chat:
+                                backblaze takes the master key's keyID and applicationKey;
+                                cloudflare the link token; save-a-key KEY the value of
+                                container_registry_read_only_token or of an app's key from an
+                                outside service, checked at its service; random-secrets makes
+                                every random vault secret and takes nothing. It prints no key.
   version                       Print this program's version.
+
+backblaze, cloudflare, secrets, lock-the-desk and the coding agent's commands each
+commit and push the vault to the main copy on util01, and refuse a repository with
+other changes not pushed. Before util01 exists, the systems desk's checkout is the
+main copy: they commit there.
 `
 
 func main() {
@@ -119,6 +135,8 @@ func run(arguments []string, out, errorOut io.Writer) int {
 		err = runWriteAPITokenProxyFile(arguments[1:], os.Stdin, out)
 	case apiProxyCommand:
 		err = runProviderAPIProxy(arguments[1:])
+	case fromTheCodingAgentCommand:
+		return codingAgentExitCode(runFromTheCodingAgent(arguments[1:], os.Stdin, out), errorOut)
 	default:
 		var e *environment
 		e, err = newEnvironment(out)
@@ -139,14 +157,27 @@ func run(arguments []string, out, errorOut io.Writer) int {
 	return 0
 }
 
+// codingAgentExitCode prints a stop of from-the-coding-agent for the coding
+// agent alone: the reason, which never holds a secret, on standard error.
+func codingAgentExitCode(err error, errorOut io.Writer) int {
+	if err == nil {
+		return 0
+	}
+	fmt.Fprintf(errorOut, "Stopped: %v.\n", trimPeriod(err.Error()))
+	if errors.Is(err, errUsage) {
+		return 4
+	}
+	return 1
+}
+
 // failureInPlainWords says, before any technical line: what failed, whether
 // anything is harmed, and what happens next. The reason it claims no
 // undo or rollback: the commands undo nothing they finished, and none of
 // them touches the person's site or servers when it stops.
 func failureInPlainWords(command string) string {
 	what := "The command " + command + " stopped before it finished."
-	if command == "go-live" {
-		what = "The first setup stopped before it finished."
+	if command == "lock-the-desk" {
+		what = "Locking your systems desk stopped before it finished."
 	}
 	return what + "  Nothing that it already finished is undone, and your site and servers are not affected.  " +
 		"Tell your coding agent: it reads the technical line below and tells you what to do next."
@@ -167,12 +198,13 @@ func (e *environment) dispatch(arguments []string) error {
 			return errNoTerminal
 		}
 		return runSecrets(e, arguments[1:])
-	case "go-live":
-		// The recovery passphrase shows only in a terminal the person watches.
+	case "lock-the-desk":
+		// The console password and the recovery passphrase show only in a
+		// terminal the person watches.
 		if !stdinIsTerminal() {
 			return errNoTerminal
 		}
-		return e.withNoMoreArguments(arguments, runGoLive)
+		return e.withNoMoreArguments(arguments, runLockTheDesk)
 	}
 	return fmt.Errorf("unknown command %q: %w", arguments[0], errUsage)
 }
@@ -191,7 +223,17 @@ type environment struct {
 	home      string
 	// person is the person's account name on the desk, which names the
 	// person's own Cloudflare tokens.
-	person           string
+	person string
+	// owner is the person's account when the command runs as root for the
+	// coding agent, so each file it writes in the person's home stays the
+	// person's; nil when the person runs it.
+	owner *fileOwner
+	// forTheCodingAgent says the coding agent runs the command: the keys
+	// come on standard input and nothing asks a question.
+	forTheCodingAgent bool
+	// commandLine names the run, such as set-up-outside-services backblaze,
+	// in commit messages and the results file.
+	commandLine      string
 	out              io.Writer
 	vault            vault
 	prompt           func(label string) (string, error)
@@ -209,8 +251,9 @@ type environment struct {
 	// writeProxyFile installs a token in the desk's API proxy, as root.
 	writeProxyFile func(request proxyFileRequest) error
 	clearScreen    func()
-	// go-live's outside addresses: IANA's RDAP bootstrap file, GitHub's API,
-	// and the registry the apps' images come from.
+	// The outside addresses of the first-time and key checks: IANA's RDAP
+	// bootstrap file, GitHub's API, the registry the apps' images come from,
+	// and Stripe's API.
 	rdapBootstrapURL     string
 	githubAPIURL         string
 	containerRegistryURL string
@@ -221,9 +264,16 @@ type environment struct {
 	setUpThePhoneCode func(emergencyCodesPath string) error
 	// deskIsLocked says the desk playbook's lock stage ran on this desk.
 	deskIsLocked func() bool
-	// resultsFile is go-live's results file; writeResultsFile writes it.
-	resultsFile      string
-	writeResultsFile func(content []byte) error
+	// resultsFile is the results file the coding agent reads, and
+	// backupWriteKeyFile keeps the backup write key for the bundle's upload.
+	resultsFile        string
+	backupWriteKeyFile string
+	// writeFileAsRoot and removeFileAsRoot change a file only root may
+	// change, through sudo.
+	writeFileAsRoot  func(path string, mode os.FileMode, content []byte) error
+	removeFileAsRoot func(path string) error
+	// bundleStore replaces the recovery bundle's MMX vault in a test.
+	bundleStore vault
 	// replaceKeys names the keys a rotation replaces: B2 key pairs by their
 	// key ID's vault name, Cloudflare's by --replace-key's names.
 	replaceKeys map[string]bool
@@ -250,6 +300,7 @@ type environment struct {
 // never sees a key, and the button and root accounts, which are not a person.
 var accountsThatMayNotRun = []string{"coding-agent", "servers-mmx", "root"}
 
+// newEnvironment is the person's own run, in their own desk account.
 func newEnvironment(out io.Writer) (*environment, error) {
 	current, err := user.Current()
 	if err != nil {
@@ -257,12 +308,19 @@ func newEnvironment(out io.Writer) (*environment, error) {
 	}
 	for _, name := range accountsThatMayNotRun {
 		if current.Username == name {
-			return nil, fmt.Errorf("this command runs only in the person's own account, never as %s. The person runs it in their own systems desk terminal, where its prompts keep every key away from the coding agent", name)
+			return nil, fmt.Errorf("this command runs only in the person's own account, never as %s. The person runs it in their own systems desk terminal, where its prompts keep every key away from the coding agent. The coding agent runs set-up-outside-services from-the-coding-agent", name)
 		}
 	}
-	e := &environment{
-		home:                        current.HomeDir,
-		person:                      current.Username,
+	e := defaultEnvironment(out)
+	e.home, e.person = current.HomeDir, current.Username
+	e.useTheCodingAgentsCheckout()
+	e.handleInterrupts()
+	return e, nil
+}
+
+// defaultEnvironment is the desk's real environment, without the person.
+func defaultEnvironment(out io.Writer) *environment {
+	return &environment{
 		out:                         out,
 		prompt:                      readHiddenLine,
 		confirm:                     readVisibleLine,
@@ -282,11 +340,19 @@ func newEnvironment(out io.Writer) (*environment, error) {
 		setUpThePhoneCode:           setUpThePhoneCodeWithSudo,
 		deskIsLocked:                func() bool { return deskIsLockedAt(deskLockedFile, deskRootLoginBeforeTheLockFile) },
 		resultsFile:                 setupResultsFile,
-		writeResultsFile:            writeResultsFileWithSudo,
+		backupWriteKeyFile:          backupWriteKeyFile,
+		writeFileAsRoot:             writeFileAsRootWithSudo,
+		removeFileAsRoot:            removeFileAsRootWithSudo,
 	}
-	e.useTheCodingAgentsCheckout()
-	e.handleInterrupts()
-	return e, nil
+}
+
+// named names the running command, such as set-up-outside-services
+// backblaze, for its commit messages and the results file.
+func (e *environment) named(command string) {
+	e.commandLine = "set-up-outside-services " + command
+	if e.forTheCodingAgent {
+		e.commandLine = "set-up-outside-services " + fromTheCodingAgentCommand + " " + command
+	}
 }
 
 func (e *environment) say(format string, values ...any) {
@@ -299,15 +365,6 @@ func (e *environment) show(text string) {
 		text += "\n"
 	}
 	fmt.Fprint(e.out, text)
-}
-
-// quietly runs work without its step-by-step lines, which go-live's screens
-// leave out: the person reads only what to do, and errors still stop the run.
-func (e *environment) quietly(work func() error) error {
-	out := e.out
-	e.out = io.Discard
-	defer func() { e.out = out }()
-	return work()
 }
 
 // useTheCodingAgentsCheckout makes every command work in the desk's one
@@ -349,7 +406,6 @@ const sayTheCodingAgentCarriesOn = "This command finished. Your coding agent car
 // provider issuing a key and the vault saving it. There the command first
 // finishes saving, or revokes the new key, so nothing is left half done.
 func (e *environment) handleInterrupts() {
-	// The terminal, also while go-live's quiet work swaps e.out.
 	screen := e.out
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)

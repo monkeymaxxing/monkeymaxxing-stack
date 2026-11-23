@@ -24,7 +24,7 @@ type projectSettings struct {
 		// token_in_a_header, or a signing method in requestSigningMethods.
 		SystemsDeskProviderAPIAuthentication string `yaml:"systems_desk_provider_api_authentication"`
 		TriageAgentCodingAgent               string `yaml:"triage_agent_coding_agent"`
-		// PasswordManager names the team's password manager on go-live's
+		// PasswordManager names the team's password manager on lock-the-desk's
 		// screens, such as 1Password. Without it they say "your password manager".
 		PasswordManager string                 `yaml:"password_manager"`
 		Apps            map[string]appSettings `yaml:"apps"`
@@ -154,12 +154,20 @@ type inventorySettings struct {
 	Groups map[string]struct {
 		Nodes []string `yaml:"nodes"`
 	} `yaml:"groups"`
+	Nodes map[string]struct {
+		Vars struct {
+			PersonUnixUsername string `yaml:"person_unix_username"`
+		} `yaml:"vars"`
+	} `yaml:"nodes"`
 }
 
 // systemSettings is what the plans need, read and checked once.
 type systemSettings struct {
 	projectSettings
 	hasStagingServer bool
+	// deskPersons maps each systems desk's node name to its person's
+	// account name on the desk, vars.person_unix_username.
+	deskPersons map[string]string
 }
 
 const (
@@ -197,7 +205,28 @@ func readSystemSettings(read func(name string) ([]byte, error)) (systemSettings,
 		return settings, fmt.Errorf("%s: %v", inventoryFile, err)
 	}
 	settings.hasStagingServer = len(inventory.Groups["staging_server"].Nodes) > 0
+	settings.deskPersons = map[string]string{}
+	for name, node := range inventory.Nodes {
+		if person := node.Vars.PersonUnixUsername; person != "" {
+			settings.deskPersons[name] = person
+		}
+	}
 	return settings, nil
+}
+
+// deskPerson is the person of the systems desk named hostname, its node's
+// person_unix_username. A desk's host name is its node's name, as the desk
+// role sets it.
+func (s systemSettings) deskPerson(hostname string) (string, error) {
+	node, _, _ := strings.Cut(hostname, ".")
+	person := s.deskPersons[node]
+	if person == "" {
+		return "", fmt.Errorf("%s names no person_unix_username for the node %s, this systems desk", inventoryFile, node)
+	}
+	if !unixUserNamePattern.MatchString(person) || contains(accountsThatMayNotRun, person) {
+		return "", fmt.Errorf("the person_unix_username of %s in %s is %q, which is not a person's account", node, inventoryFile, person)
+	}
+	return person, nil
 }
 
 // plainSetting refuses a value that is empty, still the template's example,

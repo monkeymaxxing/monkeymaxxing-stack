@@ -145,9 +145,12 @@ func TestAFailedRevokeNamesTheKeyAndWhereToDeleteIt(t *testing.T) {
 
 	h = newHarness(t, false, false)
 	h.vault.failOn["mmhotline_down_alarm_cloudflare_api_token"] = true
-	h.cloudflare.Lock()
-	h.cloudflare.Failures["DELETE /accounts/"+testAccountID+"/tokens"] = "drop"
-	h.cloudflare.Unlock()
+	// The revocation right after the failed save fails too.
+	h.vault.onFail = func() {
+		h.cloudflare.Lock()
+		h.cloudflare.Failures["DELETE /accounts/"+testAccountID+"/tokens"] = "drop"
+		h.cloudflare.Unlock()
+	}
 	err = h.runCloudflare()
 	if err == nil || !strings.Contains(err.Error(), `revoking the new Cloudflare token "acme_systems: MMHotline uploads the MMHotline-down alarm"`) ||
 		!strings.Contains(err.Error(), "failed too") || !strings.Contains(err.Error(), "delete it by hand at https://dash.cloudflare.com/"+testAccountID+"/api-tokens") {

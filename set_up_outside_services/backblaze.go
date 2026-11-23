@@ -64,8 +64,8 @@ func authorizeB2(authorizeURL, keyID, applicationKey string) (*b2Client, error) 
 	defer response.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if response.StatusCode != http.StatusOK {
-		code, message := readB2Error(body)
-		return nil, &apiError{Provider: "Backblaze", Call: "b2_authorize_account", Status: response.StatusCode, Code: code, Message: message}
+		code, _ := readB2Error(body)
+		return nil, &apiError{Provider: "Backblaze", Call: "b2_authorize_account", Status: response.StatusCode, Code: code}
 	}
 	var answer struct {
 		AccountID          string `json:"accountId"`
@@ -317,8 +317,8 @@ func (c *b2Client) uploadFile(bucketID, fileName, contentType string, content []
 	body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		code, message := readB2Error(body)
-		return b2File{}, &apiError{Provider: "Backblaze", Call: "b2_upload_file", Status: response.StatusCode, Code: code, Message: message}
+		code, _ := readB2Error(body)
+		return b2File{}, &apiError{Provider: "Backblaze", Call: "b2_upload_file", Status: response.StatusCode, Code: code}
 	}
 	var file b2File
 	if err := json.Unmarshal(body, &file); err != nil || file.FileID == "" {
@@ -404,72 +404,83 @@ func missingCapabilities(have []string) []string {
 }
 
 func runBackblaze(e *environment, arguments []string) error {
-	settings, err := readSystemSettings(e.readRepositoryFile)
-	if err != nil {
-		return err
-	}
-	plan, err := backblazePlan(settings)
-	if err != nil {
-		return err
-	}
-	replace, atOnce, err := keysToReplace(plan, arguments)
-	if err != nil {
-		return err
-	}
-	e.replaceKeys, e.deleteOldKeysAtOnce = replace, atOnce
-	oldKeys := e.oldKeysFilePath(settings)
-	saved, err := e.beginVaultChange()
-	if err != nil {
-		return err
-	}
-	e.say("Backblaze B2 keeps your backups, separate from your server provider and Cloudflare.")
-	e.say("This command creates each bucket your system uses, locks the database and uploads backups for %d days,", settings.Vars.Backups.LockBackupsAgainstDeletionForDays)
-	e.say("checks each lock with a test file, makes each server's key with only the access it needs, and saves every key straight into the vault.")
-	e.say("Your master key stays in this command's memory and is never saved. Nobody else sees it, your coding agent included.")
-	e.say("")
-	keyID, err := e.prompt("Backblaze master key's keyID (hidden): ")
-	if err != nil {
-		return err
-	}
-	applicationKey, err := e.prompt("Backblaze master key's applicationKey (hidden): ")
-	if err != nil {
-		return err
-	}
-	client, err := e.signInToBackblaze(keyID, applicationKey)
-	if err != nil {
-		return err
-	}
-	if endpoint := settings.Vars.Backups.B2S3Endpoint; !client.hasS3Endpoint(endpoint) {
-		return fmt.Errorf("the account's S3 endpoint is %s, but vars.backups.b2_s3_endpoint in %s is %s. Set b2_s3_endpoint and b2_region to the account's, then run this command again", client.s3APIURL, projectSettingsFile, endpoint)
-	}
-	e.say("Signed in to Backblaze account %s.", client.accountID)
-	if err := e.setUpBackblaze(client, plan, saved, oldKeys); err != nil {
-		return err
-	}
-	e.say("")
-	e.say("See the buckets on Backblaze's website: %s", b2BucketsPage)
-	e.say("See the keys: %s", b2KeysPage)
-	if atOnce {
-		if err := e.deleteOldKeys(oldKeys, "backblaze", false, client.deleteKey, b2KeysPage); err != nil {
-			return err
+	e.named("backblaze")
+	return e.asStep("backblaze", func(notes map[string]string) (string, error) {
+		settings, err := readSystemSettings(e.readRepositoryFile)
+		if err != nil {
+			return "", err
 		}
-	}
-	if err := e.finishVaultChange(saved, "set-up-outside-services backblaze"); err != nil {
-		return err
-	}
-	if atOnce && len(replace) > 0 {
-		e.say("The servers get the new keys at the next run of every_server: tell your coding agent to run it now.")
-	}
-	// The vault is pushed, so the run can bring the new keys to the servers.
-	// The master key stays in this command's memory only while it waits.
-	if err := e.deleteOldKeys(oldKeys, "backblaze", true, client.deleteKey, b2KeysPage); err != nil {
-		return err
-	}
-	e.say(sayTheCodingAgentCarriesOn)
-	if settings.uploadsAreBackedUp() && len(settings.Vars.Backups.UploadsBackupRunsOn) == 0 {
-		e.say("The uploads' bucket and key are ready, so your coding agent can now set vars.backups.uploads_backup_runs_on to [util_server].")
-	}
-	return nil
+		plan, err := backblazePlan(settings)
+		if err != nil {
+			return "", err
+		}
+		replace, atOnce, err := keysToReplace(plan, arguments)
+		if err != nil {
+			return "", err
+		}
+		e.replaceKeys, e.deleteOldKeysAtOnce = replace, atOnce
+		oldKeys := e.oldKeysFilePath(settings)
+		saved, err := e.beginAccountChange(settings)
+		if err != nil {
+			return "", err
+		}
+		e.say("Backblaze B2 keeps your backups, separate from your server provider and Cloudflare.")
+		e.say("This command creates each bucket your system uses, locks the database and uploads backups for %d days,", settings.Vars.Backups.LockBackupsAgainstDeletionForDays)
+		e.say("checks each lock with a test file, makes each server's key with only the access it needs, and saves every key straight into the vault.")
+		e.say("Your master key stays in this command's memory and is never saved. Nobody else sees it, your coding agent included.")
+		e.say("")
+		keyID, err := e.prompt("Backblaze master key's keyID (hidden): ")
+		if err != nil {
+			return "", err
+		}
+		applicationKey, err := e.prompt("Backblaze master key's applicationKey (hidden): ")
+		if err != nil {
+			return "", err
+		}
+		client, err := e.signInToBackblaze(keyID, applicationKey)
+		if err != nil {
+			return "", err
+		}
+		if endpoint := settings.Vars.Backups.B2S3Endpoint; !client.hasS3Endpoint(endpoint) {
+			// An account's region cannot change, so the person chooses: keep
+			// this account, and the coding agent sets the settings to its
+			// region, or make an account in the planned region.
+			accountEndpoint := strings.TrimPrefix(client.s3APIURL, "https://")
+			region := strings.TrimSuffix(strings.TrimPrefix(accountEndpoint, "s3."), ".backblazeb2.com")
+			notes["b2_account_s3_endpoint"], notes["b2_account_region"] = accountEndpoint, region
+			return "", fmt.Errorf("saved nothing: the Backblaze account is in the region %s (S3 endpoint %s), but vars.backups.b2_s3_endpoint in %s is %s. "+
+				"An account's region cannot change. To keep this account, set b2_s3_endpoint and b2_region to the account's; or make a new Backblaze account in the planned region. Then run this command again",
+				region, accountEndpoint, projectSettingsFile, endpoint)
+		}
+		e.say("Signed in to Backblaze account %s.", client.accountID)
+		if err := e.setUpBackblaze(client, plan, saved, oldKeys); err != nil {
+			return "", err
+		}
+		e.say("")
+		e.say("See the buckets on Backblaze's website: %s", b2BucketsPage)
+		e.say("See the keys: %s", b2KeysPage)
+		if atOnce {
+			if err := e.deleteOldKeys(oldKeys, "backblaze", false, client.deleteKey, b2KeysPage); err != nil {
+				return "", err
+			}
+		}
+		if err := e.finishVaultChange(saved, e.commandLine); err != nil {
+			return "", err
+		}
+		if atOnce && len(replace) > 0 {
+			e.say("The servers get the new keys at the next run of every_server: tell your coding agent to run it now.")
+		}
+		// The vault is pushed, so the run can bring the new keys to the servers.
+		// The master key stays in this command's memory only while it waits.
+		if err := e.deleteOldKeys(oldKeys, "backblaze", true, client.deleteKey, b2KeysPage); err != nil {
+			return "", err
+		}
+		e.say(sayTheCodingAgentCarriesOn)
+		if settings.uploadsAreBackedUp() && len(settings.Vars.Backups.UploadsBackupRunsOn) == 0 {
+			e.say("The uploads' bucket and key are ready, so your coding agent can now set vars.backups.uploads_backup_runs_on to [util_server].")
+		}
+		return stepDone, nil
+	})
 }
 
 // signInToBackblaze signs in with the master application key, and refuses
@@ -547,6 +558,7 @@ func (e *environment) ensureB2Key(client *b2Client, bucket *b2Bucket, plan b2Key
 		}
 		before = ids
 	}
+	var applicationKey string
 	outcome, id, err := e.issueAndSave(saved, issuedCredential{
 		provider: "Backblaze", item: "key", name: plan.KeyName, vaultNames: names,
 		deletePage: b2KeysPage, replaceSaved: rotating,
@@ -561,6 +573,7 @@ func (e *environment) ensureB2Key(client *b2Client, bucket *b2Bucket, plan b2Key
 			if key.ApplicationKey == "" || !sameSet(key.Capabilities, plan.Capabilities) || !sameSet(key.BucketIDs, []string{bucket.BucketID}) {
 				problem = "with other access than asked for"
 			}
+			applicationKey = key.ApplicationKey
 			return key.ApplicationKeyID, []string{key.ApplicationKeyID, key.ApplicationKey}, problem, nil
 		},
 	})
@@ -573,6 +586,13 @@ func (e *environment) ensureB2Key(client *b2Client, bucket *b2Bucket, plan b2Key
 	}
 	e.say("  Made %s, %s (ID %s): %s, on this bucket only.", plan.Purpose, plan.KeyName, id, strings.Join(plan.Capabilities, ", "))
 	e.say("    Saved in the vault as %s and %s.", names[0], names[1])
+	// During the setup, the recovery bundle's copy at the lock goes up with
+	// this key, so the person never gives the master key twice.
+	if plan.VaultKeyIDName == backupWriteKeyIDVaultName && saved.copyInto != nil {
+		if err := e.keepTheBackupWriteKey(id, applicationKey); err != nil {
+			return fmt.Errorf("keeping the new write key for the recovery bundle's upload failed: %v", err)
+		}
+	}
 	// The old key keeps working until the servers run with the new one.
 	// The end of the run deletes it: after the person's Enter, or at once.
 	var old []oldKey

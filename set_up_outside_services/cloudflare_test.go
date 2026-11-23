@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -173,7 +174,9 @@ func TestCloudflareRerunCreatesNothingAndAddsANewAppsBucketToTheReader(t *testin
 		t.Fatalf("rerun: %v\n%s", err, h.out)
 	}
 	calls := h.cloudflare.Snapshot()["calls"].([]string)
-	if h.count(calls, "POST /accounts/"+testAccountID+"/cfd_tunnel") != 0 || h.count(calls, "POST /accounts/"+testAccountID+"/tokens") != 1 ||
+	// Two tokens: the short-lived one that checks the domain, and the new
+	// app's key.
+	if h.count(calls, "POST /accounts/"+testAccountID+"/cfd_tunnel") != 0 || h.count(calls, "POST /accounts/"+testAccountID+"/tokens") != 2 ||
 		h.count(calls, "POST /accounts/"+testAccountID+"/access/identity_providers") != 0 {
 		t.Fatalf("the rerun must make only the new app's key: %v", calls)
 	}
@@ -367,7 +370,7 @@ func TestCloudflareRefusesATokenThatIsNoLinkToken(t *testing.T) {
 	h.cloudflare.AddToken("Alex's own token", "users-own-token-value-0001", true, standins.PermissionAccountAPITokensWrite)
 	h.answers = []string{"users-own-token-value-0001"}
 	err := runCloudflare(h.e, nil)
-	if err == nil || !strings.Contains(err.Error(), "Make the link token with the link above") {
+	if err == nil || !strings.Contains(err.Error(), "Make a new link token with the link") {
 		t.Fatalf("a user token is no link token, got %v", err)
 	}
 	if strings.Contains(err.Error(), "with the link token with") ||
@@ -399,15 +402,15 @@ func TestOneTimePINThatExistsAlreadyIsSuccess(t *testing.T) {
 }
 
 // Without the One-time PIN missing and without staging01, no short-lived
-// token is made at all.
+// Access token is made at all.
 func TestNoShortLivedTokenWhenAccessHasEverything(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.cloudflare.IdentityProviders = append(h.cloudflare.IdentityProviders, &standins.IdentityProvider{ID: "pin", Name: "One-time PIN", Type: "onetimepin"})
 	if err := h.runCloudflare(); err != nil {
 		t.Fatalf("cloudflare: %v\n%s", err, h.out)
 	}
-	if strings.Contains(h.out.String(), "short-lived") {
-		t.Fatal("no short-lived token is needed")
+	if strings.Contains(h.out.String(), "sets up Access") {
+		t.Fatal("no short-lived Access token is needed")
 	}
 }
 
@@ -601,7 +604,7 @@ func TestAnAppWithUploadsNamesItsKeyVariables(t *testing.T) {
 }
 
 // The root step that hands the API proxy a token prints its check for the
-// coding agent. In go-live the person's terminal must not show it; a failed
+// coding agent. The person's terminal must not show it; a failed
 // step still names its reason.
 func TestTheProxyStepPrintsNothingOnThePersonsScreen(t *testing.T) {
 	bin := t.TempDir()
@@ -637,5 +640,89 @@ func TestTheProxyStepPrintsNothingOnThePersonsScreen(t *testing.T) {
 	shown, err = screen(func() error { return writeProxyFileWithSudo(request) })
 	if shown != "" || err == nil || !strings.Contains(err.Error(), "systemctl restart failed: no such unit") {
 		t.Fatalf("a failed step: want its reason in the error and no screen text, got %q, %v", shown, err)
+	}
+}
+
+// useTheTemplatesAccountID puts back the template's example account ID, as
+// at a first setup, before the coding agent knows the account.
+func (h *harness) useTheTemplatesAccountID() {
+	h.t.Helper()
+	path := filepath.Join(h.e.directory, projectSettingsFile)
+	writeFile(h.t, path, strings.Replace(mustRead(h.t, path), `cloudflare_account_id: "`+testAccountID+`"`, `cloudflare_account_id: "`+exampleCloudflareAccountID+`"`, 1))
+	h.commitAll("The template's settings")
+}
+
+// At a first setup the command finds the account from the link token, adds
+// the domain, has Cloudflare copy its records, gives the account its
+// workers.dev address, and notes the registrar's facts for the domain's move.
+func TestCloudflareFindsTheAccountAddsTheDomainAndNotesTheRegistrar(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.useTheTemplatesAccountID()
+	h.cloudflare.ZoneStatus = ""
+	registry := httptest.NewServer(rdap(true))
+	t.Cleanup(registry.Close)
+	h.e.rdapBootstrapURL = registry.URL + "/dns.json"
+	code, out, errorOut := h.fromTheCodingAgent(h.addLinkToken()+"\n", "cloudflare")
+	if code != 0 {
+		t.Fatalf("exit code %d:\n%s%s", code, out, errorOut)
+	}
+	if h.cloudflare.ZoneStatus != "pending" || h.cloudflare.DNSScans != 1 || h.cloudflare.WorkersSubdomain != "acme-systems" {
+		t.Fatalf("zone %q, %d scans, workers.dev %q", h.cloudflare.ZoneStatus, h.cloudflare.DNSScans, h.cloudflare.WorkersSubdomain)
+	}
+	for name, want := range map[string]string{"cloudflare_account_id": testAccountID, "cloudflare_nameservers": "ada.ns.cloudflare.com bob.ns.cloudflare.com",
+		"cloudflare_domain_status": "pending", "domain_registrar": "Namecheap, Inc.", "domain_dnssec_on": "yes"} {
+		if got := h.results().ForTheCodingAgent[name]; got != want {
+			t.Errorf("for_the_coding_agent.%s = %q, want %q", name, got, want)
+		}
+	}
+	for _, name := range []string{linkTokenNameForAlex, "acme_systems: set-up-outside-services adds the domain, deleted after the run"} {
+		if len(h.cloudflare.LiveTokensNamed(name)) != 0 {
+			t.Errorf("the token %q is left", name)
+		}
+	}
+}
+
+// When Cloudflare does not list the link token's account, the command
+// stops and says where the person reads the account's ID; the rerun with
+// --account-id and a new link token deletes the first link token.
+func TestCloudflareAsksForTheAccountIDWhenCloudflareDoesNotListIt(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.useTheTemplatesAccountID()
+	h.cloudflare.RefuseAccountsList = true
+	code, _, errorOut := h.fromTheCodingAgent(h.addLinkToken()+"\n", "cloudflare")
+	if code != 1 || !strings.Contains(errorOut, "--account-id ID") || !strings.Contains(errorOut, "right after dash.cloudflare.com/") {
+		t.Fatalf("exit %d, want the stop that asks for --account-id: %s", code, errorOut)
+	}
+	if code, out, errorOut := h.fromTheCodingAgent(h.addLinkToken()+"\n", "cloudflare", "--account-id", testAccountID); code != 0 {
+		t.Fatalf("the rerun with --account-id: exit %d\n%s%s", code, out, errorOut)
+	}
+	if len(h.cloudflare.LiveTokensNamed(linkTokenNameForAlex)) != 0 {
+		t.Fatal("a link token is left")
+	}
+}
+
+// R2 off: everything else is made, then the command stops with R2's price
+// and the page that turns it on. The rerun after the person turned it on
+// makes the upload buckets and keys.
+func TestCloudflareStopsWithR2sPriceWhileR2IsOff(t *testing.T) {
+	h := newHarness(t, false, true)
+	h.cloudflare.R2Off = true
+	code, _, errorOut := h.fromTheCodingAgent(h.addLinkToken()+"\n", "cloudflare")
+	if code != 1 {
+		t.Fatalf("exit code %d, want 1", code)
+	}
+	for _, line := range []string{"R2 is off", "Everything else is set up.", "$0.015 for each GB a month", "https://dash.cloudflare.com/" + testAccountID + "/r2/overview"} {
+		if !strings.Contains(errorOut, line) {
+			t.Errorf("the stop lacks %q:\n%s", line, errorOut)
+		}
+	}
+	if h.vault.values["apps_cloudflare_tunnel_token"] == "" || h.vault.values["shop_R2_ACCESS_KEY_ID"] != "" || len(h.cloudflare.LiveTokensNamed(linkTokenNameForAlex)) != 0 {
+		t.Fatal("want the tunnel saved, no upload key, and the link token deleted")
+	}
+	h.cloudflare.Lock()
+	h.cloudflare.R2Off = false
+	h.cloudflare.Unlock()
+	if code, out, errorOut := h.fromTheCodingAgent(h.addLinkToken()+"\n", "cloudflare"); code != 0 || h.vault.values["shop_R2_ACCESS_KEY_ID"] == "" || !h.cloudflare.R2Buckets["acme-shop-uploads"] {
+		t.Fatalf("the rerun with R2 on: exit %d\n%s%s", code, out, errorOut)
 	}
 }

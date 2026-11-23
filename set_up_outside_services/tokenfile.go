@@ -100,3 +100,33 @@ func tokenFileValue(path, name string) string {
 	}
 	return ""
 }
+
+// updateTokenFile updates the person's token file, which stays the person's
+// own when the command runs as root for the coding agent.
+func (e *environment) updateTokenFile(path string, values map[string]string) error {
+	if err := updateTokenFile(path, values); err != nil {
+		return err
+	}
+	return e.giveToThePerson(path)
+}
+
+// fileOwner is the person's account, which owns each file the command
+// writes in the person's home while it runs as root.
+type fileOwner struct {
+	uid, gid int
+}
+
+// giveToThePerson gives a file in the person's home, and each folder above
+// it up to the home, to the person, when the command runs as root. Lchown
+// changes a link itself, never what it points at.
+func (e *environment) giveToThePerson(path string) error {
+	if e.owner == nil {
+		return nil
+	}
+	for current := path; strings.HasPrefix(current, e.home+string(filepath.Separator)); current = filepath.Dir(current) {
+		if err := os.Lchown(current, e.owner.uid, e.owner.gid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
