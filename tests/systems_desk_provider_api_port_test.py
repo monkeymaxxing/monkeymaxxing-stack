@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""The API proxy is the one program that serves 127.0.0.1:8081 and
-127.0.0.1:8082 on a systems desk, for every value of
+"""The API proxy serves 127.0.0.1:8081 (provider-api-proxy.service) and
+127.0.0.1:8082 (cloudflare-api-proxy.service) on a systems desk, each once
+its own token file exists, for every value of
 systems_desk_provider_api_authentication; no nginx is installed.
 
   MMX_BINARY=/path/to/mmx python3 tests/systems_desk_provider_api_port_test.py
@@ -59,9 +60,9 @@ class SystemsDeskProviderApiPort(unittest.TestCase):
 
     def test_no_nginx_stays_on_the_desk_and_the_proxy_starts_after_the_files_are_protected(self):
         """The desk role purges nginx, which earlier desks ran, before the
-        proxy starts, so nginx lets go of 8081 and 8082 first; the proxy
-        stays stopped while a file is missing, starts when all exist, and the
-        port check comes last. The order is the same for every value; the
+        proxy starts, so nginx lets go of 8081 and 8082 first; each service
+        stays stopped while its own file is missing, starts when it exists, and
+        the port check comes last. The order is the same for every value; the
         conditions pick the tasks."""
         for value in self.explained:
             with self.subTest(value=value):
@@ -74,12 +75,16 @@ class SystemsDeskProviderApiPort(unittest.TestCase):
                                 position('install_the_provider_api_proxy_service'))
                 self.assertLess(position('remove_nginx_which_the_api_proxy_replaced'),
                                 position('install_the_provider_api_proxy_service'))
-                self.assertLess(position('protect_cloudflare_api_token_conf'),
-                                position('start_the_provider_api_proxy_when_its_files_are_ready'))
-                self.assertLess(position('keep_the_provider_api_proxy_stopped_until_its_files_are_ready'),
-                                position('start_the_provider_api_proxy_when_its_files_are_ready'))
-                self.assertLess(position('start_the_provider_api_proxy_when_its_files_are_ready'),
-                                position('check_which_program_serves_the_api_ports'))
+                for service in ('provider', 'cloudflare'):
+                    self.assertLess(position('protect_cloudflare_api_token_conf'),
+                                    position('start_the_%s_api_proxy_when_its_file_is_ready' % service))
+                    self.assertLess(position('keep_the_%s_api_proxy_stopped_until_its_file_is_ready' % service),
+                                    position('start_the_%s_api_proxy_when_its_file_is_ready' % service))
+                    self.assertLess(position('start_the_%s_api_proxy_when_its_file_is_ready' % service),
+                                    position('check_which_program_serves_the_api_ports'))
+                # A desk from the one-service release frees port 8082 (the
+                # provider unit's restart) before the Cloudflare service starts.
+                self.assertLess(position('restart_a_running_provider_api_proxy'), position('start_the_cloudflare_api_proxy_when_its_file_is_ready'))
 
     def test_nginx_is_removed_with_its_settings_and_never_installed(self):
         task = self.task('token_in_a_header', 'remove_nginx_which_the_api_proxy_replaced')
@@ -93,14 +98,19 @@ class SystemsDeskProviderApiPort(unittest.TestCase):
         self.assertNotIn('nginx', json.dumps(packages))
         self.assertFalse((T/'roles/systems_desk/files/nginx.conf').exists())
 
-    def test_the_unit_serves_both_ports_from_the_token_files_of_each_setting(self):
-        unit = (T/'roles/systems_desk/files/provider-api-proxy.service').read_text()
-        self.assertIn('cloudflare-api-token:/etc/systems-desk/cloudflare-api-token.conf', unit)
-        self.assertIn('provider-api-token:/etc/systems-desk/provider-api-token.conf', unit)
-        self.assertIn('provider-api-signing-credential:/etc/systems-desk/provider-api-signing-credential.json', unit)
-        self.assertIn('--provider-api-url {{ .inputs.provider_api_url }}', unit)
-        self.assertIn('127.0.0.1:8081', unit)
-        self.assertIn('127.0.0.1:8082', unit)
+    def test_each_unit_serves_one_port_from_its_own_files_only(self):
+        provider = (T/'roles/systems_desk/files/provider-api-proxy.service').read_text()
+        cloudflare = (T/'roles/systems_desk/files/cloudflare-api-proxy.service').read_text()
+        self.assertIn('provider-api-token:/etc/systems-desk/provider-api-token.conf', provider)
+        self.assertIn('provider-api-signing-credential:/etc/systems-desk/provider-api-signing-credential.json', provider)
+        self.assertIn('--api server-provider --provider-api-url {{ .inputs.provider_api_url }}', provider)
+        self.assertIn('127.0.0.1:8081', provider)
+        self.assertNotIn('cloudflare-api-token', provider)
+        self.assertNotIn('8082', provider.split('[Unit]')[1])
+        self.assertEqual([line for line in cloudflare.splitlines() if line.startswith('LoadCredential=')],
+                         ['LoadCredential=cloudflare-api-token:/etc/systems-desk/cloudflare-api-token.conf'])
+        self.assertIn('run-the-provider-api-proxy --api cloudflare', cloudflare)
+        self.assertIn('127.0.0.1:8082', cloudflare)
 
     def test_the_desk_keeps_only_the_credential_file_its_setting_uses(self):
         self.assertEqual(self.task('token_in_a_header', 'remove_the_api_signing_credential_when_the_provider_takes_a_token_in_a_header')['status'], 'ready')
@@ -123,7 +133,7 @@ class SystemsDeskProviderApiPort(unittest.TestCase):
             for name in files:
                 (directory/'etc'/name).write_text('')
             stand_ins = {
-                'ss': 'printf "%%b" %s' % json.dumps(listeners),
+                'ss': 'printf "%%b\\n" %s | grep -F "127.0.0.1:${2##*:} " || true' % json.dumps(listeners),
                 'systemctl': '[ "$1" = is-active ] && exit %d; case "$5" in %s *) echo 0 ;; esac' % (0 if nginx_running else 3, ''.join('%s.service) echo %s ;; ' % item for item in main_pids.items())),
                 'sleep': ':',
             }
@@ -135,43 +145,49 @@ class SystemsDeskProviderApiPort(unittest.TestCase):
                                     env={'PATH': '%s:/usr/bin:/bin' % directory, 'AUTHENTICATION': value})
         return result.returncode, result.stderr
 
-    PROXY_ON_BOTH_PORTS = ('LISTEN 0 4096 127.0.0.1:8081 0.0.0.0:* users:(("set-up-outside-",pid=5100,fd=3))\n'
-                           'LISTEN 0 4096 127.0.0.1:8082 0.0.0.0:* users:(("set-up-outside-",pid=5100,fd=4))')
-    PROXY_ON_ONE_PORT = 'LISTEN 0 4096 127.0.0.1:8081 0.0.0.0:* users:(("set-up-outside-",pid=5100,fd=3))'
-    LEFTOVER_PROGRAM_ON_8082 = ('LISTEN 0 4096 127.0.0.1:8081 0.0.0.0:* users:(("set-up-outside-",pid=5100,fd=3))\n'
-                                'LISTEN 0 511 127.0.0.1:8082 0.0.0.0:* users:(("old-program",pid=4020,fd=6))')
+    ON_8081 = 'LISTEN 0 4096 127.0.0.1:8081 0.0.0.0:* users:(("set-up-outside-",pid=5100,fd=3))'
+    ON_8082 = 'LISTEN 0 4096 127.0.0.1:8082 0.0.0.0:* users:(("set-up-outside-",pid=5200,fd=4))'
+    BOTH = ON_8081 + '\n' + ON_8082
+    PIDS = {'provider-api-proxy': 5100, 'cloudflare-api-proxy': 5200}
     TOKENS = ['cloudflare-api-token.conf', 'provider-api-token.conf']
     CREDENTIAL = ['cloudflare-api-token.conf', 'provider-api-signing-credential.json']
 
-    def test_the_proxy_on_both_ports_passes_with_a_token_in_a_header(self):
-        self.assertEqual(self.run_check('token_in_a_header', self.TOKENS, self.PROXY_ON_BOTH_PORTS, {'provider-api-proxy': 5100}), (0, ''))
+    def test_each_service_on_its_own_port_passes_for_every_setting(self):
+        self.assertEqual(self.run_check('token_in_a_header', self.TOKENS, self.BOTH, self.PIDS), (0, ''))
+        self.assertEqual(self.run_check('ovhcloud_signed_requests', self.CREDENTIAL, self.BOTH, self.PIDS), (0, ''))
 
-    def test_the_proxy_on_both_ports_passes_with_signed_requests(self):
-        self.assertEqual(self.run_check('ovhcloud_signed_requests', self.CREDENTIAL, self.PROXY_ON_BOTH_PORTS, {'provider-api-proxy': 5100}), (0, ''))
+    def test_the_provider_port_passes_alone_before_the_cloudflare_token_exists(self):
+        """The setup creates servers through 8081 before the Cloudflare token exists."""
+        self.assertEqual(self.run_check('token_in_a_header', ['provider-api-token.conf'], self.ON_8081, self.PIDS), (0, ''))
 
-    def test_a_port_without_the_proxy_fails_the_run(self):
-        for listeners, shown in ((self.PROXY_ON_ONE_PORT, '127.0.0.1:8081'), ('', 'the programs there are: none'),
-                                 (self.LEFTOVER_PROGRAM_ON_8082, 'old-program')):
+    def test_a_port_without_its_service_fails_the_run(self):
+        for listeners, shown, wanted in ((self.ON_8081, '127.0.0.1:8082', 'cloudflare-api-proxy.service'),
+                                         (self.ON_8082, '127.0.0.1:8081', 'provider-api-proxy.service'),
+                                         ('', 'the programs there are: none', 'provider-api-proxy.service'),
+                                         (self.ON_8081 + '\nLISTEN 0 511 127.0.0.1:8082 0.0.0.0:* users:(("old-program",pid=4020,fd=6))',
+                                          'old-program', 'cloudflare-api-proxy.service')):
             with self.subTest(listeners=listeners):
-                code, error = self.run_check('token_in_a_header', self.TOKENS, listeners, {'provider-api-proxy': 5100})
+                code, error = self.run_check('token_in_a_header', self.TOKENS, listeners, self.PIDS)
                 self.assertEqual(code, 1)
-                self.assertIn('should both be served by provider-api-proxy.service (systems_desk_provider_api_authentication is token_in_a_header)', error)
+                self.assertIn('should be served by %s (systems_desk_provider_api_authentication is token_in_a_header)' % wanted, error)
                 self.assertIn(shown, error)
 
-    def test_no_program_is_expected_while_a_file_is_missing(self):
-        for value, files in (('token_in_a_header', ['cloudflare-api-token.conf']), ('ovhcloud_signed_requests', ['provider-api-signing-credential.json']),
-                             ('token_in_a_header', [])):
+    def test_no_program_is_expected_on_a_port_while_its_file_is_missing(self):
+        for value, files, fine, port in (('token_in_a_header', ['cloudflare-api-token.conf'], self.ON_8082, '8081'),
+                                         ('ovhcloud_signed_requests', ['provider-api-signing-credential.json'], self.ON_8081, '8082'),
+                                         ('token_in_a_header', [], '', '8081')):
             with self.subTest(value=value, files=files):
-                self.assertEqual(self.run_check(value, files, '', {'provider-api-proxy': 0}), (0, ''))
-                code, error = self.run_check(value, files, self.PROXY_ON_BOTH_PORTS, {'provider-api-proxy': 5100})
+                self.assertEqual(self.run_check(value, files, fine, self.PIDS), (0, ''))
+                code, error = self.run_check(value, files, self.BOTH, self.PIDS)
                 self.assertEqual(code, 1)
                 self.assertIn('should have no program yet', error)
+                self.assertIn('127.0.0.1:%s' % port, error)
 
     def test_a_running_nginx_or_its_settings_file_fails_the_run_even_beside_the_proxy(self):
         for value, files in (('token_in_a_header', self.TOKENS), ('ovhcloud_signed_requests', self.CREDENTIAL)):
             for case in ({'nginx_running': True}, {'nginx_conf': True}):
                 with self.subTest(value=value, case=case):
-                    code, error = self.run_check(value, files, self.PROXY_ON_BOTH_PORTS, {'provider-api-proxy': 5100}, **case)
+                    code, error = self.run_check(value, files, self.BOTH, self.PIDS, **case)
                     self.assertEqual(code, 1)
                     self.assertIn('nginx is still on this desk', error)
                     self.assertIn('remove_nginx_which_the_api_proxy_replaced', error)

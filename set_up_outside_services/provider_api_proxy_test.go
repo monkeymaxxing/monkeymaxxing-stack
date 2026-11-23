@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -415,7 +416,7 @@ func TestCloudflareTokenGoesOnlyToCloudflaresAddressAndThePathStaysUnderIt(t *te
 
 func TestProxyRefusesAProviderAddressNoProviderGuideGives(t *testing.T) {
 	t.Setenv("CREDENTIALS_DIRECTORY", t.TempDir())
-	err := runProviderAPIProxy([]string{"--provider-api-url", "https://attacker.example/v1/"})
+	err := runProviderAPIProxy([]string{"--api", "server-provider", "--provider-api-url", "https://attacker.example/v1/"})
 	if err == nil || !strings.Contains(err.Error(), "not a provider guide's API address") {
 		t.Fatalf("got %v", err)
 	}
@@ -490,8 +491,22 @@ func TestProxyNeedsTheDesksServerID(t *testing.T) {
 	t.Setenv("CREDENTIALS_DIRECTORY", directory)
 	os.WriteFile(filepath.Join(directory, "desk-server-name"), nil, 0o600)
 	os.WriteFile(filepath.Join(directory, "provider-api-token"), []byte(`proxy_set_header Authorization "Bearer t";`+"\n"), 0o600)
-	err := runProviderAPIProxy([]string{"--provider-api-url", providerGuideAPIAddresses[0]})
+	err := runProviderAPIProxy([]string{"--api", "server-provider", "--provider-api-url", providerGuideAPIAddresses[0]})
 	if err == nil || !strings.Contains(err.Error(), "systems desk's own server ID") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestProxyServesOnlyOneNamedSide(t *testing.T) {
+	t.Setenv("CREDENTIALS_DIRECTORY", t.TempDir())
+	for _, arguments := range [][]string{nil, {"--api", "both"}, {"--provider-api-url", providerGuideAPIAddresses[0]}} {
+		if err := runProviderAPIProxy(arguments); !errors.Is(err, errUsage) {
+			t.Errorf("%v: want a usage refusal, got %v", arguments, err)
+		}
+	}
+	// The Cloudflare side needs only its own token file.
+	err := runProviderAPIProxy([]string{"--api", "cloudflare"})
+	if err == nil || strings.Contains(err.Error(), "server ID") {
+		t.Fatalf("the Cloudflare side must not ask for the provider's files, got %v", err)
 	}
 }

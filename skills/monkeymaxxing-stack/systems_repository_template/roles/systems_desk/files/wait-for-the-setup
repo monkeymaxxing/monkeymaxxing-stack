@@ -1,21 +1,21 @@
 #!/bin/bash
-# Waits for the person's setup on the desk, set-up-outside-services go-live
-# (ssh desk01-setup), to finish or stop. The coding agent runs, from the
+# Waits for the person's setup on the desk, set-up-outside-services lock-the-desk
+# (ssh desk01-lock), to finish or stop. The coding agent runs, from the
 # laptop:
 #     ssh desk01-agent wait-for-the-setup [--at-most-minutes N]
-# It reads go-live's results file, which holds step names, their states and
+# It reads the setup's results file, which holds step names, their states and
 # values that are not secrets, never a secret. It prints the steps that
 # changed, and a line at least once a minute, so the login is never idle.
 # At the end it prints the file's summary: the steps, finished,
 # stopped_with and for_the_coding_agent.
-# The wait ends when the file says finished, or when a go-live run that
+# The wait ends when the file says finished, or when a setup run that
 # wrote the file after the wait started stopped with a reason. Reason: an
 # earlier run's stopped_with stays in the file until the person's next run
 # starts, and must not end the wait for that run.
 # Exit codes:
-#     0     go-live finished
-#     1     go-live stopped; stopped_with says why
-#     124   go-live has not finished or stopped; the wait ended at its bound
+#     0     the setup finished
+#     1     the setup stopped; stopped_with says why
+#     124   the setup has not finished or stopped; the wait ended at its bound
 #     64    a wrong argument; nothing was waited for
 # Reason for the bound, 9 minutes by default: Claude Code stops a command
 # after 10 minutes, so the wait ends first and says so. A coding agent that
@@ -58,21 +58,21 @@ while :; do
     [ "$state" = waiting ] || break
     if [ $((now - started)) -ge $((at_most_minutes * 60)) ]; then
         steps=$(steps_line)
-        printf 'go-live has not finished or stopped after %s minutes.%s Wait again with: wait-for-the-setup\n' \
+        printf 'The setup has not finished or stopped after %s minutes.%s Wait again with: wait-for-the-setup\n' \
             "$at_most_minutes" "${steps:+ Steps: $steps.}"
         exit 124
     fi
     steps=$(steps_line)
     minutes=$(( (now - started) / 60 ))
     if [ -n "$steps" ] && [ "$steps" != "$shown_steps" ]; then
-        printf -- '--- go-live (%s min): %s\n' "$minutes" "$steps"
+        printf -- '--- setup (%s min): %s\n' "$minutes" "$steps"
         shown_steps=$steps
         last_line_at=$now
     elif [ $((now - last_line_at)) -ge "$seconds_between_lines_at_most" ]; then
         if [ -f "$results_file" ]; then
-            printf -- '--- go-live (%s min): no step changed.\n' "$minutes"
+            printf -- '--- setup (%s min): no step changed.\n' "$minutes"
         else
-            printf -- '--- go-live (%s min): the person has not started it yet (no %s).\n' "$minutes" "$results_file"
+            printf -- '--- setup (%s min): the person has not started it yet (no %s).\n' "$minutes" "$results_file"
         fi
         last_line_at=$now
     fi
@@ -81,8 +81,8 @@ done
 
 jq '{steps: [.steps[] | "\(.name)=\(.state)"], finished, stopped_with, for_the_coding_agent}' "$results_file"
 if [ "$state" = finished ]; then
-    echo 'go-live finished.'
+    echo 'The setup finished.'
     exit 0
 fi
-echo 'go-live stopped. stopped_with above says why. After the fix, the person starts the setup again, and it continues where it stopped.'
+echo 'The setup stopped. stopped_with above says why. After the fix, the person starts the setup again, and it continues where it stopped.'
 exit 1

@@ -4,8 +4,8 @@
 # MMX. Run as root, from the person's terminal:
 #     sudo -n set-up-the-phone-code --emergency-codes-to PATH
 # It shows the QR code and asks for a code from the phone until one matches,
-# as step 2 of 2 of set-up-outside-services go-live's lock screen goes on
-# (go-live prints the screen's title and steps 1 and 2). Only after the
+# as step 2 of 2 of set-up-outside-services lock-the-desk's lock screen goes on
+# (lock-the-desk prints the screen's title and steps 1 and 2). Only after the
 # code matches it writes the secret to /etc/systems-desk/phone-code (root:root
 # 0400) and the emergency codes to PATH (0600, owned by the person who ran
 # sudo), for the recovery bundle. The secret itself goes nowhere else.

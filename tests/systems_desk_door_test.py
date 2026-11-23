@@ -196,6 +196,13 @@ class TheDeskDoor(unittest.TestCase):
         self.assertIn('LoadCredential=desk-server-name:/etc/systems-desk/desk-server-name', (T/'roles/systems_desk/files/provider-api-proxy.service').read_text())
         self.assertIn('LoadCredential=desk-server-id:/etc/systems-desk/desk-server-id', (T/'roles/systems_desk/files/provider-api-proxy.service').read_text())
 
+    def test_the_coding_agent_may_run_only_its_own_account_steps_command_as_root(self):
+        task = [task for _, task in self.tasks if task['path'].endswith('/allow_the_coding_agent_the_account_steps_command_through_sudo')][0]
+        fields = {argument['field']: argument['value'] for argument in task['arguments']}
+        self.assertEqual(fields['file.content'],
+                         'coding-agent ALL=(root) NOPASSWD: /usr/local/bin/set-up-outside-services from-the-coding-agent *\n')
+        self.assertEqual((fields['file.owner'], fields['file.group'], fields['file.permissions_mode']), ('root', 'root', '0440'))
+
     def test_the_coding_agent_gets_the_socket_and_its_git_settings_and_no_forwarding(self):
         login = self.login(self.locked(), 'coding-agent', LAPTOP)
         self.assertEqual(login['setenv'], ['SSH_AUTH_SOCK=/run/desk-ssh-agent/socket',

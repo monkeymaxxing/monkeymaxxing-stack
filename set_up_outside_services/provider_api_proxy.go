@@ -8,9 +8,10 @@ package main
 // Vultr, Scaleway), a signature (OVHcloud and AWS sign each request with a
 // secret) or a short-lived access token made from a service account key
 // (Google Cloud). On http://127.0.0.1:8082/ it adds the desk's Cloudflare
-// token and forwards to Cloudflare's API. systemd runs it as
-// provider-api-proxy.service, under an account of its own
-// (DynamicUser), and hands it the root-only files through LoadCredential.
+// token and forwards to Cloudflare's API. systemd runs the two sides as
+// provider-api-proxy.service and cloudflare-api-proxy.service, each under an
+// account of its own (DynamicUser), and hands each its root-only files
+// through LoadCredential.
 // docs/design.md, "The coding agent and personal credentials", records the
 // design.
 
@@ -36,6 +37,7 @@ const (
 	providerAPIListenAddress = "127.0.0.1:8081"
 	providerAPIProxyAddress  = "http://" + providerAPIListenAddress + "/"
 	apiProxyService          = "provider-api-proxy"
+	cloudflareProxyService   = "cloudflare-api-proxy"
 	// The coding agent's address for Cloudflare's API, and where the proxy
 	// forwards it. Reason for the fixed address: the desk's Cloudflare token
 	// goes only to Cloudflare.
@@ -44,6 +46,7 @@ const (
 	// The unit's unitFile and the names under which systemd's LoadCredential
 	// gives the proxy the token files.
 	apiProxyUnitFile              = "/etc/systemd/system/provider-api-proxy.service"
+	cloudflareProxyUnitFile       = "/etc/systemd/system/cloudflare-api-proxy.service"
 	providerTokenCredentialName   = "provider-api-token"
 	cloudflareTokenCredentialName = "cloudflare-api-token"
 	// The desk's own server ID at the provider, a root-owned file that
@@ -237,21 +240,35 @@ func newHeaderTokenProxy(apiAddress string, signer headerTokenSigner, client *ht
 	return &apiProxy{apiAddress: apiAddress, signer: signer, client: client}
 }
 
-// runProviderAPIProxy is the service's program. It reads the files
-// systemd handed it and serves 8081 and 8082 until it is stopped. A provider
+// runProviderAPIProxy is one service's program. --api server-provider
+// serves 8081 for provider-api-proxy.service; --api cloudflare serves 8082
+// for cloudflare-api-proxy.service. Reason for two services: each starts
+// once its own token file exists, so the provider's port answers before the
+// Cloudflare token does, while the setup makes the servers first. It reads
+// the files systemd handed it and serves until it is stopped. A provider
 // that takes a token in a header gets --provider-api-url (the unit's
 // argument) and provider-api-token; a provider whose requests are signed
 // gets provider-api-signing-credential, which holds the API address.
 func runProviderAPIProxy(arguments []string) error {
 	flags := flag.NewFlagSet(apiProxyCommand, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	api := flags.String("api", "", "")
 	providerAPIURL := flags.String("provider-api-url", "", "")
-	if err := flags.Parse(arguments); err != nil || flags.NArg() > 0 {
-		return fmt.Errorf("%s takes only --provider-api-url, for a provider that takes a token in a header: %w", apiProxyCommand, errUsage)
+	if err := flags.Parse(arguments); err != nil || flags.NArg() > 0 || (*api != "server-provider" && *api != "cloudflare") {
+		return fmt.Errorf("%s takes --api server-provider or --api cloudflare, and --provider-api-url for a provider that takes a token in a header: %w", apiProxyCommand, errUsage)
 	}
 	directory := os.Getenv("CREDENTIALS_DIRECTORY")
 	if directory == "" {
-		return fmt.Errorf("%s runs only as %s.service, which hands it the credential files", apiProxyCommand, apiProxyService)
+		return fmt.Errorf("%s runs only as a systemd service (%s.service or %s.service), which hands it the credential files", apiProxyCommand, apiProxyService, cloudflareProxyService)
+	}
+	if *api == "cloudflare" {
+		cloudflareSigner, err := readHeaderTokenSigner(filepath.Join(directory, cloudflareTokenCredentialName))
+		if err != nil {
+			return err
+		}
+		cloudflareProxy := newHeaderTokenProxy(cloudflareAPIAddress, cloudflareSigner, &http.Client{})
+		fmt.Fprintf(os.Stderr, "Adding the Cloudflare token to requests to %s on http://%s/.\n", cloudflareAPIAddress, cloudflareProxyListenAddress)
+		return serve(cloudflareProxyListenAddress, cloudflareProxy)
 	}
 	var providerProxy *apiProxy
 	if *providerAPIURL != "" {
@@ -292,30 +309,16 @@ func runProviderAPIProxy(arguments []string) error {
 		return fmt.Errorf("%s must exist (empty when the provider names no server in a path)", deskServerNameFile)
 	}
 	providerProxy.deskServerName = strings.TrimSpace(string(nameText))
-	cloudflareSigner, err := readHeaderTokenSigner(filepath.Join(directory, cloudflareTokenCredentialName))
-	if err != nil {
-		return err
-	}
-	cloudflareProxy := newHeaderTokenProxy(cloudflareAPIAddress, cloudflareSigner, &http.Client{})
-	fmt.Fprintf(os.Stderr, "Adding the Cloudflare token to requests to %s on http://%s/.\n", cloudflareAPIAddress, cloudflareProxyListenAddress)
-	return serveBoth(providerProxy, cloudflareProxy)
+	return serve(providerAPIListenAddress, providerProxy)
 }
 
-// serveBoth listens on both addresses before it serves either, so a port in
-// use stops the service at once, and returns when either server stops.
-func serveBoth(providerProxy, cloudflareProxy http.Handler) error {
-	providerListener, err := net.Listen("tcp", providerAPIListenAddress)
+// serve answers on one address until the server stops.
+func serve(address string, handler http.Handler) error {
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
-	cloudflareListener, err := net.Listen("tcp", cloudflareProxyListenAddress)
-	if err != nil {
-		return err
-	}
-	stopped := make(chan error, 2)
-	go func() { stopped <- http.Serve(providerListener, providerProxy) }()
-	go func() { stopped <- http.Serve(cloudflareListener, cloudflareProxy) }()
-	return <-stopped
+	return http.Serve(listener, handler)
 }
 
 // apiProxy forwards each request to the API address, signed.
