@@ -695,13 +695,13 @@ repository's name, including paths inside quoted SSH commands.
    [Create the three production servers now](#create-the-three-production-servers-now)
    says; then chapter 4's first screen follows.
 
-   The run's normal end prints `The desk is ready.` and the production
-   public key. When the run ends with an error such as
+   The run's normal end shows the task `say_that_the_desk_is_ready` as
+   succeeded and the last line `Run …: succeeded`. When the run ends with an error such as
    "node busy with job …" or a lost connection, the desk carries on with
    the job by itself. Wait two minutes and run the same command again.
    "node busy" again means the desk is still at work, so wait once more.
 
-   **Check:** the run printed `The desk is ready.`, the key's move
+   **Check:** the run ended with `Run …: succeeded`, the key's move
    succeeded and the laptop file `~/example-setup/provider-key` is gone,
    and `ssh desk01-agent true` logs in as `coding-agent` with no code.
 

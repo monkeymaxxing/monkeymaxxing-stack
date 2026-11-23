@@ -375,7 +375,7 @@ func (e *environment) finishVaultChange(v *savedKeys, command string) error {
 	if err != nil {
 		return fmt.Errorf("%v. The vault holds the new keys; fix the cause and run %s again, which commits and pushes them", err, command)
 	}
-	e.say("Committed the vault as signed commit %s, published %s, so the servers' next run gets the new keys.", commit, where)
+	e.say("Committed the vault as commit %s, published %s, so the servers' next run gets the new keys.", commit, where)
 	return nil
 }
 

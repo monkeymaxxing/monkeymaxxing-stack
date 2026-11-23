@@ -190,7 +190,7 @@ func runSaveAKey(e *environment, key string) error {
 		if err != nil {
 			return "", err
 		}
-		value, err := e.prompt(item.What + " (hidden): ")
+		value, err := e.prompt("Paste " + item.What + " (hidden): ")
 		if err != nil {
 			return "", err
 		}
@@ -237,7 +237,7 @@ func runRandomSecrets(e *environment) error {
 			if err := saved.save("util01_provider_api_token", providerCredential); err != nil {
 				return "", err
 			}
-			made = append(made, "util01_provider_api_token")
+			e.say("Copied your server provider key into the vault as util01_provider_api_token, for util01's own work.")
 		}
 		for _, item := range secretsPlan(settings) {
 			if item.Kind != randomSecret || saved.hasAll(item.Key) {

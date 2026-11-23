@@ -55,8 +55,9 @@ make the buckets and keys through the desk's commands, and lock the desk.
 - **The results file.** `/var/lib/monkeymaxxing-stack/setup_results.json`
   holds each step's name and state, `stopped_with`, the reason a command
   stopped, and `for_the_coding_agent`, the values that are not secrets,
-  which you write into the settings. The file never holds a secret. Read
-  it after each command, and each time the person comes back to you:
+  which you write into the settings. The file never holds a secret. It
+  appears with the first account command. Read it after each command, and
+  each time the person comes back to you:
 
   ```sh
   # On the laptop:
