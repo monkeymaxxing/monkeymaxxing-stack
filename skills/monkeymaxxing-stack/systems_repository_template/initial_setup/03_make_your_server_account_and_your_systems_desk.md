@@ -24,9 +24,9 @@ account screen of step 1 is the opening.
 ## Before you start
 
 - **Secrets never go into the chat.** The chat is stored at your
-  provider. The person types each secret at a hidden prompt: on the
-  laptop for the provider key, because the desk does not exist yet, and
-  on the desk for every other secret.
+  provider. The person types the provider key at a hidden prompt on the
+  laptop, because the desk does not exist yet. Every other key goes
+  straight to the desk, as chapter 4 says.
 - **The laptop.** We say "laptop" throughout because most people use one.
   Any computer the person develops on works the same way, such as a
   desktop or a Mac mini.
@@ -68,6 +68,7 @@ account screen of step 1 is the opening.
 
    Do this now:
      1. Open  https://accounts.hetzner.com/signUp  and make an account.
+        Already have a Hetzner account?  Sign in instead, and go on with step 3.
      2. Save the login in 1Password.
      3. Turn on two-step sign-in, which Hetzner calls  Two-factor authentication (2FA):
           https://accounts.hetzner.com/tfa
@@ -80,7 +81,7 @@ account screen of step 1 is the opening.
      ~/example-setup/enter-the-hetzner-key
 
    It asks for the key, checks it with Hetzner, and keeps it for me.
-   Then leave that window open.  It goes on to your next accounts by itself later.
+   When it says  Go back to your coding agent,  you are done in that window.
 
    After the key, I check what Hetzner has in stock and show you the real monthly price here.
    Nothing is ordered before your yes.  I wait here until the key is in.
@@ -102,8 +103,6 @@ account screen of step 1 is the opening.
    with one line that you still wait for the key. Never print the file.
    An agent with no background commands ends its reply with the screen
    and "When it says  Hetzner accepted the key,  tell me "done" here."
-   The key command stays open after that on purpose: chapter 4 step 2
-   tells it when the desk is ready.
 
    **Check:** `~/example-setup/provider-key` exists, mode `0600`.
 
@@ -184,8 +183,8 @@ account screen of step 1 is the opening.
    **Check:** the list script answers, and `vars.wireguard_network`
    overlaps no provider network.
 
-4. **The settings that chapter 4 reads.** `set-up-outside-services go-live`
-   in chapter 4 reads these settings from the systems repository, so write
+4. **The settings that chapter 4 reads.** The desk's account commands
+   in chapter 4 read these settings from the systems repository, so write
    them now, in `mmx_project_settings.yml`:
 
    - `vars.backups`: Backblaze's S3 endpoint and region for the region
@@ -209,7 +208,61 @@ account screen of step 1 is the opening.
    chapters 1 to 3 other than the desk's and its laptop's, which the desk's
    steps below fill, and `mmx validate every_server` stops, if at all, only
    on such a value or one whose comment names a later chapter. Reason:
-   otherwise `go-live` stops in the person's terminal on the empty value.
+   otherwise an account command stops on the empty value, in the middle
+   of the person's accounts.
+
+## Servers the person already pays for
+
+1. **Offer the person's own servers first.** Right after the key works,
+   and before the price screen, list the servers the account already
+   has, with the guide's listing requests: at OVHcloud the account's VPS
+   (`GET /vps`) and the project's instances. With an empty list, skip
+   this part. A server the person already pays for by the month, such as
+   an OVHcloud VPS, can become the systems desk or one of the three
+   servers instead of a new order. Only a server that is at least the
+   plan's size for its role, in the right location, qualifies.
+
+   Rebuilding erases everything on the server, so the person approves
+   each server alone. For each server, read from the provider what you
+   can: its name, its address, its operating system and its creation
+   date. Never log in to the server to look. **Ask the person,** as the
+   last text of your reply:
+
+   ```text
+   You already pay for 2 servers at OVHcloud.  I can use them instead of ordering new ones:
+
+     vps-1a2b3c4d.vps.ovh.us  (US East, 2 CPUs, 4 GB, made 2025-03-02)
+       Runs now:  "old-shop-website", its name at OVHcloud
+       New role:  your systems desk, desk01
+       Rebuilding erases everything on it: every file, database and setting.
+
+     vps-5e6f7a8b.vps.ovh.us  (US East, 2 CPUs, 4 GB, made 2026-11-20)
+       Runs now:  nothing I can see
+       New role:  app001, for your app
+       Rebuilding erases everything on it: every file, database and setting.
+
+   For each server, say "use it" or "leave it", such as "use both".
+   Nothing is erased before your yes.
+   ```
+
+   Ask "What runs on it now?" when the provider's data does not say. A
+   server the person leaves stays as it is, and the plan orders a new one
+   in its place. Record each server the person approved, with its new
+   role, its provider ID and its name, for the price screen and for
+   chapter 6.
+
+   Rebuild each approved server with the provider guide's rebuild steps,
+   at the point where the plan would order it: the desk in step 2 of
+   "Create desk01 through WireGuard", in place of the create command, and
+   the three servers in chapter 6's step 4. At OVHcloud the steps are
+   "How you make a VPS", from its step 2: wait for the VPS's own tasks,
+   rebuild it with the first-boot data, and wait for its WireGuard login.
+   A guide without rebuild steps, such as Hetzner Cloud's, bills by the
+   hour: a new server costs the same as the old one, so offer no reuse
+   there.
+
+   **Check:** the person said "use it" or "leave it" for each listed
+   server, and each approved server's ID and new role are recorded.
 
 ## The real price, approved once
 
@@ -338,6 +391,13 @@ account screen of step 1 is the opening.
      so app001 is the next bigger size.
    ```
 
+   A server the person chose to reuse keeps its line, with "already
+   paid" in place of its price, and adds nothing to "In all":
+
+   ```text
+     app001        US East, your own VPS        already paid
+   ```
+
    Never word it as a correction of yourself, such as "this is not the
    price I quoted". Reason: chapter 1's plan said "from about", and the
    real numbers are what the person approves.
@@ -375,7 +435,8 @@ repository's name, including paths inside quoted SSH commands.
    Replace `desk01.vars.allowed_laptops` in `inventories/servers.yml` with
    the laptop's `laptop_name`, the printed `wireguard_public_key`,
    `private_ip: 10.20.10.1`, and `ssh_public_key` from
-   `~/.ssh/desk01.pub`. The same laptop key opens the person's login and
+   `~/.ssh/desk01.pub`, in quotes, because the key's comment may hold a
+   colon, which YAML reads as a new key. The same laptop key opens the person's login and
    the coding agent's login. Further laptops take unused addresses from
    `vars.private_ip_ranges.systems_desk_laptops`.
 
@@ -395,10 +456,7 @@ repository's name, including paths inside quoted SSH commands.
    through `server_management_scripts/render_server_first_boot`, prints
    the desk's public key and never the private key, creates the desk with
    the provider guide's create command, and clears the private first-boot
-   file whether the provider accepts or refuses the request. Only after
-   the provider accepted the request does it make
-   `~/example-setup/desk-ordered`, which tells the waiting key command
-   that the desk is ordered.
+   file whether the provider accepts or refuses the request.
 
    ```sh
    # On the laptop. Creates desk01 at the provider, once.
@@ -422,7 +480,6 @@ repository's name, including paths inside quoted SSH commands.
    SERVER_PROVIDER_API_TOKEN="$(cat ~/example-setup/provider-key)" ./server_management_scripts/create_a_server_at_the_provider \
      --server-name desk01 --server-type SERVER_TYPE --location LOCATION --image IMAGE --ssh-key-name SSH_KEY_NAME \
      --first-boot-data "$first_boot" --wireguard-public-key "$desk_public_key" --wireguard-private-ip 10.20.9.1
-   : > ~/example-setup/desk-ordered
    ```
 
    The desk's only first-boot peer is the laptop, without an endpoint.
@@ -432,8 +489,8 @@ repository's name, including paths inside quoted SSH commands.
    `desk01.vars.provider_server_id`; at OVHcloud (a VPS) and Google Cloud,
    also the order or create receipt's service or instance name as
    `desk01.vars.provider_server_name`. When the provider refuses the
-   request, such as for no stock, the block stops before
-   `desk-ordered`: tell the person in one line, and show the price screen
+   request, such as for no stock, the block stops with the provider's
+   reason: tell the person in one line, and show the price screen
    of [the real price, approved once](#the-real-price-approved-once) again,
    with the stock as it is now.
 
@@ -444,15 +501,13 @@ repository's name, including paths inside quoted SSH commands.
    I am building your systems desk now, a small server of your own that holds your keys.
    It takes about 10 minutes.
 
-   In about 10 minutes, the window where you typed the Hetzner key goes on by itself
-   and shows your next account, Cloudflare.  I'll say when.
+   Then your next accounts come, here in the chat.  I'll say when.
    Until then, you have nothing to do.
    ```
 
    **Check:** the provider lists `desk01`, `desk01.vars.public_ipv4_address`
    holds its address, `desk01.vars.provider_server_id` holds its ID,
-   `~/example-setup/desk01-first-boot.yml` is empty, and
-   `~/example-setup/desk-ordered` exists.
+   and `~/example-setup/desk01-first-boot.yml` is empty.
 
 3. **The laptop's way in.** Write `~/.config/doubleshell/desk01.conf`
    with your write tool, as the following block. The file holds no secret:
@@ -478,7 +533,7 @@ repository's name, including paths inside quoted SSH commands.
    is one short name the person or you type:
 
    ```sshconfig
-   Host desk01 desk01-agent desk01-setup desk01-secrets desk01-review
+   Host desk01 desk01-agent desk01-lock desk01-secrets desk01-review
      HostName 10.20.9.1
      IdentityFile ~/.ssh/desk01
      IdentitiesOnly yes
@@ -487,7 +542,7 @@ repository's name, including paths inside quoted SSH commands.
      StrictHostKeyChecking yes
      ProxyCommand /Users/alex/.local/bin/doubleshell --wireguard-config ~/.config/doubleshell/desk01.conf proxy-ssh %h %p
 
-   Host desk01 desk01-setup desk01-secrets desk01-review
+   Host desk01 desk01-lock desk01-secrets desk01-review
      User alex
 
    Host desk01-agent
@@ -497,9 +552,9 @@ repository's name, including paths inside quoted SSH commands.
      ControlPersist 1h
      ServerAliveInterval 30
 
-   Host desk01-setup
+   Host desk01-lock
      RequestTTY yes
-     RemoteCommand set-up-outside-services go-live
+     RemoteCommand set-up-outside-services lock-the-desk
 
    Host desk01-secrets
      RequestTTY yes
@@ -516,8 +571,8 @@ repository's name, including paths inside quoted SSH commands.
    doubleshell in every shell.
    `desk01` is the person's own login. `desk01-agent` is your login, as
    `coding-agent`: one shared connection that later commands reuse. The
-   other three each start one command for the person: `desk01-setup` in
-   chapter 4, `desk01-secrets` for a key the vault still lacks, such as
+   other three each start one command for the person: `desk01-lock` for
+   the lock in chapter 4, `desk01-secrets` for a key the vault still lacks, such as
    Pushover's in the alerts part of the setup, and `desk01-review` for a desk
    review.
    Enroll the first SSH host key through the authenticated WireGuard
@@ -652,8 +707,8 @@ repository's name, including paths inside quoted SSH commands.
 
 ## Create the three production servers now
 
-As soon as the desk is ready, and before chapter 4's step 2 opens the
-person's next accounts, create `app001`, `db01` and `util01`. They stay
+As soon as the desk is ready, and before chapter 4's step 2 asks about
+the person's next accounts, create `app001`, `db01` and `util01`. They stay
 idle until chapter 7 installs everything on them. Reason: stock changes by
 the hour, so the approved sizes can sell out between the person's yes
 and the creation. The servers need only
@@ -748,14 +803,15 @@ after a reboot.
 
 ## Secrets
 
-Every secret has one home, and gets there one way. The person types each
-secret once, at a hidden prompt, and you never see one.
+Every secret has one home, and gets there one way. A secret never enters
+the chat, and you never see one: the person types it at a hidden prompt,
+or you pass it from the clipboard or a laptop file straight to the desk.
 
 | Secret | Where the secret is stored | How it gets there |
 | --- | --- | --- |
-| Every secret the servers use, listed below | The vault, `secrets_vault.age`, in the systems repository. Playbook key names come from `mmx secrets usage`. MMHotline's key names come from the `.secrets` references in `mmhotline_settings.yml` | In the first part of the setup, `set-up-outside-services go-live` (`ssh desk01-setup`): it asks for each key a website gives, makes every random one without a question, and commits and pushes the vault. Later, `set-up-outside-services secrets` (`ssh desk01-secrets`) asks for each key the vault still lacks. `--replace KEY` enters one key again, such as for a rotation: `ssh -t desk01 set-up-outside-services secrets --replace KEY` |
-| The person's own tokens: the provider credential, the desk's Cloudflare token, and the R2 key for posting to the status page while `util01` is down | The provider credential: only the API proxy's root-only file. The Cloudflare token: the API proxy's root-only file and the person's own token file on the desk. The R2 key: the person's own token file | The provider credential: the laptop key command of chapter 3, which you move to the desk right after the bootstrap. The Cloudflare tokens: `go-live` makes them |
-| The recovery bundle: the vault passphrase, the production private key, the desk's WireGuard private key, the shared root console password, the phone code's emergency codes, the server provider credential, the systems desk's Cloudflare token (and staging's access token when `staging01` exists), the backups' passphrase, and the read-only Backblaze key for restoring them (never the Backblaze master key) | `recovery_bundle.age` in the systems repository, and a copy in the locked backup bucket at Backblaze, encrypted with the recovery passphrase | `go-live` makes it at the lock in chapter 4 |
+| Every secret the servers use, listed below | The vault, `secrets_vault.age`, in the systems repository. Playbook key names come from `mmx secrets usage`. MMHotline's key names come from the `.secrets` references in `mmhotline_settings.yml` | In the first part of the setup, the desk's account commands in chapter 4: you pass each key a website gives from the person's clipboard or a laptop file the person names, straight to `set-up-outside-services from-the-coding-agent`, and `random-secrets` makes every random one; each command commits and pushes the vault. Later, `set-up-outside-services secrets` (`ssh desk01-secrets`) asks for each key the vault still lacks. `--replace KEY` enters one key again, such as for a rotation: `ssh -t desk01 set-up-outside-services secrets --replace KEY` |
+| The person's own tokens: the provider credential, the desk's Cloudflare token, and the R2 key for posting to the status page while `util01` is down | The provider credential: only the API proxy's root-only file. The Cloudflare token: the API proxy's root-only file and the person's own token file on the desk. The R2 key: the person's own token file | The provider credential: the laptop key command of chapter 3, which you move to the desk right after the bootstrap. The Cloudflare tokens: `set-up-outside-services from-the-coding-agent cloudflare` makes them in chapter 4 |
+| The recovery bundle: the vault passphrase, the production private key, the desk's WireGuard private key, the shared root console password, the phone code's emergency codes, the server provider credential, the systems desk's Cloudflare token (and staging's access token when `staging01` exists), the backups' passphrase, and the read-only Backblaze key for restoring them (never the Backblaze master key) | `recovery_bundle.age` in the systems repository, and a copy in the locked backup bucket at Backblaze, encrypted with the recovery passphrase | Each account command of chapter 4 adds its items as it makes them, and the lock window, `ssh desk01-lock`, adds the console password and the phone code's emergency codes, checks that every item is there, and pushes the bundle |
 | The recovery passphrase, and every account's login and recovery codes | The team's password manager | The person saves each one when it is made |
 
 The secrets that servers use are:
@@ -827,10 +883,12 @@ already, so storing the passphrase inside the vault exposes nothing.
   account", step 3): choose a free private /16 and update every inventory
   address together.
 - **The person makes a new provider key,** such as when the first key
-  expires: give the same key command again. It stops the older copy that
-  still waits, and once the desk is ordered it only saves the key, as
+  expires: before the desk's API proxy holds a key, give the same key
+  command again, and move the new key file as step 4 of "Create desk01
+  through WireGuard" says. After that, the person replaces the key with
+  the guide's `personal-token` command, as
   [The laptop key command](../provider_guides/README.md#the-laptop-key-command)
-  says. Never ask the person to press Ctrl+C or to close a window.
+  says.
 - **The team's systems repository already exists on `util01`** ("Create
   desk01 through WireGuard", step 4), as for a new team member's desk
   ([Add or remove a team member](../operating_procedures/add_or_remove_a_team_member.md))
@@ -846,6 +904,11 @@ already, so storing the passphrase inside the vault exposes nothing.
 **The provider key is typed on the laptop, once.** The desk does not exist
 yet, and the desk is built with the key. The key sits in a `0600` laptop
 file for about ten minutes, then moves to the desk and is deleted.
+
+**The person's own servers come first.** A server billed by the month is
+paid for already, so a team that has one should not pay twice. Rebuilding
+erases the server, so each server gets its own yes, after the person saw
+what runs on it now.
 
 **One price approval, after the key.** Most providers show their stock
 only with the key, and stock changes by the hour. So the person sees the

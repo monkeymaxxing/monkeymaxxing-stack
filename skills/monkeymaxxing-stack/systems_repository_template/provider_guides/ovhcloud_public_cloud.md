@@ -102,9 +102,10 @@ after the person approves the price:
    and the local data holds no key, so root had none and the bootstrap's
    root login was refused (a real VPS, 2026-11-17).
 4. Until that reboot, public SSH accepts only the desk's key, with no
-   password. Check on the first VPS that after the reboot public TCP 22 is
-   closed and the server has joined WireGuard. Then record the server in
-   the inventory as usual.
+   password. After the reboot, public TCP 22 is closed and the server has
+   joined WireGuard, as on a Public Cloud instance (confirmed on a real
+   rebuilt VPS, 2026-11-23). Then record the server in the inventory as
+   usual.
 5. Wait for the new server's login over WireGuard with a check that says
    what it waits for, never a bare timer. For the systems desk, say in one
    line "I wait for your systems desk to finish its first start and open
@@ -135,12 +136,12 @@ once stock returns. Never put the desk in production's location to save
 money.
 
 Your provider scripts keep creating Public Cloud instances, because the
-servers they create are temporary. When `create_a_server_at_the_provider`
-is given a VPS's server type, such as for the replacement of a failed VPS,
-it creates a Public Cloud flavor at least as large: `d2-4` for VPS-1,
-`b2-15` for VPS-2. After the repair, recommend moving the replacement back
-to a VPS with [Replace a server](../operating_procedures/replace_a_server.md):
-it is permanent now.
+servers they create are temporary. A failed VPS's replacement is one of
+them: `create_a_server_at_the_provider` turns a VPS's server type into a
+Public Cloud flavor at least as large, as its script below says. After
+the repair, recommend moving the replacement back to a VPS with
+[Replace a server](../operating_procedures/replace_a_server.md): it is
+permanent now.
 
 ## OVHcloud Europe: what differs
 
@@ -445,6 +446,28 @@ ovhcloud_request GET "cloud/project/$ovhcloud_project_id/instance" |
         power_state: ({"ACTIVE": "running", "SHUTOFF": "stopped"}[.status] // .status)}]}'
 ```
 
+The create script, `create_a_server_at_the_provider`, does these things in order:
+
+1. Reads its arguments, and turns a VPS's server type into a Public Cloud
+   flavor at least as large: `d2-4` for VPS-1 (`vps-...-model1`), `b2-15`
+   for VPS-2 (`vps-...-model2`). It refuses any other VPS type, so a new
+   plan never creates a server of a wrong size. Reason: the replacement of
+   a failed VPS is created with the inventory's `server_type`, which names
+   the VPS plan, and Public Cloud has no such flavor.
+2. Resolves the flavor, image, SSH key and public network in the
+   location, and creates the instance with the first-boot data, then
+   clears the first-boot file, also on failure.
+3. Writes the receipt, and waits until the instance is `ACTIVE` with a
+   public IPv4 address.
+
+**Check,** once after you write the script: run it with
+`--server-type vps-2027-model1`, a test name such as `check-vps-type`,
+the production location, the Debian 13 image, the registered key, and a
+first-boot file that holds only `#cloud-config`. The provider's listing
+must show a `d2-4` instance under that name. Then destroy it with
+`destroy_a_server_at_the_provider --server-name check-vps-type`. The
+check costs a few cents.
+
 `create_a_server_at_the_provider`:
 
 ```bash
@@ -463,6 +486,12 @@ done
 body_file=$(mktemp); chmod 600 "$body_file"
 # Clear the first-boot data after reading it, also on failure.
 trap ': > "$first_boot_data"; rm -f -- "$body_file"' EXIT
+# A VPS's type becomes a Public Cloud flavor at least as large.
+case "$server_type" in
+  vps-*-model1) server_type=d2-4 ;;
+  vps-*-model2) server_type=b2-15 ;;
+  vps-*) echo "no Public Cloud flavor is set for the VPS type $server_type; add one here" >&2; exit 2 ;;
+esac
 # OVHcloud's v1 create takes one SSH key. Reason: the first MMX run writes
 # root's whole key list from root_ssh_public_keys.
 [ "${#ssh_key_names[@]}" -eq 1 ] || { echo "give exactly one --ssh-key-name: OVHcloud's create takes one SSH key" >&2; exit 2; }

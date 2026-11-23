@@ -221,6 +221,10 @@ app, `db01` for its data, and `util01` for the system tools. After chapter
    `--first-boot-data`, the new public key as `--wireguard-public-key`,
    and the node's WireGuard address as `--wireguard-private-ip`.
    Follow the [provider script contract](../server_management_scripts/README.md#write-the-teams-provider-scripts).
+   A server the person chose to reuse
+   ([Servers the person already pays for](03_make_your_server_account_and_your_systems_desk.md#servers-the-person-already-pays-for))
+   is rebuilt instead, with the provider guide's rebuild steps and the
+   same first-boot data.
 
    Without the provider scripts (for a provider outside the guides), use the provider's own command-line tool, as
    [Without the provider scripts](../server_management_scripts/README.md#without-the-provider-scripts)
@@ -294,8 +298,8 @@ app, `db01` for its data, and `util01` for the system tools. After chapter
    `ssh -F ssh/config root@ADDRESS true` succeeds over each server's
    private `address`.
 
-6. **The shared root console password is ready.** `set-up-outside-services go-live`
-   in [chapter 4 (set up your accounts and lock your systems desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps)
+6. **The shared root console password is ready.** The lock window,
+   `ssh desk01-lock`, in [chapter 4 (set up your accounts and lock your systems desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
    made the servers' shared root console password, saved only its hash in
    the vault as `shared_root_console_password_hash`, and put the password
    itself into the recovery bundle. Every server shares the one password.
@@ -310,9 +314,9 @@ app, `db01` for its data, and `util01` for the system tools. After chapter
    says. The person reads the password from the recovery bundle on the day
    the person needs it.
 
-   When the hash is not defined, `go-live` did not finish: read
+   When the hash is not defined, the lock window did not finish: read
    `stopped_with` in `/var/lib/monkeymaxxing-stack/setup_results.json` on
-   the desk, and give the person `ssh desk01-setup` again, which continues
+   the desk, and give the person `ssh desk01-lock` again, which continues
    where it stopped.
 
    **Tell the person:** no message.

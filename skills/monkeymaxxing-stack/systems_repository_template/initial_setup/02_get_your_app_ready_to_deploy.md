@@ -111,11 +111,12 @@ the person's. Then you push the changes and watch the first build.
        sentence the person reads, and `steps_to_get_it`, the steps on that
        company's website, one per line. Add `checked_with: stripe` for a
        Stripe key, and leave `checked_with` out for any other service. In
-       chapter 4 the setup shows each such key on its own screen and asks
-       the person for it;
+       chapter 4 you show each such key's lines to the person and ask the
+       person to copy it;
    - `production_uploads_r2_bucket`: the name of the R2 bucket for the app's
      uploaded files in production, such as `example-shop-uploads`, which
-     `go-live` makes in chapter 4, once the person turned R2 on there, and
+     the desk's `cloudflare` command makes in chapter 4, once the person
+     turned R2 on, and
      `production_uploads_r2_key_variables`, the two names in
      `secrets_from_vault` that hold the bucket's key; `""` and no
      `production_uploads_r2_key_variables` when the app keeps no uploaded

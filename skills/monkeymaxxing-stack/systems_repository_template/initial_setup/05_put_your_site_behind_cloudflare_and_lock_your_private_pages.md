@@ -76,7 +76,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    The templates read the host-name settings and need no edits during
    chapter 5 (put your site behind Cloudflare and lock your private pages).
 
-   `set-up-outside-services go-live`, in
+   The desk's `cloudflare` account command, in
    [chapter 4 (set up your accounts and lock your systems desk)](04_set_up_your_accounts_and_lock_your_desk.md#steps),
    created each tunnel below through the API, with `"config_src": "local"`,
    and saved each tunnel's token in the vault. Find each tunnel's ID
@@ -157,7 +157,7 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    emails a code to the address. A new Zero Trust organization has only
    the Cloudflare identity provider, which signs in people who have a
    Cloudflare account, and One-time PIN isn't added automatically, so
-   `set-up-outside-services go-live` added it in chapter 4 (set up your accounts and lock your systems desk).
+   the desk's `cloudflare` account command added it in chapter 4 (set up your accounts and lock your systems desk).
    Read each `type` in
    `GET .../accounts/ACCOUNT_ID/access/identity_providers` to check that
    the login method exists.
@@ -273,8 +273,8 @@ first sign-in at the private pages comes in the alerts part of the setup, in
 ## Why the chapter works this way
 
 **Locally managed tunnels.** A tunnel made in Cloudflare's dashboard keeps
-its routes at Cloudflare instead, so `set-up-outside-services go-live`
-made each tunnel through the API with `"config_src": "local"`. Then the
+its routes at Cloudflare instead, so the desk's `cloudflare` account
+command made each tunnel through the API with `"config_src": "local"`. Then the
 routes live in the systems repository's `cloudflared_config.yml`
 templates, and a rebuilt server gets the routes from Git.
 

@@ -127,7 +127,7 @@ breaks.
      must keep its value in the Stack. For example, a new
      `SECRET_KEY_BASE` signs every customer out, and a new encryption key
      makes encrypted rows unreadable. Copy each value **after chapter 3's
-     desk start and before chapter 4 step 2 creates `~/example-setup/desk-ready`**
+     desk start and before chapter 4's step 7 asks for the app keys**
      (so `set-up-outside-services` finds them already in the vault and does
      not generate replacements). The person reads each value from Solo's
      vault in the person's own terminal, with

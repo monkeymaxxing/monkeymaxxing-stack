@@ -61,13 +61,13 @@ Here is the whole setup, in five parts.  About an hour and a half in all.
   1. Your app                  about 5 minutes
      I get your app ready to deploy.  You approve my changes.
   2. Your accounts             about 25 minutes
-     You make 3 accounts and paste a key from each, plus one from GitHub,
+     You use the accounts you have, or make the missing ones, and copy a key from each,
      approve the real price, and change one setting at your domain's registrar.
      I build your systems desk: a small server of your own that holds your keys
      and secrets, so neither your laptop nor I ever hold them.  I work through it.
      I order your servers right after your yes, and do the rest.
-  3. Your keys locked away     about 3 minutes
-     You save one passphrase and scan one code with your phone.
+  3. Your keys locked away     about 5 minutes
+     You save a password and one passphrase, and scan one code with your phone.
   4. Your servers              about 40 minutes
      I install everything on your servers, back up your data, and prove a restore.
      Nothing for you.
@@ -90,17 +90,17 @@ Next for you: approve my changes to your app, in about 5 minutes.  I show them h
 
 The facts on the screen:
 
-- **The 3 accounts** are the server provider, Cloudflare and Backblaze.
-  They are the 3 accounts that the terminal window counts, "account 1 of
-  3" to "account 3 of 3".
+- **The accounts** are the server provider, Cloudflare and Backblaze, and
+  the GitHub account the app is at already. The person keeps each account
+  that exists, and makes only the missing ones.
 - **The keys** are a key from each of the 3 accounts and one from
   GitHub: the server provider's key, Cloudflare's token, Backblaze's key
   (two values, the key's ID and the key) and the GitHub token that lets
   the servers download the app. The map says "a key from each" and never
-  a count, because the person counts pastes, and Backblaze's key is two
-  pastes. Add each outside service that an app needs a key from, such as
-  Stripe: "plus one from GitHub and one from Stripe". The person sees each
-  extra key as its own screen in "Your accounts".
+  a count, because the person counts copies, and Backblaze's key is two
+  copies. Add each outside service that an app needs a key from, such as
+  Stripe: "and copy a key from each, and one from Stripe". The person
+  sees each extra key as its own message in "Your accounts".
 - **The registrar's setting** is the domain's nameservers. Leave the words
   "and change one setting at your domain's registrar" out when
   `dig NS example.com +short` already names Cloudflare's nameservers, or
@@ -148,16 +148,15 @@ Your app is ready: my changes are on main, and GitHub is building your app.
 Then the account screen of chapter 3 follows in the same reply, as its last
 text.
 
-The end of "Your accounts" comes in the person's terminal window, which
-goes on to "Your keys locked away" by itself. `set-up-outside-services
-go-live` prints the compact map there:
+At the end of "Your accounts", your reply shows the compact map, before
+the window for "Your keys locked away", as chapter 4's step 9 gives it:
 
 ```text
 Your accounts are done.
 
   ✓ 1. Your app
   ✓ 2. Your accounts
-  → 3. Your keys locked away    now: 2 steps, about 3 minutes
+  → 3. Your keys locked away    now: 3 steps, about 5 minutes
     4. Your servers
     5. Live
     Later: phone alerts.  Your site has none yet.

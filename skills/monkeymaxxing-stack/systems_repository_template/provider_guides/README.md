@@ -59,28 +59,7 @@ script from the rule below, with the selected guide's values from its own
 lowercase with hyphens, and `hetzner` is the provider's short name. The
 script must work with the Bash that the laptop has, Bash 3.2 on a Mac.
 
-The script first does two checks:
-
-- **It stops an older copy of itself that still waits.** Each copy writes
-  its process ID to `~/example-setup/key-command.pid`. When that process
-  still runs and is this script, the new copy stops it and prints one
-  line: `Stopped the older key command that was still waiting.` Reason:
-  a person who makes a new key opens the command again, and the older
-  copy holds its window with nothing to say; a person cannot be expected
-  to know Ctrl+C.
-- **It knows when the systems desk already exists:** when
-  `~/example-setup/desk-ordered` or `~/example-setup/desk-ready` is
-  there. Then it asks for the key and checks it as below, saves it,
-  prints `Key saved.  Your systems desk already exists.` and ends,
-  with no wait and no `ssh desk01-setup`. You then move the new key to
-  the desk as for the first key, below; once the desk's API proxy holds
-  a key, the person replaces it with the guide's `personal-token`
-  command instead. It never runs `ssh desk01-setup`, so the setup never
-  starts a second time. Reason: a second key entry must not say again
-  that the desk is being ordered or built, and an older waiting window
-  once carried on into the setup by itself after the desk existed.
-
-Then the script does six things, in order:
+The script does five things, in order:
 
 1. **A prompt for each value,** after one line that names the person's
    part of the setup and the account, as the chat's screen does:
@@ -113,27 +92,17 @@ Then the script does six things, in order:
    joined with a colon, `ACCESS_KEY_ID:SECRET_ACCESS_KEY`; at Google Cloud
    the key file's text in base64 on one line, as `openssl base64 -A`
    writes it. The desk's API proxy reads exactly this form.
-5. **One line to the person:** `Hetzner accepted the key.`, with the
-   provider's name. The script never prints a value.
-6. **It stays open and starts the desk's setup by itself.** After the
-   line, it prints `Leave this window open.  Your coding agent shows you
-   the real price next, and sets up your systems desk after your yes.` and waits for the file
-   `~/example-setup/desk-ordered`, which your `create-desk01` script makes
-   only after the provider accepted the desk's order (chapter 3, step 2 of
-   "Create desk01 through WireGuard"; the script's lines name no chapter,
-   because the person reads them). Then it prints `Your systems desk
-   is on its way.  Building it takes about 10 to 15 minutes.` and waits for the
-   file `~/example-setup/desk-ready`, which you make when the desk is
-   ready (chapter 4, step 2). It checks every 5 seconds. It gives up after
-   90 minutes without `desk-ordered`, with `Your systems desk was not
-   ordered.  Ask your coding agent.`, and after 90 minutes without
-   `desk-ready`, with `Your systems desk is not ready.  Ask your coding
-   agent.` Reason for 90: the desk takes about 10 minutes, so a longer
-   wait means your own work failed, and a window must not wait for ever.
-   Reason for the two lines: a build time printed before the order
-   succeeded is false when the order fails, such as when the size is sold
-   out. When `desk-ready` is there, it runs `exec ssh desk01-setup`, so
-   the person types no second command and the setup runs in this window.
+5. **Two lines to the person:** `Hetzner accepted the key.`, with the
+   provider's name, then `Go back to your coding agent.` The script never
+   prints a value, and never starts another command. Reason: a window
+   that changed by itself into the next part of the setup left a person
+   in a real setup unsure what came next and who leads; the coding agent
+   says what comes next, in the chat.
+
+The script then ends. It runs again unchanged when the person makes a new
+key before the desk's API proxy holds one, and you move the new key file
+as for the first. Once the proxy holds a key, the person replaces it with
+the guide's `personal-token` command instead.
 
 Right after the bootstrap in
 [chapter 3](../initial_setup/03_make_your_server_account_and_your_systems_desk.md#create-desk01-through-wireguard),

@@ -3,48 +3,180 @@
 **When:** right after chapter 3 (make your server account and your
 systems desk).
 
-**What this chapter does:** the person types one command on the laptop,
-`ssh desk01-setup`. The command shows the next two accounts, one at a
-time: Cloudflare and Backblaze, with the domain's registrar between them
-when the domain does not point at Cloudflare yet. Then one token at
-the Git host, so the servers can download the app. Each value is checked
-with its service at once. Then the lock: one recovery passphrase, and one
-QR code for the phone. After the lock, the desk needs the laptop and a
-code from the phone.
+**What this chapter does:** you lead the person through three more
+accounts in the chat: Cloudflare, Backblaze and GitHub. First you ask
+which of the accounts the person has already. Then you take each account
+from where the person stands: a new account, an account with a saved key,
+an account without a key, or an account set up differently than the plan.
+Each key goes from the person's clipboard, or from a laptop file the
+person names, straight to a small command on the desk. The key never
+appears in the chat, and you never see it. Then the person opens one
+window, `ssh desk01-lock`, for the lock: a console password, one recovery
+passphrase, and one QR code for the phone. After the lock, the desk needs
+the laptop and a code from the phone.
 
-**Who acts:** the person signs up at Cloudflare and Backblaze, makes one
-key at each and one at the Git host, changes the nameservers at the
-registrar when needed, saves the recovery
-passphrase, and scans the QR code. You watch the command's progress from
-your own login, and do everything the person's keys let you do: the
-domain at Cloudflare, its DNS records, and the lock.
+**Who acts:** the person signs up where an account is missing, copies
+each key when you ask, changes the domain's nameservers at the registrar
+when needed, and does the lock window. You do everything else: you send
+each key to the desk, add the domain at Cloudflare, check its DNS records,
+make the buckets and keys through the desk's commands, and lock the desk.
 
-**Tell the person when the chapter starts:** step 2's screen.
+**Tell the person when the chapter starts:** step 2's question.
 
 ## Before you start
 
-- **`set-up-outside-services go-live`** is the Stack's command for the
-  accounts and the lock, installed on the desk. `ssh desk01-setup` starts
-  it as the person, in the person's own terminal. Every screen below is
-  the command's own text. The chapter shows each screen so that you know
-  what the person sees, and can answer questions about it.
-- **You never ask the person what the command printed.** The command
-  writes its progress to `/var/lib/monkeymaxxing-stack/setup_results.json`:
-  each step's name and state, `done`, `not_needed`, `in_progress` or
-  `not_started`, and `stopped_with`, the reason a run stopped. Its
-  `for_the_coding_agent` block holds values that are not secrets, which
-  you write into the settings or check. The file never holds a secret.
-  Wait for the file with `ssh desk01-agent wait-for-the-setup`, as step 2
-  says, and read it again each time the person writes to you:
+- **Why you lead, not a program.** Each person's accounts are different.
+  A person may have every account, with the keys saved on the laptop,
+  or have none. A fixed program that treats every account as new tells a
+  person with a Backblaze account to sign up again, and a new Backblaze
+  master key stops the old one working. So you ask first, and take each
+  account from where the person stands.
+- **A key never goes into the chat.** Everything in the chat goes to the
+  company that runs you. When the person pastes a key into the chat by
+  mistake, say so in one line, and ask the person to make a new key at
+  that company, because the old key is no longer private. Then delete the
+  old key at that company, or ask the person to.
+- **The desk's account commands.** `set-up-outside-services
+  from-the-coding-agent COMMAND` runs on the desk as root, through one
+  sudo rule for your login, with the key on standard input:
+
+  | COMMAND | Standard input | What the command does |
+  | --- | --- | --- |
+  | `cloudflare` | Line 1: the link token | Finds the account, adds the domain, has Cloudflare copy its DNS records, makes the tunnels and every Cloudflare key, then deletes the link token |
+  | `backblaze` | Line 1: the keyID. Line 2: the applicationKey | Makes the buckets with their locks, checks each lock, and makes one narrow key for each server. Never stores the master key |
+  | `save-a-key KEY` | Line 1: the key | Checks and saves one key a person must give: `container_registry_read_only_token`, or an app key from `an_outside_service`, such as `shop_STRIPE_API_KEY` |
+  | `random-secrets` | Nothing | Makes every random secret of the vault |
+
+  Each command prints plain lines that never hold a secret, commits and
+  pushes the vault, and writes its step into the results file. Exit 0
+  means done, and exit 1 means stopped, with the reason on the last line.
+  The command takes no path or setting from you, and prints no key, so
+  you can put a key in and never get one out.
+- **The results file.** `/var/lib/monkeymaxxing-stack/setup_results.json`
+  holds each step's name and state, `stopped_with`, the reason a command
+  stopped, and `for_the_coding_agent`, the values that are not secrets,
+  which you write into the settings. The file never holds a secret. Read
+  it after each command, and each time the person comes back to you:
 
   ```sh
   # On the laptop:
   ssh desk01-agent cat /var/lib/monkeymaxxing-stack/setup_results.json
   ```
 
-- **One message at a time.** When a screen is done, say in one line what
-  you do next, such as "Cloudflare accepted your token. I am adding your
+- **Publish each setting at once.** Each account command commits and
+  pushes the vault when it ends, so `publish-branch-to-main` works between
+  commands. Publish the settings you write after each command, as "Making
+  a change" in [`AGENTS.md`](../AGENTS.md#making-a-change) says. A later
+  command reads them from pushed `main`.
+- **One message at a time.** When an account is done, say in one line
+  what you did, such as "Cloudflare accepted your token. I added your
   domain at Cloudflare."
+
+## How a key reaches the desk
+
+Three ways, chosen per key. The person never chooses among them: you ask
+where the key is, and use the first way that fits.
+
+**From a file on the laptop,** only when the person names the file, such
+as `~/.config/backblaze/env`. Never search the laptop for keys. First list
+the variable names in the file, never the values:
+
+```sh
+# On the laptop. Lists the names of the variables in the file the person named, never a value.
+sed -n 's/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}\([A-Za-z_][A-Za-z0-9_]*\)=.*/\2/p' ~/.config/backblaze/env
+```
+
+Pick the names that hold the key, such as `B2_APPLICATION_KEY_ID` and
+`B2_APPLICATION_KEY`. When the names leave a doubt, ask the person which
+name holds which value. Then pass only those values, one per line, with
+shell tracing off:
+
+```sh
+# On the laptop. Passes two named values from the file to the desk's command, without printing them.
+(
+  set +x
+  . ~/.config/backblaze/env
+  printf '%s\n%s\n' "$B2_APPLICATION_KEY_ID" "$B2_APPLICATION_KEY"
+) | ssh -T desk01-agent sudo -n /usr/local/bin/set-up-outside-services from-the-coding-agent backblaze
+```
+
+A file that is not in the `NAME=value` form, such as a JSON file, gets
+the same pipe with a reader for its form in place of the `.` line, such as
+`jq -r .applicationKey FILE`. Never print, `cat`, or `grep` the values.
+
+**Way A, the clipboard,** when you run on the person's laptop and the
+laptop has a clipboard tool. Check only that the tool exists, with
+`command -v`:
+
+| Laptop | Read the clipboard (READ) | Empty the clipboard (EMPTY) |
+| --- | --- | --- |
+| macOS | `pbpaste` | `printf '' \| pbcopy` |
+| Windows, with the Stack in WSL | `powershell.exe -NoProfile -Command Get-Clipboard` | `printf '' \| clip.exe` |
+| Linux with Wayland | `wl-paste --no-newline` | `wl-copy --clear` |
+| Linux with X11 | `xclip -o -selection clipboard` | `printf '' \| xclip -selection clipboard` |
+
+Never run a clipboard command on its own: its output, the person's key,
+would appear in your conversation. Always pipe the clipboard straight
+into the desk's command, with no terminal on the desk's side (`ssh -T`),
+and empty the clipboard when the pipe ends, also when it fails. The
+`tr` removes line endings, Windows' carriage return included, and
+`printf` ends the value with one line break:
+
+```sh
+# On the laptop (macOS). Sends the clipboard to the desk's command, then empties the clipboard.
+(
+  set +x
+  trap "printf '' | pbcopy" EXIT
+  { pbpaste | tr -d '\r\n'; printf '\n'; } |
+    ssh -T desk01-agent sudo -n /usr/local/bin/set-up-outside-services from-the-coding-agent save-a-key container_registry_read_only_token
+)
+```
+
+On another laptop, replace `pbpaste` with READ and `printf '' | pbcopy`
+with EMPTY from the table.
+
+**Ask the person,** the first time, as the last text of your reply:
+
+```text
+Copy your GitHub token, then type  copied  here.
+
+I send it from your clipboard straight to your systems desk, and empty your clipboard right after.
+I never see it, and it never appears in this chat.
+```
+
+After the first time, the first line is enough.
+
+**Way B, the paste window,** when you cannot read the clipboard: a Linux
+laptop without `wl-paste` or `xclip`, or a coding agent that does not run
+on the person's laptop. Also use way B for one key when way A's pipe
+failed before the desk's command read a key, such as when the clipboard
+tool gave an error or the command said the value was empty.
+
+**Ask the person,** as the last text of your reply, with the command for
+the account:
+
+```text
+This key goes in through a window of its own, because I cannot read this laptop's clipboard.
+Open a new terminal window and type:
+
+  ssh -t desk01 set-up-outside-services backblaze
+
+It logs in to your systems desk and asks for your Backblaze keys.  Paste each one there.  The applicationKey stays hidden.
+When it says  Saved.  Go back to your coding agent,  tell me "done" here.
+```
+
+The window shows only the prompts and one result line:
+
+```text
+Paste your Backblaze keyID:
+Paste your Backblaze applicationKey (hidden):
+Saved.  Go back to your coding agent.
+```
+
+The window's command for each key: `cloudflare` for the Cloudflare
+token, `backblaze` for the Backblaze keys, and `secrets` for the GitHub
+token and the app keys (it asks for each key the vault still lacks).
+Then read the results file, and carry on as after way A.
 
 ## Steps
 
@@ -54,7 +186,7 @@ domain at Cloudflare, its DNS records, and the lock.
    check it, and do it now only when it was not done. Before the phone code
    exists, your login needs only the laptop key. Open the shared
    connection now. When the person takes longer than the desk's one-hour
-   idle limit, the login closes, and step 8 says how to open it again.
+   idle limit, the login closes, and step 10 says how to open it again.
 
    ```sh
    # On the laptop:
@@ -64,7 +196,7 @@ domain at Cloudflare, its DNS records, and the lock.
    Then move the laptop's bootstrap copy aside, and clone the desk's
    systems repository in its place. From now on you edit in the clone, as
    "Making a change" in [`AGENTS.md`](../AGENTS.md#making-a-change) says.
-   The bootstrap copy is needed once more, for step 8.
+   The bootstrap copy is needed once more, for step 10.
 
    ```sh
    # On the laptop:
@@ -72,80 +204,61 @@ domain at Cloudflare, its DNS records, and the lock.
    git clone desk01-agent:systems_repository ~/code/example_systems
    ```
 
+   Check which way a key reaches the desk on this laptop
+   ([How a key reaches the desk](#how-a-key-reaches-the-desk)), such as
+   with `command -v pbpaste`.
+
    **Tell the person:** no message.
 
    **Check:** `~/code/example_systems/ssh/open-the-desk-login --check`
    says the login is open, and `~/code/example_systems` is a clone of the desk's
    repository.
 
-2. **The desk's setup command.** The laptop key command from chapter 3
-   is still open in the person's terminal, waiting for
-   `~/example-setup/desk-ready`. Make that file now, empty, with your
-   write tool, and the key command runs `ssh desk01-setup` by itself in
-   the same window, so the person types nothing.
-
-   **Ask the person:**
+2. **Ask which accounts the person has.** **Ask the person,** as the last
+   text of your reply:
 
    ```text
-   Your systems desk, the small server that holds your keys, is ready.
+   Your systems desk is ready.
 
-   The window where you typed the Hetzner key goes on by itself now.
-   It shows the rest of "Your accounts", one screen at a time: 2 more accounts, one more key,
-   and a change at your domain's registrar if one is needed.
-   Then it goes on to "Your keys locked away": one passphrase and one code for your phone.
-   I carry on by myself when it is done.
-   Ask me here at any time if a step is unclear.
+   Next come three accounts:
+     Cloudflare, for your web address,
+     Backblaze, for your backups,
+     GitHub, so your servers can download your app.
 
-   If you closed that window, type this in a terminal instead.
-   It logs in to your systems desk:
-
-     ssh desk01-setup
+   Which of them do you have already?
    ```
 
-   First start the wait for `go-live` as a background command, as
-   [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
-   says. Then end your reply with the screen, whole, as its last text:
-   your turn ends there, with no tool call after it.
-
-   ```sh
-   # On the laptop, as a background command. Waits up to an hour for go-live to finish or stop.
-   ssh desk01-agent wait-for-the-setup --at-most-minutes 60
-   ```
-
-   It prints the steps as they change, and a line at least once a minute.
-   It ends with the results file's summary: the steps, `finished`,
-   `stopped_with` and `for_the_coding_agent`. Exit 0 means `go-live`
-   finished, 1 that it stopped, and 124 that it still runs at the bound.
-   When it ends with a stop, say at once, in one plain sentence, what
-   `stopped_with` says and what happens next: a refusal before the first
-   screen, such as a setting that is still the template's example, is in
-   `stopped_with` too. Fix the setting, publish it, and ask the person to
-   type `ssh desk01-setup` again.
-   A stop counts only when the run wrote the file after the wait started,
-   so an earlier run's `stopped_with` never ends the wait for the next run.
-   The wait is one more session on your shared login, and the person's
-   `ssh desk01-setup` is a separate login, so neither blocks the other.
-   Both go through the same doubleshell tunnel, which serves several
-   connections at once.
-
-   When the person writes to you meanwhile, answer, read the results
-   file, and do the work of each step that is done, such as step 3's; the
-   background wait keeps running. When `finished` is true, carry on with
-   the steps below without being told. With `stopped_with`, tell the
-   person the reason in plain words and what to do. At exit 124, start
-   the same wait again in the background, and end your reply with one
-   line that you still wait for the setup window. An agent with no
-   background commands ends its reply with the screen and "When it says
-   Go back to your coding agent,  tell me "done" here.", and then runs
-   the same wait in the foreground: it ends at once when `go-live`
-   finished.
-
-   **Check:** the results file shows that `go-live` started.
-
-3. **Cloudflare.** The command shows:
+   GitHub holds the app already, so the GitHub part needs only a token.
+   For each account the person has, ask where its key is when the
+   account's step comes, never all at once:
 
    ```text
-   Your accounts: account 2 of 3, Cloudflare (your web address and protection)
+   Where is your Backblaze key saved?
+     In a password manager or a note:  say "password manager".  You copy it from there when I ask.
+     In a file on this laptop:  tell me the file's path, such as  ~/.config/backblaze/env.
+       I pass the key from the file to your systems desk without reading it.
+     Nowhere:  say "no key".  I help you make one.
+   ```
+
+   **Check:** you know, for each of the three accounts, whether the
+   person has it.
+
+3. **Cloudflare.** Cloudflare lets only a token made on its own website
+   make other tokens (tested at Cloudflare). So the person makes one
+   token, the link token, from a link that fills in its one permission
+   and its name, even with an existing account. Build the link with the
+   repository's `project_name` and the desk's `vars.person_unix_username`,
+   such as `example_systems` and `alex`, because the command finds and
+   deletes the link token by that name:
+
+   ```text
+   https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&name=example_systems%3A+alex+makes+tokens+with+set-up-outside-services%2C+deleted+after+the+run
+   ```
+
+   **Ask the person,** with no Cloudflare account yet:
+
+   ```text
+   Your accounts: Cloudflare (your web address and protection)
 
    What this is for:
      Cloudflare puts your site on the internet and keeps your private pages private.
@@ -159,20 +272,22 @@ domain at Cloudflare, its DNS records, and the lock.
           https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=...&name=...
         The page is long.  Scroll to the bottom, below the list of permissions.
         Press  Review token,  then  Create token.
-
-   Then paste the key here.  Cloudflare calls it an API token.
-
-     Cloudflare key (hidden):
+     5. Copy the token, then type  copied  here.  Cloudflare calls the key an API token.
    ```
 
-   When an app keeps uploaded files, the screen has one more step before
-   the link: turn on R2, where the app keeps its uploads, with R2's price,
-   from the command's own lines:
+   With a Cloudflare account, the screen keeps only steps 4 and 5, and
+   starts with "Sign in at Cloudflare." When the account has no two-step
+   sign-in, step 3 stays: the account controls the domain and the private
+   pages. When an app keeps uploaded files, the screen has one more step
+   before the link, from R2's pricing page: turn on R2, where the app
+   keeps its uploads. Cloudflare asks for a card on its website before R2
+   turns on, and no token can do that step.
 
    ```text
      4. Turn on R2, where your app keeps its uploaded files:
           https://dash.cloudflare.com/?to=/:account/r2/overview
-        Finish the checkout there.  It asks for a card.
+        If the page shows your R2 buckets, R2 is on already.  Go to the next step.
+        Otherwise finish the checkout there.  It asks for a card.
         It costs nothing up to 10 GB of files a month.
         Above that:  $0.015 for each GB a month,
                      $4.50 for each million file writes after the first million,
@@ -180,102 +295,155 @@ domain at Cloudflare, its DNS records, and the lock.
         Downloads to your users cost nothing.
    ```
 
-   The link is the one the command prints, with the team's own token
-   name. The command checks the token and prints `Cloudflare accepted the
-   token.` The link token can only make tokens. With it, the command makes
-   the person's desk token and starts the desk's API proxy, adds the
-   domain to the account, copies the domain's DNS records with
-   Cloudflare's scan, gives the account its workers.dev address, makes the
-   tunnels `example_systems-apps` and `example_systems-util01` with their
-   tokens in the vault, makes the servers' Cloudflare keys (the table in
+   Then send the token to the desk's `cloudflare` command, by way A or
+   way B. The command checks the token, sets it to end by itself after 24
+   hours, finds the account, adds the domain to the account, has
+   Cloudflare copy the domain's DNS records, gives the account its
+   workers.dev address, makes the person's desk token and starts the
+   desk's Cloudflare proxy, makes the tunnels `example_systems-apps` and
+   `example_systems-util01` with their tokens in the vault, makes the
+   servers' Cloudflare keys (the table in
    [chapter 5](05_put_your_site_behind_cloudflare_and_lock_your_private_pages.md#steps)),
-   and adds One-time PIN, Access's login method that emails a code. When
-   an app keeps uploaded files, it waits until R2 is on, saying so, and
-   then makes the app's uploads bucket and its key in the same run. Then
-   it deletes the link token. The status page waits for its own part of the setup.
+   adds One-time PIN, Access's login method that emails a code, and makes
+   the app's uploads bucket and its key when an app keeps uploads. Then it
+   deletes the link token. The status page waits for its own part of the
+   setup.
 
-   When the results file shows the step `cloudflare` done:
+   Two stops need the person, and each needs a new link token, because
+   the command deletes the link token when it stops:
+
+   - **The token reaches several accounts.** The command lists each
+     account's name and ID. **Ask the person:**
+
+     ```text
+     Your Cloudflare login reaches 2 accounts:
+       Acme Inc
+       Alex's own account
+     Which one should hold your company's domain?
+     ```
+
+     Then ask for a new token from the same link, and run the command
+     again with `cloudflare --account-id ID`.
+   - **R2 is off,** while an app keeps uploads. The command prints R2's
+     price lines and page. Show the R2 step above, then ask for a new
+     token from the same link.
+
+   When the command is done:
 
    - Write `cloudflare_account_id` from `for_the_coding_agent` into
      `vars.cloudflare_account_id` in `mmx_project_settings.yml`, and
      `vars.backups.uploads_r2_s3_endpoint` beside it:
      `https://ACCOUNT_ID.r2.cloudflarestorage.com` with that ID when an app
-     keeps uploads, or `""` when none does. Commit both in your clone.
-     Publish them once `go-live` has finished (step 7's check), as "Making a change" in
-     [`AGENTS.md`](../AGENTS.md#making-a-change) says. Reason: `go-live`
-     saves keys in the vault of the desk's checkout and commits them only
-     later, and `publish-branch-to-main` refuses a checkout with changes that
-     are not committed.
-   - Check the scan's records through the proxy at
-     `http://127.0.0.1:8082/` on the desk. Read the current records with
-     `dig` against the old nameservers, for the domain itself, `www`, the
-     MX records, and TXT records such as SPF and `_dmarc`, and add each
-     record that the scan missed. The MX records come first, because
-     without them the company's email stops arriving.
+     keeps uploads, or `""` when none does. Publish both.
 
-   **Tell the person,** when your wait ends: one line about each
-   piece of work, such as "Cloudflare accepted your token. I checked your
-   domain's DNS records at Cloudflare."
+   **Tell the person,** one line, such as "Cloudflare accepted your token.
+   I added your domain at Cloudflare and made your tunnels and keys."
 
    **Check:** the step `cloudflare` is `done`, and
-   `vars.cloudflare_account_id` is committed in your clone.
+   `vars.cloudflare_account_id` is on `main`.
 
-4. **The domain's registrar.** The command reads the domain's registrar
-   and its DNSSEC state from the registry's RDAP service, and shows the
-   zone's two Cloudflare nameservers. A domain that already points at
-   Cloudflare skips the screen, and the step shows `not_needed`. The
-   screen has no account number: the account screens count only the
-   accounts the person makes in this setup (Hetzner 1 of 3, Cloudflare 2
-   of 3, Backblaze 3 of 3), so a skipped registrar screen never leaves a
-   gap in the count. Every screen's title starts with "Your accounts:",
-   the person's part.
+4. **The domain moves to Cloudflare.** The domain's registrar answers the
+   domain's address questions until its nameservers point at Cloudflare.
+   A switch before Cloudflare holds every record stops the site and the
+   company's email. So the switch goes in this order. A domain whose
+   nameservers already are `cloudflare_nameservers` in
+   `for_the_coding_agent` skips this step.
 
-   ```text
-   Your accounts: one change at your domain's registrar (Namecheap)
+   1. **Check that Cloudflare copied every record,** through the proxy at
+      `http://127.0.0.1:8082/` on the desk. Read the current records with
+      `dig` against the old nameservers: the MX records first, because
+      without them the company's email stops arriving; then the domain
+      itself, `www`, and TXT records such as SPF and `_dmarc`. Cloudflare's
+      copy can miss the email service's DKIM records, whose names depend
+      on the service, such as `google._domainkey`. Ask the person which
+      email service the company uses, and check its DKIM names. Add each
+      record that is missing at Cloudflare.
+   2. **Turn DNSSEC off,** when `domain_dnssec_on` says `yes`. Read the
+      domain's DNSSEC record (DS) at the domain's registry first, and note
+      its time to live, the second column:
 
-   What this is for:
-     Your domain must point at Cloudflare.
+      ```sh
+      # On the laptop. Asks the registry of the domain's ending, here .com, with no cache between.
+      registry_server=$(dig +short NS com. | head -1)
+      dig +noall +answer DS example.com @"$registry_server"
+      ```
 
-   Do this now:
-     1. Sign in at Namecheap.
-     2. Open your domain's nameservers.  Choose custom nameservers.
-     3. Put in these two, and remove the others:
+      **Ask the person,** with the registrar's name from `domain_registrar`:
 
-          ada.ns.cloudflare.com
-          bob.ns.cloudflare.com
+      ```text
+      Your domain moves to Cloudflare next.  Cloudflare now holds every record your domain uses, your email's first.
 
-     4. Press save.
+      One change at Namecheap first:
+        1. Sign in at Namecheap.
+        2. Open your domain's settings, and turn off DNSSEC.
 
-   Nothing to press here.  The next account comes next, and I check the nameservers myself later.
-   ```
+      I see the change by myself.
+      ```
 
-   When DNSSEC is on, the screen has a loud line above "Do this now:", and
-   a first step that turns DNSSEC off:
+      Before the screen, start a background wait until the registry lists
+      no DS record:
 
-   ```text
-   TURN OFF DNSSEC FIRST.  YOUR SITE WILL NOT WORK WITH IT ON.
-   ```
+      ```sh
+      # On the laptop, as a background command. Waits up to 30 minutes.
+      registry_server=$(dig +short NS com. | head -1)
+      timeout 30m sh -c "until [ -z \"\$(dig +short DS example.com @$registry_server)\" ]; do sleep 20; done"
+      ```
 
-   The command asks for no keypress and goes on to Backblaze by itself.
-   Once `go-live` has finished, check the change with
-   `dig NS example.com +short` until the answer names the two nameservers
-   in `cloudflare_nameservers` of `for_the_coding_agent`. Cloudflare's own
-   "Active" can take hours. Nothing in chapters 4 to 7 waits for
-   "Active". When the answer still names other nameservers at chapter 9,
-   say so plainly and say what the person changes at the registrar.
+      Then wait the DS record's time to live before step 3, as
+      Cloudflare's own guide for moving a domain with DNSSEC says. Reason:
+      a resolver that still holds the old DS record refuses the domain's
+      answers from Cloudflare, so the site and the email stop for the
+      people behind that resolver. For a `.com` domain the time to live
+      is one day. Chapters 5 to 8 need no nameserver change, so carry on,
+      and tell the person when step 3 comes:
+
+      > DNSSEC is off. One more change at Namecheap tomorrow at about 15:00 your time, because the internet forgets the old DNSSEC setting only after a day. I keep working meanwhile.
+
+   3. **Change the nameservers.** **Ask the person:**
+
+      ```text
+      One change at Namecheap:
+        1. Sign in at Namecheap.
+        2. Open your domain's nameservers.  Choose custom nameservers.
+        3. Put in these two, and remove the others:
+
+             ada.ns.cloudflare.com
+             bob.ns.cloudflare.com
+
+        4. Press save.
+
+      I see the change by myself.
+      ```
+
+      Before the screen, start a background wait:
+
+      ```sh
+      # On the laptop, as a background command. Waits up to 30 minutes for the registry to name Cloudflare.
+      registry_server=$(dig +short NS com. | head -1)
+      timeout 30m sh -c "until dig +short NS example.com @$registry_server | grep -qi 'ada.ns.cloudflare.com'; do sleep 20; done"
+      ```
+
+   4. **Check the change** with `dig NS example.com +short` until the
+      answer names the two nameservers. Cloudflare's own "Active" can take
+      hours. Nothing in chapters 5 to 8 waits for "Active". When the
+      answer still names other nameservers at chapter 9, say so plainly,
+      and say what the person changes at the registrar.
 
    **Tell the person after:**
 
    > Your registrar now points your domain at Cloudflare. Cloudflare can take a few hours to confirm. I keep working meanwhile.
 
-   **Check:** `dig NS example.com +short` names the two Cloudflare
+   **Check:** the records check found nothing missing, the registry lists
+   no DS record, and `dig NS example.com +short` names the two Cloudflare
    nameservers.
 
-5. **Backblaze.** Backblaze's region follows the servers' location, such
-   as `EU Central` for servers in Europe. The command shows:
+5. **Backblaze.** `vars.backups` names the region near the servers, such
+   as `EU Central` (`eu-central-003`) for servers in Europe.
+
+   **No Backblaze account yet. Ask the person:**
 
    ```text
-   Your accounts: account 3 of 3, Backblaze (your backups)
+   Your accounts: Backblaze (your backups)
 
    What this is for:
      Your database backups are stored at Backblaze, away from your servers.
@@ -283,55 +451,106 @@ domain at Cloudflare, its DNS records, and the lock.
    Do this now:
      1. Open  https://www.backblaze.com/sign-up/cloud-storage
         Type your email and press  Get Started Free.  Then finish making the account.
-     2. When Backblaze asks for a region, choose  EU Central.
+     2. When Backblaze asks for a region, choose  EU Central.  It is near your servers.
 
      THE REGION CANNOT BE CHANGED LATER.
 
      3. Save the login in 1Password.
      4. Open  App Keys  and press  Generate New Master Application Key.
+     5. Copy the  keyID,  then type  copied  here.
 
    Backblaze calls it the master key.  I use it once, to make a narrow key
    for each server, and never store it.
-
-   Then paste the two values here.
-
-     keyID:
-     applicationKey (hidden):
    ```
 
-   The command checks the key and prints `Backblaze accepted the key.`
-   When the account's region differs from `vars.backups`, the command
-   says so on the person's screen and waits for the person's choice:
+   **A Backblaze account with the key saved:** with a file, pass both
+   values from the file. With a password manager, ask for the keyID first,
+   then the applicationKey:
 
    ```text
-   Your Backblaze account is in  US West.  The plan was  EU Central,  near your servers.
+   Copy your Backblaze keyID, then type  copied  here.
+   ```
+
+   **A Backblaze account without a saved key.** **Ask the person** first,
+   and wait for the answer:
+
+   ```text
+   A new master key stops your old master key working.  Other keys keep working.
+   Does anything else of yours use the old master key?
+   ```
+
+   When something uses it, the person updates that program with the new
+   master key afterwards, or makes the new key only after checking. Then
+   the screen's steps 4 and 5, with "Sign in at Backblaze." first.
+
+   By way A, the two values come in two copies. Save the keyID first, in
+   a laptop file of its own, and empty the clipboard. The keyID is not a
+   secret, but it stays out of the chat all the same, so that a person
+   who mixes up the two values never pastes the applicationKey there:
+
+   ```sh
+   # On the laptop (macOS). Saves the copied keyID in a private laptop file, then empties the clipboard.
+   (
+     set +x
+     umask 077
+     trap "printf '' | pbcopy" EXIT
+     { pbpaste | tr -d '\r\n'; printf '\n'; } > ~/example-setup/backblaze-key-id
+   )
+   ```
+
+   Then ask for the applicationKey, and send both:
+
+   ```sh
+   # On the laptop (macOS). Sends the keyID file and the copied applicationKey to the desk, then empties the clipboard.
+   (
+     set +x
+     trap "printf '' | pbcopy" EXIT
+     { cat ~/example-setup/backblaze-key-id; pbpaste | tr -d '\r\n'; printf '\n'; } |
+       ssh -T desk01-agent sudo -n /usr/local/bin/set-up-outside-services from-the-coding-agent backblaze
+   )
+   ```
+
+   The command checks the key. Then it makes the buckets and keys as
+   `vars.backups` names them, with Object Lock on the database backups'
+   bucket and the uploads' copy, checks each lock with a test file, and
+   saves each server's own narrow key in the vault. The master key is
+   never stored, not in the vault and not in the recovery bundle. When
+   the command is done, move `~/example-setup/backblaze-key-id` to the
+   dumpster with the rest of `~/example-setup` in step 10.
+
+   **The account is in another region than the plan.** The command saves
+   nothing, writes `b2_account_s3_endpoint` and `b2_account_region` into
+   `for_the_coding_agent`, and stops. **Ask the person:**
+
+   ```text
+   Your Backblaze account keeps its files in  US East.  Your servers are in Europe.
    An account's region cannot be changed.
 
-   Choose one:
-     1. Carry on with  US West.  Your backups work the same, farther from your servers.
-     2. Make a new Backblaze account in  EU Central.  It needs another email address.
+   You can:
+     Keep this account.  Your backups work the same, a bit farther from your servers.   I recommend this.
+     Make a second Backblaze account in  EU Central.  It needs another email address.
+       Choose this only when your company must keep its data in Europe.
 
-     Type 1 or 2:
+   Say "keep" or "second account".
    ```
 
-   With 1, the results file's `b2_s3_endpoint` names the account's own
-   endpoint: write it, and its region, into `vars.backups`. With 2, the
-   command shows the new account's steps and asks for its key.
-   Then it makes the buckets and keys as the settings in `vars.backups`
-   name them, with Object Lock on the database backups' bucket and the
-   uploads' copy, checks each lock with a test file, saves each server's
-   own narrow key in the vault, and forgets the master key. The master key
-   is never stored, not in the vault and not in the recovery bundle, so
-   nothing needs deleting.
+   With "keep", write the account's endpoint and region into
+   `vars.backups.b2_s3_endpoint`, `vars.backups.b2_region`, and the
+   endpoint and region in `vars.backups.mmhotline_backup_replica_url`,
+   publish them, and send the key again: from the file with no question,
+   or with one more copy of the applicationKey. With "second account",
+   show the screen for no account yet.
 
-   **Check:** the results file shows Backblaze done, with each lock
-   checked.
+   **Tell the person,** one line, such as "Backblaze accepted your key. I
+   made your 4 backup buckets, each with its own narrow key."
 
-6. **The Git host token.** The servers download the app's images with a
-   read-only token. The command shows:
+   **Check:** the step `backblaze` is `done`, with each lock checked.
+
+6. **The GitHub token.** The servers download the app's images with a
+   read-only token. **Ask the person:**
 
    ```text
-   Your accounts: one more key, so your servers can download your app.
+   Your accounts: one key at GitHub, so your servers can download your app.
 
    Do this now:
      1. Open this link.  It fills in the key for you:
@@ -343,17 +562,15 @@ domain at Cloudflare, its DNS records, and the lock.
      SET EXPIRATION TO "NO EXPIRATION".  OTHERWISE YOUR DEPLOYS STOP IN 30 DAYS.
 
      3. Press  Generate token.
-
-   Then paste the key here.  GitHub calls it a token.
-
-     GitHub key (hidden):
+     4. Copy the token, then type  copied  here.  GitHub calls the key a token.
    ```
 
-   The command reads the app's image at the registry with the token, and
-   prints `GitHub accepted the key.` Write
+   A token the person has saved already works only when it holds
+   `read:packages` alone; the command refuses a token with more. Send it
+   to `save-a-key container_registry_read_only_token`. The command reads
+   the app's image at the registry with the token. Write
    `container_registry_read_only_username` from `for_the_coding_agent`
-   into `mmx_project_settings.yml`, and commit it in your clone, to
-   publish once `go-live` has finished, as in step 3.
+   into `mmx_project_settings.yml`, and publish it.
    `container_image_found` says whether CI has built the first image yet.
    With `no, not built yet`, read CI's result yourself, before chapter 6,
    as chapter 2's step 7 says: the `ci-report` branch in the app's
@@ -382,43 +599,132 @@ domain at Cloudflare, its DNS records, and the lock.
    file is on `main`, and say plainly what you found.
 
    An organization may require a token that ends. The command accepts a
-   token that ends 30 or more days from now, after the person types `yes`,
-   and refuses one that ends sooner. The screen says that the servers can
-   no longer download the app on the end date, and that deploys and new
-   servers stop. The results file's `for_the_coding_agent` then holds
+   token that ends 30 or more days from now, and refuses one that ends
+   sooner. Before you send such a token, tell the person that on the end
+   date the servers can no longer download the app, so deploys and new
+   servers stop, and wait for "yes". The results file's
+   `for_the_coding_agent` then holds
    `container_registry_read_only_token_expires_at`, the end date in UTC,
    such as `2027-02-15T09:00:00Z`. The weekly review reads it
    ([Do the weekly system review](../operating_procedures/do_the_weekly_system_review.md)).
    A token with no end date leaves the field out.
 
-   Then the command makes every other vault secret without a question,
-   because each is random: the database passwords, the failover monitor's
-   logins, the backup passphrase, the fleet hub's signing secret, each
-   app's random secrets, and the shared root console password and its
-   hash.
+   **Check:** the step for the GitHub token is `done`.
 
-   **Check:** the results file shows the Git host token done, and
+7. **The app keys from outside services.** Each app's `secrets_from_vault`
+   names each key with `where_the_value_comes_from: an_outside_service`,
+   such as Stripe's. For each one, **Ask the person,** from the key's
+   `what_it_is_for` and `steps_to_get_it`:
+
+   ```text
+   Your app needs one key from Stripe.
+
+   What this is for:
+     Stripe takes your customers' card payments with it.
+
+   Do this now:
+     1. Open  https://dashboard.stripe.com/apikeys
+     2. Press  Reveal live key,  then copy it.
+     3. Type  copied  here.
+   ```
+
+   Send each key to `save-a-key APP_VARIABLE`, such as
+   `save-a-key shop_STRIPE_API_KEY`. A key with `checked_with: stripe` is
+   checked at Stripe first. Skip a key the vault holds already, such as
+   one copied from Monkeymaxxing Solo: `secrets list-keys` through your
+   button lists the saved keys. An app with no such key skips this step.
+
+   **Check:** the step for each app key is `done`.
+
+8. **The random secrets.** Make every other vault secret, each random,
+   with no question to the person: the database passwords, the failover
+   monitor's logins, the backup passphrase, the fleet hub's signing
+   secret, and each app's random secrets.
+
+   ```sh
+   # On the laptop:
+   ssh -T desk01-agent sudo -n /usr/local/bin/set-up-outside-services from-the-coding-agent random-secrets < /dev/null
+   ```
+
+   **Tell the person:** no message.
+
+   **Check:**
    `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets usage`
-   lists no key `not defined` that chapters 5 to 9 need. The keys of the
-   later parts of the setup, such as Pushover's and the triage agent's, stay
-   `not defined` until their part of the setup.
+   lists no key `not defined` that chapters 5 to 9 need, other than
+   `shared_root_console_password_hash`, which step 9 makes. The keys of
+   the later parts of the setup, such as Pushover's and the triage
+   agent's, stay `not defined` until their part of the setup.
 
-7. **The lock.** The command ends "Your accounts" with
-   [chapter 0's compact map](00_before_you_start_what_we_build_and_how_long_it_takes.md#the-compact-map),
-   and shows the two steps of "Your keys locked away". First the recovery
-   passphrase:
+9. **The lock window.** The console password, the recovery passphrase and
+   the phone code are for the person's eyes only, so they come in a
+   window of the person's own, `ssh desk01-lock`. Say first what the
+   window shows. **Ask the person,** as the last text of your reply:
 
    ```text
    Your accounts are done.
 
      ✓ 1. Your app
      ✓ 2. Your accounts
-     → 3. Your keys locked away    now: 2 steps, about 3 minutes
+     → 3. Your keys locked away    now: 3 steps, about 5 minutes
        4. Your servers
        5. Live
        Later: phone alerts.  Your site has none yet.
 
-   Your keys locked away: step 1 of 2, your recovery passphrase
+   Your keys locked away happens in a window of its own, because only you may see what it shows.
+   Open a terminal on this laptop and type:
+
+     ssh desk01-lock
+
+   It logs in to your systems desk and shows three things, one at a time:
+     1. A password for your servers' consoles.  Save it in 1Password, then type it back.
+     2. Your recovery passphrase, six words.  Save it in 1Password, then type it back.
+     3. A QR code.  Scan it with the authenticator app on your phone, then type the 6 digits it shows.
+
+   I see by myself when it is done.  Ask me here at any time if a step is unclear.
+   ```
+
+   First start the wait as a background command, as
+   [`AGENTS.md`, "The two windows agree"](../AGENTS.md#the-two-windows-agree)
+   says. Then end your reply with the screen, whole, as its last text.
+
+   ```sh
+   # On the laptop, as a background command. Waits up to an hour for the lock window to finish or stop.
+   ssh desk01-agent wait-for-the-setup --at-most-minutes 60
+   ```
+
+   Exit 0 means the lock window finished, 1 that it stopped, and 124 that
+   it still runs at the bound: start the same wait again, and end your
+   reply with one line that you still wait for the lock window. With a
+   stop, say in one plain sentence what `stopped_with` says and what
+   happens next. An agent with no background commands ends its reply
+   with the screen and "When it says  Go back to your coding agent,  tell
+   me "done" here.", and then runs the same wait in the foreground.
+
+   The window shows, first:
+
+   ```text
+   Your keys locked away: step 1 of 3, the password for your servers' consoles
+
+   What this is for:
+     If your servers cannot be reached the normal way, this password opens each one at Hetzner's website.
+
+     SAVE IT NOW.  IT IS SHOWN ONLY ONCE.
+
+       [the password]
+
+   Do this now:
+     1. Save it in 1Password as  "Shared root console password".
+     2. Type it here to prove you saved it.
+
+     Console password (hidden):
+   ```
+
+   The desk saves only the password's hash in the vault, as
+   `shared_root_console_password_hash`, and the password itself in the
+   recovery bundle. Then the recovery passphrase:
+
+   ```text
+   Your keys locked away: step 2 of 3, your recovery passphrase
 
    What this is for:
      If you lose your systems desk (the small server that holds your keys), this one passphrase brings everything back.
@@ -437,7 +743,7 @@ domain at Cloudflare, its DNS records, and the lock.
    Then the phone code:
 
    ```text
-   Your keys locked away: step 2 of 2, your phone code
+   Your keys locked away: step 3 of 3, your phone code
 
    What this is for:
      From now on, your systems desk (the small server that holds your keys) needs your laptop AND a code from your phone.
@@ -455,7 +761,7 @@ domain at Cloudflare, its DNS records, and the lock.
      Code:
    ```
 
-   After a wrong code, the command says so and asks again:
+   After a wrong code, the window says so and asks again:
 
    ```text
      That code did not match.  Type the 6 digits your phone shows now.
@@ -469,7 +775,20 @@ domain at Cloudflare, its DNS records, and the lock.
    Each code works once. 5 wrong codes within ten minutes lock that laptop out of the systems desk for 5 minutes.
    ```
 
-   The command ends:
+   Then the recovery bundle, `recovery_bundle.age`, with no question. The
+   bundle took each item when its account command made the item. Now the
+   window checks that the bundle holds every item, commits and pushes it
+   into the systems repository, and puts a copy into the locked backup
+   bucket. The bundle holds the vault passphrase, the production private
+   key, the desk's WireGuard private key, the shared root console
+   password, the phone code's emergency codes, and the provider,
+   Cloudflare and Backblaze credentials. The phone code's secret itself
+   stays only on the desk. When an item is missing, the window stops and
+   names the item: run the account command that makes the item, then ask
+   the person to type `ssh desk01-lock` again, which continues where it
+   stopped.
+
+   The window ends:
 
    ```text
    Done.  Your phone code is ready.  Your coding agent locks your systems desk next, then builds your servers.
@@ -477,26 +796,18 @@ domain at Cloudflare, its DNS records, and the lock.
    Go back to your coding agent.
    ```
 
-   It says "Done.  Your desk is locked." instead only when the lock has
-   run: `/etc/systems-desk/locked` exists, and
+   It says "Done.  Your systems desk is locked." instead only when the
+   lock has run: `/etc/systems-desk/locked` exists, and
    `/etc/ssh/sshd_config.d/00-systems-desk-root-login-before-the-lock.conf`,
    which lets root in from the laptop with the laptop key alone, is gone.
-   In this first setup that happens in step 8.
+   In this first setup that happens in step 10.
 
-   The command puts the recovery bundle, `recovery_bundle.age`, into the
-   systems repository, and a copy into the locked backup bucket. It holds
-   the vault passphrase, the production private key, the desk's WireGuard
-   private key, the shared root console password, the phone code's
-   emergency codes, and the provider, Cloudflare and Backblaze
-   credentials. The phone code's secret itself stays only on the desk.
+   **Tell the person:** no message while the person is in the window.
 
-   **Tell the person:** no message while the person is in the command.
-   The person needs no help unless the person asks.
-
-   **Check:** the results file shows the recovery passphrase and the phone
-   code done and `finished: true`, and `main` in the desk's checkout holds
-   `recovery_bundle.age`. Then publish the settings you committed in
-   steps 3 to 6 with `publish-branch-to-main`.
+   **Check:** the results file shows the console password, the recovery
+   passphrase, the phone code and the recovery bundle done and
+   `finished: true`, and `main` in the desk's checkout holds
+   `recovery_bundle.age`.
 
    **Push the first backup to the Git host,** from the laptop, with the
    person's own Git login, as "The main copy and the backup at the Git host" in
@@ -528,112 +839,134 @@ domain at Cloudflare, its DNS records, and the lock.
    **Check:** `git ls-remote backup main` on the laptop shows the same
    commit as `main` in your clone.
 
-8. **Close root SSH from the laptop.** Run the bootstrap's `lock` stage.
-   It closes root SSH from the laptop, so from now on the desk admits only
-   the person and you, each with the laptop key and a phone code. Your
-   shared login, opened in step 1, stays open.
+10. **Close root SSH from the laptop.** Run the bootstrap's `lock` stage.
+    It closes root SSH from the laptop, so from now on the desk admits
+    only the person and you, each with the laptop key and a phone code.
+    Your shared login, opened in step 1, stays open.
 
-   Run it after `cd ~/example-setup/desk_bootstrap_copy` as a call of its
-   own:
+    Run it after `cd ~/example-setup/desk_bootstrap_copy` as a call of its
+    own:
 
-   ```sh
-   # On the laptop, in ~/example-setup/desk_bootstrap_copy:
-   ~/.local/bin/mmx run systems_desk --var desk_name=desk01 --only-fleet-stages lock --connection ssh_only
-   ```
+    ```sh
+    # On the laptop, in ~/example-setup/desk_bootstrap_copy:
+    ~/.local/bin/mmx run systems_desk --var desk_name=desk01 --only-fleet-stages lock --connection ssh_only
+    ```
 
-   Then run `cd ~/code/example_systems` as a call of its own, and remove
-   the laptop's setup folder, which holds the bootstrap copy and the key
-   command, and no secret any more:
+    Then run `cd ~/code/example_systems` as a call of its own, and remove
+    the laptop's setup folder, which holds the bootstrap copy, the key
+    command and the Backblaze keyID, and no secret:
 
-   ```sh
-   # On the laptop:
-   rm -rf ~/example-setup
-   ```
+    ```sh
+    # On the laptop:
+    rm -rf ~/example-setup
+    ```
 
-   The laptop keeps mmx, doubleshell, `~/.ssh/desk01`, `~/.ssh/desk01.pub`,
-   `~/.ssh/desk01_known_hosts`, the desk's SSH entries, and
-   `~/.config/doubleshell/desk01.conf`. Remove any provider tool's saved
-   login that the provider guide names; most guides name none, because the
-   scripts use `curl`.
+    The laptop keeps mmx, doubleshell, `~/.ssh/desk01`, `~/.ssh/desk01.pub`,
+    `~/.ssh/desk01_known_hosts`, the desk's SSH entries, and
+    `~/.config/doubleshell/desk01.conf`. Remove any provider tool's saved
+    login that the provider guide names; most guides name none, because the
+    scripts use `curl`. The person's own key files, such as
+    `~/.config/backblaze/env`, stay: they are the person's.
 
-   **Tell the person:** no message.
+    **Tell the person:** no message.
 
-   **Check:** `ssh root@desk01 true` is refused, and
-   `ssh desk01-agent true` still works with no code.
+    **Check:** `ssh root@desk01 true` is refused, and
+    `ssh desk01-agent true` still works with no code.
 
-   When your shared login closed anyway, such as after a long pause, ask
-   the person for one code:
+    When your shared login closed anyway, such as after a long pause, ask
+    the person for one code:
 
-   ```text
-   Your systems desk, the small server that holds your keys, is locked.  I need one code to start the work.
+    ```text
+    Your systems desk, the small server that holds your keys, is locked.  I need one code to start the work.
 
-   WAIT FOR A NEW CODE.  The code you just typed works only once.
+    WAIT FOR A NEW CODE.  The code you just typed works only once.
 
-   Type the 6 digits here.
-   ```
+    Type the 6 digits here.
+    ```
 
-   Then open the login with the code, as "Your login on the desk" in
-   [`AGENTS.md`](../AGENTS.md#your-login-on-the-desk) says.
+    Then open the login with the code, as "Your login on the desk" in
+    [`AGENTS.md`](../AGENTS.md#your-login-on-the-desk) says.
 
-9. **Then you work alone.** Chapters 5 to 9 need nothing from the person
-   until the first release. Run each long run as a desk job, as
-   [`AGENTS.md`](../AGENTS.md#making-a-change) says, so the laptop may
-   sleep.
+11. **Then you work alone.** Chapters 5 to 9 need nothing from the person
+    until the first release, except the nameserver change of step 4 when
+    it waits for DNSSEC. Run each long run as a desk job, as
+    [`AGENTS.md`](../AGENTS.md#making-a-change) says, so the laptop may
+    sleep.
 
-   **Tell the person:** the end of part 3, "Your keys locked away", with
-   the compact map, as the last text of your reply. Before you write it,
-   start a short background command, such as `sleep 5`, so its end wakes
-   you to start chapter 5, as the skill's "Where the person is: the five
-   parts" says:
+    **Tell the person:** the end of part 3, "Your keys locked away", with
+    the compact map, as the last text of your reply. Before you write it,
+    start a short background command, such as `sleep 5`, so its end wakes
+    you to start chapter 5, as the skill's "Where the person is: the five
+    parts" says:
 
-   ```text
-   Your keys are locked away.  Your systems desk now needs your laptop and a code from your phone.
+    ```text
+    Your keys are locked away.  Your systems desk now needs your laptop and a code from your phone.
 
-     ✓ 1. Your app
-     ✓ 2. Your accounts
-     ✓ 3. Your keys locked away
-     → 4. Your servers             now, about 40 minutes
-       5. Live
-       Later: phone alerts.  Your site has none yet.
+      ✓ 1. Your app
+      ✓ 2. Your accounts
+      ✓ 3. Your keys locked away
+      → 4. Your servers             now, about 40 minutes
+        5. Live
+        Later: phone alerts.  Your site has none yet.
 
-   Now: I am setting up Cloudflare for your site and installing everything on your servers, about 40 minutes.
-   Your laptop may sleep: the work continues on your systems desk.
-   Next for you: nothing.  I tell you the moment your site is up.
-   ```
+    Now: I am setting up Cloudflare for your site and installing everything on your servers, about 40 minutes.
+    Your laptop may sleep: the work continues on your systems desk.
+    Next for you: nothing.  I tell you the moment your site is up.
+    ```
 
-   **Check:** you started chapter 5.
+    **Check:** you started chapter 5.
 
 ## If something is different
 
-- **The team has no domain yet** (step 3): after the Cloudflare screen,
+- **The team has no domain yet** (step 3): after the Cloudflare account,
   the person registers the domain at Cloudflare, at the price Cloudflare
-  shows. The registrar screen is skipped.
-- **An app keeps uploaded files** (step 3): R2 stores them. The
-  Cloudflare screen's extra step turns R2 on, with its price, because
-  Cloudflare asks for a card on its website before R2 turns on. When the
-  person pasted the token before R2 was on, the command shows R2's page
-  again and waits for Enter, then makes the uploads bucket and its key.
-- **Cloudflare, Backblaze or GitHub refuses a value** (steps 3, 5 and 6):
-  the command shows the service's reason and asks again. Nothing else is
-  needed.
-- **The person stops in the middle:** `ssh desk01-setup` again continues
-  at the first screen that is not done. When Backblaze was done in the
-  earlier run, a short screen asks for the master key once more, because
-  the lock step at the end writes the recovery bundle's copy into the
-  locked backup bucket with the master key, and every run forgets the
-  master key when it ends. The same key works; a new master key works too.
+  shows. Step 4 is skipped.
+- **Cloudflare, Backblaze, GitHub or Stripe refuses a key** (steps 3 and
+  5 to 7): the command stops with the service's reason. Say the reason in
+  one line, and ask for the key again: one more copy, or a check of the
+  file the person named. A refused Cloudflare token needs a new token
+  from the same link.
+- **The person pastes a key into the chat:** say in one line that the key
+  is no longer private, and ask the person to make a new key at that
+  company. Use the new key, and delete the old one at the company.
+- **The person stops in the middle:** read the results file, and carry on
+  at the first account that is not `done`. The account commands keep
+  what they made, and a rerun makes nothing twice. The lock window
+  continues at its first step that is not done. Backblaze's key is not
+  needed again for the recovery bundle's copy: the Backblaze command kept
+  the backup bucket's write key on the desk for that copy, and the lock
+  window deletes it after the copy.
+- **The coding agent does not run on the person's laptop:** use way B for
+  every key, and ask the person for each file's values by way B too.
 - **The domain shows "Pending" for longer than the setup takes:** chapters
   5 to 8 continue. Chapter 9's check through the public address waits for
   "Active".
 
 ## Why the chapter works this way
 
-**The provider account came first.** The desk is built with its key, and
-every other secret is typed into the desk.
+**You lead, and small commands do the fixed work.** People come with
+their own accounts, keys and history. A fixed program that walks the same
+screens for everyone failed the first real setup with existing accounts:
+it told a person who had every account to sign up again, and to make a
+Backblaze master key that would have stopped the old one. The whole
+point of a coding agent is that it works with the person's current
+setup. So you ask, and adapt to each account. A small
+command per account does the part that must be exact, once it has a key.
 
-**One screen per account, with the check at once.** The person makes a key
-and pastes it in the same minute, and the service says yes or no at once.
-So no key waits in an open browser tab.
+**A key goes from the clipboard or a file straight to the desk.** The
+chat goes to the company that runs you, so a key never enters it. You
+start the pipe, but the key passes from the laptop's clipboard or file to
+the desk's command without your conversation seeing it. The desk's
+command prints no key and reads none back, so the sudo rule lets you put
+a key in and never get one out.
+
+**The clipboard first, the paste window second.** Copying and typing
+`copied` keeps the person in the chat. The paste window works everywhere,
+so it stays as the backup for a laptop whose clipboard you cannot read.
+
+**The domain switch has a fixed order.** Every record at Cloudflare
+first, the mail records before all, then DNSSEC off, then the
+nameservers. A switch out of order stops the site and the email.
 
 **Separate accounts.** The backups are at Backblaze, away from the server
 provider and Cloudflare, so a lost server account leaves the backups safe.
@@ -647,8 +980,12 @@ read-only Backblaze key that restores the backups, never the master key.
 uploads into a locked bucket without one.
 
 **One recovery passphrase.** The recovery bundle holds every item a lost
-desk needs, encrypted. The person saves one passphrase instead of six
+desk needs, encrypted. The person saves one passphrase instead of seven
 secrets, and types it back once, so a bad copy shows at once.
+
+**Only the lock is a window.** The console password, the recovery
+passphrase and the phone code are for the person's eyes only, so they
+appear in the person's own terminal, never in the chat.
 
 **The phone code comes last.** The phone code is the lock. Before it, the
 laptop key alone opens the desk, so you do the whole desk setup yourself.

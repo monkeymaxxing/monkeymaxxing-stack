@@ -185,8 +185,8 @@ README. The chapters are your own structure.
 | --- | --- | --- |
 | Before the parts | Answers two questions and says "go" | Chapter 1, steps 1 to 3 |
 | 1. Your app | Approves your changes to the app | Chapter 1, steps 4 and 5; chapter 2 |
-| 2. Your accounts | Makes 3 accounts (the server provider, Cloudflare, Backblaze) and pastes a key from each, plus one from GitHub (one more for each key an app needs from an outside service; Backblaze's key is two values), approves the real price, makes one private repository at GitHub when `gh` is not signed in, and changes the nameservers at the domain's registrar when they do not point at Cloudflare yet | Chapter 3, with chapter 6's steps 1 to 5, which create the three servers as soon as the systems desk is ready; chapter 4, steps 1 to 6 |
-| 3. Your keys locked away | Saves one recovery passphrase and scans one phone code | Chapter 4, steps 7 to 9 |
+| 2. Your accounts | Says which accounts exist already (the server provider, Cloudflare, Backblaze, GitHub), makes the missing ones, and gives a key from each: the server provider's at a hidden prompt on the laptop, every other key by copying it or naming a laptop file that holds it (one more for each key an app needs from an outside service; Backblaze's key is two values). Approves the real price and any server already paid for that is rebuilt, makes one private repository at GitHub when `gh` is not signed in, and changes the nameservers at the domain's registrar when they do not point at Cloudflare yet | Chapter 3, with chapter 6's steps 1 to 5, which create the three servers as soon as the systems desk is ready; chapter 4, steps 1 to 8 |
+| 3. Your keys locked away | In one window, saves a console password and one recovery passphrase, and scans one phone code | Chapter 4, steps 9 to 11 |
 | 4. Your servers | Nothing | Chapter 5; chapter 6, steps 6 and 7; chapter 7; chapter 8, part 1 |
 | 5. Live | Nothing | Chapter 9 |
 | Later: phone alerts | Makes the Pushover account, types its keys, and acknowledges one test alert | Chapter 8, part 2 |
@@ -266,8 +266,10 @@ exception with its rule, and give its reason.
 4. **If you can do a step, you do it.** Configure outside accounts once
    through the desk's API proxy or signed-in laptop tools such as `gh`
    (never require `gh`: show a pre-filled link without it). The person does
-   only what requires a person: sign up, approve money/terms, type a secret
-   at a hidden prompt, save a login, or scan a QR code. Every screen for
+   only what requires a person: sign up, approve money/terms, copy a key
+   for you to pass straight to the desk (never into the chat), save a
+   login, or scan a QR code. You ask which accounts the person has first,
+   and take each from where the person stands. Every screen for
    the person has four parts: a title naming the company and purpose,
    "What this is for:", "Do this now:" with numbered one-instruction lines,
    and the prompt or one thing to say; use bold capitals on their own line

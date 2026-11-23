@@ -190,8 +190,8 @@ answers.
    - **Your name on the desk:** the laptop's user name, `$USER`.
    - **Status page and alerts page names:** `status.` and `ops.` before
      the domain, such as `status.example.com` and `ops.example.com`.
-     Reason: `go-live` refuses a name that is still the template's
-     example, so chapter 1 fills both for the person's yes. Chapters 5
+     Reason: the desk's account commands refuse a name that is still the
+     template's example, so chapter 1 fills both for the person's yes. Chapters 5
      and 8 check that the domain has no DNS record for each name, and
      pick another when it has.
    - **Sign-in email:** read `git config user.email`. Use it as the

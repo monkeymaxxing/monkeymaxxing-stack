@@ -105,7 +105,7 @@ The contracts below state the required outcomes for changes to the stack.
   The person's provider token goes only to a provider guide's API address. The recovery passphrase is shown once,
   and cleared from the desk terminal after the person types it back.
   Production servers retain account-owned tokens; only a person's desk holds personal tokens.
-  At Cloudflare the person makes one token by hand, from the link `set-up-outside-services cloudflare` prints;
+  At Cloudflare the person makes one token by hand, from the link the coding agent gives;
   the command makes every other token, the person's desk token and posting key named after the person, and
   deletes the link token when it ends. Replacing a Cloudflare or B2 key deletes the old one once the servers'
   run brought the new one and the person pressed Enter, so a routine replacement stops no upload; after a
@@ -122,8 +122,9 @@ The contracts below state the required outcomes for changes to the stack.
   agent uses the production key's socket, `run-mmx-on-the-servers` (run as the `servers-mmx` account) and the API
   proxy, and never reads a key or a token. A run longer than a few minutes is a desk job that keeps running while
   the laptop sleeps; the agent reads its log and exit file later. Nothing on the desk needs resuming, and nothing
-  is signed in there. The person logs in to the desk only for a hidden prompt or a desk review, each one short
-  command plus one phone code.
+  is signed in there. The coding agent passes each key the person copies, or keeps in a laptop file the person
+  names, straight to the desk's account command, which prints no key and reads none back. The person logs in to
+  the desk only for the lock, a hidden prompt or a desk review, each one short command plus one phone code.
 - **The team's main copy is on `util01`:** a root-owned bare repository that refuses force pushes and branch
   deletions. Only keys in `root_ssh_public_keys` can push to it. MMHotline and `util01` trust every commit on it
   (`systems_repository_commits.trusted_commits: every_commit_on_origin`); nothing is signed. MMHotline pushes the triage agent's
