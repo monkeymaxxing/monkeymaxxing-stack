@@ -256,3 +256,47 @@ func mustRead(t *testing.T, path string) string {
 	}
 	return string(text)
 }
+
+// The person's own save-a-key KEY, way B for one key: one hidden prompt,
+// for that key only, with no question about the vault's other missing keys.
+func TestThePersonsSaveAKeyAsksForTheOneKeyOnly(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.answers = []string{registryToken}
+	if err := runPersonsSaveAKey(h.e, []string{registryTokenVaultKey}); err != nil {
+		t.Fatalf("save-a-key: %v\n%s", err, h.out)
+	}
+	if h.vault.values[registryTokenVaultKey] != registryToken || len(h.answers) != 0 {
+		t.Fatalf("want the token saved from the one prompt, vault %q, answers left %d", h.vault.values[registryTokenVaultKey], len(h.answers))
+	}
+	for _, arguments := range [][]string{nil, {"a key"}, {registryTokenVaultKey, "extra"}} {
+		if err := runPersonsSaveAKey(h.e, arguments); !errors.Is(err, errUsage) {
+			t.Errorf("%v: want a refusal of the arguments, got %v", arguments, err)
+		}
+	}
+	if !strings.Contains(usage, "save-a-key KEY ") {
+		t.Error("the usage lacks the person's save-a-key")
+	}
+}
+
+// random-secrets saves the backups' passphrase in the recovery bundle before
+// the vault: a failed bundle write leaves the vault without it, so the rerun
+// makes it again and both hold the same value.
+func TestRandomSecretsSavesTheBundlesCopyFirst(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.rootFiles["/etc/systems-desk/provider-api-token.conf"] = `proxy_set_header Authorization "Bearer ` + providerToken + `";` + "\n"
+	const key = "pgbackrest_repository_cipher_passphrase"
+	h.bundle.failOn[key] = true
+	if code, _, _ := h.fromTheCodingAgent("", "random-secrets"); code != 1 {
+		t.Fatalf("exit %d, want the stop at the bundle", code)
+	}
+	if h.vault.values[key] != "" {
+		t.Fatal("the vault holds the passphrase the bundle lacks, so no rerun can fill the bundle")
+	}
+	delete(h.bundle.failOn, key)
+	if code, out, errorOut := h.fromTheCodingAgent("", "random-secrets"); code != 0 {
+		t.Fatalf("rerun: exit %d\n%s%s", code, out, errorOut)
+	}
+	if h.vault.values[key] == "" || h.vault.values[key] != h.bundle.values[key] {
+		t.Fatal("the vault and the bundle do not hold the same passphrase")
+	}
+}

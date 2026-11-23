@@ -457,3 +457,25 @@ func TestSecretsCommitsInTheCheckoutWhileItIsTheMainCopy(t *testing.T) {
 		t.Fatalf("the output does not say where main is:\n%s", h.out)
 	}
 }
+
+// secrets --replace KEY makes that key again and asks for nothing else,
+// even while the vault lacks other keys, such as before chapter 8.
+func TestSecretsReplaceAsksForNothingElse(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.vault.referenced = templateKeys
+	for _, key := range templateKeys {
+		if key != "pushover_application_token" {
+			h.vault.values[key] = "old-" + key
+		}
+	}
+	h.secretsRepository()
+	if err := runSecrets(h.e, []string{"--replace", "pgbackrest_repository_cipher_passphrase"}); err != nil {
+		t.Fatalf("secrets --replace: %v\n%s", err, h.out)
+	}
+	if value := h.vault.values["pgbackrest_repository_cipher_passphrase"]; value == "" || value == "old-pgbackrest_repository_cipher_passphrase" {
+		t.Fatal("the passphrase was not made again")
+	}
+	if h.vault.values["pushover_application_token"] != "" {
+		t.Fatal("--replace saved another key")
+	}
+}

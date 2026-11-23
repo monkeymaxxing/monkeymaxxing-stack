@@ -159,6 +159,16 @@ func (e *environment) becomeTheDesksPerson() error {
 	return nil
 }
 
+// runPersonsSaveAKey is the person's save-a-key KEY, in their own window,
+// for a key the coding agent cannot send from the clipboard: one key, at a
+// hidden prompt, and no other question.
+func runPersonsSaveAKey(e *environment, arguments []string) error {
+	if len(arguments) != 1 || !vaultKeyPattern.MatchString(arguments[0]) {
+		return fmt.Errorf("save-a-key takes one KEY, such as %s: %w", registryTokenVaultKey, errUsage)
+	}
+	return runSaveAKey(e, arguments[0])
+}
+
 // runSaveAKey saves one vault key that only a person can give, after its
 // service's check: the registry's read-only token or an app's key from an
 // outside service.

@@ -180,14 +180,19 @@ func (v *savedKeys) hasAny(names ...string) bool {
 }
 
 // save saves one value, replacing the key's old value when the vault has one.
+// A value the recovery bundle keeps goes into the bundle first. Reason: a
+// command makes only what the vault lacks, so a value in the vault but not
+// in the bundle would stay missing from the bundle on every rerun.
 func (v *savedKeys) save(name, value string) error {
+	if v.copyInto != nil && v.copied[name] {
+		if err := v.copyInto.save(name, value); err != nil {
+			return err
+		}
+	}
 	if err := v.store.set(name, value, v.names[name]); err != nil {
 		return err
 	}
 	v.saved(name)
-	if v.copyInto != nil && v.copied[name] {
-		return v.copyInto.save(name, value)
-	}
 	return nil
 }
 

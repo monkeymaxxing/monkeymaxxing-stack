@@ -239,11 +239,25 @@ func (e *environment) bundleItemsFromTheAccounts(settings systemSettings, bundle
 	return values, missing
 }
 
-// refuseMissingItems names each missing item and the command that makes it.
-func refuseMissingItems(missing []string) error {
+// rotatedBy names the rotation that makes a bundle item's value again when
+// the vault holds it already: the command that made it skips a key the vault
+// holds, so running it again would never fill the bundle.
+var rotatedBy = map[string]string{
+	"pgbackrest_repository_cipher_passphrase": "secrets --replace pgbackrest_repository_cipher_passphrase",
+	"pgbackrest_b2_read_only_key_id":          "backblaze --replace-key pgbackrest_b2_read_only_key_id",
+	"pgbackrest_b2_read_only_application_key": "backblaze --replace-key pgbackrest_b2_read_only_key_id",
+}
+
+// refuseMissingItems names each missing item and the command that makes it,
+// or the rotation that makes it again when the vault holds it already.
+func refuseMissingItems(missing []string, vault *savedKeys) error {
 	var named []string
 	for _, key := range missing {
-		if command := madeBy[key]; command != "" {
+		command := madeBy[key]
+		if rotation := rotatedBy[key]; rotation != "" && vault != nil && vault.hasAll(key) {
+			command = rotation
+		}
+		if command != "" {
 			named = append(named, key+" (set-up-outside-services "+command+")")
 		} else {
 			named = append(named, key)
@@ -271,7 +285,7 @@ func (e *environment) completeTheBundle(settings systemSettings, bundle *savedKe
 	}
 	values, missing := e.bundleItemsFromTheAccounts(settings, bundle)
 	if len(missing) > 0 {
-		return refuseMissingItems(missing)
+		return refuseMissingItems(missing, nil)
 	}
 	values[bundleProviderCredential] = providerCredential
 	for _, key := range sortedKeys(values) {
@@ -301,7 +315,8 @@ func sortedKeys(values map[string]string) []string {
 }
 
 // uploadTheBundle copies the pushed bundle into the locked backup bucket
-// with the kept write key, then deletes the kept key's file. The bucket's
+// with the kept write key; lock-the-desk deletes the kept key's file once
+// the upload is recorded. The bucket's
 // lock keeps the copy from deletion; no lifecycle rule hides a current
 // file, so it stays.
 func (e *environment) uploadTheBundle(settings systemSettings) error {
@@ -333,7 +348,7 @@ func (e *environment) uploadTheBundle(settings systemSettings) error {
 		return err
 	}
 	e.say("Copied the recovery bundle into the locked backup bucket %s as %s.", bucket.BucketName, name)
-	return e.removeFileAsRoot(e.backupWriteKeyFile)
+	return nil
 }
 
 // trimmedLines splits a file's text into its non-empty lines.

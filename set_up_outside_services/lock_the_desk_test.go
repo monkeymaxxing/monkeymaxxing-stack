@@ -262,3 +262,87 @@ func TestTheDeskIsLockedOnlyWithTheRecordAndWithoutTheRootLoginFile(t *testing.T
 		t.Errorf("a systems desk that is not locked yet: %q", message)
 	}
 }
+
+// bundleCopies counts the recovery bundle's copies at Backblaze.
+func (h *lockHarness) bundleCopies() int {
+	copies := 0
+	for _, file := range h.b2.Files {
+		if strings.HasPrefix(file.Name, "recovery_bundle/") {
+			copies++
+		}
+	}
+	return copies
+}
+
+// A lock stopped after the bundle's upload, while it removes the kept write
+// key, has recorded the upload: the rerun only removes what is left, never
+// uploads again and never asks to delete the bundle.
+func TestLockTheDeskRecordsTheUploadBeforeItRemovesTheKeptFiles(t *testing.T) {
+	h := newLockHarness(t)
+	h.accounts()
+	removeFileAsRoot := h.e.removeFileAsRoot
+	h.e.removeFileAsRoot = func(string) error { return errors.New("sudo: interrupted") }
+	if err := runLockTheDesk(h.e); err == nil {
+		t.Fatal("want the stop at the removal")
+	}
+	if state := h.results().state("recovery_bundle"); state != stepDone || h.bundleCopies() != 1 {
+		t.Fatalf("after the stop, recovery_bundle is %q with %d copies, want done with 1", state, h.bundleCopies())
+	}
+	h.e.removeFileAsRoot = removeFileAsRoot
+	h.out.Reset()
+	if err := runLockTheDesk(h.e); err != nil {
+		t.Fatalf("rerun: %v\n%s", err, h.out)
+	}
+	if !h.results().Finished || h.bundleCopies() != 1 {
+		t.Fatalf("the rerun did not finish, or uploaded again: %d copies", h.bundleCopies())
+	}
+	for _, path := range []string{h.e.backupWriteKeyFile, h.passphraseFile()} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s stays after the rerun", path)
+		}
+	}
+}
+
+// The phone code's root step enrolls once and refuses a second time. A lock
+// that stops after the enrollment, before the bundle holds the emergency
+// codes, takes them from the kept file on the rerun, without enrolling again.
+func TestLockTheDeskKeepsTheEmergencyCodesUntilTheBundleHoldsThem(t *testing.T) {
+	h := newLockHarness(t)
+	h.accounts()
+	h.phoneCode = func(path string) error {
+		if err := os.WriteFile(path, []byte(emergencyCodes+"\n"), 0o600); err != nil {
+			return err
+		}
+		return errors.New("the connection dropped after the phone code was set up")
+	}
+	if err := runLockTheDesk(h.e); err == nil {
+		t.Fatal("want the stop at the phone code")
+	}
+	h.phoneCode = func(string) error {
+		return errors.New("This systems desk's phone code is already set up. Nothing changed.")
+	}
+	h.out.Reset()
+	if err := runLockTheDesk(h.e); err != nil {
+		t.Fatalf("rerun: %v\n%s", err, h.out)
+	}
+	if !h.bundleKeys()[bundlePhoneCodeEmergencyCode] || !h.results().Finished {
+		t.Fatal("the bundle lacks the emergency codes, or the lock did not finish")
+	}
+	if _, err := os.Stat(h.e.phoneCodeEmergencyCodesFile(systemSettings{projectSettings: projectSettings{ProjectName: "acme_systems"}})); !errors.Is(err, os.ErrNotExist) {
+		t.Error("the emergency codes file stays after the bundle holds the codes")
+	}
+}
+
+// A bundle item the vault holds already is made again by its rotation, not
+// by the command that made it, which skips a key the vault holds.
+func TestAMissingBundleItemTheVaultHoldsNamesItsRotation(t *testing.T) {
+	vault := &savedKeys{names: map[string]bool{"pgbackrest_repository_cipher_passphrase": true, "pgbackrest_b2_read_only_key_id": true}}
+	err := refuseMissingItems([]string{"pgbackrest_b2_read_only_key_id", "pgbackrest_repository_cipher_passphrase", bundleCloudflareDeskToken}, vault)
+	for _, want := range []string{"pgbackrest_repository_cipher_passphrase (set-up-outside-services secrets --replace pgbackrest_repository_cipher_passphrase)",
+		"pgbackrest_b2_read_only_key_id (set-up-outside-services backblaze --replace-key pgbackrest_b2_read_only_key_id)",
+		bundleCloudflareDeskToken + " (set-up-outside-services cloudflare)"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("want %q in %v", want, err)
+		}
+	}
+}

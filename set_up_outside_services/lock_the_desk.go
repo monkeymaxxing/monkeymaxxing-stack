@@ -89,64 +89,20 @@ func runLockTheDesk(e *environment) error {
 		if err != nil {
 			return "", err
 		}
-		providerCredential, err := e.readProviderCredential(settings)
-		if err != nil {
-			return "", err
-		}
-		saved, err := e.beginVaultChange()
-		if err != nil {
-			return "", err
-		}
-		bundle, passphrase, err := e.openTheBundle(settings)
-		if err != nil {
-			return "", err
-		}
-		if bundle == nil {
-			return "", fmt.Errorf("%s exists, but its passphrase file %s is gone. Delete %s from the systems repository and run the account commands again: they make a new bundle", recoveryBundleFile, e.recoveryPassphraseFile(settings), recoveryBundleFile)
-		}
-		// Before the first screen, so the person never does the lock's steps
-		// for a run that then stops on a missing account.
-		if _, missing := e.bundleItemsFromTheAccounts(settings, bundle); len(missing) > 0 {
-			return "", refuseMissingItems(missing)
-		}
-		if _, err := e.readRootFile(e.backupWriteKeyFile); err != nil {
-			return "", fmt.Errorf("the backup write key that set-up-outside-services backblaze keeps for the recovery bundle's upload is missing (%v). Run set-up-outside-services backblaze --replace-key %s, which makes a new one and keeps it, then run lock-the-desk again", err, backupWriteKeyIDVaultName)
-		}
-		steps := []lockStep{
-			{"shared_root_console_password", func() error { return e.consolePasswordScreen(settings, saved, bundle) }},
-			{"recovery_passphrase", func() error { return e.recoveryPassphraseScreen(settings, passphrase) }},
-			{"phone_code", func() error { return e.phoneCodeScreen(bundle) }},
-			{"recovery_bundle", func() error {
-				if err := e.completeTheBundle(settings, bundle, providerCredential); err != nil {
-					return err
-				}
-				// Pushed before the upload, so a rerun after a failed upload
-				// still has the kept key and uploads the same bundle.
-				if err := e.finishVaultChange(saved, e.commandLine); err != nil {
-					return err
-				}
-				if err := e.uploadTheBundle(settings); err != nil {
-					return err
-				}
-				if err := os.Remove(e.recoveryPassphraseFile(settings)); err != nil && !errors.Is(err, os.ErrNotExist) {
-					return err
-				}
-				return nil
-			}},
-		}
-		for _, step := range steps {
-			if e.readResults().state(step.name) == stepDone {
-				continue
-			}
-			if err := e.updateResults(func(r *setupResults) { r.setState(step.name, stepInProgress) }); err != nil {
+		// A run that stopped after the upload only cleans up: the bundle is
+		// pushed and uploaded, and its passphrase file may be gone already.
+		if e.readResults().state("recovery_bundle") != stepDone {
+			if err := e.runTheLockSteps(settings); err != nil {
 				return "", err
 			}
-			if err := step.run(); err != nil {
-				return "", err
-			}
-			if err := e.updateResults(func(r *setupResults) { r.setState(step.name, stepDone) }); err != nil {
-				return "", err
-			}
+		}
+		// Only after the upload is recorded, so a rerun never finds the
+		// bundle without its passphrase file before the bundle is safe.
+		if err := e.removeFileAsRoot(e.backupWriteKeyFile); err != nil {
+			return "", err
+		}
+		if err := os.Remove(e.recoveryPassphraseFile(settings)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
 		}
 		return "", e.updateResults(func(r *setupResults) { r.Finished = true })
 	})
@@ -154,6 +110,67 @@ func runLockTheDesk(e *environment) error {
 		return fmt.Errorf("%v.\n\nGo back to your coding agent. It sees where this stopped", trimPeriod(err.Error()))
 	}
 	e.show(lockDoneMessage(e))
+	return nil
+}
+
+// runTheLockSteps runs each lock step the results file does not show done,
+// up to the bundle's upload.
+func (e *environment) runTheLockSteps(settings systemSettings) error {
+	providerCredential, err := e.readProviderCredential(settings)
+	if err != nil {
+		return err
+	}
+	saved, err := e.beginVaultChange()
+	if err != nil {
+		return err
+	}
+	bundle, passphrase, err := e.openTheBundle(settings)
+	if err != nil {
+		return err
+	}
+	if bundle == nil {
+		return fmt.Errorf("%s exists, but its passphrase file %s is gone, so nothing can add to it. Delete %s from the systems repository, then make the values it copies again: "+
+			"set-up-outside-services backblaze --replace-key %s --replace-key %s, and set-up-outside-services secrets --replace pgbackrest_repository_cipher_passphrase. Then run lock-the-desk again",
+			recoveryBundleFile, e.recoveryPassphraseFile(settings), recoveryBundleFile, backupWriteKeyIDVaultName, "pgbackrest_b2_read_only_key_id")
+	}
+	// Before the first screen, so the person never does the lock's steps
+	// for a run that then stops on a missing account.
+	if _, missing := e.bundleItemsFromTheAccounts(settings, bundle); len(missing) > 0 {
+		return refuseMissingItems(missing, saved)
+	}
+	if _, err := e.readRootFile(e.backupWriteKeyFile); err != nil {
+		return fmt.Errorf("the backup write key that set-up-outside-services backblaze keeps for the recovery bundle's upload is missing (%v). Run set-up-outside-services backblaze --replace-key %s, which makes a new one and keeps it, then run lock-the-desk again", err, backupWriteKeyIDVaultName)
+	}
+	steps := []lockStep{
+		{"shared_root_console_password", func() error { return e.consolePasswordScreen(settings, saved, bundle) }},
+		{"recovery_passphrase", func() error { return e.recoveryPassphraseScreen(settings, passphrase) }},
+		{"phone_code", func() error { return e.phoneCodeScreen(settings, bundle) }},
+		{"recovery_bundle", func() error {
+			if err := e.completeTheBundle(settings, bundle, providerCredential); err != nil {
+				return err
+			}
+			// Pushed before the upload, so a rerun after a failed upload
+			// still has the kept key and uploads the same bundle.
+			if err := e.finishVaultChange(saved, e.commandLine); err != nil {
+				return err
+			}
+			return e.uploadTheBundle(settings)
+		}},
+	}
+	for _, step := range steps {
+		if e.readResults().state(step.name) == stepDone {
+			continue
+		}
+		if err := e.updateResults(func(r *setupResults) { r.setState(step.name, stepInProgress) }); err != nil {
+			return err
+		}
+		if err := step.run(); err != nil {
+			return err
+		}
+		if err := e.updateResults(func(r *setupResults) { r.setState(step.name, stepDone) }); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -214,8 +231,19 @@ Do this now:
 	return nil
 }
 
-func (e *environment) phoneCodeScreen(bundle *savedKeys) error {
-	e.show(`
+// phoneCodeEmergencyCodesFile keeps the phone code's emergency codes from
+// the root step until the bundle holds them, readable only by the person.
+// Reason: the root step sets up the phone code once and refuses a second
+// time, so a run that stops before the bundle saves the codes takes them
+// from this file on the rerun.
+func (e *environment) phoneCodeEmergencyCodesFile(settings systemSettings) string {
+	return filepath.Join(e.home, ".config", "monkeymaxxing-stack", settings.ProjectName+"_phone_code_emergency_codes_until_the_bundle_is_saved")
+}
+
+func (e *environment) phoneCodeScreen(settings systemSettings, bundle *savedKeys) error {
+	path := e.phoneCodeEmergencyCodesFile(settings)
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		e.show(`
 Your keys locked away: step 3 of 3, your phone code
 
 What this is for:
@@ -225,20 +253,23 @@ Do this now:
   1. Open the authenticator app on your phone.
   2. Scan this code.
 `)
-	// A private folder of the person's own, so the root step's file is never
-	// readable by another account.
-	folder, err := os.MkdirTemp(e.home, ".phone-code-emergency-codes-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(folder)
-	path := filepath.Join(folder, "emergency_codes")
-	if err := e.setUpThePhoneCode(path); err != nil {
-		return err
+		// The person's own private folder, so the root step's file is never
+		// readable by another account.
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return err
+		}
+		if err := e.setUpThePhoneCode(path); err != nil {
+			return err
+		}
+	} else {
+		e.say("Your phone code is set up already. Saving its emergency codes from the earlier run in the recovery bundle.")
 	}
 	codes, err := e.readRootFile(path)
 	if err != nil || strings.TrimSpace(string(codes)) == "" {
 		return fmt.Errorf("set-up-the-phone-code wrote no emergency codes to %s", path)
 	}
-	return bundle.save(bundlePhoneCodeEmergencyCode, strings.TrimSpace(string(codes)))
+	if err := bundle.save(bundlePhoneCodeEmergencyCode, strings.TrimSpace(string(codes))); err != nil {
+		return err
+	}
+	return os.Remove(path)
 }

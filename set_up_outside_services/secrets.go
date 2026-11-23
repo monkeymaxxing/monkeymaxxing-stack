@@ -399,7 +399,8 @@ func (e *environment) saveSecrets(replace string) error {
 		if err := e.stopIfInterrupted(); err != nil {
 			return err
 		}
-		wanted := missing[item.Key] || item.Key == replace
+		// --replace enters its one key, and asks for nothing else.
+		wanted := item.Key == replace || (replace == "" && missing[item.Key])
 		if item.Kind == consolePasswordSecret && item.Key != replace {
 			// lock-the-desk makes it at the setup, in the person's own window.
 			wanted = false

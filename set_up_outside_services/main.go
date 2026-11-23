@@ -57,8 +57,8 @@ Commands:
                                 From one link token you make with the link it prints: find
                                 the account (--account-id names it when the token reaches
                                 several), add your domain and copy its DNS records, give the
-                                account its workers.dev address, then make your systems
-                                desk's Cloudflare token (in the API proxy and your token
+                                account its workers.dev address, then make your
+                                systems desk's Cloudflare token (in the API proxy and your token
                                 file), the tunnels, the R2 buckets and keys, the
                                 MMHotline-down alarm's token, the status page and your own
                                 key for posting to it, and the One-time PIN login method;
@@ -78,9 +78,13 @@ Commands:
   secrets [--replace KEY]       Save every vault secret the servers read that the vault lacks:
                                 the ones only a website gives, at hidden prompts, with the page
                                 where you make each, and random ones nobody needs to see.
-                                --replace KEY enters one again; --replace
+                                --replace KEY enters that one again, and nothing else; --replace
                                 shared_root_console_password_hash makes a new console
                                 password, shown once for your password manager.
+  save-a-key KEY                Save one key only you can give, at a hidden prompt, after its
+                                service's check: container_registry_read_only_token or an
+                                app's key from an outside service, such as shop_STRIPE_API_KEY.
+                                It asks for nothing else.
   lock-the-desk                 The setup's last step, in your own window (ssh desk01-lock):
                                 the servers' shared root console password, shown once; your
                                 recovery passphrase, shown once; your phone code. Then it
@@ -198,6 +202,11 @@ func (e *environment) dispatch(arguments []string) error {
 			return errNoTerminal
 		}
 		return runSecrets(e, arguments[1:])
+	case "save-a-key":
+		if !stdinIsTerminal() {
+			return errNoTerminal
+		}
+		return runPersonsSaveAKey(e, arguments[1:])
 	case "lock-the-desk":
 		// The console password and the recovery passphrase show only in a
 		// terminal the person watches.
