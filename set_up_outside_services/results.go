@@ -162,7 +162,16 @@ func removeFileAsRootWithSudo(path string) error {
 // readRootFileWithSudo reads a file only root reads, such as the API proxy's
 // token file. The content never shows on the screen.
 func readRootFileWithSudo(path string) ([]byte, error) {
-	command := exec.Command("sudo", "-n", "cat", "--", path)
+	return readWithSudo(exec.Command("sudo", "-n", "cat", "--", path))
+}
+
+// readFileAsTheCodingAgent reads a file of the coding agent's checkout with
+// the coding agent's own rights.
+func readFileAsTheCodingAgent(path string) ([]byte, error) {
+	return readWithSudo(exec.Command("sudo", "-n", "-u", codingAgentAccount, "cat", "--", path))
+}
+
+func readWithSudo(command *exec.Cmd) ([]byte, error) {
 	var output, errorOutput bytes.Buffer
 	command.Stdout, command.Stderr = &output, &errorOutput
 	if err := command.Run(); err != nil {

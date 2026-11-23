@@ -4775,8 +4775,15 @@ The command checks its arguments strictly against the four commands below
 and refuses anything else before it reads standard input. It takes no
 path or setting from the caller, prints no key, reads none back, and cuts
 every provider error to its status and code. It takes the person from
-`vars.person_unix_username`, not from the caller, so token names and the
-token file belong to the person. A test runs each command, on success and
+`/etc/systems-desk/person-unix-username`, which the desk role writes as
+root from `person_unix_username`, so token names and the token file belong
+to the person. It never takes the person from the coding agent's checkout,
+it refuses a `project_name` other than letters, digits, `_` and `-`, and it
+reads the checkout's files as `coding-agent`. Reason: the command runs as
+root and the coding agent owns the checkout. A changed name or a symbolic
+link there could otherwise aim root's reads and writes at the person's own
+files or the desk's. The agent can put a key in, never reach the person's
+files. A test runs each command, on success and
 on failure, with a dummy secret, and checks that the secret appears
 nowhere in the output. The rule follows the desk's two other rules for the
 agent, `update-this-desks-wireguard-peers` and `run-mmx-on-the-servers`.

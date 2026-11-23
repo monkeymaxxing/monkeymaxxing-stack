@@ -24,7 +24,9 @@ import (
 // read. The command takes no path or setting from its caller, prints no
 // key, and reads none back: the agent can put a key in, never get one out.
 // It checks its arguments strictly before it reads standard input, and it
-// works for the person the desk's settings name, never for root.
+// works for the person the desk role names in a root-only file, never for
+// root. It reads the coding agent's checkout as the coding agent, so a
+// symbolic link there reaches nothing the coding agent cannot read itself.
 
 const fromTheCodingAgentCommand = "from-the-coding-agent"
 
@@ -125,25 +127,28 @@ func (e *environment) runForTheCodingAgent(command codingAgentCommand) error {
 	return fmt.Errorf("unknown command %q: %w", command.name, errUsage)
 }
 
-// becomeTheDesksPerson works for the person the desk's settings name, never
-// for root, which runs the command: the person's tokens carry the person's
-// name, and each file in the person's home stays the person's own.
+// deskPersonFile names the desk's person, written by the desk role as root.
+// Reason: the command runs as root for the coding agent, so it takes the
+// person's account from a file only root writes, never from the coding
+// agent's own checkout, where a changed name could aim root's writes at
+// another account's files.
+const deskPersonFile = "/etc/systems-desk/person-unix-username"
+
+// becomeTheDesksPerson works for the desk's person, never for root, which
+// runs the command: the person's tokens carry the person's name, and each
+// file in the person's home stays the person's own.
 func (e *environment) becomeTheDesksPerson() error {
-	settings, err := readSystemSettings(e.readRepositoryFile)
+	content, err := e.readRootFile(deskPersonFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("this systems desk has no %s, which names its person. Run the systems desk's playbook again: %v", deskPersonFile, err)
 	}
-	hostname, err := os.Hostname()
-	if err != nil {
-		return err
-	}
-	person, err := settings.deskPerson(hostname)
-	if err != nil {
-		return err
+	person := strings.TrimSpace(string(content))
+	if !unixUserNamePattern.MatchString(person) || contains(accountsThatMayNotRun, person) {
+		return fmt.Errorf("%s names %q, which is not a person's account", deskPersonFile, person)
 	}
 	account, err := user.Lookup(person)
 	if err != nil {
-		return fmt.Errorf("this systems desk has no account %s, the person_unix_username of its node in %s: %v", person, inventoryFile, err)
+		return fmt.Errorf("this systems desk has no account %s, the person %s names: %v", person, deskPersonFile, err)
 	}
 	uid, uidErr := strconv.Atoi(account.Uid)
 	gid, gidErr := strconv.Atoi(account.Gid)

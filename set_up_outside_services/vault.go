@@ -47,6 +47,7 @@ type mmxVault struct {
 // the desk's bootstrap makes (roles/systems_desk/files/start-the-systems-repository),
 // and the vault passphrase the bootstrap makes there, root:servers-mmx 0640.
 const (
+	codingAgentAccount      = "coding-agent"
 	codingAgentCheckout     = "/home/coding-agent/systems_repository"
 	deskVaultPassphraseFile = "/etc/systems-desk/vault-passphrase"
 )
@@ -223,7 +224,7 @@ var sudoProgram = "sudo"
 // file of the checkout runs here.
 func gitAsTheCodingAgent(directory string) func(arguments ...string) (string, error) {
 	return func(arguments ...string) (string, error) {
-		command := exec.Command(sudoProgram, append([]string{"-n", "-u", "coding-agent", "env", "-C", directory,
+		command := exec.Command(sudoProgram, append([]string{"-n", "-u", codingAgentAccount, "env", "-C", directory,
 			"HOME=/home/coding-agent", "SSH_AUTH_SOCK=/run/desk-ssh-agent/socket",
 			"GIT_CONFIG_SYSTEM=/etc/systems-desk/coding-agent-gitconfig", "git", "-c", "core.hooksPath=/dev/null"}, arguments...)...)
 		var output, errorOutput bytes.Buffer

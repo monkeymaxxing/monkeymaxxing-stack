@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -65,27 +66,51 @@ func TestTheCodingAgentsArgumentsAreCheckedBeforeStandardInput(t *testing.T) {
 	}
 }
 
-// The command runs as root and works for the person the desk's node names.
-func TestTheDesksPersonComesFromItsNodeInTheInventory(t *testing.T) {
-	settings := systemSettings{deskPersons: map[string]string{"desk01": "sam", "desk02": "root"}}
-	if person, err := settings.deskPerson("desk01.example.org"); err != nil || person != "sam" {
-		t.Errorf("desk01: %q, %v", person, err)
+// The command runs as root and works for the person the desk role names in a
+// root-only file, never for a name in the coding agent's own checkout.
+func TestTheDesksPersonComesFromTheRootOnlyFile(t *testing.T) {
+	h := newHarness(t, false, false)
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, hostname := range []string{"desk02", "desk03"} {
-		if _, err := settings.deskPerson(hostname); err == nil {
-			t.Errorf("%s: want a refusal", hostname)
+	h.e.person, h.e.home = "", ""
+	h.rootFiles[deskPersonFile] = current.Username + "\n"
+	if err := h.e.becomeTheDesksPerson(); err != nil || h.e.person != current.Username || h.e.home != current.HomeDir {
+		t.Fatalf("want the file's person %s, got %q at %q: %v", current.Username, h.e.person, h.e.home, err)
+	}
+	for _, named := range []string{"root\n", "coding-agent\n", "../etc\n", ""} {
+		h.rootFiles[deskPersonFile] = named
+		if err := h.e.becomeTheDesksPerson(); err == nil {
+			t.Errorf("%q: want a refusal", named)
 		}
 	}
-	h := newHarness(t, false, false)
-	writeFile(t, filepath.Join(h.e.directory, inventoryFile), "nodes:\n  desk01:\n    vars:\n      person_unix_username: sam\n")
-	read, err := readSystemSettings(h.e.readRepositoryFile)
-	if err != nil || read.deskPersons["desk01"] != "sam" {
-		t.Fatalf("the inventory's person was not read: %v, %v", read.deskPersons, err)
+	delete(h.rootFiles, deskPersonFile)
+	if err := h.e.becomeTheDesksPerson(); err == nil || !strings.Contains(err.Error(), deskPersonFile) {
+		t.Errorf("want a refusal without the file, got %v", err)
 	}
 	if os.Geteuid() != 0 {
 		if err := runFromTheCodingAgent([]string{"backblaze"}, failingReader{t}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "runs as root") {
 			t.Fatalf("want a refusal outside root, got %v", err)
 		}
+	}
+}
+
+// project_name becomes part of file names that root writes in the person's
+// home, so a name that could leave ~/.config/monkeymaxxing-stack is refused.
+func TestAProjectNameThatCouldLeaveItsFolderIsRefused(t *testing.T) {
+	h := newHarness(t, false, false)
+	path := filepath.Join(h.e.directory, projectSettingsFile)
+	original := mustRead(t, path)
+	for _, name := range []string{"../../../../etc/foo", "a/b", "..", "-a", "_a", "a b"} {
+		writeFile(t, path, strings.Replace(original, "project_name: acme_systems", "project_name: \""+name+"\"", 1))
+		if _, err := readSystemSettings(h.e.readRepositoryFile); err == nil || !strings.Contains(err.Error(), "project_name") {
+			t.Errorf("%q: want a refusal, got %v", name, err)
+		}
+	}
+	writeFile(t, path, original)
+	if _, err := readSystemSettings(h.e.readRepositoryFile); err != nil {
+		t.Fatalf("the template's project_name: %v", err)
 	}
 }
 

@@ -277,6 +277,17 @@ node_tasks:
     directory: {path: /var/lib/servers-mmx, owner: servers-mmx, group: servers-mmx, permissions_mode: "0700"}
   - id: create_the_buttons_settings_directory
     directory: {path: /etc/systems-desk, owner: root, group: root, permissions_mode: "0755"}
+  # The person's account name, root-owned, which set-up-outside-services
+  # from-the-coding-agent reads. Reason: that command runs as root for the
+  # coding agent, so it takes the person from a file only root writes, never
+  # from the coding agent's own checkout of the systems repository.
+  - id: write_the_persons_account_name_for_the_account_steps
+    file:
+      path: /etc/systems-desk/person-unix-username
+      content: "{{ .inputs.person_unix_username }}\n"
+      owner: root
+      group: root
+      permissions_mode: "0644"
   - id: create_the_persons_production_key
     ssh_key_pair:
       for_user_account: "{{ .inputs.person_unix_username }}"

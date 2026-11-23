@@ -58,7 +58,7 @@ Commands:
                                 the account (--account-id names it when the token reaches
                                 several), add your domain and copy its DNS records, give the
                                 account its workers.dev address, then make your systems
-                                systems desk's Cloudflare token (in the API proxy and your token
+                                desk's Cloudflare token (in the API proxy and your token
                                 file), the tunnels, the R2 buckets and keys, the
                                 MMHotline-down alarm's token, the status page and your own
                                 key for posting to it, and the One-time PIN login method;
@@ -381,12 +381,14 @@ func (e *environment) useTheCodingAgentsCheckout() {
 	e.inTheCodingAgentsCheckout = true
 }
 
-// readRepositoryFile reads a file of the systems repository, through sudo
-// in the coding agent's checkout.
+// readRepositoryFile reads a file of the systems repository. In the coding
+// agent's checkout it reads as the coding agent, through sudo. Reason: the
+// command may run as root, and the coding agent owns the checkout, so a
+// symbolic link there must reach only what the coding agent may read itself.
 func (e *environment) readRepositoryFile(name string) ([]byte, error) {
 	path := filepath.Join(e.directory, name)
 	if e.inTheCodingAgentsCheckout {
-		return e.readRootFile(path)
+		return readFileAsTheCodingAgent(path)
 	}
 	return os.ReadFile(path)
 }
@@ -394,7 +396,7 @@ func (e *environment) readRepositoryFile(name string) ([]byte, error) {
 // repositoryHas says whether the systems repository holds a file.
 func (e *environment) repositoryHas(name string) bool {
 	if e.inTheCodingAgentsCheckout {
-		return exec.Command("sudo", "-n", "test", "-e", filepath.Join(e.directory, name)).Run() == nil
+		return exec.Command("sudo", "-n", "-u", codingAgentAccount, "test", "-e", filepath.Join(e.directory, name)).Run() == nil
 	}
 	_, err := os.Stat(filepath.Join(e.directory, name))
 	return err == nil

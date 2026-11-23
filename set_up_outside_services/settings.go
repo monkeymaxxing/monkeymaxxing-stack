@@ -154,20 +154,12 @@ type inventorySettings struct {
 	Groups map[string]struct {
 		Nodes []string `yaml:"nodes"`
 	} `yaml:"groups"`
-	Nodes map[string]struct {
-		Vars struct {
-			PersonUnixUsername string `yaml:"person_unix_username"`
-		} `yaml:"vars"`
-	} `yaml:"nodes"`
 }
 
 // systemSettings is what the plans need, read and checked once.
 type systemSettings struct {
 	projectSettings
 	hasStagingServer bool
-	// deskPersons maps each systems desk's node name to its person's
-	// account name on the desk, vars.person_unix_username.
-	deskPersons map[string]string
 }
 
 const (
@@ -178,6 +170,11 @@ const (
 )
 
 var cloudflareAccountIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// projectNamePattern is the form of project_name. Reason: the name becomes
+// part of file names in the person's home, written as root for the coding
+// agent, so a slash or a dot-dot must never reach a path.
+var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 // readSystemSettings reads the settings with read, which reads a file of
 // the systems repository by its name there.
@@ -196,6 +193,9 @@ func readSystemSettings(read func(name string) ([]byte, error)) (systemSettings,
 	if settings.ProjectName == "" {
 		return settings, fmt.Errorf("%s has no project_name", projectSettingsFile)
 	}
+	if !projectNamePattern.MatchString(settings.ProjectName) {
+		return settings, fmt.Errorf("project_name in %s may hold only letters, digits, _ and -, starting with a letter or digit, such as example_systems", projectSettingsFile)
+	}
 	inventoryText, err := read(inventoryFile)
 	if err != nil {
 		return settings, err
@@ -205,28 +205,7 @@ func readSystemSettings(read func(name string) ([]byte, error)) (systemSettings,
 		return settings, fmt.Errorf("%s: %v", inventoryFile, err)
 	}
 	settings.hasStagingServer = len(inventory.Groups["staging_server"].Nodes) > 0
-	settings.deskPersons = map[string]string{}
-	for name, node := range inventory.Nodes {
-		if person := node.Vars.PersonUnixUsername; person != "" {
-			settings.deskPersons[name] = person
-		}
-	}
 	return settings, nil
-}
-
-// deskPerson is the person of the systems desk named hostname, its node's
-// person_unix_username. A desk's host name is its node's name, as the desk
-// role sets it.
-func (s systemSettings) deskPerson(hostname string) (string, error) {
-	node, _, _ := strings.Cut(hostname, ".")
-	person := s.deskPersons[node]
-	if person == "" {
-		return "", fmt.Errorf("%s names no person_unix_username for the node %s, this systems desk", inventoryFile, node)
-	}
-	if !unixUserNamePattern.MatchString(person) || contains(accountsThatMayNotRun, person) {
-		return "", fmt.Errorf("the person_unix_username of %s in %s is %q, which is not a person's account", node, inventoryFile, person)
-	}
-	return person, nil
 }
 
 // plainSetting refuses a value that is empty, still the template's example,

@@ -196,6 +196,14 @@ class TheDeskDoor(unittest.TestCase):
         self.assertIn('LoadCredential=desk-server-name:/etc/systems-desk/desk-server-name', (T/'roles/systems_desk/files/provider-api-proxy.service').read_text())
         self.assertIn('LoadCredential=desk-server-id:/etc/systems-desk/desk-server-id', (T/'roles/systems_desk/files/provider-api-proxy.service').read_text())
 
+    def test_the_persons_account_name_is_root_owned_for_the_account_steps(self):
+        # from-the-coding-agent runs as root and reads the person from here, never from the coding agent's checkout.
+        task = [task for _, task in self.tasks if task['path'].endswith('/write_the_persons_account_name_for_the_account_steps')][0]
+        fields = {argument['field']: argument['value'] for argument in task['arguments']}
+        self.assertEqual((fields['file.content'], fields['file.owner'], fields['file.group'], fields['file.path']),
+                         ('alex\n', 'root', 'root', '/etc/systems-desk/person-unix-username'))
+        self.assertIn('"/etc/systems-desk/person-unix-username"', (T.parents[2]/'set_up_outside_services/coding_agent.go').read_text())
+
     def test_the_coding_agent_may_run_only_its_own_account_steps_command_as_root(self):
         task = [task for _, task in self.tasks if task['path'].endswith('/allow_the_coding_agent_the_account_steps_command_through_sudo')][0]
         fields = {argument['field']: argument['value'] for argument in task['arguments']}
