@@ -146,11 +146,20 @@ The desk's buttons and services for `coding-agent`:
   (the next call resets its checkout).
 - **API proxy:** `http://127.0.0.1:8081/` (server provider, adding the
   person's token or signing requests for OVHcloud, AWS, or Google Cloud)
-  and `http://127.0.0.1:8082/` (Cloudflare). Never read the person's token
-  files.
+  and `http://127.0.0.1:8082/` (Cloudflare). Each port answers once its
+  own token exists: the provider's from chapter 3, Cloudflare's from
+  chapter 4. Never read the person's token files.
+- **Account commands:** `sudo -n /usr/local/bin/set-up-outside-services from-the-coding-agent COMMAND`
+  takes a key on standard input and saves it where it belongs:
+  `cloudflare`, `backblaze`, `save-a-key KEY` and `random-secrets`. You
+  pass the key from the person's clipboard or a laptop file the person
+  names, straight into the command, so you never see it
+  ([How a key reaches the desk](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#how-a-key-reaches-the-desk)).
+  The command prints no key and reads none back.
 
 The person logs in to the desk only for a few short laptop commands plus a
-phone code: `ssh desk01-secrets` for new secrets,
+phone code: `ssh desk01-lock` once during the setup, `ssh desk01-secrets`
+for new secrets,
 `ssh -t desk01 sudo lock-everyone-out` for a break-in lock-out, and
 `ssh desk01-review` to manage the desk itself:
 
@@ -260,11 +269,13 @@ button only after the next `ssh desk01-review`.
   upgrade Debian in place via apt sources.
 - **Every configured production secret lives in the vault,** `secrets_vault.age`,
   MMHotline's included: never in another repo file, commit message, image,
-  or log. The person types each secret once at a hidden prompt of
-  `set-up-outside-services` on the desk (`ssh desk01-setup` during initial
-  setup, `ssh desk01-secrets` later, or
+  or log. Each key reaches the vault through `set-up-outside-services` on
+  the desk, which generates random keys and commits and pushes the vault:
+  during initial setup you pass each key from the person's clipboard or a
+  laptop file straight to its account command; later the person types it
+  at a hidden prompt (`ssh desk01-secrets`, or
   `ssh -t desk01 set-up-outside-services secrets --replace KEY` for a
-  rotation), which generates random keys and commits and pushes the vault
+  rotation)
   ([Secrets in chapter 3](initial_setup/03_make_your_server_account_and_your_systems_desk.md#secrets)).
 
   You never open or print secrets: no `mmx secrets edit` or `mmx secrets show`,
@@ -357,7 +368,8 @@ windows that disagree cost the person a refused tool call and a question.
   after it, and never only in a tool call's description or summary.
 - **Start the wait first, in the background.** While the person works in
   their terminal, wait only on a result you can read:
-  `ssh desk01-agent wait-for-the-setup --at-most-minutes 60`,
+  `ssh desk01-agent wait-for-the-setup --at-most-minutes 60` for the lock
+  window,
   `ssh desk01-agent wait-for-a-desk-job NAME --at-most-minutes 60`, or the
   file a laptop script writes. Start the wait as a background command (in
   Claude Code, run-in-background), then write the screen and end your turn.
@@ -371,9 +383,9 @@ windows that disagree cost the person a refused tool call and a question.
   the result (done, failed, or still waiting), giving a failed background
   command the same plain failure line before any retry.
 - Never ask the person to say "done" for a result your wait reads (the key
-  file, `desk-ready`, `wait-for-the-setup`, or a job's exit). Ask for
-  "done" only when nothing you can read shows the result (such as a
-  website-only step), and say so.
+  file, `wait-for-the-setup`, or a job's exit). Ask for "done" only when
+  nothing you can read shows the result (such as a website-only step, or
+  a key's paste window), and say so.
 - **An agent with no background commands** ends its turn with the screen
   and asks the person to say "done" when their window shows the result,
   then runs the same wait in the foreground (which ends at once).
@@ -381,7 +393,7 @@ windows that disagree cost the person a refused tool call and a question.
   end your turn with one line saying what you still wait for. When a wait
   ends with a stop, say in one plain sentence what stopped and what
   happens next (`wait-for-the-setup` prints the stop reason, including if
-  `go-live` refused before its first screen).
+  the lock window refused before its first screen).
 
 Reason: the person reads only the text ending your reply, and a background
 wait keeps the chat free for screens and questions.

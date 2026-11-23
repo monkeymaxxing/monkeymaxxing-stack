@@ -245,12 +245,13 @@ vars:
       staging_env:
         APP_ORIGIN: https://staging.shop.example.com
       # Each environment variable the app reads from the vault, and where
-      # its value comes from. set-up-outside-services go-live makes each one
-      # with generated_by_the_setup without a question: a random value, or
-      # for the two R2 key variables below, the key it makes at Cloudflare.
-      # It asks for each one from an_outside_service on its own screen, with
-      # what_it_is_for and steps_to_get_it, and checks it when checked_with
-      # names a service it knows (stripe).
+      # its value comes from. The setup makes each one with
+      # generated_by_the_setup without a question: a random value, or for
+      # the two R2 key variables below, the key it makes at Cloudflare. For
+      # each one from an_outside_service, the coding agent shows the person
+      # what_it_is_for and steps_to_get_it, and the person copies the key;
+      # set-up-outside-services checks it when checked_with names a service
+      # it knows (stripe).
       secrets_from_vault:
         SECRET_KEY_BASE:
           where_the_value_comes_from: generated_by_the_setup

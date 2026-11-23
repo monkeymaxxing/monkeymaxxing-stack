@@ -161,8 +161,7 @@ inventory's real names and addresses, and the next unused desk name.
     and render lines: `first_boot=/tmp/desk02-first-boot.yml`, the `trap`
     line, which clears the file also after a refused request, the create
     command with `--server-name desk02` and the lost desk's
-    `wireguard_public_key`, and the last line, which makes
-    `~/example-setup/desk-ordered`.
+    `wireguard_public_key`.
     Record the new public address as `desk02.vars.public_ipv4_address`
     and the returned `id` as `desk02.vars.provider_server_id` (at OVHcloud
     and Google Cloud, also the receipt's service or instance name as
@@ -171,7 +170,7 @@ inventory's real names and addresses, and the next unused desk name.
     holds its ID, and the first-boot file is empty.
 11. **Write the laptop's way in,** as chapter 3's step 3 says, with
     `desk02` in place of `desk01` in every name: `desk02.conf`, the SSH
-    entries `desk02`, `desk02-agent`, `desk02-setup`,
+    entries `desk02`, `desk02-agent`, `desk02-lock`,
     `desk02-secrets` and `desk02-review`, and
     `~/.ssh/desk02_known_hosts`. Use the lost desk's
     `wireguard_public_key` and the new public address. Delete the

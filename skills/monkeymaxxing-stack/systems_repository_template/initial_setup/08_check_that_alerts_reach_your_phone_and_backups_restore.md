@@ -227,7 +227,7 @@ You do the rest. It takes about 15 minutes.
      and gives MMWatchdog's fleet hub no push destination.
 
    Leave `triage_agent` and `status_page` out: parts 3 and 4 add them.
-   `go-live` already saved the MMHotline-down alarm's Cloudflare token in
+   The desk's `cloudflare` account command already saved the MMHotline-down alarm's Cloudflare token in
    the vault. Check with `mmx validate`, then publish the change with the
    [Making a change](../AGENTS.md#making-a-change) steps.
 
@@ -592,7 +592,7 @@ command on the desk, looks at the page, and resolves one test notice.
     the company's name from chapter 1. The page is public, so it gets no
     Access application. Publish the change.
 
-    When an app keeps uploads, `go-live` turned R2 on already. Otherwise
+    When an app keeps uploads, R2 is on already, from chapter 4. Otherwise
     check R2 through the API proxy
     (`GET http://127.0.0.1:8082/accounts/ACCOUNT_ID/r2/buckets`).
 

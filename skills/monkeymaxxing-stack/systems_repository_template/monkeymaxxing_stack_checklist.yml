@@ -816,7 +816,7 @@ items:
     verification: >-
       a person logged in as root at one server's provider console with the
       shared root console password (the recovery bundle's item, which
-      go-live made; after a rotation, the password manager item "Shared
+      the lock window, ssh desk01-lock, made; after a rotation, the password manager item "Shared
       root console password"). Every server
       has the password hash from vault key shared_root_console_password_hash,
       applied on every MMX run. SSH refuses the console password. The

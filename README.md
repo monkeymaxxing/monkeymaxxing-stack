@@ -402,8 +402,9 @@ risk.
 - **Malware or a thief copying your laptop's files.** Your production keys and passwords are never on your laptop. They live on your systems desk, a small separate server that only you can log in to, so the laptop holds nothing worth stealing.
 - **A stolen or lost laptop.** A login to your systems desk needs a code from your phone.
 - **Your secrets reaching your AI provider.** Your coding agent uses your
-  keys without ever seeing them. You type each secret at a hidden prompt,
-  never in the chat.
+  keys without ever seeing them. You copy a key, and your agent passes it
+  straight from your clipboard to your systems desk. A key never goes in
+  the chat.
 - **Clumsy mistakes,** your own or your agent's. Risky changes show you what
   will change first, and you type `yes`.
 - **Attackers from outside.** Your servers talk over a private network, and
@@ -432,8 +433,8 @@ end of each part what is done and what is left:
 | Part | What you do | What your agent does |
 | --- | --- | --- |
 | **1. Your app** (about 5 minutes) | Approve your agent's changes to your app, once | Gets your app ready to deploy |
-| **2. Your accounts** (about 25 minutes) | Make 3 accounts: your server provider, Cloudflare, and Backblaze for the backups. Paste a key from each, and one from GitHub, one screen at a time. Approve the real monthly price. If your domain does not point at Cloudflare yet, change one setting at your domain's registrar | Checks each key with its company at once, builds your systems desk, a small server of your own that holds your keys and secrets so neither your laptop nor your agent holds them, orders your servers right after your yes so the price holds, and sets up everything else at each company |
-| **3. Your keys locked away** (about 3 minutes) | Save one recovery passphrase, and scan one code with your phone | Locks your systems desk |
+| **2. Your accounts** (about 25 minutes) | Tell your agent which accounts you have already: your server provider, Cloudflare, Backblaze for the backups, and GitHub. Make the missing ones, and copy a key from each, one account at a time. Keys you have saved already work too. Approve the real monthly price. If your domain does not point at Cloudflare yet, change one setting at your domain's registrar | Checks each key with its company at once, builds your systems desk, a small server of your own that holds your keys and secrets so neither your laptop nor your agent holds them, orders your servers right after your yes so the price holds, and sets up everything else at each company |
+| **3. Your keys locked away** (about 5 minutes) | In one window: save a console password and one recovery passphrase, and scan one code with your phone | Locks your systems desk |
 | **4. Your servers** (about 40 minutes) | Nothing. Your laptop may sleep | Installs everything on your servers, backs up your data, and proves a restore |
 | **5. Live** (about 15 minutes) | Nothing | Tells you the moment your site is up, then puts your app's newest version live |
 
@@ -553,8 +554,9 @@ in Codex.
   asks for your domain and your server provider, then shows you what it
   will set up and what it costs.
 
-  Your agent never asks you to paste a secret into the chat: you type each
-  secret at a hidden prompt that checks it. When your agent needs your
+  Your agent never asks you to paste a secret into the chat: you copy each
+  key, and your agent passes it straight to your systems desk, which
+  checks it. When your agent needs your
   systems desk, it asks for one code from your phone, in the chat.
 - **Later,** in the same agent on your laptop: "Review my system", "Deploy
   shop to production", "We have paying customers now: what should

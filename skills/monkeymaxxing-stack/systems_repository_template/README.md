@@ -271,9 +271,9 @@ measured warning or an event:
 
 The setup comes in five parts, about an hour and a half in all, and needs you for
 about 20 minutes, mostly at the start: **Your app** (you approve the
-changes to your app), **Your accounts** (you make 3 accounts and paste a
-key from each, plus one from GitHub, and approve the real price), **Your keys locked away** (you save one
-passphrase and scan one code with your phone), **Your servers** (nothing
+changes to your app), **Your accounts** (you say which accounts you have,
+make the missing ones, copy a key from each, and approve the real price), **Your keys locked away** (you save a
+console password and one passphrase, and scan one code with your phone), **Your servers** (nothing
 for you), and **Live**. Phone alerts follow in about 15 minutes, and,
 when you want them, an agent that answers alerts before they reach you, a
 status page for your customers, and a written guide to running your
@@ -328,8 +328,9 @@ example:
 
 Your coding agent explains each action, checks the current state, and
 follows the operating procedure for the job. Never paste a secret into the
-conversation. Your coding agent tells you where to type each secret: a
-hidden prompt of a short command, such as `ssh desk01-secrets`, which logs in to your systems desk. When your
+conversation. Your coding agent tells you how each secret reaches your systems desk: you copy it and type
+`copied`, and your coding agent passes it straight from your clipboard; or you type it at a hidden prompt of a
+short command, such as `ssh desk01-secrets`, which logs in to your systems desk. When your
 coding agent needs your systems desk, it asks for one code from your phone, in the
 chat.
 

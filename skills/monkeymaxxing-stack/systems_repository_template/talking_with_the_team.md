@@ -121,7 +121,7 @@ tells the person nothing.
   | ghcr.io | "GitHub, where your app's image is kept" |
   | CI | "the automatic tests at GitHub" the first time; "the tests at GitHub" after |
   | operating procedure, before it is explained | "the tested steps for that job" |
-  | `desk01-setup`, `desk01-agent` outside a command the person types | "the window where you typed the key"; "my login on your systems desk" |
+  | `desk01-lock`, `desk01-agent` outside a command the person types | "the window that locks your keys away"; "my login on your systems desk" |
   | restore drill, before it is explained | "prove a restore", "the restore test" |
   | restore test, before it is explained | "the restore test, a check that your backups really restore" |
   | Containerfile, Dockerfile | "the file that says how your app is packaged for the servers" |
@@ -202,9 +202,12 @@ in the checklist as `state: deviated`, with `deviation:` saying what
 differs and why.
 
 Never ask the person to put a secret in the chat, because the chat is
-stored at the coding agent's provider. Tell the person where to type the
-secret instead: a hidden prompt of a `set-up-outside-services` command on
-the desk, such as `ssh desk01-secrets`, or the password manager. Never ask
+stored at the coding agent's provider. Ask the person to copy the secret
+and type `copied`, and pipe the clipboard straight to the desk's account
+command; or pass it from a laptop file the person names; or give a hidden
+prompt of a `set-up-outside-services` command on the desk, such as
+`ssh desk01-secrets`
+([How a key reaches the desk](initial_setup/04_set_up_your_accounts_and_lock_your_desk.md#how-a-key-reaches-the-desk)). Never ask
 the person to paste a secret into a file with an editor.
 
 ## During work
@@ -330,8 +333,8 @@ is separate: "your systems desk, a small server of your own that holds your
 production keys and secrets, so neither your laptop nor I ever hold them; I
 work through it". Later, "your systems desk, the small server that holds
 your keys" or "your systems desk" is enough. Host names and commands keep
-their names (`desk01`, `ssh desk01-setup`); where a command first appears,
-say what it reaches ("`ssh desk01-setup` logs in to your systems desk").
+their names (`desk01`, `ssh desk01-lock`); where a command first appears,
+say what it reaches ("`ssh desk01-lock` logs in to your systems desk").
 
 | Term | Explanation |
 | --- | --- |
@@ -341,13 +344,13 @@ say what it reaches ("`ssh desk01-setup` logs in to your systems desk").
 | Token file | The person's private file on the desk, `~/.config/monkeymaxxing-stack/<project_name>.env`, written by `set-up-outside-services` and never read by the coding agent. |
 | Recovery passphrase | The six words in the team's password manager that open `recovery_bundle.age`, the encrypted bundle holding everything a lost systems desk needs. |
 | Phone code | The 6-digit single-use code from the person's authenticator app that opens the systems desk for the person or the coding agent. |
-| `set-up-outside-services` | The desk command for outside-company accounts, secrets, and missing vault keys, started from the laptop (such as `ssh desk01-setup` or `ssh desk01-secrets`). |
+| `set-up-outside-services` | The desk command for outside-company accounts, secrets, and missing vault keys. The coding agent runs its account commands through `ssh desk01-agent`, with each key piped from the person's clipboard or a laptop file; the person runs it from the laptop with `ssh desk01-lock` or `ssh desk01-secrets`. |
 | Desk review | The person's run of `ssh desk01-review`, which applies `playbooks/systems_desk.yml` as root after showing any changes since the last review and waiting for `yes`. |
 | Coding agent account | The `coding-agent` Unix account on the desk that the laptop's coding agent reaches through `ssh desk01-agent`. |
 | Button | A desk command or local service that uses a protected credential for the coding agent without exposing the credential. |
 | API proxy | The desk service that injects or signs API credentials for the coding agent on `127.0.0.1:8081` (server provider) and `127.0.0.1:8082` (Cloudflare) ([Your login on the desk](AGENTS.md#your-login-on-the-desk)). |
 | Desk token | The person's Cloudflare token on their systems desk (created by `set-up-outside-services cloudflare`, used by the API proxy, unable to create tokens). |
-| Link token | The temporary Cloudflare token the person creates from the printed link; `set-up-outside-services cloudflare` uses it to mint the needed tokens and then deletes it. |
+| Link token | The temporary Cloudflare token the person creates from the link the coding agent gives; `set-up-outside-services cloudflare` uses it to mint the needed tokens and then deletes it. |
 | Lock-out button | `ssh -t desk01 sudo lock-everyone-out`, run only by a person in narrow break-in cases ([The lock-out: only for these cases](operating_procedures/respond_to_a_break_in.md#the-lock-out-only-for-these-cases)). It cuts off every other desk, `util01`, and the triage agent while keeping access on the desk that keeps access. |
 | Undo a lock-out | Restore access to every desk, `util01`, and the triage agent by removing `everyone_locked_out_except_desk` and running the lock-out button again. Say "undo", never "reverse". |
 | Desk that keeps access | During a lock-out, the one desk named in `everyone_locked_out_except_desk` where the person and coding agent keep working. |

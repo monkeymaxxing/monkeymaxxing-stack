@@ -4729,15 +4729,94 @@ sends the newest changes to the bucket about once a minute.
 
 ## Account and secret setup from the systems desk
 
-The person makes the accounts, approves the costs, and enters a secret only
-where a service offers no other way. One Stack command does the rest of the
-account and secret work: `set-up-outside-services`, a Go program in the
-Stack repository's `set_up_outside_services/`. The desk role installs it on
-every systems desk from its pin, `stack_software.set_up_outside_services`.
-The person runs it in their own desk login, each command through one short
-entry on the laptop, such as `ssh desk01-setup` for `go-live` and
-`ssh desk01-secrets` for `secrets`, or `ssh -t desk01 set-up-outside-services
-COMMAND`. The person keeps no checkout on the desk. `go-live` works in the desk's one working copy,
+The person makes the accounts that are missing, approves the costs, and
+gives a key only where a service offers no other way. One Stack command
+does the rest of the account and secret work: `set-up-outside-services`, a
+Go program in the Stack repository's `set_up_outside_services/`. The desk
+role installs it on every systems desk from its pin,
+`stack_software.set_up_outside_services`.
+
+**The coding agent leads the accounts; small commands do the fixed work.**
+During the setup the coding agent asks which accounts the person has
+already, and takes each account from where the person stands: no account
+yet, an account with a saved key, an account without a key, or an account
+set up differently than the plan, such as a Backblaze account in another
+region. Then it runs one small command per account, with the key on
+standard input. Reason, from the first real setup with existing
+accounts (2026-11-23): the whole point of having a coding agent is that
+it can work with the person's current setup. The earlier
+design, one program, `go-live`, walking fixed screens, treated every
+account as new: it told a person who had every account, with the keys
+saved on the laptop, to sign up at Backblaze again and to make a new
+master key, which would have stopped the old one. A fixed program cannot
+adapt to a person's situation; the agent can, and the part that must be
+exact stays in Go.
+
+**How a key reaches the desk without reaching the agent.** A key never
+goes into the chat, because the chat goes to the company that runs the
+agent. The agent pipes it instead: from the laptop's clipboard, after the
+person copies the key and types `copied`, straight into
+`ssh desk01-agent sudo -n /usr/local/bin/set-up-outside-services from-the-coding-agent COMMAND`,
+with no terminal on the desk's side, and empties the clipboard when the
+pipe ends, also when it fails; or from a laptop file the person names,
+listing only the variable names and passing the named values with shell
+tracing off. The agent never runs a clipboard command on its own, because
+its output would enter the conversation. When the agent cannot read the
+clipboard, such as on a Linux laptop without `wl-paste` or `xclip`, the
+person runs the same account's person-mode command in a window of their
+own, `ssh -t desk01 set-up-outside-services COMMAND`, and pastes the key at
+its hidden prompt. The clipboard comes first and the window is the
+backup: copying keeps the person in the chat, and the window works
+everywhere.
+
+**The sudo rule: the agent can put a key in, never get one out.**
+`coding-agent ALL=(root) NOPASSWD: /usr/local/bin/set-up-outside-services from-the-coding-agent *`.
+The command checks its arguments strictly against the four commands below
+and refuses anything else before it reads standard input. It takes no
+path or setting from the caller, prints no key, reads none back, and cuts
+every provider error to its status and code. It takes the person from
+`vars.person_unix_username`, not from the caller, so token names and the
+token file belong to the person. A test runs each command, on success and
+on failure, with a dummy secret, and checks that the secret appears
+nowhere in the output. The rule follows the desk's two other rules for the
+agent, `update-this-desks-wireguard-peers` and `run-mmx-on-the-servers`.
+
+| Agent-mode command | Standard input | What it does |
+| --- | --- | --- |
+| `backblaze` | Line 1 the keyID, line 2 the applicationKey | `backblaze`'s work below. When the account's region differs from `vars.backups.b2_s3_endpoint`, it saves nothing, writes the account's endpoint and region to the results file, and stops; the agent explains the choice, writes the setting on the person's choice, and sends the key again. It keeps the backup bucket's write key in a root-only file, `/var/lib/monkeymaxxing-stack/backup_write_key_until_the_bundle_is_uploaded`, until the lock uploads the recovery bundle |
+| `cloudflare`, with `--account-id ID` when the token reaches several accounts | Line 1 the link token | Finds the account (several: stops and lists them), adds the domain, has Cloudflare copy the DNS records, gives the account its workers.dev address, checks that R2 is on while an app keeps uploads (off: stops with R2's price), then `cloudflare`'s work below. Writes the account ID, the nameservers, the registrar and the DNSSEC state to the results file |
+| `save-a-key KEY` | Line 1 the key | Saves one key only a person can give: `container_registry_read_only_token` (checked to hold only `read:packages`, to end in 30 days or more or never, and to read the app's image) or an app key from `an_outside_service` (checked at Stripe with `checked_with: stripe`). Refuses any other KEY |
+| `random-secrets` | Nothing | Makes every random vault secret, except the console password |
+
+Every agent-mode command runs as root, commits and pushes the vault when
+it ends, copies each recovery item into the recovery bundle as it makes
+the item, and writes its step into
+`/var/lib/monkeymaxxing-stack/setup_results.json` (0644): each step's
+state, `stopped_with`, and `for_the_coding_agent`, the values that are
+not secrets. Exit 0 means done, 1 stopped. Because each command commits
+the vault, the agent can publish its own settings between commands.
+
+**The lock is the person's one window.** `set-up-outside-services
+lock-the-desk`, through `ssh desk01-lock`, shows only what the person
+alone may see: the shared root console password (shown once, typed back;
+its hash goes to the vault, the password to the bundle), the recovery
+passphrase (shown once, typed back), and the phone code through
+`sudo -n set-up-the-phone-code --emergency-codes-to PATH`. Then it checks
+that the recovery bundle holds every item and refuses with the missing
+names otherwise, uploads the bundle's copy into the locked backup bucket
+with the kept write key, deletes that key's file, and commits and pushes.
+Its last screen says the desk is locked only when `/etc/systems-desk/locked`
+exists and the before-the-lock root login file is gone; otherwise it says
+the coding agent locks the desk next, because the lock stage runs after
+it. The agent says what the window shows before the person opens it, and
+waits for it with `wait-for-the-setup`.
+
+**Person mode stays.** `backblaze`, `cloudflare` and `secrets` keep their
+hidden prompts for the person: the paste window during the setup, a key
+rotation, and a joining teammate. They do the same work as agent mode;
+only the input differs.
+
+The person keeps no checkout on the desk. Every command works in the desk's one working copy,
 the coding agent's checkout `/home/coding-agent/systems_repository`, which
 the person's account reaches only through `sudo -n`. It runs MMX as root,
 which opens the vault with the desk's `/etc/systems-desk/vault-passphrase`
@@ -4749,9 +4828,13 @@ Reason: the passphrase never passes through a process of `coding-agent`'s,
 which the coding agent could read, and never through a file in the
 person's home.
 
+The commands below are the person-mode forms and the work each one does;
+the agent-mode commands above do the same work with the key on standard
+input.
+
 | Command | What it does |
 | --- | --- |
-| `set-up-outside-services go-live` | The first part of the setup, on the desk, one screen at a time in the four-part form: Cloudflare (the link token; it finds the account, adds the domain, has Cloudflare copy the DNS records from the current nameservers, gives the account its workers.dev address, then does `cloudflare`'s work; with an app that keeps uploads, one more step turns R2 on, with its price, and the run waits until R2 is on), the domain's registrar (the two nameservers; the registrar's name and DNSSEC state from the registry's RDAP service; it waits for Enter), Backblaze (the master key; then `backblaze`'s work), the registry's read-only token at ghcr.io (checked to never end, to hold only `read:packages`, and to read the app's image), each app secret from `an_outside_service` on its own screen (checked at Stripe with `checked_with: stripe`), every other vault secret without a question, then the lock: the recovery passphrase, shown once and typed back, and the phone code through `sudo -n set-up-the-phone-code --emergency-codes-to PATH`. Each value is checked with its service at once; a refused value is asked again with the service's reason. It commits and pushes the vault, then the recovery bundle, and copies the bundle into the locked backup bucket. Its last screen says the desk is locked only when `/etc/systems-desk/locked` exists and the before-the-lock root login file is gone; otherwise it says the coding agent locks the desk next, because the lock stage runs after it. `/var/lib/monkeymaxxing-stack/setup_results.json` (0644) names each step's state and the values the coding agent needs that are not secrets; a rerun continues where a run stopped |
+| `set-up-outside-services lock-the-desk` | The lock window, above: the console password, the recovery passphrase, the phone code, and the recovery bundle's check, upload and push. A rerun continues at its first step that is not done |
 | `set-up-outside-services backblaze`, with `--replace-key VAULT_KEY` for a rotation and `--delete-the-old-keys-at-once` after a break-in, as for `cloudflare` | Takes the B2 account's master key at two hidden prompts. Creates every bucket the system uses, sets each bucket's Object Lock and lifecycle rule, checks each lock with a test file, makes each server's key with exactly the capabilities below, and saves each key into the vault |
 | `set-up-outside-services cloudflare` | Takes the link token, the one token the person makes by hand from a prepared link, at a hidden prompt. With it, makes the person's desk token and writes it into the API proxy and the token file; with the desk token, creates the tunnels, the apps' R2 buckets (with `staging01`, each app's staging bucket too), and, through `mmhotline status-page set-up`, the status page's bucket, host name, and rule; with the link token, makes the servers' account-owned tokens and R2 keys below and saves them into the vault, and makes the person's own posting key for the status page and writes it into the token file; with a short-lived token it deletes at once, adds the One-time PIN login method when missing and, with `staging01`, makes staging's Access service token, whose two values go into the token file. Before it makes anything, it sets the link token to end by itself after 24 hours, and it deletes the link token when it ends, after a failure too. While the status page's domain is not Active at Cloudflare, it skips the status page and its two keys, says so, and finishes the rest; a rerun adds them |
 | `set-up-outside-services cloudflare --replace-key NAME` (repeatable) or `--replace-every-key`, with `--delete-the-old-keys-at-once` after a break-in | Makes a new key for each named one and saves it where the old one was (the vault, the API proxy, or the token file). A key the servers use keeps its old key until the servers' run passed and the person presses Enter; the at-once flag deletes it without waiting. A tunnel gets a new secret; staging's service token gets a new secret with the same ID |
@@ -4760,9 +4843,10 @@ person's home.
 | `set-up-outside-services personal-token staging-access` | Takes staging's Access service token from the password manager at two hidden prompts, on a desk whose token file lacks it, and writes it into the token file |
 | `set-up-outside-services personal-token server-provider --server-listing-path PATH` | Takes the person's server provider token at a hidden prompt, checks it at the provider, only at a provider guide's own API address, named before the prompt, then writes it into the API proxy's file, its only place on the desk, restarts the proxy, and checks a request through it. For a provider whose API signs each request (`systems_desk_provider_api_authentication: ovhcloud_signed_requests`), it takes each of the credential's values at its own prompt, checks them with a signed listing, writes the API proxy's credential file, restarts that proxy, and checks the listing through it |
 
-**Why go-live works the way it does.** The screens are the product: the
-person reads only what to do, so each provider's step-by-step lines run
-quietly and an error stops the run with its reason. The recovery bundle,
+**The recovery bundle stays whole.** Each command copies its items into
+the bundle as it makes them, and the lock refuses to finish while an item
+is missing. Reason: with the accounts split over several commands, a
+bundle written at the end could miss an item without warning. The recovery bundle,
 `recovery_bundle.age`, is an MMX vault file of its own, made with
 `mmx secrets set --vault`, encrypted with six words from the BIP39 list (66
 bits; age's scrypt makes guessing a copy at the Git host or Backblaze too
@@ -4772,10 +4856,12 @@ emergency codes, the server provider credential, the desk's Cloudflare
 token, the restore drill's read-only Backblaze key, the backups' passphrase
 (no backup can be read without it), and staging's Access service token with
 `staging01`. The Backblaze master key is never stored, the bundle included.
-The passphrase is made at the run's start and kept in a 0600 file in the
-person's home until the bundle is pushed, so a secret that exists nowhere
-else, such as the console password, goes into the bundle when it is made and
-a rerun loses nothing. util01 gets the desk's own provider credential,
+The bundle's passphrase is made when the first command opens the bundle,
+and kept in a root-only file until the lock pushes the bundle, so a secret
+that exists nowhere else goes into the bundle when it is made, and a
+rerun loses nothing. The Backblaze command keeps the backup bucket's
+write key until the lock has uploaded the bundle's copy, so the person
+never gives the master key twice. util01 gets the desk's own provider credential,
 because providers such as Hetzner make tokens only on their website. Turning
 R2 on asks for a card at Cloudflare's checkout, so the Cloudflare screen
 states R2's price from Cloudflare's pricing page before the person approves
@@ -4807,9 +4893,10 @@ is made, because a typed random value is a chance for a weak or reused
 one. An unknown key the playbooks read is listed, not made: the step
 cannot know whether it is random.
 
-**What the command never does.** It never runs as `coding-agent`,
-`servers-mmx`, or root (it refuses), so the coding agent never sees a key.
-It keeps each master credential in memory for the run only and never saves
+**What the command never does.** In person mode it never runs as
+`coding-agent`, `servers-mmx`, or root (it refuses). In agent mode it runs
+as root only through the sudo rule above, so the coding agent puts a key
+in and never sees one. It keeps each master credential in memory for the run only and never saves
 it. It never puts a secret in a process argument, a file of the
 repository, or its output: values go to `mmx secrets set` on standard
 input, and an error message holds only the provider's status, code, and
@@ -4914,7 +5001,8 @@ Reasons for each list:
 **Cloudflare.** The person makes one token by hand, the link token, from a
 link that fills in its one permission, Account API Tokens Edit, and its
 name ([token template URLs](https://developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/)),
-and enters it at the command's hidden prompt. Only a hand-made token can
+and copies it for the agent to pipe to the desk, or pastes it at the
+command's hidden prompt. Only a hand-made token can
 make tokens: Cloudflare refuses a token made through the API that holds
 Account API Tokens Write ("sub-token is not allowed to have permissions to
 manage other tokens", tested at Cloudflare). The command
@@ -5113,13 +5201,19 @@ nginx once included; the format stayed so that a desk review needs to
 rewrite no token file. For a provider whose API signs each request, the
 same step writes the proxy's credential file instead, restarts the proxy,
 and checks the listing through it, again putting the old file back on any
-failure ("The API proxy" below). The proxy starts once every file
-its unit hands it exists: Cloudflare's, and the provider's token file or
-credential file. While one is missing, the step writes its file, says which
-file the proxy waits for, and skips the check through the proxy.
+failure ("The API proxy" below). The proxy runs as two services, one per port:
+`provider-api-proxy.service` on 8081 starts once the provider's token
+file or credential file exists, and `cloudflare-api-proxy.service` on 8082
+once `/etc/systems-desk/cloudflare-api-token.conf` exists. Writing a token
+file restarts only its own service. Reason: systemd stops a whole unit
+when one of its credential files is missing, so one unit for both ports
+served neither until Cloudflare's token existed, and the three servers,
+created right after the desk, could not be created at the provider (a
+real setup, 2026-11-23).
 
-**Recovery items.** `go-live` puts every recovery item into the recovery
-bundle at the lock, so no command shows recovery items one by one. The procedures send one item of
+**Recovery items.** The account commands and the lock put every recovery
+item into the recovery bundle, so no command shows recovery items one by
+one. The procedures send one item of
 the bundle straight to a program with `mmx secrets pipe-to`, or print it to
 the person's own terminal with `mmx secrets show`, which refuses to print
 anywhere but a terminal ("Read an item from the recovery bundle" in the
@@ -5128,8 +5222,8 @@ never edits a file.
 
 **What stays a website step, and why:**
 
-- Making each account, choosing B2's region, approving a cost, and the
-  two-step sign-in: the person's identity and money.
+- Making each missing account, choosing B2's region, approving a cost,
+  and the two-step sign-in: the person's identity and money.
 - The B2 master key and the Cloudflare link token: something must
   authorize the command, and neither company offers another way. A
   Cloudflare token made through the API cannot make tokens.
@@ -5652,7 +5746,7 @@ prints a line at least once a minute, so the person sees progress, and
 ends after 9 minutes by default with its own exit code (124), before Claude
 Code's 10-minute command limit. The job's exit code passes through; 125
 means the exit file holds no number. The wait reads only `~/runs/NAME.log`
-and `NAME.exit`. `wait-for-the-setup` reads `go-live`'s results file, and a
+and `NAME.exit`. `wait-for-the-setup` reads the setup's results file, and ends when the lock window finished; a
 stop counts only when the file was written after the wait started, because
 an earlier run's `stopped_with` stays until the next run's first write.
 Reason: in a newcomer test the agent wrote 25 polling loops, and one
@@ -5718,8 +5812,9 @@ protection on the desk exists for one of five things:
   They live on the desk, so the laptop holds nothing worth stealing.
 - **A secret reaching the agent's conversation.** What the agent reads goes
   to the company that runs it. So the agent uses the keys through the desk
-  and never sees them. The person types each secret at a hidden prompt, and
-  no command the agent runs prints one.
+  and never sees them. Each key goes from the person's clipboard or a
+  laptop file straight to a desk command, or the person types it at a
+  hidden prompt, and no command the agent runs prints one.
 - **Clumsy mistakes.** For example, a cleanup that deletes the desk itself,
   a typo that cuts the person's laptop off, or a screen that says "locked"
   when the desk is not.
@@ -5800,8 +5895,8 @@ the person's production key, the vault passphrase `/etc/systems-desk/vault-passp
 `/home/coding-agent/systems_repository` with its first commit (`start-the-systems-repository`), the first
 desk review recorded without a question, and the coding agent's door. Its normal end prints "The desk is
 ready." and the production public key. Reason: before the lock, root SSH from the laptop works, so the
-agent does every desk step itself, and the person's part is the accounts and the lock in
-`ssh desk01-setup`. The first desk review is recorded without a question because the person has nothing
+agent does every desk step itself, and the person's part is the accounts, led by the agent in the chat, and
+the lock in `ssh desk01-lock`. The first desk review is recorded without a question because the person has nothing
 to compare it with, and the bootstrap ran this very desk playbook from the same repository.
 
 **A desk that joins a team's repository,** a new member's or a rebuilt one, gets a copy of the laptop's clone
