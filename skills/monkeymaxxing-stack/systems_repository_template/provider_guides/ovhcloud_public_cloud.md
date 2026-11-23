@@ -38,9 +38,20 @@ Two things to know about a VPS:
 - **It is billed by the month,** so a VPS for a server that lives for
   minutes, such as `restore01`, costs a whole month.
 - **Only the person can end it.** Ending a VPS takes a token that OVHcloud
-  emails to the account's admin contact. Your destroy script requests the
-  termination (`POST /vps/NAME/terminate`) and tells the person to confirm
-  it from that email; it never reports the server as gone.
+  emails to the account's admin contact. Your destroy and power-off
+  scripts refuse a VPS's ID and never act on a VPS. To end one, you
+  request the termination from the desk (`POST /vps/NAME/terminate`
+  through the API proxy) and tell the person to confirm it from that
+  email; the VPS counts as gone only once the list script no longer
+  shows it.
+- **The inventory names it.** A VPS lives outside the Public Cloud
+  project, so each VPS node records its VPS service name, such as
+  `vps-77f3667b.vps.ovh.us`, as `vars.provider_server_name` in
+  `inventories/servers.yml`. The list script lists the account's VPS
+  servers whose service name the inventory records, under their inventory
+  names, and no other VPS of the account. Reason: the restore drill and
+  the leftover check refuse a list without `util01`, and a VPS the
+  inventory does not name is not this system's.
 
 **Stock:** the public, credential-free
 `GET https://api.us.ovhcloud.com/1.0/vps/order/rule/datacenter?ovhSubsidiary=US&planCode=PLAN`
@@ -105,7 +116,8 @@ after the person approves the price:
    password. After the reboot, public TCP 22 is closed and the server has
    joined WireGuard, as on a Public Cloud instance (confirmed on a real
    rebuilt VPS, 2026-11-23). Then record the server in the inventory as
-   usual.
+   usual, with its VPS service name, `NAME` above, as
+   `vars.provider_server_name`.
 5. Wait for the new server's login over WireGuard with a check that says
    what it waits for, never a bare timer. For the systems desk, say in one
    line "I wait for your systems desk to finish its first start and open
@@ -141,7 +153,11 @@ them: `create_a_server_at_the_provider` turns a VPS's server type into a
 Public Cloud flavor at least as large, as its script below says. After
 the repair, recommend moving the replacement back to a VPS with
 [Replace a server](../operating_procedures/replace_a_server.md): it is
-permanent now.
+permanent now. The failed VPS itself stays at OVHcloud, billed each
+month: its node leaves the inventory, so the list script stops showing it
+and `destroy_replaced_servers` counts it as gone. Tell the person in one
+line that the failed VPS still runs, and end it with them as
+[Two things to know about a VPS](#vps-or-public-cloud-by-how-long-the-server-stays) says.
 
 ## OVHcloud Europe: what differs
 
@@ -284,7 +300,7 @@ and the triage agent's server replacements run the same scripts there, with `pow
 link, with the narrower rules `util01` needs:
 
 ```text
-https://api.us.ovhcloud.com/createToken/?GET=/cloud/project/PROJECT_ID/*&POST=/cloud/project/PROJECT_ID/instance&POST=/cloud/project/PROJECT_ID/instance/*&DELETE=/cloud/project/PROJECT_ID/instance/*
+https://api.us.ovhcloud.com/createToken/?GET=/cloud/project/PROJECT_ID/*&POST=/cloud/project/PROJECT_ID/instance&POST=/cloud/project/PROJECT_ID/instance/*&DELETE=/cloud/project/PROJECT_ID/instance/*&GET=/vps&GET=/vps/*
 ```
 
 On that page too the person types the OVHcloud login and password, because the page ignores a signed-in
@@ -294,12 +310,17 @@ form in the vault as `util01_provider_api_token`. The restore drill and the left
 key to the scripts as `SERVER_PROVIDER_API_TOKEN`, so `util01` needs no other setting and no program beyond
 Debian's `curl` and `sha1sum` and the Stack's `jq`.
 
-| Methods | Paths under `/cloud/project/PROJECT_ID` | Why `util01` needs them |
+| Methods | Paths | Why `util01` needs them |
 | --- | --- | --- |
-| GET | `/*` | List servers, keys, flavors and images; the price script reads a flavor's plan codes |
-| POST | `/instance` | Create a server |
-| POST | `/instance/*` | Start, stop or reboot a server, for the triage agent's replacements |
-| DELETE | `/instance/*` | Delete a server |
+| GET | `/cloud/project/PROJECT_ID/*` | List servers, keys, flavors and images; the price script reads a flavor's plan codes |
+| POST | `/cloud/project/PROJECT_ID/instance` | Create a server |
+| POST | `/cloud/project/PROJECT_ID/instance/*` | Start, stop or reboot a server, for the triage agent's replacements |
+| DELETE | `/cloud/project/PROJECT_ID/instance/*` | Delete a server |
+| GET | `/vps` and `/vps/*` | The list script lists the system's VPS servers, `util01` among them, with their state and address. Reads only: `util01` never changes or ends a VPS |
+
+A `util01` credential made from the earlier link, without the two `/vps` rules, fails the list script with
+HTTP 403 on `GET vps` once the inventory records a VPS. The person makes a new one from the link above and
+replaces it as this section's last paragraphs say, with `set-up-outside-services secrets --replace util01_provider_api_token`.
 
 The price script reads OVHcloud's public order catalog, outside the project, without the credential, so
 `util01`'s credential needs no rule for it. `util01`'s credential cannot register SSH keys: the coding agent registers `util01`'s key from the desk
@@ -309,14 +330,14 @@ of the path, several segments deep (a credential with `POST /cloud/project/PROJE
 `POST /cloud/project/PROJECT_ID/instance/ID/stop` on a real project, 2026-11-12). DELETE permits removing any server of the project, so keep other systems in
 other projects.
 
-**Proved at OVHcloud: the weekly restore drill, and `util01`'s four access rules.** On 2026-11-13, in
+**Proved at OVHcloud: the weekly restore drill, and `util01`'s four project access rules.** On 2026-11-13, in
 `US-EAST-VA-1`, a `util01` of type `d2-4` ran the real weekly restore drill against a real system's backups at
 Backblaze B2. The drill made and destroyed `restore01` by itself and passed: 3 minutes 59 seconds from the
 drill's start to its end, `restore_duration_seconds` 218, `util01` created in 57 seconds, the destroy 16
 seconds, and no instance, volume, snapshot or address left. The desk's server work through the API proxy is
 proved on a real OVHcloud project too: list, create with first-boot data, stop, start, delete.
 
-The same day a credential with exactly this guide's four rules (its `GET /auth/currentCredential` answer showed
+The same day a credential with exactly the four project rules above (its `GET /auth/currentCredential` answer showed
 those four rules and no expiry) was enough for everything `util01` does: the list script, the create with
 first-boot data (56 seconds), the power-off, `POST /instance/ID/stop` (16 seconds, `stopped`), the destroy (15
 seconds), and the whole weekly restore drill, which passed (`restore_duration_seconds` 206) and left no
@@ -341,7 +362,7 @@ and the person deletes the old application. When a person leaves, the person who
 person's application by its name on the same page; `util01`'s credential keeps working.
 
 A person can also end a credential at once, without the Control Panel: `POST /auth/logout`, signed with that
-credential, makes OVHcloud refuse it. The call needs no access rule, so `util01`'s four rules already cover it,
+credential, makes OVHcloud refuse it. The call needs no access rule, so `util01`'s rules already cover it,
 and it answers HTTP 200 with `null`. Proved on 2026-11-13: one request right after the call still worked, and
 about 20 seconds later every call answered HTTP 403 with "This credential is not valid". The application's
 entry stays on the **API keys** page until the person deletes it there, so delete it too.
@@ -440,11 +461,41 @@ after them say why.
 
 ```bash
 # One request lists the whole project: v1 pages an answer only when asked.
-ovhcloud_request GET "cloud/project/$ovhcloud_project_id/instance" |
-  jq '{servers: [.[] | {id, name,
+instances=$(ovhcloud_request GET "cloud/project/$ovhcloud_project_id/instance" |
+  jq '[.[] | {id, name,
         public_ipv4_address: ([.ipAddresses[]? | select(.version == 4 and .type == "public") | .ip][0] // ""),
-        power_state: ({"ACTIVE": "running", "SHUTOFF": "stopped"}[.status] // .status)}]}'
+        power_state: ({"ACTIVE": "running", "SHUTOFF": "stopped"}[.status] // .status)}]')
+# A VPS lives outside the project. List each VPS of the account whose service
+# name a node records as vars.provider_server_name, under that node's name;
+# the account's other VPS servers are not this system's.
+[ -f inventories/servers.yml ] || { echo "no inventories/servers.yml here: run this script from the systems repository's root" >&2; exit 1; }
+recorded=$(awk '
+  /^nodes:/ { in_nodes = 1; next }
+  /^[^ #]/ { in_nodes = 0 }
+  in_nodes && /^  [^ #][^ ]*:[ ]*$/ { node = $1; sub(/:$/, "", node) }
+  in_nodes && /^      provider_server_name:/ {
+    value = $0; sub(/^ *provider_server_name: */, "", value); sub(/ *#.*$/, "", value); gsub(/"/, "", value)
+    if (value != "") print value "\t" node
+  }' inventories/servers.yml)
+vps_servers='[]'
+if [ -n "$recorded" ]; then
+  account_vps=$(ovhcloud_request GET vps)
+  while IFS=$'\t' read -r service_name node; do
+    jq -e --arg s "$service_name" 'any(.[]; . == $s)' <<< "$account_vps" > /dev/null || continue
+    # A VPS's state is running or stopped, or OVHcloud's own word, such as rebooting.
+    state=$(ovhcloud_request GET "vps/$service_name" | jq -r .state)
+    address=$(ovhcloud_request GET "vps/$service_name/ips" | jq -r '[.[] | select(test("^[0-9.]+$"))][0] // ""')
+    vps_servers=$(jq -c --arg id "$service_name" --arg n "$node" --arg a "$address" --arg s "$state" \
+      '. + [{id: $id, name: $n, public_ipv4_address: $a, power_state: $s}]' <<< "$vps_servers")
+  done <<< "$recorded"
+fi
+jq -n --argjson i "$instances" --argjson v "$vps_servers" '{servers: ($i + $v)}'
 ```
+
+A VPS's `id` in the list is its service name. `GET /vps/NAME/ips` lists the
+VPS's addresses, IPv4 and IPv6; the script takes the IPv4 one. A real
+setup's restore drill refused before the VPS part was added: its `util01`
+was a VPS, and the project's list did not hold it (2026-11-23).
 
 The create script, `create_a_server_at_the_provider`, does these things in order:
 
@@ -549,6 +600,9 @@ while [ $# -gt 0 ]; do
   esac
   shift 2
 done
+case "$server_id" in
+  *.vps.ovh.*) echo "$server_id is an OVHcloud VPS: this script never ends one; only the person can, as the provider guide says" >&2; exit 1 ;;
+esac
 p="cloud/project/$ovhcloud_project_id"
 listing=$(ovhcloud_request GET "$p/instance")
 if [ -n "$server_id" ]; then
@@ -591,6 +645,9 @@ while [ $# -gt 0 ]; do
   shift 2
 done
 [ -n "$server_id" ] || { echo "give --server-id" >&2; exit 2; }
+case "$server_id" in
+  *.vps.ovh.*) echo "$server_id is an OVHcloud VPS: this script never powers one off" >&2; exit 1 ;;
+esac
 p="cloud/project/$ovhcloud_project_id"
 status_of() {  # status_of: the server's OVHcloud status from a whole listing, or nothing when it is not listed
   ovhcloud_request GET "$p/instance" | jq -r --arg i "$server_id" '[.[] | select(.id == $i) | .status][0] // empty'

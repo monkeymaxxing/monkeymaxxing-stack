@@ -47,6 +47,8 @@ class StandIn:
     def __init__(self):
         self.catalog_requests = []
         self.instances, self.lose_the_next_create_answer, self.refusals = [], False, []
+        # The account's VPS servers, by service name, outside the project.
+        self.vps = {}
         stand_in = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -80,6 +82,16 @@ class StandIn:
                             or self.headers.get('X-Ovh-Signature') != '$1$' + hashlib.sha1(signed.encode()).hexdigest()):
                         stand_in.refusals.append('%s %s' % (method, path))
                         return self.answer(400, {'message': 'Invalid signature'})
+                vps_route = path.split('?')[0].split('/')
+                if method == 'GET' and vps_route[0] == 'vps':
+                    if len(vps_route) == 1:
+                        return self.answer(200, sorted(stand_in.vps))
+                    vps = stand_in.vps.get(vps_route[1])
+                    if vps is None:
+                        return self.answer(404, {'message': 'not found'})
+                    if vps_route[2:] == ['ips']:
+                        return self.answer(200, ['2001:db8::77', vps['ip']])
+                    return self.answer(200, {'name': vps_route[1], 'state': vps['state']})
                 project = 'cloud/project/%s/' % PROJECT
                 if not path.startswith(project):
                     return self.answer(403, {'message': 'This call has not been granted'})
@@ -152,6 +164,8 @@ class OVHcloudProviderScripts(unittest.TestCase):
         self.addCleanup(self.stand_in.close)
         self.directory = Path(tempfile.mkdtemp(dir=os.environ.get('TMPDIR')))
         self.addCleanup(shutil.rmtree, self.directory)
+        (self.directory/'inventories').mkdir()
+        self.write_inventory('')
         function, scripts = guide_blocks()
         self.assertEqual(sorted(scripts), ['create_a_server_at_the_provider', 'destroy_a_server_at_the_provider',
                                            'list_the_servers_at_the_provider', 'power_off_a_server_at_the_provider',
@@ -167,12 +181,24 @@ class OVHcloudProviderScripts(unittest.TestCase):
             (self.directory/name).write_text(text)
             (self.directory/name).chmod(0o755)
 
+    def write_inventory(self, util01_vars):
+        """The systems repository's inventory, from whose root the scripts run."""
+        (self.directory/'inventories/servers.yml').write_text(
+            'vars:\n  wireguard_network: 10.20.0.0/16\n\nnodes:\n'
+            '  desk01:\n    address: 127.0.0.1\n    vars:\n'
+            '      # Its name at the provider (an OVHcloud VPS service name); "" when the provider uses the ID.\n'
+            '      provider_server_name: ""\n'
+            '  util01:\n    address: 10.20.0.1\n    vars:\n      public_ipv4_address: 192.0.2.77\n' + util01_vars +
+            '  db01:\n    address: 10.20.2.1\n    vars:\n'
+            '      provider_server_name: "vps-gone0000.vps.ovh.us"   # ended, no longer in the account\n'
+            '\ngroups:\n  util_server:\n    nodes: [util01]\n')
+
     def run_script(self, bash, name, *arguments, signed=False, token=None):
         env = {'PATH': os.environ['PATH'], 'HOME': str(self.directory), 'TMPDIR': str(self.directory)}
         if signed:
             env['SERVER_PROVIDER_API_TOKEN'] = token or '%s:%s:%s' % (APPLICATION_KEY, APPLICATION_SECRET, CONSUMER_KEY)
         return subprocess.run([bash, str(self.directory/name), *arguments], text=True, capture_output=True, env=env,
-                              stdin=subprocess.DEVNULL, timeout=120)
+                              stdin=subprocess.DEVNULL, timeout=120, cwd=self.directory)
 
     def create(self, bash, name, signed, receipt):
         first_boot = self.directory/('first-boot-' + name)
@@ -242,6 +268,34 @@ class OVHcloudProviderScripts(unittest.TestCase):
                     by_name = self.run_script(bash, 'power_off_a_server_at_the_provider', '--server-name', 'app001', signed=signed)
                     self.assertEqual(by_name.returncode, 2, 'a name is never enough to cut power')
                     self.assertEqual(self.stand_in.refusals, [])
+
+    def test_the_list_holds_the_vps_servers_the_inventory_names_and_never_acts_on_one(self):
+        self.write_inventory('      provider_server_name: "vps-77f3667b.vps.ovh.us"\n')
+        self.stand_in.vps = {'vps-77f3667b.vps.ovh.us': {'state': 'running', 'ip': '192.0.2.77'},
+                             'vps-0ther000.vps.ovh.us': {'state': 'running', 'ip': '192.0.2.99'}}
+        for bash in bash_programs():
+            for signed in (False, True):
+                with self.subTest(bash=bash, signed=signed):
+                    self.stand_in.instances.clear()
+                    self.create(bash, 'restore01', signed, self.directory/'receipt.json')
+                    servers = self.servers(bash, signed)
+                    # util01 by its inventory name, with the VPS service name as its ID; another
+                    # VPS of the account, which the inventory does not name, stays out.
+                    self.assertEqual([(s['name'], s['id'], s['public_ipv4_address'], s['power_state']) for s in servers if s['name'] != 'restore01'],
+                                     [('util01', 'vps-77f3667b.vps.ovh.us', '192.0.2.77', 'running')])
+                    self.assertEqual(len(servers), 2)
+                    for script in ('destroy_a_server_at_the_provider', 'power_off_a_server_at_the_provider'):
+                        refused = self.run_script(bash, script, '--server-id', 'vps-77f3667b.vps.ovh.us', signed=signed)
+                        self.assertEqual((refused.returncode, refused.stdout), (1, ''), script)
+                        self.assertIn('is an OVHcloud VPS', refused.stderr)
+                    self.assertIn('vps-77f3667b.vps.ovh.us', self.stand_in.vps)
+                    self.assertEqual(self.stand_in.refusals, [])
+
+    def test_the_list_refuses_outside_the_systems_repository(self):
+        (self.directory/'inventories/servers.yml').unlink()
+        result = self.run_script(bash_programs()[0], 'list_the_servers_at_the_provider')
+        self.assertEqual((result.returncode, result.stdout), (1, ''))
+        self.assertIn('run this script from the systems repository', result.stderr)
 
     def test_a_lost_create_answer_finds_the_one_new_server_and_never_posts_again(self):
         for bash in bash_programs():
