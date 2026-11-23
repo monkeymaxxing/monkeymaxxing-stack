@@ -24,6 +24,54 @@
 # waiting every_server would be refused as busy, and every_server would
 # remove the runtime peer for restore01.
 fleet_stages:
+  # The drill restores the backup bucket as it stood when the drill started,
+  # and a database server sends its newest changes to the bucket only about
+  # once a minute (archive_timeout = 60, roles/database_server). A drill
+  # started right after an app's first migrations restored a copy without
+  # the apps' tables, and its check queries failed (a test system on
+  # 2026-11-18, and a team's real first drill on 2026-11-23). So before
+  # every drill the primary closes its current write-ahead log segment
+  # (pg_switch_wal) and waits until Postgres has archived that segment
+  # (pg_stat_archiver): archive_command pushes each segment to the bucket
+  # before it reports the segment archived. A replica archives nothing.
+  # The wait is bounded at 5 minutes, fixed: pushing one segment takes
+  # seconds, so a segment not archived after 5 minutes means archiving is
+  # failing, and the drill stops there with a plain message, before it
+  # creates anything.
+  - id: push_the_newest_database_changes
+    nodes: database_servers
+    on_node_failure: stop_run
+    node_tasks:
+      - id: archive_the_current_write_ahead_log_segment
+        shell:
+          script: |
+            set -euo pipefail
+            ask_postgres() {
+              "/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/psql" --no-psqlrc --tuples-only --no-align \
+                --port 5432 --dbname postgres --command "$1"
+            }
+            if [ "$(ask_postgres 'select pg_is_in_recovery()')" = t ]; then
+              echo "This server is a replica; the primary sends the changes."
+              exit 0
+            fi
+            # The segment that holds every change made until now. With no change
+            # since the last switch, it is the last segment, archived already.
+            segment=$(ask_postgres 'select pg_walfile_name(pg_switch_wal())')
+            for ((waited = 0; waited < 300; waited += 5)); do
+              archived=$(ask_postgres "select coalesce(last_archived_wal, '') from pg_stat_archiver")
+              # Segment names sort in the order Postgres writes them.
+              if [[ ! "$archived" < "$segment" ]]; then
+                echo "The write-ahead log segment $segment is in the backup bucket."
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Postgres did not archive the write-ahead log segment $segment to the backup bucket within 5 minutes (last archived: ${archived:-none}), so the drill stopped before it created anything. Archiving is failing: read pg_stat_archiver's failed_count and last_failed_wal on this server and its pgBackRest log." >&2
+            exit 1
+          dryrun: printf 'would archive the current write-ahead log segment of the primary before the drill\n'
+          run_as_user_account: postgres
+          env:
+            POSTGRESQL_MAJOR_VERSION: "{{ .vars.postgresql_major_version }}"
   - id: restore_and_check_the_backups
     nodes: util_server
     on_node_failure: stop_run

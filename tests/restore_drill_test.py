@@ -159,8 +159,9 @@ else: sys.exit('unexpected command '+name)
 '''
 
 
-def shell_script():
+def shell_script(task='create_restore_check_and_destroy_the_owned_server'):
     text = SOURCE.read_text()
+    text = text[text.index('      - id: ' + task):]
     body = re.search(r'          script: \|\n(.*?)          dryrun:', text, re.S)[1]
     return '\n'.join(line[12:] for line in body.splitlines())
 
@@ -530,27 +531,60 @@ class ScheduledServerSettingsComparison(unittest.TestCase):
                 # Without a trusted commit the job never takes the lock.
                 self.assertEqual(any(c[0]=='flock' and c[-1]=='9' for c in commands),'MERGE_BASE_EXIT' in settings)
 
-class TheFirstDrillReadsTheNewestChanges(unittest.TestCase):
-    """2026-11-18 on a test system: every_server started the first drill seconds
-    after the app's first migrations, before their write-ahead log reached the
-    bucket, and the drill reads the bucket as it stood at its start. The
-    restored copy had no app tables, and the check queries failed."""
+class EveryDrillReadsTheNewestChanges(unittest.TestCase):
+    """2026-11-18 on a test system and 2026-11-23 at a team's real first drill:
+    the drill started right after the app's first migrations, before their
+    write-ahead log reached the bucket, and the drill reads the bucket as it
+    stood at its start. The restored copy had no app tables, and the check
+    queries failed. A once-only push at the first every_server run did not
+    cover a drill whose migrations came in a later run."""
 
-    def test_the_primary_pushes_its_write_ahead_log_just_before_the_first_drill_starts(self):
-        playbook = (TEMPLATE/'playbooks/every_server.yml').read_text()
-        stages = re.findall(r'(?m)^  - id: (\S+)', playbook)
-        self.assertEqual(stages[-2:], ['push_the_newest_database_changes_before_the_first_restore_drill',
-                                       'start_the_restore_drill_until_one_has_passed'])
-        push = playbook[playbook.index('  - id: push_the_newest_database_changes_before_the_first_restore_drill'):
-                        playbook.index('  - id: start_the_restore_drill_until_one_has_passed')]
-        self.assertIn('nodes: database_servers', push)
-        # pgBackRest's check switches to a new segment of the write-ahead log and
-        # waits until that segment is in the bucket; a replica archives nothing.
-        self.assertIn('pg_is_in_recovery()', push)
-        self.assertIn('pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main check', push)
-        self.assertIn('run_as_user_account: postgres', push)
-        self.assertIn('run_only_once_marker_file: /var/lib/mmx/commands_run_once/', push)
+    def run_push(self, archived_answers, in_recovery='f'):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root/'answers').write_text('\n'.join(archived_answers) + '\n')
+            fake = root/'psql'
+            # Answers each query as Postgres would: the switched segment, then
+            # pg_stat_archiver's last archived segment, one line per call.
+            fake.write_text('#!/bin/bash\nquery="${@: -1}"\necho "$query" >> "%s/queries"\n'
+                            'case "$query" in\n  *pg_is_in_recovery*) echo %s ;;\n'
+                            '  *pg_switch_wal*) echo 000000010000000000000007 ;;\n'
+                            '  *pg_stat_archiver*) head -n 1 "%s/answers"; tail -n +2 "%s/answers" > "%s/rest" || true; mv "%s/rest" "%s/answers" ;;\nesac\n'
+                            % ((root, in_recovery) + (root,) * 5))
+            fake.chmod(0o755)
+            script = shell_script('archive_the_current_write_ahead_log_segment')
+            script = script.replace('"/usr/lib/postgresql/$POSTGRESQL_MAJOR_VERSION/bin/psql"', str(fake)).replace('sleep 5', 'sleep 0')
+            result = subprocess.run(['bash', '-c', script], text=True, capture_output=True, env=dict(os.environ, POSTGRESQL_MAJOR_VERSION='18'))
+            queries = (root/'queries').read_text().splitlines()
+            return result, queries
 
+    def test_the_primary_archives_its_newest_segment_before_the_drill_creates_anything(self):
+        stages = re.findall(r'(?m)^  - id: (\S+)', SOURCE.read_text())
+        self.assertEqual(stages, ['push_the_newest_database_changes', 'restore_and_check_the_backups'])
+        stage = SOURCE.read_text().split('  - id: restore_and_check_the_backups')[0]
+        self.assertIn('nodes: database_servers', stage)
+        self.assertIn('on_node_failure: stop_run', stage)
+        self.assertIn('run_as_user_account: postgres', stage)
+        result, queries = self.run_push(['000000010000000000000006', '000000010000000000000006', '000000010000000000000007'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('000000010000000000000007 is in the backup bucket', result.stdout)
+        self.assertEqual(sum('pg_switch_wal' in query for query in queries), 1)
+        self.assertEqual(sum('pg_stat_archiver' in query for query in queries), 3, 'it waits until the switched segment is archived')
+
+    def test_a_replica_archives_nothing(self):
+        result, queries = self.run_push([], in_recovery='t')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any('pg_switch_wal' in query for query in queries))
+
+    def test_archiving_that_never_catches_up_stops_the_drill_with_a_plain_message(self):
+        result, queries = self.run_push(['000000010000000000000006'] * 100)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('did not archive the write-ahead log segment 000000010000000000000007', result.stderr)
+        self.assertIn('within 5 minutes', result.stderr)
+        self.assertEqual(sum('pg_stat_archiver' in query for query in queries), 60, '5 minutes of tries every 5 seconds')
+
+    def test_every_server_keeps_no_once_only_push(self):
+        self.assertNotIn('push_the_newest_database_changes', (TEMPLATE/'playbooks/every_server.yml').read_text())
 
 if __name__ == '__main__':
     unittest.main()

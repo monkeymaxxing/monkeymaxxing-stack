@@ -105,6 +105,14 @@ waits to run again. The next drill also refuses a leftover server.
   `cleanup_failure_reason`. The drill fails its service, and does not run
   again: remove the leftover as
   [Remove a leftover restore server](#remove-a-leftover-restore-server) says.
+- **The drill stopped before it created anything,** at fleet stage
+  `push_the_newest_database_changes`: the journal says the primary did not
+  archive its write-ahead log segment within 5 minutes. Archiving is
+  failing, so the backups miss the newest changes. `latest_result.json`
+  still holds the drill before, with its older `started_at`. Read
+  `pg_stat_archiver`'s `failed_count` and `last_failed_wal` on the primary
+  and its pgBackRest log, fix the cause, then
+  [start a drill now](#start-or-stop-a-drill-now).
 - **The drill failed.** A failure gives `attempt_dir` for recovery. Name
   the cause only from the drill's own record: the journal's line
   `restore drill failed at fleet stage ...` names the failed fleet stage
@@ -174,16 +182,24 @@ ordinary agent runs.
 
 The drill does these steps by itself:
 
-1. Refuse an existing `restore01` at the provider or in the inventory,
+1. Make the primary database server send its newest changes to the
+   bucket (fleet stage `push_the_newest_database_changes`): it closes
+   its current write-ahead log segment with `pg_switch_wal()` and waits,
+   up to 5 minutes, until `pg_stat_archiver` shows that segment archived.
+   Reason: the drill restores the bucket as it stood at the drill's start,
+   and the primary otherwise sends its changes only about once a minute,
+   so a drill right after an app's first migrations restored a copy
+   without the app's tables.
+2. Refuse an existing `restore01` at the provider or in the inventory,
    or any member of `database_restore_servers`.
-2. Generate `restore01`'s WireGuard key pair in memory on `util01`.
+3. Generate `restore01`'s WireGuard key pair in memory on `util01`.
    Use `render_server_first_boot` to render first-boot data with
    the inventory's `vars.restore01_private_ip` and only `util01`
    as a peer. Create `restore01` with the team's provider script, the
    database servers' size and location, and the utility server's SSH key.
    The create script records the accepted server ID before waiting for
    provisioning. Pass the private key once in first-boot data and keep no copy.
-3. Make a temporary project copy outside the working repository. Add
+4. Make a temporary project copy outside the working repository. Add
    `restore01` with `address` and `private_ip` from `vars.restore01_private_ip`, the
    setup-generated public key, and the provider's `public_ipv4_address`.
    Add `restore01` as a runtime peer on `util01` through root SSH in the MMX drill, retaining
@@ -191,14 +207,14 @@ The drill does these steps by itself:
    WireGuard and save the known-hosts line only in the temporary copy.
    Run `restore_database --var restore_mode=copy_on_restore01 --var server_name=restore01
    --var recover_to=latest --var read_backup_bucket_as_of=DRILL_START_TIME`.
-4. Run every app's `restore_drill_check_queries`; every query must answer
+5. Run every app's `restore_drill_check_queries`; every query must answer
    true. Measure the duration until the queries answer and the age of the
    newest restored transaction at drill start. A null transaction-age
    measurement means no replayed transaction supplied a measurement.
-5. Compare one eligible uploaded file per app byte for byte between R2 and
+6. Compare one eligible uploaded file per app byte for byte between R2 and
    B2 as B2 stood at drill start. Eligible files were unchanged before the
    last passed uploads copy. An empty eligible set is reported explicitly.
-6. After success, failure, or a handled stop, remove only the runtime
+7. After success, failure, or a handled stop, remove only the runtime
    peer with the recorded `restore01` public key from `util01` through root SSH in the MMX drill.
    Destroy only the server ID in the create receipt. Remove temporary
    inventory and host keys after provider destruction succeeds. A
