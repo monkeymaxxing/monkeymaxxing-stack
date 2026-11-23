@@ -24,7 +24,7 @@ import (
 // server-provider replaces it, after the new token passed a check, so the
 // old token keeps working until the new one is known to work. The
 // Cloudflare token goes into the proxy and the person's token file; set-up-
-// outside-services cloudflare and go-live make it.
+// outside-services cloudflare makes it.
 
 const writeProxyFileCommand = "write-api-token-proxy-file"
 

@@ -429,11 +429,11 @@ func runBackblaze(e *environment, arguments []string) error {
 		e.say("checks each lock with a test file, makes each server's key with only the access it needs, and saves every key straight into the vault.")
 		e.say("Your master key stays in this command's memory and is never saved. Nobody else sees it, your coding agent included.")
 		e.say("")
-		keyID, err := e.prompt("Backblaze master key's keyID (hidden): ")
+		keyID, err := e.prompt("Paste your Backblaze keyID (hidden): ")
 		if err != nil {
 			return "", err
 		}
-		applicationKey, err := e.prompt("Backblaze master key's applicationKey (hidden): ")
+		applicationKey, err := e.prompt("Paste your Backblaze applicationKey (hidden): ")
 		if err != nil {
 			return "", err
 		}

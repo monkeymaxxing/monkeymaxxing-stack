@@ -162,15 +162,15 @@ Open a new terminal window and type:
   ssh -t desk01 set-up-outside-services backblaze
 
 It logs in to your systems desk and asks for your Backblaze keys.  Paste each one there.  The applicationKey stays hidden.
-When it says  Saved.  Go back to your coding agent,  tell me "done" here.
+When the window says what it made and ends, tell me "done" here.
 ```
 
-The window shows only the prompts and one result line:
+The window shows the prompts, then a few lines about what the command
+made, such as the buckets and keys, and ends:
 
 ```text
-Paste your Backblaze keyID:
+Paste your Backblaze keyID (hidden):
 Paste your Backblaze applicationKey (hidden):
-Saved.  Go back to your coding agent.
 ```
 
 The window's command for each key: `cloudflare` for the Cloudflare
