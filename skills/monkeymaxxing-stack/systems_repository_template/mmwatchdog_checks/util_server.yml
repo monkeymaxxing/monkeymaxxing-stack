@@ -130,8 +130,11 @@ check_groups:
   # Caddy, update themselves and need no check. A pin whose download_url is
   # not a GitHub release gets no check; the comment below names it, and the
   # scheduled software review covers it when the team turns the review on.
-  # codex is checked only while triage_agent_coding_agent is codex, and
-  # rclone only while
+  # codex gets no check: its pin follows the Codex version the pinned
+  # MMHotline release was tested with, so it moves with a Stack upgrade, and
+  # a newer Codex alone is nothing a person acts on (Codex releases several
+  # times a week; a team's real setup got a warning minutes after setup,
+  # 2026-11-23). rclone is checked only while
   # backups.uploads_backup_runs_on names util01, because only then does the
   # system install the program.
   #
@@ -152,9 +155,9 @@ check_groups:
   # check_every 1h by default. Reason: a release an hour late changes
   # nothing. GitHub allows 60 requests an hour from one address without a
   # sign-in; each program costs 2 requests an hour (its check and
-  # release_sources_answer), so the template's 6 checked programs (7 with
-  # codex) make 12 (14) requests an hour, 48 (46) under the limit; when
-  # every request fails and is tried 3 times, 36 (42). Each further pinned
+  # release_sources_answer), so the template's 6 checked programs make 12
+  # requests an hour, 48 under the limit; when every request fails and is
+  # tried 3 times, 36. Each further pinned
   # program adds 2, or 6 when every request fails.
   # time_limit_per_run 5m: release_sources_answer asks every source in turn,
   # at most 40 seconds each.
@@ -205,7 +208,7 @@ check_groups:
 {{- $checked_programs := dict }}
 {{- range $program, $release := .inputs.stack_software }}
 {{- $installed := true }}
-{{- if eq $program "codex" }}{{ $installed = eq $.inputs.triage_agent_coding_agent "codex" }}{{ end }}
+{{- if eq $program "codex" }}{{ $installed = false }}{{ end }}
 {{- if eq $program "rclone" }}{{ $installed = not (empty $.inputs.backups.uploads_backup_runs_on) }}{{ end }}
 {{- if eq $program "doubleshell" }}{{ $installed = false }}{{ end }}
 {{- if $installed }}

@@ -7,8 +7,8 @@ The checks are written in mmwatchdog_checks/util_server.yml from
 stack_software in mmx_project_settings.yml. This file proves:
   - the real every_server playbook passes the inputs, and util01 gets one
     check per downloaded program that the settings install: every
-    downloaded_binary entry of software_outside_the_distribution.yml, codex
-    only while triage_agent_coding_agent is codex, rclone only while the
+    downloaded_binary entry of software_outside_the_distribution.yml except
+    codex, whose pin follows MMHotline's, and rclone only while the
     uploads' copy runs on util01; a pin that is not a GitHub release gets
     no check;
   - each generated script against a stand-in GitHub API: a newer release
@@ -153,14 +153,13 @@ class PinnedProgramReleases(unittest.TestCase):
 
     def test_util01_gets_one_check_per_downloaded_program_that_its_settings_install(self):
         checks, _ = self.util01_checks([('  triage_agent_coding_agent: claude_code', '  triage_agent_coding_agent: codex')])
-        self.assertEqual(self.programs(checks), sorted(downloaded_programs()))
+        self.assertEqual(self.programs(checks), sorted(set(downloaded_programs()) - {'codex'}))
         self.assertIn('release_sources_answer', checks)
 
-    def test_codex_is_checked_only_while_the_triage_agent_runs_codex(self):
-        checks, _ = self.default_checks
-        self.assertEqual(self.programs(checks), sorted(set(downloaded_programs()) - {'codex'}))
-        checks, _ = self.util01_checks([('  triage_agent_coding_agent: claude_code', '  triage_agent_coding_agent: codex')])
-        self.assertIn('codex' + CHECK_SUFFIX, checks)
+    def test_codex_gets_no_check_because_its_pin_follows_mmhotline(self):
+        for checks, _ in (self.default_checks, self.util01_checks([('  triage_agent_coding_agent: claude_code', '  triage_agent_coding_agent: codex')])):
+            self.assertNotIn('codex' + CHECK_SUFFIX, checks)
+            self.assertNotIn("'openai/codex'", checks['release_sources_answer'])
 
     def test_rclone_is_checked_only_while_the_uploads_copy_runs_on_util01(self):
         checks, _ = self.util01_checks([('    uploads_backup_runs_on: [util_server]', '    uploads_backup_runs_on: []')])

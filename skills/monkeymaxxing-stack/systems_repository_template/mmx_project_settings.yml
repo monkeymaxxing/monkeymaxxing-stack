@@ -877,7 +877,11 @@ vars:
     # The triage agent's coding agent when triage_agent_coding_agent is
     # codex; util01 downloads nothing for Codex otherwise. Use the Codex
     # version that the pinned MMHotline release was built against, which
-    # MMHotline's docs/validation.md names. Codex's release package holds
+    # MMHotline's docs/validation.md names. That Codex must know the model
+    # the triage agent uses: an older Codex starts each run with "Model
+    # metadata for MODEL not found" and runs with fallback settings. The
+    # pin moves with a Stack upgrade, so MMWatchdog does not warn about newer
+    # Codex releases. Codex's release package holds
     # codex, its helper codex-code-mode-host, and rg. Codex's releases are
     # tagged rust-vVERSION
     # and publish no checksum file: the release page shows each file's

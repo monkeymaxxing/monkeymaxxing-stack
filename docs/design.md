@@ -3531,10 +3531,14 @@ release to read.
   `software_outside_the_distribution.yml`.** MMX templates cannot read
   another file of the project, and `stack_software` holds every downloaded
   program's pin and download address under the entry's name. The template
-  repeats two install conditions of the roles: `codex` only while
-  `triage_agent_coding_agent` is `codex`, and
-  `rclone` only while `backups.uploads_backup_runs_on` is not empty, so a
-  program the system does not install raises no warning. Programs from
+  repeats the uploads copy's install condition: `rclone` only while
+  `backups.uploads_backup_runs_on` is not empty, so a program the system
+  does not install raises no warning. `codex` gets no check: its pin
+  follows the Codex version the pinned MMHotline release was tested with,
+  so it moves with a Stack upgrade, and a newer Codex alone is nothing a
+  person acts on. Codex releases several times a week; a team's real setup
+  got a warning minutes after its setup (2026-11-23). `doubleshell` runs on
+  laptops, not `util01`, and gets none either. Programs from
   vendors' apt repositories update themselves and get no check. A pin whose
   `download_url` is not a GitHub release, such as Google's gcloud, gets a
   comment and no check; the scheduled software review covers it when the
