@@ -89,19 +89,32 @@ sed -n 's/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}\([A-Za-z_][A-Za-z0-9_]
 Pick the names that hold the key, such as `B2_APPLICATION_KEY_ID` and
 `B2_APPLICATION_KEY`. When the names leave a doubt, ask the person which
 name holds which value. Then pass only those values, one per line, with
-shell tracing off:
+shell tracing off. Read each value as data, never by running the file
+with `.` or `source`: a shell that cannot read a line prints the whole
+line, key included, into your conversation, even with tracing off.
+`value_of` prints the value of one named variable, its quotes removed,
+and a missing value stops the pipe with the name alone:
 
 ```sh
 # On the laptop. Passes two named values from the file to the desk's command, without printing them.
 (
   set +x
-  . ~/.config/backblaze/env
-  printf '%s\n%s\n' "$B2_APPLICATION_KEY_ID" "$B2_APPLICATION_KEY"
+  file=~/.config/backblaze/env
+  value_of() {
+    sed -n "s/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}$1=//p" "$file" | tail -n 1 |
+      sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+  }
+  for name in B2_APPLICATION_KEY_ID B2_APPLICATION_KEY; do
+    [ -n "$(value_of "$name")" ] || { echo "The file has no value for $name." >&2; exit 1; }
+  done
+  printf '%s\n%s\n' "$(value_of B2_APPLICATION_KEY_ID)" "$(value_of B2_APPLICATION_KEY)"
 ) | ssh -T desk01-agent sudo -n /usr/local/bin/set-up-outside-services from-the-coding-agent backblaze
 ```
 
-A file that is not in the `NAME=value` form, such as a JSON file, gets
-the same pipe with a reader for its form in place of the `.` line, such as
+When the pipe stops with "The file has no value for NAME", ask the person
+which name holds the value, or use the clipboard. A file that is not in
+the `NAME=value` form, such as a JSON file, gets the same pipe with a
+reader for its form in place of `value_of`, such as
 `jq -r .applicationKey FILE`. Never print, `cat`, or `grep` the values.
 
 **Way A, the clipboard,** when you run on the person's laptop and the
@@ -174,8 +187,10 @@ Paste your Backblaze applicationKey (hidden):
 ```
 
 The window's command for each key: `cloudflare` for the Cloudflare
-token, `backblaze` for the Backblaze keys, and `secrets` for the GitHub
-token and the app keys (it asks for each key the vault still lacks).
+token, `backblaze` for the Backblaze keys, and `save-a-key KEY` for the
+GitHub token and each app key, such as
+`save-a-key container_registry_read_only_token` or
+`save-a-key shop_STRIPE_API_KEY`. It asks for that one key only.
 Then read the results file, and carry on as after way A.
 
 ## Steps
@@ -360,9 +375,37 @@ Then read the results file, and carry on as after way A.
       on the service, such as `google._domainkey`. Ask the person which
       email service the company uses, and check its DKIM names. Add each
       record that is missing at Cloudflare.
-   2. **Turn DNSSEC off,** when `domain_dnssec_on` says `yes`. Read the
-      domain's DNSSEC record (DS) at the domain's registry first, and note
-      its time to live, the second column:
+
+      `dig` finds only the names you ask for, so a host name such as
+      `billing.example.com` can be missing without any check failing.
+      List every record Cloudflare now holds for the domain
+      (`GET http://127.0.0.1:8082/zones/ZONE_ID/dns_records`, every
+      page), name and type only, never a TXT record's value, and **ask the
+      person:**
+
+      ```text
+      Before your domain moves, Cloudflare must hold every name your domain uses.
+      Cloudflare holds these now:
+
+        example.com          A, MX, TXT
+        www.example.com      CNAME
+        google._domainkey    TXT
+
+      Does your company use any other name, such as  billing.example.com  or  shop.example.com ?
+      Your old DNS provider's page lists them all.  Say "complete", or name the missing ones.
+      ```
+
+      Add each name the person names, with its record from the old
+      nameservers, before the switch.
+   2. **Turn DNSSEC off,** when `domain_dnssec_on` says `yes`. When
+      `for_the_coding_agent` has no `domain_dnssec_on`, the registrar's
+      record did not say: ask the registry yourself, with the `dig` below.
+      A DS record means DNSSEC is on; an empty answer means off. When
+      `dig` fails or times out, the state is unknown: keep the switch
+      pending and ask again later, because a switch with DNSSEC on stops
+      the site and the email. Read the domain's DNSSEC record (DS) at the
+      domain's registry first, and note its time to live, the second
+      column:
 
       ```sh
       # On the laptop. Asks the registry of the domain's ending, here .com, with no cache between.
@@ -488,16 +531,37 @@ Then read the results file, and carry on as after way A.
    By way A, the two values come in two copies. Save the keyID first, in
    a laptop file of its own, and empty the clipboard. The keyID is not a
    secret, but it stays out of the chat all the same, so that a person
-   who mixes up the two values never pastes the applicationKey there:
+   who mixes up the two values never pastes the applicationKey there.
+   The pipe saves the copy only when it looks like a keyID: hexadecimal,
+   12 characters for a master key or 25 for another key. Reason: a person
+   who copied the applicationKey first would otherwise leave that secret
+   in a laptop file. The pipe never prints the copy:
 
    ```sh
-   # On the laptop (macOS). Saves the copied keyID in a private laptop file, then empties the clipboard.
+   # On the laptop (macOS). Saves the copied keyID in a private laptop file, only when it looks like a keyID, then empties the clipboard.
    (
      set +x
      umask 077
      trap "printf '' | pbcopy" EXIT
-     { pbpaste | tr -d '\r\n'; printf '\n'; } > ~/example-setup/backblaze-key-id
+     key_id=$(pbpaste | tr -d '\r\n')
+     case "$key_id" in
+       *[!0-9a-fA-F]*) looks_like_a_key_id=no ;;
+       *) case ${#key_id} in 12|25) looks_like_a_key_id=yes ;; *) looks_like_a_key_id=no ;; esac ;;
+     esac
+     if [ "$looks_like_a_key_id" = yes ]; then
+       printf '%s\n' "$key_id" > ~/example-setup/backblaze-key-id && echo "Saved the keyID."
+     else
+       echo "The copy is not a keyID. Nothing was saved, and the clipboard is empty." >&2
+       exit 1
+     fi
    )
+   ```
+
+   When the pipe says the copy is not a keyID, **ask the person:**
+
+   ```text
+   That copy was not the keyID, so I saved nothing and emptied your clipboard.
+   Copy the keyID, the shorter of the two values, then type  copied  here.
    ```
 
    Then ask for the applicationKey, and send both:
@@ -517,8 +581,8 @@ Then read the results file, and carry on as after way A.
    bucket and the uploads' copy, checks each lock with a test file, and
    saves each server's own narrow key in the vault. The master key is
    never stored, not in the vault and not in the recovery bundle. When
-   the command is done, move `~/example-setup/backblaze-key-id` to the
-   dumpster with the rest of `~/example-setup` in step 10.
+   the command is done, leave `~/example-setup/backblaze-key-id` in place:
+   step 10 removes it with the rest of `~/example-setup`.
 
    **The account is in another region than the plan.** The command saves
    nothing, writes `b2_account_s3_endpoint` and `b2_account_region` into
@@ -705,20 +769,19 @@ Then read the results file, and carry on as after way A.
    The window shows, first:
 
    ```text
-   Your keys locked away: step 1 of 3, the password for your servers' consoles
+   Your keys locked away: step 1 of 3, your servers' console password
 
    What this is for:
-     If your servers cannot be reached the normal way, this password opens each one at Hetzner's website.
+     Your server provider's web console lets root log in with it, the way in when everything else fails.
 
-     SAVE IT NOW.  IT IS SHOWN ONLY ONCE.
-
-       [the password]
-
-   Do this now:
-     1. Save it in 1Password as  "Shared root console password".
-     2. Type it here to prove you saved it.
-
-     Console password (hidden):
+   The servers' shared root console password, saved as its hash in shared_root_console_password_hash.
+     Why: Every server lets root log in with it at your server provider's web console, the way in when SSH and the private network fail. SSH never accepts it. The vault keeps only its hash.
+     Save it in your team's password manager as a new item named "Shared root console password". It shows here once:
+     ----
+     [the password]
+     ----
+     Press Enter once it is saved. The screen is cleared then:
+     Type the password from the item "Shared root console password" (hidden), to check the saved copy:
    ```
 
    The desk saves only the password's hash in the vault, as

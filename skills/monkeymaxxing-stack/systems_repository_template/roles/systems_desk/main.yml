@@ -198,7 +198,7 @@ node_tasks:
   # /etc/systems-desk/vault-passphrase (root:servers-mmx 0640) at the
   # bootstrap. set-up-outside-services (write-api-token-proxy-file at the
   # bootstrap, personal-token server-provider for a new provider token, and
-  # lock-the-desk or cloudflare for the desk's Cloudflare token) writes each
+  # cloudflare for the desk's Cloudflare token) writes each
   # *-api-token.conf (root:root 0600), restarts the API proxy service that
   # reads it, and checks a request through it. Each token file contains only one line,
   # which the proxy reads: proxy_set_header Authorization "Bearer TOKEN";
