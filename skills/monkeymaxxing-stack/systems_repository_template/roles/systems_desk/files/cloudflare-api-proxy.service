@@ -1,0 +1,17 @@
+# The API proxy for Cloudflare. On 127.0.0.1:8082 it adds the desk's
+# Cloudflare token and forwards the request to Cloudflare's API. The server
+# provider has its own service, provider-api-proxy, so neither waits for the
+# other's token (roles/systems_desk/main.yml, cloudflare_api_proxy).
+[Unit]
+Description=API proxy for Cloudflare on 127.0.0.1:8082
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outside_services_release.version }}/set-up-outside-services run-the-provider-api-proxy --api cloudflare
+LoadCredential=cloudflare-api-token:/etc/systems-desk/cloudflare-api-token.conf
+DynamicUser=yes
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

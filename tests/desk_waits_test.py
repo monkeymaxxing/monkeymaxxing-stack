@@ -191,7 +191,7 @@ class WaitForADeskJob(unittest.TestCase):
 
 
 def results(steps, finished=False, stopped_with=None, updated_at='2026-11-17T09:00:00Z'):
-    content = {'command': 'set-up-outside-services go-live', 'version': '0.1.0', 'updated_at': updated_at,
+    content = {'command': 'set-up-outside-services lock-the-desk', 'version': '0.1.0', 'updated_at': updated_at,
                'steps': [{'name': name, 'state': state} for name, state in steps],
                'finished': finished, 'for_the_coding_agent': {'cloudflare_account_id': 'abc'}}
     if stopped_with:
@@ -220,7 +220,7 @@ class WaitForTheSetup(unittest.TestCase):
         self.assertNotIn('@clock', result.stdout)
         self.assertIn('"cloudflare=done"', result.stdout)
         self.assertIn('cloudflare_account_id', result.stdout)
-        self.assertEqual(printed_lines(result.stdout)[-1], 'go-live finished.')
+        self.assertEqual(printed_lines(result.stdout)[-1], 'The setup finished.')
 
     def test_an_earlier_runs_stop_does_not_end_the_wait_but_the_new_runs_stop_does(self):
         self.file.write_text(results([('cloudflare', 'in_progress')], stopped_with='Cloudflare refused the token'))
@@ -232,7 +232,7 @@ class WaitForTheSetup(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn('the registrar still lists the old nameservers', result.stdout)
         self.assertNotIn('Cloudflare refused the token', result.stdout)
-        self.assertTrue(printed_lines(result.stdout)[-1].startswith('go-live stopped.'))
+        self.assertTrue(printed_lines(result.stdout)[-1].startswith('The setup stopped.'))
         ended_at = max(int(n) for n in re.findall(r'@clock (\d+)', result.stdout))
         self.assertLess(ended_at - CLOCK_START, 300)
 

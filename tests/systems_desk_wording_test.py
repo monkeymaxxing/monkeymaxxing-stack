@@ -5,7 +5,7 @@
 
 A newcomer reads "desk" as furniture. Everything a person reads says
 "systems desk" (the first mention on a page also says what it is). Host and
-command names such as `desk01`, `ssh desk01-setup` and `desk01-agent`, and
+command names such as `desk01`, `ssh desk01-lock` and `desk01-agent`, and
 file paths, are not prose and stay as they are.
 
 Scanned: README.md; the template's README.md; the `text` code blocks and quoted (>) lines of
@@ -139,7 +139,7 @@ class SystemsDeskWordingTest(unittest.TestCase):
 
     def test_the_pattern_itself(self):
         bad = ['Your desk is locked.', 'every other desks', 'the Desk', 'on the desk, it']
-        good = ['your systems desk', '`ssh desk01-setup`', 'desk01-agent', 'the Systems Desk',
+        good = ['your systems desk', '`ssh desk01-lock`', 'desk01-agent', 'the Systems Desk',
                 'roles/systems_desk/files', 'desk-ssh-agent.service', 'host desk01']
         for line in bad:
             self.assertTrue(list(bare_desk_columns(line)), line)

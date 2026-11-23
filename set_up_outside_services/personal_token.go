@@ -46,9 +46,9 @@ type proxyFileRequest struct {
 	CloudflareAccountID string
 }
 
-// The API proxy's two token files and their addresses (the proxy's
-// unit, roles/systems_desk/files/provider-api-proxy.service, hands it
-// both).
+// The API proxy's two token files and their addresses. Each file belongs to
+// its own service (roles/systems_desk/files/provider-api-proxy.service and
+// cloudflare-api-proxy.service).
 var proxyAPIs = map[string]struct {
 	file    string
 	address string
@@ -323,7 +323,7 @@ func writeProxyFileWithSudo(request proxyFileRequest) error {
 }
 
 // runWriteAPITokenProxyFile is the root step: it replaces one token file of
-// the API proxy, restarts the proxy, and checks a request through
+// the API proxy, restarts that file's service, and checks a request through
 // it. On any failure it puts the old file back, so the proxy keeps working
 // with the old token.
 func runWriteAPITokenProxyFile(arguments []string, stdin io.Reader, out io.Writer) error {
@@ -399,13 +399,17 @@ func writeSigningCredential(credential signingCredential, checkPath string, out 
 }
 
 // writeFileAndRestartProxy replaces one of the API proxy's root-only
-// files, restarts the proxy, and checks a request through it. The proxy runs
-// once every file its unit hands it exists, so while one is missing the
-// command only writes the file. On any failure it puts the old file back, so
-// the proxy keeps working with the old one.
+// files, restarts the service that reads that file (the Cloudflare token's
+// is cloudflare-api-proxy, every other is provider-api-proxy), and checks a
+// request through it. Each service starts once its own file exists, so
+// the other's file never holds this one back. On any failure it puts the old
+// file back, so the service keeps working with the old one.
 func writeFileAndRestartProxy(path string, content []byte, checkAddress, noun string, out io.Writer) error {
-	unit, err := os.ReadFile(apiProxyUnitFile)
-	if err != nil {
+	service, unitFile := apiProxyService, apiProxyUnitFile
+	if path == proxyAPIs["cloudflare"].file {
+		service, unitFile = cloudflareProxyService, cloudflareProxyUnitFile
+	}
+	if _, err := os.Stat(unitFile); err != nil {
 		return fmt.Errorf("%v. A systems desk review installs the proxy; run review-and-apply-the-systems-desk-settings first", err)
 	}
 	old, readErr := os.ReadFile(path)
@@ -416,24 +420,14 @@ func writeFileAndRestartProxy(path string, content []byte, checkAddress, noun st
 	restore := func(reason error) error {
 		if hadOld {
 			_ = writeRootFile(path, old)
-			_ = exec.Command("systemctl", "restart", apiProxyService).Run()
+			_ = exec.Command("systemctl", "restart", service).Run()
 		} else {
 			_ = os.Remove(path)
-			_ = exec.Command("systemctl", "stop", apiProxyService).Run()
+			_ = exec.Command("systemctl", "stop", service).Run()
 		}
 		return fmt.Errorf("%v. The API proxy keeps its old %s", reason, noun)
 	}
-	for _, line := range strings.Split(string(unit), "\n") {
-		if credential, ok := strings.CutPrefix(line, "LoadCredential="); ok {
-			if _, file, _ := strings.Cut(credential, ":"); file != path {
-				if _, err := os.Stat(file); err != nil {
-					fmt.Fprintf(out, "Wrote %s. The API proxy starts once %s exists too, so the check through the proxy waits until then.\n", path, file)
-					return nil
-				}
-			}
-		}
-	}
-	for _, step := range [][]string{{"systemctl", "enable", "--quiet", apiProxyService}, {"systemctl", "restart", apiProxyService}} {
+	for _, step := range [][]string{{"systemctl", "enable", "--quiet", service}, {"systemctl", "restart", service}} {
 		if output, err := exec.Command(step[0], step[1:]...).CombinedOutput(); err != nil {
 			return restore(fmt.Errorf("%s failed: %s. A systems desk review installs the proxy; run review-and-apply-the-systems-desk-settings first", strings.Join(step, " "), firstLine(string(output), err)))
 		}

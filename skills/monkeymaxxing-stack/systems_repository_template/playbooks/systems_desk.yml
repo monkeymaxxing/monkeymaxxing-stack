@@ -19,9 +19,9 @@
 # Reason it is not a task of this playbook: MMX keeps every file a run reads
 # on the controller machine in the run's history, and the key must not stay
 # on the laptop.
-# The phone code comes next, in set-up-outside-services go-live.
+# The phone code comes next, in set-up-outside-services lock-the-desk.
 #
-# The lock, from the laptop, once go-live set up the phone code:
+# The lock, from the laptop, once lock-the-desk set up the phone code:
 #     mmx run systems_desk --var desk_name=desk01 --only-fleet-stages lock --connection ssh_only
 # It records the lock and closes root SSH from the laptop: from then on
 # only the person and coding-agent log in from a laptop, each with the
@@ -151,7 +151,7 @@ fleet_stages:
 
   # The lock: from now on this desk asks every outside login for the phone
   # code, and root logs in only from loopback. The coding agent runs it from
-  # the laptop once set-up-outside-services go-live set up the phone code,
+  # the laptop once set-up-outside-services lock-the-desk set up the phone code,
   # with --only-fleet-stages lock: it records the lock, then closes root's
   # login from the laptops, its last change, so nothing after it needs that
   # login. From then on the desk role keeps it closed
@@ -170,7 +170,7 @@ fleet_stages:
           message: >-
             The phone code is not set up on {{ .vars.desk_name }} yet, so the lock would
             leave the laptop key alone at the door. The person sets it up at the end of
-            set-up-outside-services go-live. Nothing changed.
+            set-up-outside-services lock-the-desk. Nothing changed.
       # Reason: closing root's login before the desk role opened the
       # person's and the coding agent's door would leave no way in.
       - id: refuse_the_lock_before_the_bootstrap_finished

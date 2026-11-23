@@ -198,9 +198,9 @@ node_tasks:
   # /etc/systems-desk/vault-passphrase (root:servers-mmx 0640) at the
   # bootstrap. set-up-outside-services (write-api-token-proxy-file at the
   # bootstrap, personal-token server-provider for a new provider token, and
-  # go-live or cloudflare for the desk's Cloudflare token) writes each
-  # *-api-token.conf (root:root 0600), restarts the API proxy, and
-  # checks a request through it. Each token file contains only one line,
+  # lock-the-desk or cloudflare for the desk's Cloudflare token) writes each
+  # *-api-token.conf (root:root 0600), restarts the API proxy service that
+  # reads it, and checks a request through it. Each token file contains only one line,
   # which the proxy reads: proxy_set_header Authorization "Bearer TOKEN";
   # For a provider whose requests are signed, such as OVHcloud, personal-token
   # server-provider writes the API proxy's credential file instead
@@ -321,7 +321,7 @@ node_tasks:
   - id: install_the_publish_branch_to_main_command
     file: {path: /usr/local/bin/publish-branch-to-main, source: files/publish-branch-to-main, owner: root, group: root, permissions_mode: "0755"}
   # The coding agent's two waits, run in its own login with no sudo:
-  # for a desk job, and for the person's go-live. Each one prints a line at
+  # for a desk job, and for the person's lock-the-desk. Each one prints a line at
   # least once a minute and ends at a bound, so the agent waits with one
   # command instead of a loop of sleeps (files/wait-for-a-desk-job and
   # files/wait-for-the-setup say how).
@@ -414,6 +414,26 @@ node_tasks:
     file:
       path: /etc/sudoers.d/update-this-desks-wireguard-peers
       content: "coding-agent ALL=(root) NOPASSWD: /usr/local/bin/update-this-desks-wireguard-peers \"\"\n"
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -c -f "$NEW_FILE"
+          dryrun: visudo -c -f "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+  # The coding agent runs the account steps that need a secret only the
+  # person holds (a Backblaze key, the Cloudflare link token, a registry
+  # token) as root: sudo -n set-up-outside-services from-the-coding-agent
+  # COMMAND, with the secret on standard input. Reason: the commands write
+  # root-only files and the API proxy's token files, and the secret never
+  # appears in a command line or a shell history. The program checks its
+  # arguments strictly and refuses anything but its own command list before it
+  # reads standard input, so the * here lets through nothing else.
+  - id: allow_the_coding_agent_the_account_steps_command_through_sudo
+    file:
+      path: /etc/sudoers.d/set-up-outside-services-for-the-coding-agent
+      content: "coding-agent ALL=(root) NOPASSWD: /usr/local/bin/set-up-outside-services from-the-coding-agent *\n"
       owner: root
       group: root
       permissions_mode: "0440"
@@ -521,19 +541,27 @@ node_tasks:
       path: /usr/local/bin/set-up-outside-services
       target: "/usr/local/lib/set-up-outside-services/releases/{{ .inputs.set_up_outside_services_release.version }}/set-up-outside-services"
   # The API proxy, the desk's one program between the coding agent
-  # and the outside APIs. On 127.0.0.1:8081 it adds the person's server
-  # provider token, or signs each request with the person's credential
-  # (provider_api_authentication other than token_in_a_header), and forwards
-  # the request to the provider's API address. On 127.0.0.1:8082 it adds the
+  # and the outside APIs, in two services. provider-api-proxy.service, on
+  # 127.0.0.1:8081, adds the person's server provider token, or signs each
+  # request with the person's credential (provider_api_authentication other
+  # than token_in_a_header), and forwards the request to the provider's API
+  # address. cloudflare-api-proxy.service, on 127.0.0.1:8082, adds the
   # desk's Cloudflare token and forwards the request to Cloudflare's API.
+  # Reason for two services: each starts once its own file exists. The setup
+  # creates the servers through the provider's port before the Cloudflare
+  # step makes the Cloudflare token, so one service that waited for both
+  # files kept the provider's port down.
   # set-up-outside-services personal-token server-provider and cloudflare
-  # write the root-only files, root:root 0600, and restart the proxy. systemd
-  # runs the proxy under an account of its own (DynamicUser) and hands it a
-  # copy of each file that only that account reads (LoadCredential). Reason:
-  # the coding agent uses the tokens without reading them, so a mistake or a
-  # leak of its conversation never carries them. The unit names the release
-  # it runs and the provider's address, so a new release or address restarts
-  # the proxy.
+  # write the root-only files, root:root 0600, and restart the service that
+  # reads the file. systemd runs each service under an account of its own
+  # (DynamicUser) and hands it a copy of its files that only that account
+  # reads (LoadCredential). Reason: the coding agent uses the tokens without
+  # reading them, so a mistake or a leak of its conversation never carries
+  # them. Each unit names the release it runs (the provider's unit also the
+  # provider's address), so a new release or address restarts the service.
+  # A desk from the one-service release gets the new provider unit written over
+  # the old one: its restart frees port 8082 before the Cloudflare service
+  # starts, which is why the provider's block comes first.
   # The desk's own server ID at the provider, root-owned, which the API proxy
   # reads (systemd's LoadCredential). Reason: the proxy refuses a request
   # other than GET that names this ID, so a cleanup never deletes or
@@ -562,6 +590,16 @@ node_tasks:
           shell: {script: systemctl daemon-reload, dryrun: 'true'}
         - id: restart_a_running_provider_api_proxy
           systemd_service: {name: provider-api-proxy, state: do_not_start_or_stop, refresh: restart}
+  - task_block:
+      id: cloudflare_api_proxy
+      changes:
+        - id: install_the_cloudflare_api_proxy_service
+          file: {path: /etc/systemd/system/cloudflare-api-proxy.service, template: files/cloudflare-api-proxy.service, owner: root, group: root, permissions_mode: "0644"}
+      activate:
+        - id: load_the_cloudflare_api_proxy_service
+          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+        - id: restart_a_running_cloudflare_api_proxy
+          systemd_service: {name: cloudflare-api-proxy, state: do_not_start_or_stop, refresh: restart}
   # The desk keeps only the provider credential that its setting uses.
   # Reason: after a move to another provider, a working credential for the
   # account the team left would otherwise stay on the desk, unused and
@@ -583,39 +621,44 @@ node_tasks:
   - id: protect_cloudflare_api_token_conf
     when: {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
     file: {path: /etc/systems-desk/cloudflare-api-token.conf, owner: root, group: root, permissions_mode: "0600"}
-  # The proxy starts once every file its unit hands it exists: Cloudflare's,
-  # and the provider's token file or credential file. Missing files leave it
-  # stopped, so neither port answers without its token.
-  - id: keep_the_provider_api_proxy_stopped_until_its_files_are_ready
+  # Each service starts once the file its unit hands it exists: the
+  # provider's token file or credential file, and Cloudflare's token file.
+  # A missing file leaves its service stopped, so its port never answers
+  # without its token, and the other service is not held back.
+  - id: keep_the_provider_api_proxy_stopped_until_its_file_is_ready
     when:
       not:
-        all:
-          - {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
-          - any:
-              - all:
-                  - {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
-                  - {path_exists: /etc/systems-desk/provider-api-token.conf}
-              - all:
-                  - not: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
-                  - {path_exists: /etc/systems-desk/provider-api-signing-credential.json}
+        any:
+          - all:
+              - {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+              - {path_exists: /etc/systems-desk/provider-api-token.conf}
+          - all:
+              - not: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+              - {path_exists: /etc/systems-desk/provider-api-signing-credential.json}
     systemd_service: {name: provider-api-proxy, state: stopped, start_at_boot: false}
-  - id: start_the_provider_api_proxy_when_its_files_are_ready
+  - id: start_the_provider_api_proxy_when_its_file_is_ready
     when:
-      all:
-        - {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
-        - any:
-            - all:
-                - {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
-                - {path_exists: /etc/systems-desk/provider-api-token.conf}
-            - all:
-                - not: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
-                - {path_exists: /etc/systems-desk/provider-api-signing-credential.json}
+      any:
+        - all:
+            - {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+            - {path_exists: /etc/systems-desk/provider-api-token.conf}
+        - all:
+            - not: {equals: ["{{ .inputs.provider_api_authentication }}", token_in_a_header]}
+            - {path_exists: /etc/systems-desk/provider-api-signing-credential.json}
     systemd_service: {name: provider-api-proxy, state: running, start_at_boot: true}
-  # The run fails when 127.0.0.1:8081 or 127.0.0.1:8082 is not served by the
-  # proxy, or is served by anything while a file is missing. Reason: a
-  # program that holds a port keeps running without the proxy, and systemd
-  # and MMX report the start as a success, so the coding agent would lose an
-  # API with nothing reported. It also fails while nginx runs or its
+  - id: keep_the_cloudflare_api_proxy_stopped_until_its_file_is_ready
+    when:
+      not: {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
+    systemd_service: {name: cloudflare-api-proxy, state: stopped, start_at_boot: false}
+  - id: start_the_cloudflare_api_proxy_when_its_file_is_ready
+    when: {path_exists: /etc/systems-desk/cloudflare-api-token.conf}
+    systemd_service: {name: cloudflare-api-proxy, state: running, start_at_boot: true}
+  # The run fails when 127.0.0.1:8081 is not served by
+  # provider-api-proxy, or 127.0.0.1:8082 by cloudflare-api-proxy, or when
+  # either port is served by anything while that service's file is missing.
+  # Reason: a program that holds a port keeps running without the proxy, and
+  # systemd and MMX report the start as a success, so the coding agent would
+  # lose an API with nothing reported. It also fails while nginx runs or its
   # settings file exists, so a desk review catches an nginx that the package
   # removal above did not remove.
   - id: check_which_program_serves_the_api_ports
@@ -626,31 +669,34 @@ node_tasks:
           printf 'nginx is still on this desk (running, or /etc/nginx/nginx.conf exists), but the API proxy serves 127.0.0.1:8081 and 127.0.0.1:8082 now. The package removal in this desk review did not remove it. Read this desk review'"'"'s output for remove_nginx_which_the_api_proxy_replaced, fix what it says, and run the desk review again.\n' >&2
           exit 1
         fi
-        expected=provider-api-proxy
-        [ -e /etc/systems-desk/cloudflare-api-token.conf ] || expected=
         if [ "$AUTHENTICATION" = token_in_a_header ]; then
-          [ -e /etc/systems-desk/provider-api-token.conf ] || expected=
+          provider_file=/etc/systems-desk/provider-api-token.conf
         else
-          [ -e /etc/systems-desk/provider-api-signing-credential.json ] || expected=
+          provider_file=/etc/systems-desk/provider-api-signing-credential.json
         fi
-        for _ in $(seq 30); do
-          listeners=$(ss -Hltnp 'sport = :8081 or sport = :8082')
-          if [ -z "$expected" ]; then
-            [ -n "$listeners" ] || exit 0
+        # One port: its service when the file exists, nobody when it does not.
+        check_port() {
+          port=$1 service=$2 file=$3 what=$4
+          for _ in $(seq 30); do
+            listeners=$(ss -Hltnp "sport = :$port")
+            if [ ! -e "$file" ]; then
+              [ -n "$listeners" ] || return 0
+            else
+              main_pid=$(systemctl show --property MainPID --value "$service.service")
+              [ "$(printf '%s\n' "$listeners" | grep -c "pid=$main_pid,")" -eq 1 ] && [ "$(printf '%s\n' "$listeners" | wc -l)" -eq 1 ] && return 0
+            fi
+            sleep 1
+          done
+          if [ ! -e "$file" ]; then
+            printf '127.0.0.1:%s, where the coding agent reaches %s, should have no program yet, because %s is missing (systems_desk_provider_api_authentication is %s), but after 30 seconds this program listens there: %s\n' "$port" "$what" "$file" "$AUTHENTICATION" "$listeners" >&2
           else
-            main_pid=$(systemctl show --property MainPID --value "$expected.service")
-            ports=$(printf '%s\n' "$listeners" | grep -c "pid=$main_pid," || true)
-            [ "$ports" -eq 2 ] && [ "$(printf '%s\n' "$listeners" | wc -l)" -eq 2 ] && exit 0
+            printf '127.0.0.1:%s, where the coding agent reaches %s, should be served by %s.service (systems_desk_provider_api_authentication is %s), but after 30 seconds the programs there are: %s\n' "$port" "$what" "$service" "$AUTHENTICATION" "${listeners:-none}" >&2
           fi
-          sleep 1
-        done
-        if [ -z "$expected" ]; then
-          printf '127.0.0.1:8081 and 127.0.0.1:8082, where the coding agent reaches the server provider'"'"'s API and Cloudflare'"'"'s API, should have no program yet, because a token or credential file is missing (systems_desk_provider_api_authentication is %s), but after 30 seconds this program listens there: %s\n' "$AUTHENTICATION" "$listeners" >&2
-        else
-          printf '127.0.0.1:8081 and 127.0.0.1:8082, where the coding agent reaches the server provider'"'"'s API and Cloudflare'"'"'s API, should both be served by %s.service (systems_desk_provider_api_authentication is %s), but after 30 seconds the programs there are: %s\n' "$expected" "$AUTHENTICATION" "${listeners:-none}" >&2
-        fi
-        printf 'Run the desk review again. If this repeats, read: journalctl -u provider-api-proxy --since -10min\n' >&2
-        exit 1
+          printf 'Run the desk review again. If this repeats, read: journalctl -u %s --since -10min\n' "$service" >&2
+          return 1
+        }
+        check_port 8081 provider-api-proxy "$provider_file" "the server provider's API"
+        check_port 8082 cloudflare-api-proxy /etc/systems-desk/cloudflare-api-token.conf "Cloudflare's API"
       dryrun: 'true'
       changed_when: false
       env: {AUTHENTICATION: "{{ .inputs.provider_api_authentication }}"}
