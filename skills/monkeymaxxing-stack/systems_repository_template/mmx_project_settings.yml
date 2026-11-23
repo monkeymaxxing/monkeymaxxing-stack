@@ -196,6 +196,12 @@ vars:
       # then runs twice. The web containers' 30 seconds are fixed: a
       # request that takes longer than that is a bug.
       seconds_a_job_gets_to_finish_when_stopped: 30
+      # The directory inside the image with the app's built files whose
+      # names carry a fingerprint, such as CSS and JavaScript. Each web
+      # container also serves the previous release's files, so a page the
+      # old release rendered still loads them after a deploy. "" for an app
+      # without such files. Never leave the key out: the run would stop at
+      # fill_the_asset_directory_of_the_first_web_container.
       asset_directory: /rails/public/assets
       # Every container of the app runs with a read-only file system, so a
       # file the app writes to its own disk fails at once with "read-only

@@ -94,7 +94,8 @@ class RenderedQuadlets(unittest.TestCase):
 
     def render(self, filename, **app_settings):
         app = dict(env={'WEB_CONCURRENCY': '2'}, asset_directory='/app/assets', jobs_command='node jobs.mjs',
-                   jobs_connect_directly_to_postgres=False, **app_settings)
+                   jobs_connect_directly_to_postgres=False)
+        app.update(app_settings)
         values = dict(apps={'shop': app}, web_container=dict(key='shop', value=dict(web_port=8001, image='example.com/shop:v1')),
                       job_container=dict(key='shop', value=dict(image='example.com/shop:v1')))
         with tempfile.TemporaryDirectory() as temporary:
@@ -145,6 +146,16 @@ class RenderedQuadlets(unittest.TestCase):
                 self.assertIn('ReadOnly=true', lines)
                 self.assertEqual([line for line in lines if line.startswith('Tmpfs=')],
                                  ['Tmpfs=/app/storage/framework/views:mode=1777', 'Tmpfs=/data/caddy:mode=1777'])
+
+    def test_an_app_without_asset_files_gets_no_asset_directory(self):
+        # asset_directory "" says the app has no fingerprinted files: the web
+        # container mounts no asset directory, and the role fills none.
+        mounts = lambda **settings: [line for line in self.render(self.FILES[0], **settings).splitlines() if 'web_assets' in line]
+        self.assertEqual(mounts(), ['Volume=/var/lib/monkeymaxxing-stack/web_assets/shop-web-8001:/app/assets:ro'])
+        self.assertEqual(mounts(asset_directory=''), [])
+        role = (TEMPLATE / 'roles/app_server/main.yml').read_text()
+        for task in ('fill_the_asset_directory_of_the_first_web_container', 'fill_the_asset_directory_with_both_releases'):
+            self.assertIn('- id: %s\n          when: {not: {equals: ["{{ .inputs.apps[.web_container.key].asset_directory }}", ""]}}' % task, role)
 
 
 if __name__ == '__main__':

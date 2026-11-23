@@ -33,8 +33,10 @@ Environment=WEB_CONCURRENCY={{ .node.cpu.count }}
 {{- end }}
 EnvironmentFile=/etc/{{ $app_name }}/{{ $app_name }}_settings.env
 EnvironmentFile=/etc/{{ $app_name }}/{{ $app_name }}.env
+{{- if $app.asset_directory }}
 # The asset files of this release and of the one before it (asset bridging).
 Volume=/var/lib/monkeymaxxing-stack/web_assets/{{ $app_name }}-web-{{ $web_port }}:{{ $app.asset_directory }}:ro
+{{- end }}
 LogDriver=journald
 # The container's file system is read-only: a file the app writes to its
 # own disk would vanish at the next deploy (each deploy starts a new

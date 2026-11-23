@@ -89,8 +89,17 @@ the person's. Then you push the changes and watch the first build.
      each directory. Each becomes a memory-backed directory, empty at every
      start, so list no directory that holds data that must last. Leave the
      key out when the app writes nowhere else;
-   - `asset_directory`, `database_name`, and `env`: the app's settings
-     that are not secret, such as its public address, `APP_ORIGIN`. Leave
+   - `asset_directory`: required. The directory inside the app's image
+     that holds its built CSS and JavaScript files whose names carry a
+     fingerprint of their content, such as Rails' `/rails/public/assets`.
+     Each release's web containers serve the previous release's files
+     too, so a page the old release rendered still loads them after a
+     deploy. Write `""` for an app without such files, such as an API or
+     a server that renders plain HTML. Never leave the key out: MMX cannot
+     check a missing key before the run, so the run stops at
+     `fill_the_asset_directory_of_the_first_web_container`;
+   - `database_name` and `env`: the app's settings that are not secret,
+     such as its public address, `APP_ORIGIN`. Leave
      the uploads bucket's name, `R2_BUCKET`, out of `env`: the Stack writes
      it from `production_uploads_r2_bucket`, so the app and the nightly
      copy of its uploads use the same bucket;
