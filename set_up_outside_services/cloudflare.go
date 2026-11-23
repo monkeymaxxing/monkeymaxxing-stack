@@ -84,8 +84,43 @@ type cloudflareToken struct {
 	Name     string `json:"name"`
 	Value    string `json:"value"`
 	Policies []struct {
-		Resources map[string]any `json:"resources"`
+		Resources        map[string]any `json:"resources"`
+		PermissionGroups []struct {
+			ID string `json:"id"`
+		} `json:"permission_groups"`
 	} `json:"policies"`
+}
+
+// holdsPlan says whether the token holds exactly the plan's permission
+// groups on the plan's resources, so a rerun can tell a token made before a
+// change of the plan, such as a desk token made before the desk gained
+// zone rights, and update it.
+func (t cloudflareToken) holdsPlan(plan cloudflareCredentialPlan, ids map[permissionGroup]string) bool {
+	have := map[string]bool{}
+	for _, policy := range t.Policies {
+		for _, group := range policy.PermissionGroups {
+			for resource := range policy.Resources {
+				have[group.ID+" on "+resource] = true
+			}
+		}
+	}
+	want := map[string]bool{}
+	for _, policy := range plan.Policies {
+		for _, group := range policy.Groups {
+			for resource := range policy.Resources {
+				want[ids[group]+" on "+resource] = true
+			}
+		}
+	}
+	if len(have) != len(want) {
+		return false
+	}
+	for pair := range want {
+		if !have[pair] {
+			return false
+		}
+	}
+	return true
 }
 
 // verifyAccountToken checks an account-owned token. Cloudflare's
@@ -1011,6 +1046,16 @@ func (e *environment) ensureDeskToken(link *cloudflareClient, settings systemSet
 	if err != nil {
 		return nil, err
 	}
+	if !made && !token.holdsPlan(plan, ids) {
+		// A desk set up by an earlier Stack: its token gains the rights the
+		// desk token has now, and keeps its value, so the API proxy and the
+		// token file stay as they are.
+		if err := link.updateAccountToken(token.ID, plan, ids); err != nil {
+			return nil, fmt.Errorf("updating the rights of your systems desk's token %q (ID %s) failed: %v. It still works with its earlier rights; run this command again", plan.TokenName, token.ID, err)
+		}
+		e.say("  Your systems desk's token %q (ID %s) is in your token file and the API proxy already. Updated its rights to: %s. Its value stays the same.", plan.TokenName, token.ID, describePolicies(plan.Policies))
+		return &cloudflareClient{baseURL: e.cloudflareAPIURL, token: held, accountID: accountID, who: "your systems desk's Cloudflare token"}, nil
+	}
 	if !made {
 		e.say("  Your systems desk's token %q (ID %s) is in your token file and the API proxy already. Unchanged.", plan.TokenName, token.ID)
 		return &cloudflareClient{baseURL: e.cloudflareAPIURL, token: held, accountID: accountID, who: "your systems desk's Cloudflare token"}, nil
@@ -1085,15 +1130,6 @@ func (e *environment) ensureTunnelToken(client *cloudflareClient, tunnel tunnelP
 	return nil
 }
 
-func resourceNames(resources map[string]any) []string {
-	var names []string
-	for name := range resources {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
 func (e *environment) ensureCloudflareCredential(client *cloudflareClient, plan cloudflareCredentialPlan, ids map[permissionGroup]string, saved *savedKeys, oldKeys string) error {
 	replacing := e.replaceKeys[plan.VaultNames[0]]
 	outcome, id, err := e.issueAndSave(saved, issuedCredential{
@@ -1163,20 +1199,14 @@ func (e *environment) updateSavedTokenResources(client *cloudflareClient, plan c
 		e.say("    If an app was added since the key was made, add its bucket to the key on Cloudflare's website.")
 		return nil
 	}
-	have := map[string]any{}
-	for _, policy := range tokens[0].Policies {
-		for name, value := range policy.Resources {
-			have[name] = value
-		}
+	if tokens[0].holdsPlan(plan, ids) {
+		return nil
 	}
 	want := map[string]any{}
 	for _, policy := range plan.Policies {
 		for name, value := range policy.Resources {
 			want[name] = value
 		}
-	}
-	if strings.Join(resourceNames(have), ",") == strings.Join(resourceNames(want), ",") {
-		return nil
 	}
 	if err := client.updateAccountToken(tokens[0].ID, plan, ids); err != nil {
 		return err

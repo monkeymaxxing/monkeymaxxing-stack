@@ -71,17 +71,10 @@ func TestCloudflareMakesEveryTokenFromOneLinkToken(t *testing.T) {
 		}
 	}
 
-	// The desk's token: the nine permission groups, the zone ones on every
-	// zone of the account, in the API proxy and the token file.
+	// The desk's token: its permission groups, the zone ones on every zone
+	// of the account, in the API proxy and the token file.
 	desk := h.onlyLiveToken(deskTokenNameForAlex)
-	for _, group := range append(append([]permissionGroup{}, deskAccountPermissions...), deskZonePermissions...) {
-		if !strings.Contains(strings.Join(desk.Permissions, "|"), group.Name) {
-			t.Fatalf("the systems desk's token lacks %s: %v", group.Name, desk.Permissions)
-		}
-	}
-	if len(desk.Permissions) != 9 || strings.Contains(strings.Join(desk.Permissions, "|"), "API Tokens") {
-		t.Fatalf("the systems desk's token must hold exactly the nine groups and never make tokens: %v", desk.Permissions)
-	}
+	requireDeskTokenRights(t, desk)
 	zonePolicy := string(desk.Policies[1])
 	if !strings.Contains(zonePolicy, `"com.cloudflare.api.account.zone.*":"*"`) || !strings.Contains(zonePolicy, groupID("Zone Read", scopeZone)) {
 		t.Fatalf("the zone permissions must apply to every zone, with the zone's Zone Read: %s", zonePolicy)
@@ -146,6 +139,58 @@ func TestCloudflareMakesEveryTokenFromOneLinkToken(t *testing.T) {
 		}
 	}
 	h.requireNoSecretInOutput(desk.Value, r2Secret(posting.Value), posting.Value, "link-token-value-00000001", h.cloudflare.ServiceTokens[0].ClientSecret)
+}
+
+// requireDeskTokenRights checks the desk token holds every zone right a
+// team's site settings may need, besides the Stack's own, and nothing that
+// makes tokens, adds Access login methods, or deletes a zone.
+func requireDeskTokenRights(t *testing.T, desk *standins.CloudflareToken) {
+	t.Helper()
+	held := "|" + strings.Join(desk.Permissions, "|") + "|"
+	for _, name := range []string{
+		"Cloudflare Tunnel Write", "Access: Apps and Policies Write", "Workers R2 Storage Write",
+		"DNS Write", "Zone Read", "Zone Settings Write", "Dynamic URL Redirects Write", "Bot Management Write",
+		"Page Rules Write", "SSL and Certificates Write", "Zone WAF Write", "Firewall Services Write",
+		"Config Settings Write", "Origin Write", "Cache Settings Write", "Zone Transform Rules Write", "Workers Routes Write",
+	} {
+		if !strings.Contains(held, "|"+name+"|") {
+			t.Fatalf("the systems desk's token lacks %s: %v", name, desk.Permissions)
+		}
+	}
+	for _, name := range []string{"API Tokens", "Identity Providers, and Groups Write", "|Zone Write|"} {
+		if strings.Contains(held, name) {
+			t.Fatalf("the systems desk's token must not hold %s: %v", name, desk.Permissions)
+		}
+	}
+}
+
+// A desk set up by an earlier Stack, whose token lacks the zone rights the
+// desk token has now, gets them by one rerun: the same token, the same value.
+func TestARerunWidensAnEarlierDeskTokenAndKeepsItsValue(t *testing.T) {
+	h := newHarness(t, false, false)
+	if err := h.runCloudflare(); err != nil {
+		t.Fatalf("cloudflare: %v\n%s", err, h.out)
+	}
+	desk := h.onlyLiveToken(deskTokenNameForAlex)
+	// The desk token as Stack 0.3.1 made it: four zone groups.
+	h.cloudflare.Lock()
+	narrow := `{"effect":"allow","resources":{"com.cloudflare.api.account.` + testAccountID + `":{"com.cloudflare.api.account.zone.*":"*"}},"permission_groups":[` +
+		`{"id":"` + groupID("DNS Write", scopeZone) + `"},{"id":"` + groupID("Cache Settings Write", scopeZone) + `"},` +
+		`{"id":"` + groupID("Zone Read", scopeZone) + `"},{"id":"` + groupID("Zone Transform Rules Write", scopeZone) + `"}]}`
+	desk.Policies[1] = []byte(narrow)
+	desk.Permissions = append(desk.Permissions[:len(deskAccountPermissions)], "DNS Write", "Cache Settings Write", "Zone Read", "Zone Transform Rules Write")
+	h.cloudflare.Unlock()
+	if err := h.runCloudflare(); err != nil {
+		t.Fatalf("rerun: %v\n%s", err, h.out)
+	}
+	now := h.onlyLiveToken(deskTokenNameForAlex)
+	if now.ID != desk.ID || now.Value != desk.Value || h.proxy["cloudflare"] != desk.Value {
+		t.Fatal("the rerun must keep the desk token and its value")
+	}
+	requireDeskTokenRights(t, now)
+	if !strings.Contains(h.out.String(), "Updated its rights to:") {
+		t.Fatalf("the person must hear the desk token's rights changed:\n%s", h.out)
+	}
 }
 
 // A rerun keeps every token that is saved where it is used and still

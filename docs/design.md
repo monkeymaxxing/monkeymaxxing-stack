@@ -5052,17 +5052,62 @@ other tokens").
 person's account name on the desk, `vars.person_unix_username`. It holds,
 on the account, Cloudflare Tunnel Write, Access: Apps and Policies Write,
 Access: Organizations, Identity Providers, and Groups Read, Access: Service
-Tokens Read, and Workers R2 Storage Write; and on every zone of the
-account, written as `{"com.cloudflare.api.account.ACCOUNT":
-{"com.cloudflare.api.account.zone.*": "*"}}`, DNS Write, Cache Settings
-Write, Zone Read, and Zone Transform Rules Write (one token with these
-nine, tested at Cloudflare). These cover what the coding
-agent does through the proxy (tunnels, DNS, Access applications and
-policies, the cache rule, R2 buckets, the lock-out's revocation of Access
-sessions) and MMHotline's status-page set-up. The desk token only reads
-login methods and service tokens: a login method decides whose address
-Access believes, so a token in the proxy that could add one would let a
-mistake admit anyone. An account-owned token keeps working whatever
+Tokens Read, and Workers R2 Storage Write. These cover what the coding
+agent does through the proxy (tunnels, Access applications and policies,
+R2 buckets, the lock-out's revocation of Access sessions) and MMHotline's
+status-page set-up.
+
+On every zone of the account, written as
+`{"com.cloudflare.api.account.ACCOUNT":
+{"com.cloudflare.api.account.zone.*": "*"}}`, it holds every zone right a
+team's own site settings may need, not only the Stack's, so a new site
+setting never needs a new token. Each new token costs the person a trip to
+Cloudflare's website, and a team that set up its site on an earlier Stack
+had to make one for each new need (a `www` redirect, a bot setting).
+The groups, by what they are for:
+
+- The Stack's own work: Zone Read and DNS Write (host names, tunnels'
+  records), Cache Settings Write (the cache rule), Zone Transform Rules
+  Write (the status page's URL rewrite rule).
+- The zone's settings and certificates: Zone Settings Write (such as
+  Always Use HTTPS, the lowest TLS version, HTTP/3) and SSL and
+  Certificates Write (the SSL mode, edge and origin certificates).
+- Where requests go: Dynamic URL Redirects Write (single redirects, such
+  as `www` to the bare domain), Page Rules Write (older sites' forwarding
+  rules), Origin Write (origin rules), Config Settings Write
+  (configuration rules), Managed headers Write (Cloudflare's ready-made
+  header transforms), and Workers Routes Write (a Worker on a path).
+- Caching after a release: Cache Purge.
+- Who may reach the site: Zone WAF Write (WAF custom and rate-limiting
+  rules), Firewall Services Write (IP access rules), and Bot Management
+  Write (bot and AI-crawler settings).
+- Checking a change: Analytics Read, read only.
+
+Left out, each for a reason:
+
+- Anything that manages tokens. Cloudflare refuses it to a token made
+  through the API, and the proxy returns every response to the coding
+  agent, so a new token's value would reach the agent.
+- Adding Access login methods (Access: Organizations, Identity Providers,
+  and Groups Write). A login method decides whose address Access believes,
+  so a token in the proxy that could add one would let a mistake admit
+  anyone. The desk token only reads login methods and service tokens.
+- Zone Write. It can delete a whole zone with every setting in it; only
+  the short-lived domain token holds it.
+- Products the Stack and an ordinary site do not use, such as load
+  balancers, waiting rooms, and email routing. Adding one to the list is
+  a Stack change; a team then gets it by one rerun, as below.
+
+Cloudflare accepted all twenty-two groups on one token on 2026-11-23,
+with these resources. The lab's account token maker no longer worked, so
+the proof token was user-owned, with the same groups and resources; a
+`PUT` of a narrower proof token with the wider zone groups, its name and
+its policies only, kept it active and kept its value working. A rerun on a desk whose token already exists
+compares the token's groups and resources with this list and, when they
+differ, updates the token in place (`PUT /accounts/ID/tokens/ID`). The
+token keeps its value, so the API proxy and the token file stay as they
+are: a team that set up on an earlier Stack gets the wider token by one
+rerun of `cloudflare` with one link token. An account-owned token keeps working whatever
 happens to the person's own Cloudflare login, so a leaving person's tokens
 are deleted by name (`--delete-tokens-of-person`), never by removing the
 person from the account alone. Cloudflare's `/user/tokens/verify` answers
