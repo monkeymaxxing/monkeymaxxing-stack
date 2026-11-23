@@ -3,7 +3,7 @@
 This repository holds the server settings for `shop.example.com`.
 Your coding agent uses the server settings in this repository to operate
 the system.
-The system follows Monkeymaxxing Stack version 0.3.0.
+The system follows Monkeymaxxing Stack version 0.3.1.
 
 **Setup status: incomplete.** The links below contain example values.
 At the end of the setup, your coding agent replaces the example values with
