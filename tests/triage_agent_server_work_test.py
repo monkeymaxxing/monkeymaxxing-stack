@@ -141,10 +141,12 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         the reports the team's task asks for; and holds a warning that starts a triage session for
         triage_agent.warn_waits_for_the_agent_minutes; trusts every commit on origin
         (trusted_commits: every_commit_on_origin, since 0.3.0 under triage_agent, and in systems_repository_commits from 0.5.0);
-        and publishes the status page with titles, impacts, components, edit/delete, and Atom feed (since 0.6.0). The pin names the release that does all of this."""
+        publishes the status page with titles, impacts, components, edit/delete, and Atom feed (since 0.6.0); and clears
+        the triage agent's home before each run, so a newer coding agent's settings files never carry over (since 0.6.1).
+        The pin names the release that does all of this."""
         settings = (T/'mmx_project_settings.yml').read_text()
         version = re.search(r'(?m)^    mmhotline:\n      version: "(.*?)"', settings)[1]
-        self.assertEqual(version, '0.6.0')
+        self.assertEqual(version, '0.6.1')
 
     def test_the_held_warn_wait_comes_from_the_stack_setting_for_every_answer(self):
         settings = (T/'mmx_project_settings.yml').read_text()

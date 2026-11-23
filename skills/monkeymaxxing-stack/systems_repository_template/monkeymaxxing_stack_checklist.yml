@@ -40,7 +40,7 @@
 # operating_procedures/add_staging01.md finishes both when the team adds
 # staging01, during the setup for a team that chose the fuller system.
 
-stack_version: 0.3.1
+stack_version: 0.4.0
 # stack_commit records the commit of the stack's repository from which the
 # coding agent copied the system's files. The coding agent records the
 # commit during the initial setup and with each new version. During an
