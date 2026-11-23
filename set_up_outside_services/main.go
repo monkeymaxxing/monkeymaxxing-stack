@@ -34,7 +34,7 @@ Cloudflare, the vault's other secrets, your own tokens on this systems desk, and
 recovery bundle. During the setup your coding agent runs the account commands for
 you, with each key passed straight from your clipboard; you run the lock yourself
 with ssh desk01-lock. You run the other commands from your laptop with
-ssh -t desk01, plus a code from your phone once the desk is locked, such as:
+ssh -t desk01, plus a code from your phone once the systems desk is locked, such as:
 
   ssh -t desk01 set-up-outside-services backblaze
 
@@ -58,7 +58,7 @@ Commands:
                                 the account (--account-id names it when the token reaches
                                 several), add your domain and copy its DNS records, give the
                                 account its workers.dev address, then make your systems
-                                desk's Cloudflare token (in the API proxy and your token
+                                systems desk's Cloudflare token (in the API proxy and your token
                                 file), the tunnels, the R2 buckets and keys, the
                                 MMHotline-down alarm's token, the status page and your own
                                 key for posting to it, and the One-time PIN login method;
@@ -101,7 +101,7 @@ Commands:
                                 in your token file, on a systems desk where cloudflare did not make it.
   from-the-coding-agent backblaze | cloudflare [--account-id ID] | save-a-key KEY | random-secrets
                                 Your coding agent's way to run an account command, as root
-                                through the desk's sudo rule, with each key on standard input,
+                                through the systems desk's sudo rule, with each key on standard input,
                                 one value per line, so the key never shows in its chat:
                                 backblaze takes the master key's keyID and applicationKey;
                                 cloudflare the link token; save-a-key KEY the value of
