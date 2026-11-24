@@ -724,6 +724,25 @@ func consolePasswordHash(password string) (string, error) {
 	return hash, nil
 }
 
+// consolePasswordMatchesHash says whether hash, from the vault, is the
+// SHA-512 crypt hash of password, as /etc/shadow checks it: openssl hashes
+// the password again with the hash's own salt. The password goes on
+// standard input; the salt is not secret.
+func consolePasswordMatchesHash(password, hash string) (bool, error) {
+	parts := strings.Split(hash, "$")
+	if len(parts) != 4 || parts[1] != "6" || parts[2] == "" {
+		return false, fmt.Errorf("the vault's %s is not a SHA-512 crypt hash", consolePasswordVaultKey)
+	}
+	command := exec.Command("openssl", "passwd", "-6", "-salt", parts[2], "-stdin")
+	command.Stdin = strings.NewReader(password + "\n")
+	var output, errorOutput bytes.Buffer
+	command.Stdout, command.Stderr = &output, &errorOutput
+	if err := command.Run(); err != nil {
+		return false, fmt.Errorf("openssl passwd -6 failed: %s", firstLine(errorOutput.String(), err))
+	}
+	return strings.TrimSpace(output.String()) == hash, nil
+}
+
 // missing lists the keys the playbooks read that the vault lacks, as
 // `mmx secrets usage --json` reports them. MMX exits 1 when a key is
 // missing, which is the case this reads, so its JSON decides.

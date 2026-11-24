@@ -142,13 +142,7 @@ func (e *environment) runTheLockSteps(settings systemSettings) error {
 		return fmt.Errorf("the backup write key that set-up-outside-services backblaze keeps for the recovery bundle's upload is missing (%v). Run set-up-outside-services backblaze --replace-key %s, which makes a new one and keeps it, then run lock-the-desk again", err, backupWriteKeyIDVaultName)
 	}
 	steps := []lockStep{
-		{"shared_root_console_password", func() error {
-			password, err := e.consolePasswordScreen(settings, "Your keys locked away: step 1 of 3, your servers' console password")
-			if err != nil {
-				return err
-			}
-			return e.saveTheConsolePassword(saved, bundle, password)
-		}},
+		{"shared_root_console_password", func() error { return e.consolePasswordScreen(settings, saved, bundle) }},
 		{"recovery_passphrase", func() error {
 			return e.recoveryPassphraseScreen(settings, passphrase, "Your keys locked away: step 2 of 3, your recovery passphrase", "Save it in", "The lock")
 		}},
@@ -183,21 +177,25 @@ func (e *environment) runTheLockSteps(settings systemSettings) error {
 }
 
 // consolePasswordScreen makes the servers' shared root console password,
-// shows it once, and returns it once the person typed it back. title is the
-// screen's first line, which names the command's step.
-func (e *environment) consolePasswordScreen(settings systemSettings, title string) (string, error) {
+// shows it once, and saves it once the person typed it back: its hash in
+// the vault, the password in the bundle.
+func (e *environment) consolePasswordScreen(settings systemSettings, saved, bundle *savedKeys) error {
 	e.show(`
-` + title + `
+Your keys locked away: step 1 of 3, your servers' console password
 
 What this is for:
   Your server provider's web console lets root log in with it, the way in when everything else fails.
 `)
 	for _, item := range secretsPlan(settings) {
 		if item.Kind == consolePasswordSecret {
-			return e.showANewConsolePassword(item)
+			password, err := e.showANewConsolePassword(item)
+			if err != nil {
+				return err
+			}
+			return e.saveTheConsolePassword(saved, bundle, password)
 		}
 	}
-	return "", errors.New("the secrets plan has no console password")
+	return errors.New("the secrets plan has no console password")
 }
 
 // recoveryPassphraseScreen shows the recovery passphrase once and has the

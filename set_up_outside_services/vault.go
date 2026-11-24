@@ -14,7 +14,8 @@ import (
 // vault is the systems repository's MMX vault. This command lists its keys
 // and adds values, and never writes the vault's file itself: MMX owns the
 // vault's format. Only make-a-new-recovery-bundle reads a value back, to
-// copy it into the new bundle or to upload with it, never to the screen.
+// copy it into the new bundle, to upload with it, or to check the typed
+// console password against its hash, never to the screen.
 type vault interface {
 	keys() (map[string]bool, error)
 	set(key, value string, replace bool) error

@@ -4929,10 +4929,19 @@ through MMX (`mmx secrets pipe-to`). Reason that reading the vault is
 allowed here: the person runs the command on their own desk, where they
 are root already, and each value goes from one encrypted file, or a
 root-only file, into another, never to the screen or to the coding agent.
-Two items cannot be read back by design, so they get new values: a new
-console password, shown once and typed back as at the lock (hash to the
-vault, password to the bundle), and new emergency codes, which the
-command makes as google-authenticator does and gives the phone code with
+Two items cannot be read back by design, so they come another way. The
+person types the servers' current console password from the password
+manager at a hidden prompt; the command checks it against the vault's
+`shared_root_console_password_hash` by hashing it again with that hash's
+salt (`openssl passwd -6 -salt`), and puts it in the bundle. Two wrong ones
+stop the run with nothing changed, and point to
+`operating_procedures/rotate_a_secret.md`, whose console password section
+replaces the password without the old one while `util01` reaches the
+servers over SSH. Reason for typing the current password, not making a new
+one: the vault and the servers stay as they are, so no server run follows,
+and a stop never leaves a password manager holding a password the servers
+never got. The command makes new emergency codes as google-authenticator
+does and gives the phone code with
 `sudo -n set-up-the-phone-code --replace-emergency-codes` on standard
 input. That replaces only the code lines of `/etc/systems-desk/phone-code`
 and checks, before its atomic swap, that the new file keeps the old
@@ -4943,18 +4952,17 @@ the unopenable bundle held them.
 The command changes nothing live until the new bundle is safe. It reads
 the settings after its pull, so a `staging01` a teammate added is in the
 bundle; it checks every input (the desk's files, the vault's keys, the
-phone code, and that the upload's key signs in) before the first screen;
-it runs both screens and builds the bundle in a folder of the person's
-own; it checks the bundle with the lock's completeness check and uploads
-it into the locked backup bucket. Only then, in one finishing step, does
-it save the hash in the vault, give the phone code the new emergency
-codes, replace `recovery_bundle.age`, and commit and push it with the
-vault. Reason: a stop before the upload leaves the vault, the phone code
-and the repository's bundle in step, and a later account command never
-commits an orphaned vault change. Any stop before the upload removes the
-folder, which holds the new passphrase in plain text, Ctrl-C and a lost
-connection too, and a rerun starts again. After the upload the folder
-stays with a mark, so a rerun finishes that bundle and makes no new
+phone code, the console password's hash, and that the upload's key signs
+in) before the first screen; it runs both screens and builds the bundle
+in a folder of the person's own; it checks the bundle with the lock's
+completeness check and uploads it into the locked backup bucket. Only
+then, in one finishing step, does it give the phone code the new
+emergency codes, replace `recovery_bundle.age`, and commit and push it.
+It never changes the vault. Reason: a stop before the upload leaves the
+phone code and the repository's bundle in step. Any stop before the
+upload removes the folder, which holds the new passphrase in plain
+text, Ctrl-C and a lost connection too, and a rerun starts again.
+After the upload the folder stays with a mark, so a rerun finishes that bundle and makes no new
 passphrase; once the checkout holds the bundle, the folder goes, and a
 failed commit or push says not to run the command again. One run at a
 time: a lock file in the person's folder refuses a second terminal, which
@@ -5002,9 +5010,11 @@ other than the vault; the settings it reads, such as bucket names, stay
 the coding agent's to change, and the command prints the values the agent
 needs, such as `r2_bucket_url`. It never decrypts the vault itself, and
 reads a value back out of the vault in one command only:
-`make-a-new-recovery-bundle` reads the values the new bundle copies, and
-the backup write key its upload uses, with `mmx secrets pipe-to`, as root,
-straight into the new bundle or the upload, never to the screen. Reason:
+`make-a-new-recovery-bundle` reads the values the new bundle copies, the
+backup write key its upload uses, and the console password's hash it
+checks the typed password against, with `mmx secrets pipe-to`, as root,
+straight into the new bundle, the upload or the check, never to the
+screen. Reason:
 the old bundle cannot be opened, and the vault is the one place those
 values live on the desk.
 

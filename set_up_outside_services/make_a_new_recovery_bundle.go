@@ -16,24 +16,28 @@ import (
 // recovery passphrase, on a locked desk: the route when the recovery
 // passphrase is lost while the desk still works. The old bundle cannot be
 // opened without the old passphrase, so this command builds a new one from
-// where each item lives on the desk. It makes new values for the two items
-// the desk cannot read back: a new console password, whose hash alone is in
-// the vault, and new emergency codes, which the desk's phone code keeps but
+// where each item lives on the desk. Two items the desk cannot read back
+// come another way: the person types the servers' current console password
+// from the password manager, checked against its hash in the vault, and the
+// command makes new emergency codes, which the desk's phone code keeps but
 // never shows. The phone's own secret stays, so the person scans nothing.
+// The console password and the vault stay as they are, so the servers need
+// no run.
 //
 // It changes nothing live until the bundle is safe: it checks every input,
 // runs both screens and builds the bundle in a private folder, and copies
-// it into the locked backup bucket. Only then does it save the new hash in
-// the vault, give the phone code the new emergency codes, replace
-// recovery_bundle.age, and commit and push. A stop before the upload leaves
-// the desk as it was, and a rerun starts again; a stop after it leaves the
-// folder, and a rerun finishes that bundle.
+// it into the locked backup bucket. Only then does it give the phone code
+// the new emergency codes, replace recovery_bundle.age, and commit and
+// push. A stop before the upload leaves the desk as it was, and a rerun
+// starts again; a stop after it leaves the folder, and a rerun finishes
+// that bundle.
 //
 // Only the person runs it, in their own terminal on the desk, because the
-// screens show the new console password and recovery passphrase. It reads
-// the vault as root through MMX, as every account command writes it: each
-// value goes from the vault, or a root-only file, straight into the new
-// bundle, and never to the screen. docs/design.md, "Account and secret
+// person types the console password and the screen shows the new recovery
+// passphrase. It reads the vault as root through MMX, as every account
+// command writes it: each value goes from the vault, or a root-only file,
+// straight into the new bundle or the password's check, and never to the
+// screen. docs/design.md, "Account and secret
 // setup from the systems desk", records the design.
 
 const makeANewRecoveryBundleCommand = "make-a-new-recovery-bundle"
@@ -170,6 +174,10 @@ func (e *environment) makeANewRecoveryBundle() error {
 	if err != nil {
 		return err
 	}
+	consolePasswordHash, err := saved.store.value(consolePasswordVaultKey)
+	if err != nil {
+		return err
+	}
 
 	if err := os.RemoveAll(directory); err != nil {
 		return err
@@ -211,7 +219,9 @@ func (e *environment) makeANewRecoveryBundle() error {
 		return err
 	}
 
-	consolePassword, err := e.consolePasswordScreen(settings, "Your new recovery bundle: step 1 of 2, a new console password for your servers")
+	// After every check of the desk's items, so a refusal comes before this
+	// first screen; a wrong password removes the folder like any stop.
+	consolePassword, err := e.typeTheCurrentConsolePassword(settings, consolePasswordHash)
 	if err != nil {
 		return err
 	}
@@ -249,6 +259,45 @@ func (e *environment) makeANewRecoveryBundle() error {
 	return e.saveTheUploadedBundle(saved, directory)
 }
 
+// typeTheCurrentConsolePassword asks the person for the servers' current
+// shared root console password, from the team's password manager, and
+// returns it once it matches the vault's hash. Two wrong ones stop the run.
+// Reason for two: a typing slip gets a second try, and a person who does
+// not have the current password learns at once how to replace it.
+func (e *environment) typeTheCurrentConsolePassword(settings systemSettings, hash string) (string, error) {
+	e.show(fmt.Sprintf(`
+Your new recovery bundle: step 1 of 2, your servers' console password
+
+What this is for:
+  The new recovery bundle keeps your servers' console password as it is now. It does not change.
+
+Do this now:
+  Type the password from the item  %s  in %s.
+`, consolePasswordItem, passwordManager(settings)))
+	for tries := 1; ; {
+		typed, err := e.prompt("  Console password (hidden): ")
+		if errors.Is(err, errEmptyValue) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		matches, err := consolePasswordMatchesHash(typed, hash)
+		if err != nil {
+			return "", err
+		}
+		if matches {
+			e.say("  It matches your servers' console password.")
+			return typed, nil
+		}
+		if tries == 2 {
+			return "", fmt.Errorf("the password typed twice is not your servers' current console password, so nothing changed. When nobody has the current one, replace it first, as operating_procedures/rotate_a_secret.md, section \"The shared root console password\", says, then run %s again", makeANewRecoveryBundleCommand)
+		}
+		tries++
+		e.say("  That is not your servers' current console password. Check the item %q in %s, then type it again.", consolePasswordItem, passwordManager(settings))
+	}
+}
+
 // newBundleIn is the new bundle's MMX vault in its folder, with its
 // passphrase file beside it.
 func newBundleIn(directory string) mmxVault {
@@ -256,8 +305,8 @@ func newBundleIn(directory string) mmxVault {
 }
 
 // saveTheUploadedBundle is the one finishing step, after the upload: the
-// console password's hash into the vault, the emergency codes into the
-// phone code, the bundle into the checkout, then the commit and the push.
+// emergency codes into the phone code, the bundle into the checkout, then
+// the commit and the push.
 // Each part may run twice, so a rerun after a stop here finishes it.
 func (e *environment) saveTheUploadedBundle(saved *savedKeys, directory string) error {
 	bundle := newBundleIn(directory)
@@ -266,22 +315,10 @@ func (e *environment) saveTheUploadedBundle(saved *savedKeys, directory string) 
 		if err != nil {
 			return err
 		}
-		consolePassword, err := bundle.value(bundleConsolePassword)
-		if err != nil {
-			return err
-		}
 		codes, err := bundle.value(bundlePhoneCodeEmergencyCode)
 		if err != nil {
 			return err
 		}
-		hash, err := consolePasswordHash(consolePassword)
-		if err != nil {
-			return err
-		}
-		if err := saved.save(consolePasswordVaultKey, hash); err != nil {
-			return err
-		}
-		e.say("Saved the new console password's hash as %s; the servers get it at their next MMX run.", consolePasswordVaultKey)
 		if err := e.replaceEmergencyCodes(codes); err != nil {
 			return err
 		}
@@ -291,13 +328,13 @@ func (e *environment) saveTheUploadedBundle(saved *savedKeys, directory string) 
 	if err != nil {
 		return fmt.Errorf("%v. The new bundle is in the backup bucket, and your new passphrase opens it. Fix the cause, then run %s again: it finishes this bundle and makes no new passphrase", trimPeriod(err.Error()), makeANewRecoveryBundleCommand)
 	}
-	// The checkout holds the bundle and the vault the hash now, so the
-	// folder and its passphrase go.
+	// The checkout holds the bundle now, so the folder and its passphrase
+	// go.
 	if err := os.RemoveAll(directory); err != nil {
 		return err
 	}
 	if err := e.finishVaultChange(saved, e.commandLine); err != nil {
-		return fmt.Errorf("%v. The new bundle is in the systems desk's checkout and in the backup bucket, and your new passphrase opens it: do not run %s again, which would make another passphrase. Your coding agent commits and pushes recovery_bundle.age and secrets_vault.age", err, makeANewRecoveryBundleCommand)
+		return fmt.Errorf("%v. The new bundle is in the systems desk's checkout and in the backup bucket, and your new passphrase opens it: do not run %s again, which would make another passphrase. Your coding agent commits and pushes recovery_bundle.age", err, makeANewRecoveryBundleCommand)
 	}
 	return nil
 }

@@ -79,8 +79,8 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
   it in the password manager as `Shared root console password`, and
   unmounts and reboots as its step 5 shows. That password opens this
   server's console. Once SSH works again,
-  [Make a new recovery passphrase](make_a_new_recovery_passphrase.md) gives
-  every server one new console password.
+  [The shared root console password](rotate_a_secret.md#the-shared-root-console-password)
+  gives every server one new console password.
 - **Know which way in the provider gives.** Some consoles show the running
   system and take a login (step 1; steps 2 to 4 work there as written).
   Others, such as Hetzner Cloud's, need a person at the browser console, and

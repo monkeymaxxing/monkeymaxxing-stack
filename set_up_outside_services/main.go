@@ -96,9 +96,10 @@ Commands:
   make-a-new-recovery-bundle    After a lost recovery passphrase, in your own terminal
                                 (ssh -t desk01 set-up-outside-services make-a-new-recovery-bundle),
                                 on a systems desk whose lock is done: a new recovery bundle
-                                with a new recovery passphrase, a new console password for
-                                your servers and new emergency codes for your phone code,
-                                each shown once or saved only in the bundle. It copies the
+                                with a new recovery passphrase, shown once, your servers'
+                                current console password, which you type from your password
+                                manager, and new emergency codes for your phone code, saved
+                                only in the bundle. It copies the
                                 bundle into the locked backup bucket, then commits and
                                 pushes it in place of the old one. Your phone needs no new
                                 scan.

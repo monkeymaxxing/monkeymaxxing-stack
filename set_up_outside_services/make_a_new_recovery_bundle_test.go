@@ -15,12 +15,14 @@ import (
 
 // remakeHarness is a desk whose lock is done, whose recovery passphrase is
 // lost: lock-the-desk ran, the lock stage locked the desk, and the phone
-// code is set up. phoneCodes records each set of emergency codes the phone
-// code was given.
+// code is set up. consolePassword is the one the lock showed, which the
+// person types from the password manager; phoneCodes records each set of
+// emergency codes the phone code was given.
 type remakeHarness struct {
 	*lockHarness
-	oldPassphrase, oldHash, oldBundle string
-	phoneCodes                        []string
+	oldPassphrase, oldHash, oldBundle, oldVault string
+	consolePassword                             string
+	phoneCodes                                  []string
 }
 
 func newRemakeHarness(t *testing.T) *remakeHarness {
@@ -38,17 +40,41 @@ func newRemakeHarness(t *testing.T) *remakeHarness {
 	}
 	h.oldPassphrase, h.oldHash = h.passphrase, h.vault.values[consolePasswordVaultKey]
 	h.oldBundle = h.repositoryBundle()
+	h.oldVault = h.repositoryFile(vaultFile)
+	shown := regexp.MustCompile(`----\n  ([a-z-]+)\n  ----`).FindAllStringSubmatch(h.out.String(), -1)
+	h.consolePassword = shown[len(shown)-1][1]
+	lockPrompt := h.e.prompt
+	h.e.prompt = func(label string) (string, error) {
+		if strings.Contains(label, "Console password") {
+			return h.consolePassword, nil
+		}
+		return lockPrompt(label)
+	}
 	h.out.Reset()
 	return h
 }
 
 func (h *remakeHarness) repositoryBundle() string {
 	h.t.Helper()
-	content, err := os.ReadFile(filepath.Join(h.e.directory, recoveryBundleFile))
+	return h.repositoryFile(recoveryBundleFile)
+}
+
+func (h *remakeHarness) repositoryFile(name string) string {
+	h.t.Helper()
+	content, err := os.ReadFile(filepath.Join(h.e.directory, name))
 	if err != nil {
 		h.t.Fatal(err)
 	}
 	return string(content)
+}
+
+// requireTheVaultUnchanged says the vault's file and its console password
+// hash are as the lock left them: the command never changes the vault.
+func (h *remakeHarness) requireTheVaultUnchanged() {
+	h.t.Helper()
+	if h.vault.values[consolePasswordVaultKey] != h.oldHash || h.repositoryFile(vaultFile) != h.oldVault {
+		h.t.Error("the vault changed")
+	}
 }
 
 // bundleValue reads one item of the repository's bundle with the passphrase
@@ -82,9 +108,7 @@ func (h *remakeHarness) lockedCopies() int {
 // a passphrase on the desk.
 func (h *remakeHarness) requireNothingChanged() {
 	h.t.Helper()
-	if h.vault.values[consolePasswordVaultKey] != h.oldHash {
-		h.t.Error("the vault's console password hash changed")
-	}
+	h.requireTheVaultUnchanged()
 	if len(h.phoneCodes) > 0 {
 		h.t.Error("the phone code got new emergency codes")
 	}
@@ -99,28 +123,12 @@ func (h *remakeHarness) requireNothingChanged() {
 	}
 }
 
-// consolePasswordMatchesHash says whether hash is the SHA-512 crypt hash of
-// password, as /etc/shadow checks it.
-func consolePasswordMatchesHash(t *testing.T, password, hash string) bool {
-	t.Helper()
-	parts := strings.Split(hash, "$")
-	if len(parts) != 4 || parts[1] != "6" {
-		return false
-	}
-	command := exec.Command("openssl", "passwd", "-6", "-salt", parts[2], "-stdin")
-	command.Stdin = strings.NewReader(password + "\n")
-	output, err := command.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return strings.TrimSpace(string(output)) == hash
-}
-
 // After a finished lock whose recovery passphrase is lost, the new bundle
 // opens with the new passphrase alone and holds every item the lock
-// requires, with the desk's current values, a new console password and new
-// emergency codes. It is pushed in place of the old bundle and copied into
-// the locked backup bucket, and no secret shows on the screen.
+// requires, with the desk's current values, the console password the person
+// typed and new emergency codes. It is pushed in place of the old bundle and
+// copied into the locked backup bucket, the vault is unchanged, and no
+// secret shows on the screen.
 func TestANewRecoveryBundleOpensWithTheNewPassphraseAndHoldsEveryItem(t *testing.T) {
 	h := newRemakeHarness(t)
 	if err := runMakeANewRecoveryBundle(h.e); err != nil {
@@ -166,15 +174,17 @@ func TestANewRecoveryBundleOpensWithTheNewPassphraseAndHoldsEveryItem(t *testing
 			t.Errorf("the new emergency codes keep the old %s", old)
 		}
 	}
-	consolePassword := h.bundleValue(bundleConsolePassword)
-	if len(consolePassword) != 23 || h.vault.values[consolePasswordVaultKey] == h.oldHash ||
-		!consolePasswordMatchesHash(t, consolePassword, h.vault.values[consolePasswordVaultKey]) {
-		t.Errorf("the console password %q is not a new 4-group password, or the vault's hash is not its hash", consolePassword)
+	if got := h.bundleValue(bundleConsolePassword); got != h.consolePassword {
+		t.Errorf("the new bundle's console password is %q, want the typed current one", got)
 	}
+	if strings.Contains(output, "----\n  ") {
+		t.Errorf("the run showed a new console password:\n%s", output)
+	}
+	h.requireTheVaultUnchanged()
 
-	// Pushed with the vault, and a second locked copy at Backblaze.
-	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile+"\n"+vaultFile {
-		t.Errorf("the push changes %q, want the bundle and the vault", files)
+	// Pushed alone, and a second locked copy at Backblaze.
+	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile {
+		t.Errorf("the push changes %q, want the bundle alone", files)
 	}
 	if copies := h.lockedCopies(); copies != 2 {
 		t.Errorf("want the lock's copy and the new one at Backblaze, got %d", copies)
@@ -182,7 +192,34 @@ func TestANewRecoveryBundleOpensWithTheNewPassphraseAndHoldsEveryItem(t *testing
 	if _, err := os.Stat(h.e.newBundleDirectory(mustSettings(t, h.e))); !os.IsNotExist(err) {
 		t.Error("the new bundle's folder, with its passphrase, stays on the desk")
 	}
-	h.requireNoSecretInOutput(providerToken, masterKey, vaultPassphrase, strings.Fields(codes)[0])
+	h.requireNoSecretInOutput(providerToken, masterKey, vaultPassphrase, h.consolePassword, strings.Fields(codes)[0])
+}
+
+// A console password that does not match the vault's hash is asked once
+// more; a second wrong one stops the run before the passphrase screen, with
+// the rotation named, and changes nothing.
+func TestAWrongConsolePasswordTwiceChangesNothing(t *testing.T) {
+	h := newRemakeHarness(t)
+	asked := 0
+	lockPrompt := h.e.prompt
+	h.e.prompt = func(label string) (string, error) {
+		if strings.Contains(label, "Console password") {
+			asked++
+			return "bcdef-bcdef-bcdef-bcdef", nil
+		}
+		return lockPrompt(label)
+	}
+	err := runMakeANewRecoveryBundle(h.e)
+	if err == nil || !strings.Contains(err.Error(), "rotate_a_secret.md") || !strings.Contains(err.Error(), "nothing changed") {
+		t.Fatalf("want a stop that names the rotation and says nothing changed, got %v", err)
+	}
+	if asked != 2 || strings.Contains(h.out.String(), "step 2 of 2") {
+		t.Fatalf("want two tries and no passphrase screen, got %d tries:\n%s", asked, h.out)
+	}
+	h.requireNothingChanged()
+	if h.lockedCopies() != 1 {
+		t.Error("a copy was uploaded")
+	}
 }
 
 // The gate is the desk's lock itself, not lock-the-desk's record: a desk
@@ -243,9 +280,8 @@ func TestANewRecoveryBundleChecksEveryInputBeforeAScreen(t *testing.T) {
 }
 
 // A run that stops after both screens but before the upload, here because
-// Backblaze refuses the upload, changes nothing live: the vault keeps the
-// old hash, the phone code its old emergency codes, and the repository its
-// old bundle. The folder with the new passphrase is gone.
+// Backblaze refuses the upload, changes nothing live: the phone code keeps
+// its old emergency codes and the repository its old bundle. The folder with the new passphrase is gone.
 func TestAStopBeforeTheUploadChangesNothing(t *testing.T) {
 	h := newRemakeHarness(t)
 	h.b2.Failures["b2_upload_file"] = "malformed"
@@ -260,11 +296,19 @@ func TestAStopBeforeTheUploadChangesNothing(t *testing.T) {
 }
 
 // A run that stops after the upload keeps what it needs, and the rerun
-// finishes that bundle: no new screen, no second upload, and the vault's
-// hash and the phone's codes are the uploaded bundle's.
+// finishes that bundle: no new screen, no second upload, and the phone's
+// codes are the uploaded bundle's.
 func TestAStopAfterTheUploadFinishesOnTheRerun(t *testing.T) {
 	h := newRemakeHarness(t)
-	h.vault.failOn[consolePasswordVaultKey] = true
+	failedOnce := false
+	h.e.replaceEmergencyCodes = func(codes string) error {
+		if !failedOnce {
+			failedOnce = true
+			return errors.New("set-up-the-phone-code --replace-emergency-codes stopped (exit status 1)")
+		}
+		h.phoneCodes = append(h.phoneCodes, codes)
+		return nil
+	}
 	err := runMakeANewRecoveryBundle(h.e)
 	if err == nil || !strings.Contains(err.Error(), "run "+makeANewRecoveryBundleCommand+" again: it finishes this bundle") {
 		t.Fatalf("want a stop after the upload that says the rerun finishes it, got %v", err)
@@ -274,7 +318,6 @@ func TestAStopAfterTheUploadFinishesOnTheRerun(t *testing.T) {
 	}
 	passphrase := h.passphrase
 
-	delete(h.vault.failOn, consolePasswordVaultKey)
 	h.out.Reset()
 	if err := runMakeANewRecoveryBundle(h.e); err != nil {
 		t.Fatalf("the rerun: %v\n%s", err, h.out)
@@ -285,14 +328,15 @@ func TestAStopAfterTheUploadFinishesOnTheRerun(t *testing.T) {
 	if h.lockedCopies() != 2 {
 		t.Error("the rerun uploaded another copy")
 	}
-	if !consolePasswordMatchesHash(t, h.bundleValue(bundleConsolePassword), h.vault.values[consolePasswordVaultKey]) {
-		t.Error("the vault's hash is not the uploaded bundle's console password")
+	if h.bundleValue(bundleConsolePassword) != h.consolePassword {
+		t.Error("the uploaded bundle's console password is not the typed one")
 	}
+	h.requireTheVaultUnchanged()
 	if len(h.phoneCodes) != 1 || h.phoneCodes[0] != h.bundleValue(bundlePhoneCodeEmergencyCode) {
 		t.Error("the phone code did not get the uploaded bundle's emergency codes")
 	}
-	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile+"\n"+vaultFile {
-		t.Errorf("the push changes %q, want the bundle and the vault", files)
+	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile {
+		t.Errorf("the push changes %q, want the bundle alone", files)
 	}
 	if _, err := os.Stat(h.e.newBundleDirectory(mustSettings(t, h.e))); !os.IsNotExist(err) {
 		t.Error("the new bundle's folder, with its passphrase, stays on the desk")
@@ -346,9 +390,13 @@ func TestCtrlCRemovesTheNewPassphrase(t *testing.T) {
 	}
 	h := newRemakeHarness(t)
 	h.e.handleInterrupts()
-	h.e.confirm = func(string) (string, error) {
-		os.Stdout.WriteString("waiting " + h.e.newBundleDirectory(mustSettings(t, h.e)) + "\n")
-		select {}
+	remakePrompt := h.e.prompt
+	h.e.prompt = func(label string) (string, error) {
+		if strings.Contains(label, "Recovery passphrase") {
+			os.Stdout.WriteString("waiting " + h.e.newBundleDirectory(mustSettings(t, h.e)) + "\n")
+			select {}
+		}
+		return remakePrompt(label)
 	}
 	_ = runMakeANewRecoveryBundle(h.e)
 	t.Fatal("the command did not wait at the screen")
