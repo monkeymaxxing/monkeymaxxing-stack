@@ -144,7 +144,8 @@ class TheTriageUsersCheckNowLines(unittest.TestCase):
 
 FLEET_HUB_SUDOERS = os.path.join(TEMPLATE, "roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings")
 FLEET_FINDINGS_REGEX_LINE = (
-    "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog ^fleet findings [a-z0-9_]+/[a-z0-9_]+ --json$"
+    "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog "
+    "^fleet findings [A-Za-z0-9][A-Za-z0-9_-]*/[A-Za-z0-9][A-Za-z0-9_-]* --json$"
 )
 SET_ASIDE_FINDINGS_LINE = "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet set-aside-findings --json"
 
@@ -167,7 +168,12 @@ class TheTriageUsersFleetHubFindingsLines(unittest.TestCase):
     def test_the_regex_allows_one_check_and_json_only(self):
         regex = re.compile(FLEET_FINDINGS_REGEX_LINE[FLEET_FINDINGS_REGEX_LINE.index("^fleet"):])
         self.assertRegex("fleet findings installed_packages/known_exploited_flaws --json", regex)
+        # MMWatchdog's names: a letter or digit, then letters, digits, _ and -; a custom check may use them all.
+        self.assertRegex("fleet findings Custom-Jobs/Queue-2 --json", regex)
         for refused in (
+            "fleet findings -x/y --json",
+            "fleet findings a/-y --json",
+            "fleet findings a.b/c --json",
             "fleet findings installed_packages/known_exploited_flaws",
             "fleet findings installed_packages/known_exploited_flaws --finding x --json",
             "fleet findings installed_packages --json",

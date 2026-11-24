@@ -15,7 +15,10 @@
   servers"). Both only read the hub's latest reports. The regex line allows
   one check, as CHECK_GROUP/CHECK, and --json, and nothing else: no
   --finding, because a finding's ID holds spaces, which a sudo regex
-  cannot bound safely. tests/sudoers_triage_test.py checks it.
+  cannot bound safely. Each name follows MMWatchdog's own: a letter or
+  digit first, so no name reads as an option, then letters, digits, _ and
+  -, so a team's custom check is listed too; MMWatchdog refuses a name
+  longer than 64. tests/sudoers_triage_test.py checks it.
 */ -}}
 # Managed by MMX from roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings in
 # the systems repository. The triage user may read, as root, the past week's
@@ -41,5 +44,5 @@ triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }}
 triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} util_server_capacity --last 7d --json
 {{- end }}
 {{- end }}
-triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog ^fleet findings [a-z0-9_]+/[a-z0-9_]+ --json$
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog ^fleet findings [A-Za-z0-9][A-Za-z0-9_-]*/[A-Za-z0-9][A-Za-z0-9_-]* --json$
 triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet set-aside-findings --json
