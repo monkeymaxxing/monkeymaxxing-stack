@@ -1082,6 +1082,11 @@ node_tasks:
         After=wg-quick@wg0.service
         Wants=wg-quick@wg0.service
 
+  # The findings set aside after investigation, on the hub that now runs:
+  # roles/set_aside_findings_on_the_fleet_hub, which
+  # playbooks/apply_set_aside_findings.yml runs too.
+  - role: set_aside_findings_on_the_fleet_hub
+
   # The hub keeps a record of every server that ever reported and expects
   # further reports from each recorded server. The hub alerts when a
   # recorded server stops reporting. A server deleted from the inventory,

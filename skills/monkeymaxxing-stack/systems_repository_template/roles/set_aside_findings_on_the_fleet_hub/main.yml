@@ -1,0 +1,86 @@
+# The findings set aside after investigation, on MMWatchdog's fleet hub on
+# util01: triage_agent_notes/set_aside_findings.yml becomes
+# /etc/mmwatchdog/set_aside_findings.yml (triage_agent_rules.md, "Setting a
+# finding aside"). Two callers run the same steps: the util_server role,
+# right after it set up the hub, and playbooks/apply_set_aside_findings.yml,
+# which the triage agent requests after it added an entry.
+#
+# The steps follow the util_server role's own order for the hub's files:
+# write the candidate, check it with the installed MMWatchdog, and only
+# then install it and reload MMWatchdog. So a file that MMWatchdog refuses
+# never goes live, and the hub keeps the entries it had. A reload, not a
+# restart: the hub settles the file against its open incidents at every
+# reload, and a reload keeps the hub's alerts flowing. Last, the entries
+# in effect, which the hub lists, must be the installed file's entries.
+#
+# The candidate sits beside the hub's other candidate files, which
+# MMWatchdog checks together. When the check refuses it, on_failure puts
+# the installed entries back into the candidate, so the util_server role's
+# next check of the hub's files does not fail on a file that never went
+# live.
+node_tasks:
+  - task_block:
+      id: set_aside_findings_of_the_fleet_hub
+      changes:
+        - id: write_the_candidate_set_aside_findings
+          file:
+            path: /usr/local/lib/mmwatchdog/candidate_config/set_aside_findings.yml
+            source: ../../triage_agent_notes/set_aside_findings.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      # The check only reads, so a dryrun runs it too, and the daily server
+      # settings comparison ends with 0 when nothing differs. A first
+      # preview of a new util01 has no MMWatchdog yet, and skips it.
+      validate:
+        - id: check_the_candidate_set_aside_findings
+          shell:
+            script: bash -c "$PROGRAM"
+            dryrun: bash -c "$PROGRAM"
+            run_only_if_this_path_exists: /usr/local/bin/mmwatchdog
+            env:
+              PROGRAM: |
+                /usr/local/bin/mmwatchdog validate \
+                  --config-dir /usr/local/lib/mmwatchdog/candidate_config \
+                  --official-extra-module-dir /usr/local/lib/mmwatchdog/official_extra_modules \
+                  --external-module-dir /usr/local/lib/mmwatchdog/external_modules
+            changed_when: false
+      activate:
+        - id: install_the_set_aside_findings
+          file:
+            path: /etc/mmwatchdog/set_aside_findings.yml
+            content_from_node_paths: [/usr/local/lib/mmwatchdog/candidate_config/set_aside_findings.yml]
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: reload_mmwatchdog_for_the_set_aside_findings
+          when: {equals: ["{{ .node_tasks.install_the_set_aside_findings.change }}", changed]}
+          shell:
+            script: /usr/local/bin/mmwatchdog reload
+      verify:
+        - id: confirm_the_set_aside_findings_in_effect
+          shell:
+            script: bash -c "$PROGRAM"
+            dryrun: bash -c "$PROGRAM"
+            run_only_if_this_path_exists: /run/mmwatchdog/mmwatchdog.sock
+            env:
+              PROGRAM: |
+                entries='[(. // [])[] | [.check, .finding, .exact_finding]]'
+                installed=$(/usr/local/bin/mmwatchdog validate --json | jq --compact-output ".config.set_aside_findings | $entries") || exit 1
+                in_effect=$(/usr/local/bin/mmwatchdog fleet set-aside-findings --json | jq --compact-output ".set_aside_findings | $entries") || exit 1
+                if [ "$installed" != "$in_effect" ]; then
+                  echo "The fleet hub does not have the entries of /etc/mmwatchdog/set_aside_findings.yml in effect. Installed: $installed. In effect: $in_effect. Read journalctl -u mmwatchdog for the reload."
+                  exit 1
+                fi
+                echo "The fleet hub has $(printf '%s' "$in_effect" | jq length) set-aside findings in effect, the entries of /etc/mmwatchdog/set_aside_findings.yml."
+            changed_when: false
+      on_failure:
+        - id: put_the_installed_set_aside_findings_back_into_the_candidate
+          shell:
+            script: |
+              candidate=/usr/local/lib/mmwatchdog/candidate_config/set_aside_findings.yml
+              if [ -e /etc/mmwatchdog/set_aside_findings.yml ]; then
+                cp /etc/mmwatchdog/set_aside_findings.yml "$candidate"
+              else
+                rm -f "$candidate"
+              fi

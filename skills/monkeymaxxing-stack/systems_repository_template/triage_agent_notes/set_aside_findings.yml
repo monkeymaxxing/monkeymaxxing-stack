@@ -1,0 +1,27 @@
+# Findings set aside after investigation: MMWatchdog's fleet hub on util01
+# stops alerting for each exact finding below, on every server, also on
+# servers added later. The triage agent adds an entry, with its reason,
+# only when its evidence holds for every server with that exact finding
+# (triage_agent_rules.md, "Setting a finding aside"), and runs
+# apply_set_aside_findings. Every field of an entry is required.
+# MMWatchdog matches check, finding and exact_finding exactly, so a new
+# package version, a published fix or a changed advisory alerts again; it
+# never quiets an SOS. The weekly system review lists every entry and
+# removes the ones no server matches any more
+# (operating_procedures/do_the_weekly_system_review.md).
+#
+# Keep this file, with set_aside_findings: [] when it has no entry: MMX
+# refuses a missing file, and util01's run installs it on the fleet hub as
+# /etc/mmwatchdog/set_aside_findings.yml.
+#
+# An entry looks like this:
+#
+#   set_aside_findings:
+#     - check: installed_packages/known_exploited_flaws
+#       finding: CVE-2026-123158 openssh
+#       exact_finding: "Debian:13 CVE-2026-123158 openssh 1:10.0p1-7+deb13u4; fixed version: none; DEBIAN-CVE-2026-123158 modified 2026-11-20T08:12:00Z"
+#       reason: Needs musl without PAM; roles/every_server installs Debian's openssh-server, which links PAM on every server. Debian rates it unimportant.
+#       investigation_note: triage_agent_notes/2026-11-23_openssh_package_warning_on_app001.md
+#       set_aside_by: triage agent (MMHotline run b82fdd8b)
+#       set_aside_on: 2026-11-23
+set_aside_findings: []

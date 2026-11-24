@@ -81,6 +81,14 @@ report, and propose, but grants no rights.
   database server; `jobs_server_capacity` and `job_containers` of a jobs
   server; `load_balancer_server_capacity` of a load-balancer server; and
   `util_server_capacity` of `util01`.
+- **Every server with a finding, on the fleet hub:** an alert about one
+  finding names a few servers and then "and N more". List them all, with
+  each server's exact finding, with
+  `ssh triage@util01 sudo mmwatchdog fleet findings installed_packages/known_exploited_flaws --json`.
+  Replace `installed_packages/known_exploited_flaws` with the alert's
+  check, as `CHECK_GROUP/CHECK`, and keep the rest unchanged. The entries
+  that are set aside now, with the servers each covers:
+  `ssh triage@util01 sudo mmwatchdog fleet set-aside-findings --json`.
 - **Postgres:** log in through the server's local socket as the database
   role `triage`, a read-only role that belongs to `pg_monitor` and reads
   the statistics views.
@@ -348,19 +356,54 @@ destroys a server.
   new server joined the apps' tunnel with the tunnel token from the vault,
   with no change at Cloudflare.
 
-### A session that a warning started
+### Warnings wait for your report
 
-MMHotline holds a warning that starts a triage session for
+MMHotline holds every warning while you look, for
 `triage_agent.warn_waits_for_the_agent_minutes` in `mmhotline_settings.yml`
 (rendered from `triage_agent_server_work.warn_waits_for_the_triage_agent_minutes`
-in `mmx_project_settings.yml`, 3 in the template), so that a change you
-handle by yourself makes one sound. In such a session, request the playbook
-run or send a report within the first minute or two: if either comes in
-time, MMHotline never sends the held warning, and your request (MMHotline's
-own warning or approval request) or your report is the sound. If nothing
-comes, MMHotline sends the warning at the end of the wait. So do not spend
-the first minutes on long reading before you request or report: send a
-short report at info first when the work needs longer.
+in `mmx_project_settings.yml`, 15 in the template): a warning that starts
+a session, and one that joins your session while you work. The person
+then hears your verdict instead of the raw warning.
+
+- **Name each alert your report or request is about** with
+  `--about-alert-id ALERT_ID`, once per alert, as your prompt lists them.
+  A warning your report names reaches people as your report, at your
+  report's level. When your run carries only one alert, you may leave the
+  option out.
+- **A warning that nothing of your run names reaches people when your run
+  ends,** as it arrived. So never let a warning you looked at go unnamed:
+  a report about one finding covers only the alerts it names, and a
+  verdict about one server never covers another.
+- **A playbook request takes a warning over only when MMHotline tells a
+  person about it at once:** a request that waits for an approval, or a
+  run after MMHotline's warning with Stop. A playbook that runs at once
+  and reports (`act_then_report`) takes nothing over: your report after it
+  names the warning.
+- **The wait has an end.** A warning nothing took over reaches people at
+  the end of the wait, even while you still work. When the work needs
+  longer, send a short report first, at the level the finding deserves,
+  that names the warning and says what you check next.
+
+### One finding on many servers
+
+MMWatchdog's fleet hub sends one alert for one finding across the fleet,
+such as one flaw in one package version, with the servers that have it.
+Servers that get the same finding later come in one update, at most every
+6 hours, at the level of the servers it adds. A worse level, a new version
+of the finding, or a server at SOS comes at once.
+
+- **An update that adds servers is a new question.** Your verdict on the
+  first servers rested on what you checked there. Check the added servers,
+  listed in full by `mmwatchdog fleet findings`
+  ([Reading the system](#reading-the-system)), or show that a set-aside
+  entry's evidence covers them ([Setting a finding aside](#setting-a-finding-aside)).
+- **An update with only recovered servers** comes at info and starts no
+  run.
+- **A message's first line is the exact finding:** the package, the
+  installed version, the fix state and the advisory's revision, such as
+  `Debian:13 CVE-2026-123158 openssh 1:10.0p1-7+deb13u4; fixed version: none; DEBIAN-CVE-2026-123158 modified 2026-11-20T08:12:00Z`.
+  A new exact finding of an open finding comes as its own alert: an
+  upgrade from one affected version to another is not a fix.
 
 ### Adding and removing app servers with the load
 
@@ -514,9 +557,11 @@ record on MMHotline's Triage agent page shows the review's work and cost.
 
 ### When to hand over
 
-Stop changing things and hand over to a person, at SOS, with your
-diagnosis. For `staging01`, follow the level limit under
-[Alert levels](#alert-levels). Hand over:
+Stop changing things and hand over to a person with your diagnosis. Hand
+over at SOS when users are hurt now, or on signs of data loss or a
+break-in; at warn when a person must act within days, such as a fault
+in an app's code that users do not notice yet. For `staging01`, follow the
+level limit under [Alert levels](#alert-levels). Hand over:
 
 - as soon as the problem needs a person now and no fix you may run
   exists: report at SOS at once, and do not keep investigating first.
@@ -608,11 +653,14 @@ on.
 
 ### Alert levels
 
-| Level | Meaning | Examples |
+An alert is a request for action. Choose your report's level by what a
+person must do, never by how much you found.
+
+| Level | When | Examples |
 | --- | --- | --- |
-| info | Sent at once as a quiet alert, only to the contact methods that subscribe to info; nobody needs to act. | A fix that worked; a new release with no security fix |
-| warn | Sent at once, as a notification that wakes nobody; a person looks when they're next working. | A fix that worked but found the disk 98% full; a trigger's warning; a reboot that waits for the weekly window |
-| SOS (`sos` in the files) | Wakes the person on call, even at night, and repeats until someone claims the SOS in MMHotline: presses "Claim: I'm handling the incident", or acknowledges the SOS in Pushover. | A hand-over; a flaw that attackers exploit now and that reaches servers in `inventories/servers.yml` |
+| SOS (`sos` in the files) | Users are hurt now, and you could not fix it. It wakes the person on call, even at night, and repeats until someone claims the SOS in MMHotline: presses "Claim: I'm handling the incident", or acknowledges the SOS in Pushover. | The site is down and no fix you may run exists; signs of data loss or of a break-in; a flaw that attackers exploit now and that reaches servers in `inventories/servers.yml` |
+| warn | A person must act within days, or must know of a change that costs money or carries risk. A notification that wakes nobody; a person looks when they're next working. | A fix that worked but found the disk 98% full; a trigger's warning; a reboot that waits for the weekly window; a server added for the load, with its price; a fix the nightly updates did not install a day later |
+| info | Everything else. Sent as a quiet alert, only to the contact methods that subscribe to info; nobody needs to act. | "I checked, and the finding does not affect you"; a fix that worked; a restarted service; a new release with no security fix; a security fix that attackers do not exploit now |
 
 MMHotline sends its own alert about each playbook that waits for a person:
 a playbook request needing a person's approval at SOS, and a warning
@@ -662,6 +710,53 @@ confinement: all Linux capabilities dropped (`DropCapability=all`),
 user namespaces. Everything else (Postgres, PgBouncer, MMX, MMWatchdog,
 MMHotline, Litestream, coding agents) is internal-only (WireGuard,
 loopback, or Cloudflare Access).
+
+### Setting a finding aside
+
+When you find that a finding does not affect the team, report it at info.
+When your evidence also holds for every server that has, or later gets,
+the same exact finding, set the finding aside, so MMWatchdog stops
+alerting for it on every server, including servers added later.
+
+- **When an entry is allowed.** Your evidence holds for every server with
+  that exact finding, such as Debian rating the flaw `unimportant`, or a
+  flaw only in a build the Debian package is not. Evidence that rests on a
+  server's configuration, such as "sshd links PAM", is allowed only when a
+  Stack role makes that configuration the same on every server: the
+  reason names the role, such as `roles/every_server`. Otherwise, report at
+  info about the servers you checked, and set nothing aside: another
+  server with the finding alerts at its own level.
+- **What MMWatchdog matches:** the check, the finding, and the exact
+  finding, all equal. Copy them whole from `mmwatchdog fleet findings`
+  ([Reading the system](#reading-the-system)). A new package version, a
+  published fix, a changed advisory, or a typo alerts again, so a mistake
+  costs an extra alert, never a lost one. MMWatchdog never quiets an SOS.
+- **Write the entry** into `triage_agent_notes/set_aside_findings.yml`,
+  with every field:
+
+  ```yaml
+  set_aside_findings:
+    - check: installed_packages/known_exploited_flaws
+      finding: CVE-2026-123158 openssh
+      exact_finding: "Debian:13 CVE-2026-123158 openssh 1:10.0p1-7+deb13u4; fixed version: none; DEBIAN-CVE-2026-123158 modified 2026-11-20T08:12:00Z"
+      reason: Needs musl without PAM; roles/every_server installs Debian's openssh-server, which links PAM on every server. Debian rates it unimportant.
+      investigation_note: triage_agent_notes/2026-11-23_openssh_package_warning_on_app001.md
+      set_aside_by: triage agent (MMHotline run b82fdd8b)
+      set_aside_on: 2026-11-23
+  ```
+
+  Keep the file when it has no entry, as `set_aside_findings: []`: MMX
+  needs the file.
+- **Apply it.** Commit the file with your note, then request
+  `apply_set_aside_findings`, as it is. It runs at once with every
+  answer, installs the file on the fleet hub only, and checks it first,
+  so a bad file never goes live. Then report at info, naming the alerts
+  the entry covers. MMWatchdog closes their incidents with "Set aside
+  after investigation".
+- **The entry has no end date.** The weekly system review lists every
+  entry and removes the ones no server matches any more. A change to a
+  role that an entry's reason names removes the entry first
+  (`AGENTS.md`, "Set-aside findings").
 
 ### A fix that waits for a reboot
 
@@ -776,17 +871,28 @@ A newer release is no outage and nothing to wake anyone for. Only a flaw
 that attackers exploit now makes your report an SOS; every other release
 is an info report, which shows without a sound, and only on the phones
 that subscribe to info. MMHotline holds the check's own warning while you
-look, and delivers it, waking nobody, only when its wait ends with no
-report and no playbook run request from you.
+look, and delivers it, waking nobody, only when no report of yours names
+it ([Warnings wait for your report](#warnings-wait-for-your-report)).
 
 - **`stack_version_is_the_newest_release`:** a newer Stack release is
-  out. Read its release notes. Report at info, whatever the release
-  fixes, and hand over to a person with the two Stack versions, the
-  release's page, and the procedure,
+  out. Read its release notes. Report at info, and hand over to a person
+  with the two Stack versions, the release's page, and the procedure,
   [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
-  Add the release to `triage_agent_notes/open_software_findings.md`.
-  Report at SOS only when a release note names a flaw that attackers
-  exploit now and that reaches servers in `inventories/servers.yml`.
+  Add the release to `triage_agent_notes/open_software_findings.md`. A
+  release that fixes a flaw attackers exploit now says so in its notes,
+  and the next check below warns about it.
+- **`stack_release_fixes_an_exploited_flaw`:** a Stack release newer than
+  this system's fixes a flaw that attackers exploit now, in one of the
+  Stack's programs. Each flaw is its own finding, named in the release's
+  notes by the line
+  `Fixes an exploited flaw: <CVE or advisory id> in <program> <versions>`.
+  Judge whether the flaw reaches the servers
+  ([Levels of vulnerability findings](#levels-of-vulnerability-findings)):
+  report at SOS when it reaches servers in `inventories/servers.yml` and
+  users are at risk now; otherwise at warn, because a person must upgrade
+  within days. Hand over with the flaw, the program and its versions,
+  both Stack versions, the release's page, and
+  [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
 - **`PROGRAM_pin_is_the_newest_release`:** read the release notes of
   every release between the pin and the newest, and the program's
   `security_advisories_page` in `software_outside_the_distribution.yml`.

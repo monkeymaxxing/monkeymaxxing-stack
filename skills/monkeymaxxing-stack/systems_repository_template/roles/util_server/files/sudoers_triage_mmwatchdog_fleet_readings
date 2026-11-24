@@ -1,5 +1,5 @@
 {{- /*
-  The triage user's sudo lines for the fleet hub's readings, on util01:
+  The triage user's sudo lines for the fleet hub's readings and findings, on util01:
   /etc/sudoers.d/triage-reads-fleet-readings. The triage agent reads the
   past week's readings of the check group that warned (triage_agent_rules.md, "A
   trigger's warning names its operating procedure"), and mmwatchdog fleet readings reads
@@ -8,6 +8,14 @@
   as another configuration directory. It reads the role input
   inventory_nodes, whose vars hold the flag of each group a server is in,
   such as is_app_server: true; the inventory's own false flags aren't there.
+
+  The last two lines let the triage agent list every server with a finding
+  of one check, when an alert names only a few and "N more", and the
+  findings set aside now (triage_agent_rules.md, "One finding on many
+  servers"). Both only read the hub's latest reports. The regex line allows
+  one check, as CHECK_GROUP/CHECK, and --json, and nothing else: no
+  --finding, because a finding's ID holds spaces, which a sudo regex
+  cannot bound safely. tests/sudoers_triage_test.py checks it.
 */ -}}
 # Managed by MMX from roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings in
 # the systems repository. The triage user may read, as root, the past week's
@@ -33,3 +41,5 @@ triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }}
 triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet readings {{ $name }} util_server_capacity --last 7d --json
 {{- end }}
 {{- end }}
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog ^fleet findings [a-z0-9_]+/[a-z0-9_]+ --json$
+triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet set-aside-findings --json

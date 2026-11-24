@@ -142,5 +142,43 @@ class TheTriageUsersCheckNowLines(unittest.TestCase):
                 self.assertIsNone(regex.match(refused))
 
 
+FLEET_HUB_SUDOERS = os.path.join(TEMPLATE, "roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings")
+FLEET_FINDINGS_REGEX_LINE = (
+    "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog ^fleet findings [a-z0-9_]+/[a-z0-9_]+ --json$"
+)
+SET_ASIDE_FINDINGS_LINE = "triage ALL=(root) NOPASSWD: /usr/local/bin/mmwatchdog fleet set-aside-findings --json"
+
+
+class TheTriageUsersFleetHubFindingsLines(unittest.TestCase):
+    """On util01, the triage user lists every server with a finding, and the set-aside entries in effect.
+
+    Both commands only read the hub's latest reports. The regex line allows one check, as CHECK_GROUP/CHECK, and
+    --json, nothing else: no --finding, whose finding IDs hold spaces that a sudo regex cannot bound safely, and
+    no other option or directory.
+    """
+
+    def lines(self):
+        with open(FLEET_HUB_SUDOERS) as file:
+            return [line for line in file.read().splitlines() if line.startswith("triage ") and "fleet readings" not in line]
+
+    def test_the_two_lines_are_the_only_other_lines(self):
+        self.assertEqual(self.lines(), [FLEET_FINDINGS_REGEX_LINE, SET_ASIDE_FINDINGS_LINE])
+
+    def test_the_regex_allows_one_check_and_json_only(self):
+        regex = re.compile(FLEET_FINDINGS_REGEX_LINE[FLEET_FINDINGS_REGEX_LINE.index("^fleet"):])
+        self.assertRegex("fleet findings installed_packages/known_exploited_flaws --json", regex)
+        for refused in (
+            "fleet findings installed_packages/known_exploited_flaws",
+            "fleet findings installed_packages/known_exploited_flaws --finding x --json",
+            "fleet findings installed_packages --json",
+            "fleet findings ../x/y --json",
+            "fleet findings a/b --json --config-dir /tmp/x",
+            "fleet forget app001 --json",
+            "fleet findings a/b;id --json",
+        ):
+            with self.subTest(arguments=refused):
+                self.assertIsNone(regex.match(refused))
+
+
 if __name__ == "__main__":
     unittest.main()

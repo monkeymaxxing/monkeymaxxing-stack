@@ -1,0 +1,21 @@
+# Installs triage_agent_notes/set_aside_findings.yml on MMWatchdog's fleet
+# hub on util01, and changes nothing else. The triage agent requests it
+# after it committed a new entry (triage_agent_rules.md, "Setting a finding
+# aside"); MMHotline runs it at once and reports, with every answer of
+# what_the_triage_agent_may_do_without_a_person (mmhotline_settings.yml).
+# Reason: every_server would take long, and on a large fleet MMHotline
+# cannot judge its whole explain output, while this playbook only quiets
+# the exact findings the agent wrote down, with its reason, in a file its
+# commits may change anyway.
+#
+# The role checks the file with MMWatchdog before it installs it, reloads
+# the hub, and confirms the entries in effect: a file MMWatchdog refuses
+# fails the run and never goes live. util01's every_server runs the same
+# role, so the two never disagree.
+#
+#   ./server_management_scripts/run_mmx_on_util01 run apply_set_aside_findings
+fleet_stages:
+  - id: apply_set_aside_findings
+    nodes: util_server
+    node_tasks:
+      - role: set_aside_findings_on_the_fleet_hub
