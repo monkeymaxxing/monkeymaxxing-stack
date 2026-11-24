@@ -856,9 +856,9 @@ vars:
     # repository's set_up_outside_services/build_release_archive.sh, which
     # writes this pin.
     set_up_outside_services:
-      version: "0.5.0"
-      download_url: https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/download/v0.5.0/set-up-outside-services-0.5.0-linux-amd64.tar.gz
-      sha256: "547f0f91aafb22f00e83ca2b8b8ed9cdcca4baa290e8b73445cc860ab42d4d85"
+      version: "0.6.0"
+      download_url: https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/download/v0.6.0/set-up-outside-services-0.6.0-linux-amd64.tar.gz
+      sha256: "718f386d8f8949ab2aae130f770683bf50335f57dba4eff28e991a277c350867"
     # MMHotline's backup: use the Litestream version named in the MMHotline
     # repository's docs/how-to/back-up-and-restore-the-database.md, "Set up".
     # Litestream calls its x86-64 archive linux-x86_64; the release's
