@@ -270,7 +270,11 @@ check_groups:
 {{- else }}
             echo "{{ $program }}: the pin, $pinned, is the newest release, $newest."
 {{- end }}
-        alert_severity: warn
+        # A routine Stack release asks nobody to act, so it is info: the
+        # team sees it on the dashboard and in the weekly review, and no
+        # agent run is spent on it. A Stack release that fixes a flaw
+        # exploited now is the warning below.
+        alert_severity: {{ if eq $program "set_up_outside_services" }}info{{ else }}warn{{ end }}
 {{- end }}
 {{- if hasKey $checked_programs "set_up_outside_services" }}
       # One finding for each flaw that attackers exploit now and that a
@@ -282,7 +286,7 @@ check_groups:
       # check of their own, and the Stack is the team's supplier for them,
       # so a Stack release is how the team learns of such a fix.
       # stack_version_is_the_newest_release above says only that a release
-      # is out, and its warning leads to an info report; this check warns
+      # is out, at info; this check warns
       # about each flaw on its own, so a second flaw alerts while the first
       # is open. It reads every release newer than this system's, through
       # GitHub's /releases?per_page=100, leaving out drafts and

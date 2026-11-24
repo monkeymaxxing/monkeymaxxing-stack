@@ -3645,8 +3645,9 @@ is a release to read.
   (`roles/util_server/files/mmwatchdog_external_modules/`). While GitHub
   does not answer, the module reports the findings of its last answer, so
   an outage neither closes nor opens one. The routine check,
-  `stack_version_is_the_newest_release`, stays as it was: its warning
-  starts the triage agent, whose report is info.
+  `stack_version_is_the_newest_release`, is info: a routine release asks
+  nobody to act, so it shows on the dashboard and in the weekly review and
+  starts no agent run.
 - **A release is no outage and nothing to wake anyone for, so only a flaw
   exploited now wakes a person.** The triage agent reports a newer release
   at info, including a release with a security fix that attackers do not

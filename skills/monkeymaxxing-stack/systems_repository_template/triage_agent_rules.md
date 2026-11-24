@@ -875,7 +875,8 @@ look, and delivers it, waking nobody, only when no report of yours names
 it ([Warnings wait for your report](#warnings-wait-for-your-report)).
 
 - **`stack_version_is_the_newest_release`:** a newer Stack release is
-  out. Read its release notes. Report at info, and hand over to a person
+  out. The check is info, so it reaches you only inside a session started
+  by something else, or in the scheduled review. Read its release notes. Report at info, and hand over to a person
   with the two Stack versions, the release's page, and the procedure,
   [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
   Add the release to `triage_agent_notes/open_software_findings.md`. A
