@@ -4972,13 +4972,33 @@ then, in one finishing step, does it give the phone code the new
 emergency codes, replace `recovery_bundle.age`, and commit and push it.
 It never changes the vault. Reason: a stop before the upload leaves the
 phone code and the repository's bundle in step. Any stop before the
-upload removes the folder, which holds the new passphrase in plain
-text, Ctrl-C and a lost connection too, and a rerun starts again.
-After the upload the folder stays with a mark, so a rerun finishes that bundle and makes no new
-passphrase; once the checkout holds the bundle, the folder goes, and a
-failed commit or push says not to run the command again. One run at a
+person typed the passphrase back removes the folder, which holds the new
+passphrase in plain text, Ctrl-C and a lost connection too, and a rerun
+starts again. Then, before the upload, the folder gets a record: the
+copy's file name in the backup bucket and the bundle's SHA-256. From the
+record on, the folder stays until the push succeeds, and a rerun finishes
+that bundle with no screen and no new passphrase. Reason: the person saved
+that passphrase, so the bundle it opens is the one to publish. The rerun
+asks Backblaze for the named copy (`b2_list_file_names`) and compares its
+file info `bundle_sha256`, which the upload sets, so a copy whose answer
+never arrived is not made twice; Ctrl-C waits from before the upload
+until the uploaded mark is written. The phone code's new codes get a mark
+too, the SHA-256 of the five codes, written with the swap: a rerun with
+that mark skips the swap, so a code the person used meanwhile stays used.
+The commit holds `recovery_bundle.age` alone; the command pulls the
+team's main and pushes, and a rerun after a failed push pushes the commit
+it left. Each stop gives one instruction: run the command again. One run at a
 time: a lock file in the person's folder refuses a second terminal, which
-would share the folder. The upload uses the database servers' write key
+would share the folder.
+
+**The bundle covers the desk that made it.** Its SSH and WireGuard keys
+are the bundle's, so a rebuild gives back that desk. The bundle's item
+`systems_desk_name` names it, the passphrase screen says "This recovery
+bundle rebuilds desk02, this systems desk.", the results file's
+`recovery_bundle_systems_desk_name` holds it, and each commit that saves
+the bundle ends with "The recovery bundle covers desk02.", so a coding
+agent finds the name in the clone without the passphrase. The name is the
+desk's host name, which the desk role sets from the inventory. The upload uses the database servers' write key
 on the production backup bucket, read from the vault, the key the lock's
 upload used. Reason: the person gives no key, the Backblaze master key
 stays never stored, and the key can only add files, which the bucket's

@@ -9,12 +9,24 @@ recovery bundle, so every server lets it in with no change. Then the lost
 desk is deleted at the provider.
 
 **Which desk this page rebuilds:** the desk whose keys are in the recovery
-bundle, `recovery_bundle.age`. That is the desk that ran chapter 4 (set up
-your accounts and lock your systems desk), usually `desk01`, and any desk this page
-rebuilt from it. A desk added later for a teammate has its own keys, which
-the bundle does not hold. A teammate's lost desk is replaced with
+bundle, `recovery_bundle.age`: the desk that made the bundle, at chapter 4
+(set up your accounts and lock your systems desk) or with
+[Make a new recovery passphrase](make_a_new_recovery_passphrase.md). The
+bundle's item `systems_desk_name` names it, and so does the newest commit
+that saved the bundle, which you read in the laptop's clone:
+
+```sh
+# On the laptop, in ~/code/example_systems:
+git log --format=%B -- recovery_bundle.age | grep -m1 '^The recovery bundle covers '
+```
+
+When the command prints nothing, the bundle is older than that line, and
+it covers the desk that ran chapter 4, usually `desk01`.
+A desk the bundle does not cover has its own keys, which the bundle does
+not hold. Such a lost desk is replaced with
 [Add or remove a team member](add_or_remove_a_team_member.md): remove the
 lost desk ("Leaving", steps 2 and 3), then add a new desk ("Joining").
+**Check:** the lost desk is the one the command names.
 
 **Who acts:**
 
@@ -28,9 +40,10 @@ recovery bundle, phone code, desk review and link token.
 [Technical terms](../talking_with_the_team.md#technical-terms) explains
 each term.
 
-**The examples** rebuild the lost desk `desk01`, at `10.20.9.1`, of the
-person `alex`, whose laptop is at `10.20.10.1`, as `desk02`. Use the
-inventory's real names and addresses, and the next unused desk name.
+**The examples** rebuild the lost desk `desk01`, the desk the bundle
+covers, at `10.20.9.1`, of the person `alex`, whose laptop is at
+`10.20.10.1`, as `desk02`. Use the name the bundle covers, the
+inventory's real addresses, and the next unused desk name.
 
 ## Before you start
 

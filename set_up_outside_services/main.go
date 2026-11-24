@@ -290,6 +290,9 @@ type environment struct {
 	replaceEmergencyCodes func(codes string) error
 	// deskIsLocked says the desk playbook's lock stage ran on this desk.
 	deskIsLocked func() bool
+	// deskName is this systems desk's name, such as desk02: its host name,
+	// which the desk role sets from the inventory.
+	deskName string
 	// resultsFile is the results file the coding agent reads, and
 	// backupWriteKeyFile keeps the backup write key for the bundle's upload.
 	resultsFile        string
@@ -342,6 +345,11 @@ func newEnvironment(out io.Writer) (*environment, error) {
 	}
 	e := defaultEnvironment(out)
 	e.home, e.person = current.HomeDir, current.Username
+	host, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+	e.deskName, _, _ = strings.Cut(host, ".")
 	e.useTheCodingAgentsCheckout()
 	e.handleInterrupts()
 	return e, nil
@@ -451,9 +459,10 @@ func (e *environment) repositoryHas(name string) bool {
 
 const sayTheCodingAgentCarriesOn = "This command finished. Your coding agent carries on by itself: it checks the result with mmx secrets usage, which lists names only."
 
-// handleInterrupts lets Ctrl-C stop the command at once, except between a
-// provider issuing a key and the vault saving it. There the command first
-// finishes saving, or revokes the new key, so nothing is left half done.
+// handleInterrupts lets Ctrl-C stop the command at once, except in a
+// critical section, such as between a provider issuing a key and the vault
+// saving it. There the command first finishes the step, or revokes the new
+// key, so nothing is left half done.
 func (e *environment) handleInterrupts() {
 	screen := e.out
 	signals := make(chan os.Signal, 1)
@@ -464,11 +473,13 @@ func (e *environment) handleInterrupts() {
 			if e.inCriticalSection {
 				e.interrupted = true
 				e.interruptMutex.Unlock()
-				fmt.Fprintln(screen, "\nStopping once the key being saved is saved or revoked.")
+				fmt.Fprintln(screen, "\nStopping once the step under way is finished.")
 				continue
 			}
+			// The lock stays held until the exit, so the command cannot
+			// enter a critical section, such as an upload, while this stop
+			// removes its folder.
 			clear, folder := e.valueOnScreen, e.folderToRemoveOnStop
-			e.interruptMutex.Unlock()
 			restoreTerminal()
 			if clear {
 				e.clearScreen()
@@ -494,7 +505,7 @@ func (e *environment) leaveCriticalSection() {
 	stop := e.interrupted
 	e.interruptMutex.Unlock()
 	if stop {
-		fmt.Fprintln(e.out, "Stopped after the last key was saved. A rerun continues where this run stopped.")
+		fmt.Fprintln(e.out, "Stopped after the step under way was finished. A rerun continues where this run stopped.")
 		os.Exit(130)
 	}
 }

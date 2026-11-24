@@ -84,7 +84,7 @@ func runLockTheDesk(e *environment) error {
 		e.show("Your systems desk's lock is done already.\n\nGo back to your coding agent.")
 		return nil
 	}
-	err := e.asStep("", func(map[string]string) (string, error) {
+	err := e.asStep("", func(notes map[string]string) (string, error) {
 		settings, err := readSystemSettings(e.readRepositoryFile)
 		if err != nil {
 			return "", err
@@ -104,6 +104,7 @@ func runLockTheDesk(e *environment) error {
 		if err := os.Remove(e.recoveryPassphraseFile(settings)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
+		notes[recoveryBundleDeskNote] = e.deskName
 		return "", e.updateResults(func(r *setupResults) { r.Finished = true })
 	})
 	if err != nil {
@@ -215,6 +216,7 @@ func (e *environment) recoveryPassphraseScreen(settings systemSettings, passphra
 
 What this is for:
   If you lose your systems desk, this one passphrase brings everything back.
+  This recovery bundle rebuilds %s, this systems desk.
 
   SAVE IT NOW.  IT IS SHOWN ONLY ONCE.
 
@@ -224,7 +226,7 @@ Do this now:
   1. %s %s as  "%s recovery passphrase".
   2. Type it here to prove you saved it.
 
-`, title, passphrase, saveIn, passwordManager(settings), companyName(settings)))
+`, title, e.deskName, passphrase, saveIn, passwordManager(settings), companyName(settings)))
 	for {
 		typed, err := e.prompt("  Recovery passphrase: ")
 		if errors.Is(err, errEmptyValue) {

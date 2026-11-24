@@ -103,7 +103,7 @@ The contracts below state the required outcomes for changes to the stack.
   the systems repository on `util01`. No desk or server key is registered at the Git host, which keeps only a backup
   that the laptop pushes and nothing reads.
   The person's provider token goes only to a provider guide's API address. The recovery passphrase is shown once,
-  and cleared from the desk terminal after the person types it back.
+  exactly as it opens the bundle, and cleared from the desk terminal after the person types back that exact text.
   Production servers retain account-owned tokens; only a person's desk holds personal tokens.
   At Cloudflare the person makes one token by hand, from the link the coding agent gives;
   the command makes every other token, the person's desk token and posting key named after the person, and
@@ -132,7 +132,7 @@ The contracts below state the required outcomes for changes to the stack.
   laptop pushes with the person's own login; nothing reads from it, and a refused backup push is shown to the
   person.
 - **One recovery passphrase:** the recovery bundle, `recovery_bundle.age`, holds every item a lost desk needs,
-  encrypted with one six-word passphrase that the person saves in the password manager. A copy sits in the locked
+  for the desk that made it, which the bundle names, encrypted with one six-word passphrase that the person saves in the password manager. A copy sits in the locked
   backup bucket. Rebuilding a lost desk, a lost phone and a new team member's desk each start from it.
 - **A practiced break-in response:** only a person starts or undoes a lock-out. The coding agent prepares and
   publishes the one-line inventory commit, `everyone_locked_out_except_desk`, and the person runs one command,

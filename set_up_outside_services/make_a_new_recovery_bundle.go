@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -28,9 +29,9 @@ import (
 // runs both screens and builds the bundle in a private folder, and copies
 // it into the locked backup bucket. Only then does it give the phone code
 // the new emergency codes, replace recovery_bundle.age, and commit and
-// push. A stop before the upload leaves the desk as it was, and a rerun
-// starts again; a stop after it leaves the folder, and a rerun finishes
-// that bundle.
+// push. A stop before the person typed the passphrase back leaves the desk
+// as it was, and a rerun starts again; a stop after it leaves the folder,
+// and a rerun finishes that bundle with that passphrase.
 //
 // Only the person runs it, in their own terminal on the desk, because the
 // person types the console password and the screen shows the new recovery
@@ -78,17 +79,42 @@ func newEmergencyCodes() (string, error) {
 }
 
 // newBundleDirectory holds the new bundle and its passphrase while this
-// command builds it, readable only by the person. A run that stops before
-// the upload removes it, so a bundle that was not uploaded never reaches
-// the systems repository. After the upload, it holds uploadedMark too, and
-// stays until the bundle is saved in the checkout.
+// command builds and publishes it, readable only by the person. Its files
+// say how far a run got:
+//   - recovery_bundle.age and recovery_passphrase, while the run builds;
+//   - copyRecordFile, once the person typed the passphrase back, written
+//     before the upload;
+//   - uploadedMark, once the backup bucket holds the copy;
+//   - installedCodesFile, once the phone code has the bundle's emergency
+//     codes.
+//
+// Until copyRecordFile, any stop removes the folder, so a passphrase the
+// person never saved goes. From copyRecordFile on, the folder stays until
+// the push succeeds, so a rerun publishes the bundle whose passphrase the
+// person saved.
 func (e *environment) newBundleDirectory(settings systemSettings) string {
 	return filepath.Join(e.home, ".config", "monkeymaxxing-stack", settings.ProjectName+"_new_recovery_bundle_until_it_is_pushed")
 }
 
-// uploadedMark, in the new bundle's folder, says its bundle is in the locked
-// backup bucket, so a rerun finishes that bundle instead of making another.
-const uploadedMark = "uploaded_to_the_backup_bucket"
+const (
+	// copyRecordFile names the bundle's copy in the backup bucket and
+	// holds the bundle's SHA-256, written before the upload, so a rerun
+	// finds a copy whose answer never arrived.
+	copyRecordFile = "backup_bucket_copy.json"
+	// uploadedMark says the backup bucket holds the copy.
+	uploadedMark = "uploaded_to_the_backup_bucket"
+	// installedCodesFile holds the SHA-256 of the emergency codes the phone
+	// code got, so a rerun never gives them again: a code the person used
+	// meanwhile stays used.
+	installedCodesFile = "phone_code_has_these_emergency_codes"
+)
+
+// bundleCopy is copyRecordFile's content: the copy's file name in the
+// backup bucket and the bundle's SHA-256.
+type bundleCopy struct {
+	FileName string `json:"backup_bucket_file_name"`
+	SHA256   string `json:"bundle_sha256"`
+}
 
 // oneRunAtATime locks a file in the person's private folder while the
 // command runs, so a second terminal is refused. Reason: two runs share the
@@ -125,8 +151,12 @@ func runMakeANewRecoveryBundle(e *environment) error {
 		return err
 	}
 	defer release()
-	err = e.asStep("new_recovery_bundle", func(map[string]string) (string, error) {
-		return stepDone, e.makeANewRecoveryBundle()
+	err = e.asStep("new_recovery_bundle", func(notes map[string]string) (string, error) {
+		if err := e.makeANewRecoveryBundle(); err != nil {
+			return "", err
+		}
+		notes[recoveryBundleDeskNote] = e.deskName
+		return stepDone, nil
 	})
 	if err != nil {
 		return fmt.Errorf("%v.\n\nGo back to your coding agent. It sees where this stopped", trimPeriod(err.Error()))
@@ -136,21 +166,29 @@ func runMakeANewRecoveryBundle(e *environment) error {
 }
 
 func (e *environment) makeANewRecoveryBundle() error {
+	// A bundle whose passphrase the person saved is finished before the
+	// pull: its commit may wait for its push, which the pull's check
+	// would refuse.
+	settings, err := readSystemSettings(e.readRepositoryFile)
+	if err != nil {
+		return err
+	}
+	directory := e.newBundleDirectory(settings)
+	if _, err := os.Stat(filepath.Join(directory, copyRecordFile)); err == nil {
+		e.say("An earlier run made a new recovery bundle and stopped before publishing it. Finishing that bundle: the recovery passphrase that run showed opens it.")
+		return e.publishTheNewBundle(settings, directory, nil)
+	}
+
 	// The pull first, so the settings and the inventory are the team's: a
 	// staging01 a teammate added is in the bundle and in its check.
 	saved, err := e.beginVaultChange()
 	if err != nil {
 		return err
 	}
-	settings, err := readSystemSettings(e.readRepositoryFile)
-	if err != nil {
+	if settings, err = readSystemSettings(e.readRepositoryFile); err != nil {
 		return err
 	}
-	directory := e.newBundleDirectory(settings)
-	if _, err := os.Stat(filepath.Join(directory, uploadedMark)); err == nil {
-		e.say("An earlier run copied a new recovery bundle into the backup bucket and stopped before saving it here. Finishing that bundle: the recovery passphrase that run showed opens it.")
-		return e.saveTheUploadedBundle(saved, directory)
-	}
+	directory = e.newBundleDirectory(settings)
 
 	// Every input, before any screen or change: the desk's files, the
 	// vault's keys, the phone code, and the upload's key.
@@ -170,7 +208,7 @@ func (e *environment) makeANewRecoveryBundle() error {
 	if phoneCode, err := e.readRootFile(deskPhoneCodeFile); err != nil || strings.TrimSpace(strings.SplitN(string(phoneCode), "\n", 2)[0]) == "" {
 		return fmt.Errorf("this systems desk has no phone code in %s, so it cannot get new emergency codes. Ask your coding agent", deskPhoneCodeFile)
 	}
-	upload, err := e.backupBucketWithTheVaultsWriteKey(settings, saved)
+	bucket, err := e.backupBucketWithTheVaultsWriteKey(settings)
 	if err != nil {
 		return err
 	}
@@ -185,12 +223,12 @@ func (e *environment) makeANewRecoveryBundle() error {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return err
 	}
-	// Until the upload, any stop removes the folder with the passphrase,
-	// Ctrl-C and a lost connection too.
+	// Until the person saved the passphrase, any stop removes the folder
+	// with it, Ctrl-C and a lost connection too.
 	e.removeOnStop(directory)
-	uploaded := false
+	kept := false
 	defer func() {
-		if !uploaded {
+		if !kept {
 			e.removeOnStop("")
 			os.RemoveAll(directory)
 		}
@@ -243,20 +281,25 @@ func (e *environment) makeANewRecoveryBundle() error {
 		return err
 	}
 
+	// The person saved the passphrase, so from the record on the folder
+	// stays until the push, and a rerun publishes this bundle.
 	content, err := os.ReadFile(bundle.file)
 	if err != nil {
 		return err
 	}
-	if err := upload(content); err != nil {
+	record, err := json.Marshal(bundleCopy{FileName: e.newBundleCopyName(), SHA256: sha256Hex(content)})
+	if err != nil {
 		return err
 	}
-	e.say("The older copies there stay until their lock ends; only the old passphrase opens them.")
-	if err := os.WriteFile(filepath.Join(directory, uploadedMark), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, copyRecordFile), record, 0o600); err != nil {
 		return err
 	}
-	uploaded = true
+	// A stop from here on keeps the folder. A stop that began before this
+	// line holds the stop's lock until its exit, so it removes the folder
+	// and nothing is sent.
 	e.removeOnStop("")
-	return e.saveTheUploadedBundle(saved, directory)
+	kept = true
+	return e.publishTheNewBundle(settings, directory, bucket)
 }
 
 // typeTheCurrentConsolePassword asks the person for the servers' current
@@ -304,59 +347,120 @@ func newBundleIn(directory string) mmxVault {
 	return mmxVault{directory: directory, file: filepath.Join(directory, recoveryBundleFile), passwordFile: filepath.Join(directory, "recovery_passphrase")}
 }
 
-// saveTheUploadedBundle is the one finishing step, after the upload: the
-// emergency codes into the phone code, the bundle into the checkout, then
-// the commit and the push.
-// Each part may run twice, so a rerun after a stop here finishes it.
-func (e *environment) saveTheUploadedBundle(saved *savedKeys, directory string) error {
+// publishTheNewBundle publishes the bundle in directory, whose passphrase
+// the person saved: it copies the bundle into the locked backup bucket
+// unless the bucket holds that copy already, gives the phone code the
+// bundle's emergency codes unless it has them already, then replaces
+// recovery_bundle.age in the checkout and commits and pushes it. Each part
+// may run twice, so a rerun after any stop here finishes the same bundle.
+// bucket is nil on a rerun; it signs in when the copy is still to make.
+func (e *environment) publishTheNewBundle(settings systemSettings, directory string, bucket *backupBucket) error {
 	bundle := newBundleIn(directory)
-	err := func() error {
-		content, err := os.ReadFile(bundle.file)
-		if err != nil {
-			return err
-		}
-		codes, err := bundle.value(bundlePhoneCodeEmergencyCode)
-		if err != nil {
-			return err
-		}
-		if err := e.replaceEmergencyCodes(codes); err != nil {
-			return err
-		}
-		e.say("Saved the new emergency codes only in the new recovery bundle. The old emergency codes no longer work.")
-		return e.writeRepositoryFile(recoveryBundleFile, content)
-	}()
+	content, err := os.ReadFile(bundle.file)
 	if err != nil {
-		return fmt.Errorf("%v. The new bundle is in the backup bucket, and your new passphrase opens it. Fix the cause, then run %s again: it finishes this bundle and makes no new passphrase", trimPeriod(err.Error()), makeANewRecoveryBundleCommand)
-	}
-	// The checkout holds the bundle now, so the folder and its passphrase
-	// go.
-	if err := os.RemoveAll(directory); err != nil {
 		return err
 	}
-	if err := e.finishVaultChange(saved, e.commandLine); err != nil {
-		return fmt.Errorf("%v. The new bundle is in the systems desk's checkout and in the backup bucket, and your new passphrase opens it: do not run %s again, which would make another passphrase. Your coding agent commits and pushes recovery_bundle.age", err, makeANewRecoveryBundleCommand)
+	if err := e.copyTheNewBundle(settings, directory, content, bucket); err != nil {
+		return fmt.Errorf("%v. Your new recovery passphrase opens the new bundle, which waits on this systems desk. Fix the cause, then run %s again: it copies this bundle into the backup bucket and makes no new passphrase", trimPeriod(err.Error()), makeANewRecoveryBundleCommand)
 	}
+	e.say("The older copies there stay until their lock ends; only the old passphrase opens them.")
+	commit, where, err := func() (string, string, error) {
+		codes, err := bundle.value(bundlePhoneCodeEmergencyCode)
+		if err != nil {
+			return "", "", err
+		}
+		if err := e.giveThePhoneCodeTheNewCodes(directory, codes); err != nil {
+			return "", "", err
+		}
+		if err := e.writeRepositoryFile(recoveryBundleFile, content); err != nil {
+			return "", "", err
+		}
+		return e.publishTheRecoveryBundle("Replace the recovery bundle with " + e.commandLine + "\n\n" + e.bundleCoversLine())
+	}()
+	if err != nil {
+		return fmt.Errorf("%v. The new bundle is in the backup bucket, and your new passphrase opens it. Fix the cause, then run %s again: it finishes publishing this bundle and makes no new passphrase", trimPeriod(err.Error()), makeANewRecoveryBundleCommand)
+	}
+	e.say("Committed the new recovery bundle as commit %s and published it %s. The vault did not change.", commit, where)
+	// Published, so the folder and its passphrase go.
+	return os.RemoveAll(directory)
+}
+
+// copyTheNewBundle makes sure the backup bucket holds the copy that
+// copyRecordFile names, with the bundle's SHA-256: it looks first, so a
+// copy whose answer never arrived is not made twice. The stop protection
+// holds from before the upload until uploadedMark is written.
+func (e *environment) copyTheNewBundle(settings systemSettings, directory string, content []byte, bucket *backupBucket) error {
+	if _, err := os.Stat(filepath.Join(directory, uploadedMark)); err == nil {
+		return nil
+	}
+	e.enterCriticalSection()
+	defer e.leaveCriticalSection()
+	text, err := os.ReadFile(filepath.Join(directory, copyRecordFile))
+	if err != nil {
+		return err
+	}
+	var record bundleCopy
+	if err := json.Unmarshal(text, &record); err != nil || record.FileName == "" {
+		return fmt.Errorf("%s does not name the bundle's copy", filepath.Join(directory, copyRecordFile))
+	}
+	if sha256Hex(content) != record.SHA256 {
+		return fmt.Errorf("the new bundle in %s is not the one its record names", directory)
+	}
+	if bucket == nil {
+		if bucket, err = e.backupBucketWithTheVaultsWriteKey(settings); err != nil {
+			return err
+		}
+	}
+	held, err := bucket.holds(record.FileName, record.SHA256)
+	if err != nil {
+		return err
+	}
+	if held {
+		e.say("The locked backup bucket %s holds this bundle already, as %s.", bucket.bucket.BucketName, record.FileName)
+	} else if err := bucket.upload(record.FileName, content); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(directory, uploadedMark), nil, 0o600)
+}
+
+// giveThePhoneCodeTheNewCodes gives the phone code the bundle's emergency
+// codes, unless installedCodesFile says it has them already. Reason: a rerun
+// that gave all five again would revive a code the person used meanwhile.
+func (e *environment) giveThePhoneCodeTheNewCodes(directory, codes string) error {
+	installed := filepath.Join(directory, installedCodesFile)
+	if text, err := os.ReadFile(installed); err == nil && strings.TrimSpace(string(text)) == sha256Hex([]byte(codes)) {
+		return nil
+	}
+	e.enterCriticalSection()
+	defer e.leaveCriticalSection()
+	if err := e.replaceEmergencyCodes(codes); err != nil {
+		return err
+	}
+	if err := os.WriteFile(installed, []byte(sha256Hex([]byte(codes))+"\n"), 0o600); err != nil {
+		return err
+	}
+	e.say("Saved the new emergency codes only in the new recovery bundle. The old emergency codes no longer work.")
 	return nil
 }
 
 // backupBucketWithTheVaultsWriteKey signs in to Backblaze with the database
 // servers' write key on the production backup bucket, the key lock-the-desk
-// uploaded the first copy with, and returns the upload of a new copy.
+// uploaded the first copy with.
 // Reason for this key, not the master key: the vault holds it, so the
 // person gives no key, and it can only add files, which the bucket's lock
 // keeps.
-func (e *environment) backupBucketWithTheVaultsWriteKey(settings systemSettings, saved *savedKeys) (func(content []byte) error, error) {
-	keyID, err := saved.store.value(backupWriteKeyIDVaultName)
+func (e *environment) backupBucketWithTheVaultsWriteKey(settings systemSettings) (*backupBucket, error) {
+	keyID, err := e.vault.value(backupWriteKeyIDVaultName)
 	if err != nil {
 		return nil, err
 	}
-	applicationKey, err := saved.store.value(backupWriteApplicationKeyVaultName)
+	applicationKey, err := e.vault.value(backupWriteApplicationKeyVaultName)
 	if err != nil {
 		return nil, err
 	}
-	upload, err := e.backupBucketUpload(settings, keyID, applicationKey)
+	bucket, err := e.signInToTheBackupBucket(settings, keyID, applicationKey)
 	if err != nil {
 		return nil, fmt.Errorf("signing in to Backblaze with the vault's backup write key %s failed (%v). When the key no longer works, run set-up-outside-services backblaze --replace-key %s, then run this command again", backupWriteKeyIDVaultName, err, backupWriteKeyIDVaultName)
 	}
-	return upload, nil
+	return bucket, nil
 }

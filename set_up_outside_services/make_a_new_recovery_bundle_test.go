@@ -138,6 +138,9 @@ func TestANewRecoveryBundleOpensWithTheNewPassphraseAndHoldsEveryItem(t *testing
 	if h.passphrase == h.oldPassphrase || strings.Count(output, h.passphrase) != 1 {
 		t.Fatal("the new passphrase is the old one, or shows more than once")
 	}
+	if !strings.Contains(output, "Committed the new recovery bundle as commit") || strings.Contains(output, "servers' next run") {
+		t.Errorf("the run does not say it published the bundle alone:\n%s", output)
+	}
 	if !strings.Contains(output, "Save it in place of the old one in 1Password") {
 		t.Errorf("the passphrase screen does not say to replace the old one:\n%s", output)
 	}
@@ -145,8 +148,8 @@ func TestANewRecoveryBundleOpensWithTheNewPassphraseAndHoldsEveryItem(t *testing
 	// The new passphrase opens the bundle in the repository, and each item
 	// holds the desk's value.
 	keys := h.bundleKeys()
-	if len(keys) != 10 {
-		t.Errorf("the new bundle holds %d items, want the lock's 10: %v", len(keys), keys)
+	if len(keys) != 11 {
+		t.Errorf("the new bundle holds %d items, want the lock's 11: %v", len(keys), keys)
 	}
 	want := map[string]string{
 		bundleVaultPassphrase:     vaultPassphrase,
@@ -193,6 +196,35 @@ func TestANewRecoveryBundleOpensWithTheNewPassphraseAndHoldsEveryItem(t *testing
 		t.Error("the new bundle's folder, with its passphrase, stays on the desk")
 	}
 	h.requireNoSecretInOutput(providerToken, masterKey, vaultPassphrase, h.consolePassword, strings.Fields(codes)[0])
+}
+
+// The bundle covers the desk that made it: a teammate's desk02 that makes
+// a new bundle names itself on the passphrase screen, in the bundle, in the
+// results file and in the commit, so a rebuild gives back desk02.
+func TestANewRecoveryBundleNamesTheDeskItCovers(t *testing.T) {
+	h := newRemakeHarness(t)
+	if got := h.bundleValue(bundleSystemsDeskName); got != "desk01" {
+		t.Errorf("the lock's bundle names %q, want desk01", got)
+	}
+	if got := h.results().ForTheCodingAgent[recoveryBundleDeskNote]; got != "desk01" {
+		t.Errorf("the lock's results name %q, want desk01", got)
+	}
+	h.e.deskName = "desk02"
+	if err := runMakeANewRecoveryBundle(h.e); err != nil {
+		t.Fatalf("make-a-new-recovery-bundle: %v\n%s", err, h.out)
+	}
+	if !strings.Contains(h.out.String(), "This recovery bundle rebuilds desk02, this systems desk.") {
+		t.Errorf("the passphrase screen does not name desk02:\n%s", h.out)
+	}
+	if got := h.bundleValue(bundleSystemsDeskName); got != "desk02" {
+		t.Errorf("the new bundle names %q, want desk02", got)
+	}
+	if got := h.results().ForTheCodingAgent[recoveryBundleDeskNote]; got != "desk02" {
+		t.Errorf("the results name %q, want desk02", got)
+	}
+	if message := h.git(h.e.directory, "--git-dir", h.origin, "log", "-1", "--format=%B", "main"); !strings.Contains(message, "The recovery bundle covers desk02.") {
+		t.Errorf("the commit does not name desk02:\n%s", message)
+	}
 }
 
 // A console password that does not match the vault's hash is asked once
@@ -279,19 +311,84 @@ func TestANewRecoveryBundleChecksEveryInputBeforeAScreen(t *testing.T) {
 	}
 }
 
-// A run that stops after both screens but before the upload, here because
-// Backblaze refuses the upload, changes nothing live: the phone code keeps
-// its old emergency codes and the repository its old bundle. The folder with the new passphrase is gone.
-func TestAStopBeforeTheUploadChangesNothing(t *testing.T) {
+// The record of a staged bundle: the folder stays, with the copy's name and
+// the bundle's SHA-256, while the phone code, the vault and the
+// repository's bundle are as they were.
+func (h *remakeHarness) requireAStagedBundleOnly() {
+	h.t.Helper()
+	h.requireTheVaultUnchanged()
+	if len(h.phoneCodes) > 0 || h.repositoryBundle() != h.oldBundle {
+		h.t.Error("the phone code or the repository's bundle changed before the upload")
+	}
+	if _, err := os.Stat(filepath.Join(h.e.newBundleDirectory(mustSettings(h.t, h.e)), copyRecordFile)); err != nil {
+		h.t.Errorf("the staged bundle's record is gone: %v", err)
+	}
+}
+
+// requireTheRerunFinishes reruns the command and checks that it showed no
+// screen, kept the passphrase, gave the phone code the bundle's codes once,
+// pushed the bundle alone, left copies copies at Backblaze, and removed the
+// folder.
+func (h *remakeHarness) requireTheRerunFinishes(copies int) {
+	h.t.Helper()
+	passphrase := h.passphrase
+	h.out.Reset()
+	if err := runMakeANewRecoveryBundle(h.e); err != nil {
+		h.t.Fatalf("the rerun: %v\n%s", err, h.out)
+	}
+	if strings.Contains(h.out.String(), "step 1 of 2") || strings.Contains(h.out.String(), "step 2 of 2") || h.passphrase != passphrase {
+		h.t.Fatalf("the rerun showed a screen again:\n%s", h.out)
+	}
+	if got := h.lockedCopies(); got != copies {
+		h.t.Errorf("want %d locked copies at Backblaze, got %d", copies, got)
+	}
+	h.requireTheVaultUnchanged()
+	if len(h.phoneCodes) != 1 || h.phoneCodes[0] != h.bundleValue(bundlePhoneCodeEmergencyCode) {
+		h.t.Errorf("the phone code got %d sets of codes, want the bundle's once", len(h.phoneCodes))
+	}
+	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile {
+		h.t.Errorf("the push changes %q, want the bundle alone", files)
+	}
+	if h.bundleValue(bundleConsolePassword) != h.consolePassword {
+		h.t.Error("the published bundle does not open with the passphrase the person saved")
+	}
+	if _, err := os.Stat(h.e.newBundleDirectory(mustSettings(h.t, h.e))); !os.IsNotExist(err) {
+		h.t.Error("the new bundle's folder, with its passphrase, stays on the desk")
+	}
+}
+
+// Backblaze refuses the upload after the person saved the passphrase: the
+// run changes nothing live and keeps the bundle, and the rerun copies that
+// same bundle, with no new passphrase.
+func TestARefusedUploadKeepsTheBundleForTheRerun(t *testing.T) {
 	h := newRemakeHarness(t)
 	h.b2.Failures["b2_upload_file"] = "malformed"
 	err := runMakeANewRecoveryBundle(h.e)
-	if err == nil || !strings.Contains(h.out.String(), "step 2 of 2") {
-		t.Fatalf("want a stop at the upload after both screens, got %v\n%s", err, h.out)
+	if err == nil || !strings.Contains(h.out.String(), "step 2 of 2") || !strings.Contains(err.Error(), "it copies this bundle into the backup bucket and makes no new passphrase") {
+		t.Fatalf("want a stop at the upload after both screens that says the rerun copies this bundle, got %v\n%s", err, h.out)
 	}
-	h.requireNothingChanged()
 	if h.lockedCopies() != 1 {
 		t.Error("a copy was uploaded")
+	}
+	h.requireAStagedBundleOnly()
+	h.requireTheRerunFinishes(2)
+}
+
+// Backblaze keeps the upload but its answer never arrives: the rerun finds
+// that copy by its name and SHA-256 and makes no second one.
+func TestAnUploadWhoseAnswerIsLostIsNotMadeTwice(t *testing.T) {
+	h := newRemakeHarness(t)
+	h.b2.Failures["b2_upload_file"] = "drop"
+	if err := runMakeANewRecoveryBundle(h.e); err == nil {
+		t.Fatal("want a stop when the upload's answer is lost")
+	}
+	if h.lockedCopies() != 2 {
+		t.Fatal("the stand-in did not keep the upload")
+	}
+	h.requireAStagedBundleOnly()
+	h.requireTheRerunFinishes(2)
+	if !strings.Contains(h.out.String(), "holds this bundle already") {
+		t.Errorf("the rerun did not say the bucket holds the copy:\n%s", h.out)
 	}
 }
 
@@ -310,36 +407,61 @@ func TestAStopAfterTheUploadFinishesOnTheRerun(t *testing.T) {
 		return nil
 	}
 	err := runMakeANewRecoveryBundle(h.e)
-	if err == nil || !strings.Contains(err.Error(), "run "+makeANewRecoveryBundleCommand+" again: it finishes this bundle") {
+	if err == nil || !strings.Contains(err.Error(), "run "+makeANewRecoveryBundleCommand+" again: it finishes publishing this bundle") {
 		t.Fatalf("want a stop after the upload that says the rerun finishes it, got %v", err)
 	}
 	if h.lockedCopies() != 2 || h.repositoryBundle() != h.oldBundle || len(h.phoneCodes) != 0 {
 		t.Fatal("the stop is not right after the upload")
 	}
-	passphrase := h.passphrase
+	h.requireTheRerunFinishes(2)
+}
 
-	h.out.Reset()
+// The push fails after the phone code got the new codes: the stop gives one
+// instruction, to run the command again, and the rerun pushes the commit
+// without giving the phone code the codes again, so a code the person used
+// meanwhile stays used.
+func TestAFailedPushFinishesOnTheRerunWithoutGivingTheCodesAgain(t *testing.T) {
+	h := newRemakeHarness(t)
+	origin := h.origin
+	h.e.replaceEmergencyCodes = func(codes string) error {
+		h.phoneCodes = append(h.phoneCodes, codes)
+		h.git(h.e.directory, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "unreachable"))
+		return nil
+	}
+	err := runMakeANewRecoveryBundle(h.e)
+	if err == nil || !strings.Contains(err.Error(), "run "+makeANewRecoveryBundleCommand+" again: it finishes publishing this bundle") || strings.Contains(err.Error(), "do not run") {
+		t.Fatalf("want one instruction, to run the command again, got %v", err)
+	}
+	if len(h.phoneCodes) != 1 {
+		t.Fatal("the stop is not after the phone code got the codes")
+	}
+	h.git(h.e.directory, "remote", "set-url", "origin", origin)
+	h.requireTheRerunFinishes(2)
+}
+
+// A teammate pushes to main while the person is at the screens: the
+// publish lands on top of the teammate's commit.
+func TestATeammatesPushDuringTheScreensIsKept(t *testing.T) {
+	h := newRemakeHarness(t)
+	remakePrompt := h.e.prompt
+	pushed := false
+	h.e.prompt = func(label string) (string, error) {
+		if strings.Contains(label, "Console password") && !pushed {
+			pushed = true
+			teammate := t.TempDir()
+			h.git(teammate, "clone", "--quiet", h.origin, ".")
+			writeFile(t, filepath.Join(teammate, "teammate.txt"), "a teammate's change\n")
+			h.git(teammate, "add", "teammate.txt")
+			h.git(teammate, "commit", "--quiet", "-m", "A teammate's change")
+			h.git(teammate, "push", "--quiet", "origin", "HEAD:main")
+		}
+		return remakePrompt(label)
+	}
 	if err := runMakeANewRecoveryBundle(h.e); err != nil {
-		t.Fatalf("the rerun: %v\n%s", err, h.out)
+		t.Fatalf("make-a-new-recovery-bundle: %v\n%s", err, h.out)
 	}
-	if strings.Contains(h.out.String(), "step 1 of 2") || strings.Contains(h.out.String(), "step 2 of 2") || h.passphrase != passphrase {
-		t.Fatalf("the rerun showed a screen again:\n%s", h.out)
-	}
-	if h.lockedCopies() != 2 {
-		t.Error("the rerun uploaded another copy")
-	}
-	if h.bundleValue(bundleConsolePassword) != h.consolePassword {
-		t.Error("the uploaded bundle's console password is not the typed one")
-	}
-	h.requireTheVaultUnchanged()
-	if len(h.phoneCodes) != 1 || h.phoneCodes[0] != h.bundleValue(bundlePhoneCodeEmergencyCode) {
-		t.Error("the phone code did not get the uploaded bundle's emergency codes")
-	}
-	if files := strings.TrimSpace(h.git(h.e.directory, "--git-dir", h.origin, "diff-tree", "--no-commit-id", "--name-only", "-r", "main")); files != recoveryBundleFile {
-		t.Errorf("the push changes %q, want the bundle alone", files)
-	}
-	if _, err := os.Stat(h.e.newBundleDirectory(mustSettings(t, h.e))); !os.IsNotExist(err) {
-		t.Error("the new bundle's folder, with its passphrase, stays on the desk")
+	if log := h.git(h.e.directory, "--git-dir", h.origin, "log", "--format=%s", "-2", "main"); !strings.Contains(log, "A teammate's change") || !strings.Contains(log, "Replace the recovery bundle") {
+		t.Errorf("main lacks the teammate's commit or the bundle's:\n%s", log)
 	}
 }
 

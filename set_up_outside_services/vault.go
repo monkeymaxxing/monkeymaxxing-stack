@@ -372,6 +372,7 @@ func (e *environment) finishVaultChange(v *savedKeys, command string) error {
 		if len(v.made) == 0 {
 			message = "Update the recovery bundle with " + command
 		}
+		message += "\n\n" + e.bundleCoversLine()
 	}
 	if len(files) == 0 && !v.leftover {
 		e.say("The vault needed nothing from this run, so nothing was committed.")
@@ -392,8 +393,39 @@ func (e *environment) finishVaultChange(v *savedKeys, command string) error {
 	if err != nil {
 		return fmt.Errorf("%v. The vault holds the new keys; fix the cause and run %s again, which commits and pushes them", err, command)
 	}
+	if !contains(files, vaultFile) && !v.leftover {
+		e.say("Committed the recovery bundle as commit %s and published it %s. The vault did not change.", commit, where)
+		return nil
+	}
 	e.say("Committed the vault as commit %s, published %s, so the servers' next run gets the new keys.", commit, where)
 	return nil
+}
+
+// publishTheRecoveryBundle commits recovery_bundle.age when the checkout's
+// copy changed, pulls the team's main, and pushes, with nothing else. A
+// rerun after a failed push pushes the commit that run left. It returns
+// the commit and where main now is.
+func (e *environment) publishTheRecoveryBundle(message string) (commit, where string, err error) {
+	status, err := e.git("status", "--porcelain", "--", recoveryBundleFile)
+	if err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(status) != "" {
+		if _, err := e.commitFiles(message, recoveryBundleFile); err != nil {
+			return "", "", err
+		}
+	}
+	if e.hasOrigin() {
+		if _, err := e.git("pull", "--rebase", "--quiet", "origin", "main"); err != nil {
+			_, _ = e.git("rebase", "--abort")
+			return "", "", err
+		}
+	}
+	if where, err = e.pushMain(); err != nil {
+		return "", "", err
+	}
+	commit, err = e.git("rev-parse", "--short", "HEAD")
+	return strings.TrimSpace(commit), where, err
 }
 
 // issuedCredential is a key or token that a provider issues and the vault

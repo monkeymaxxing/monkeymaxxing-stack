@@ -27,6 +27,13 @@ recovery bundle, recovery passphrase, phone code and emergency code.
 [Technical terms](../talking_with_the_team.md#technical-terms) explains
 each term.
 
+**Which desk runs it:** the desk the bundle covers, whose SSH and
+WireGuard keys the bundle holds, so a rebuild keeps giving that desk
+back. "Which desk this page rebuilds" in
+[Rebuild a systems desk](rebuild_a_systems_desk.md) says how to find its
+name; the examples below call it `desk01`. A new bundle covers the desk
+that makes it, and its passphrase screen names that desk.
+
 **When the desk is lost too,** this page cannot help: a new bundle needs
 the desk's keys. Without the recovery passphrase, a lost desk cannot be
 rebuilt from the bundle.
@@ -47,7 +54,8 @@ servers over SSH. Then follow this page.
 
 ## Make the new bundle
 
-1. **The person runs the command.** Tell the person:
+1. **The person of the desk the bundle covers runs the command,** with
+   that desk's name in place of `desk01`. Tell the person:
 
    > Please type this in your terminal, with a code from your phone:
    >
@@ -55,7 +63,7 @@ servers over SSH. Then follow this page.
    >
    > It asks two things, one at a time:
    >   1. Your servers' console password. Type it from the item  Shared root console password  in your password manager.
-   >   2. Your new recovery passphrase, six words, shown once. Save it in your password manager as your company's recovery passphrase, in place of the old one, then type it back.
+   >   2. Your new recovery passphrase, six words, shown once, exactly as it shows: small letters, one space between words. Save it in your password manager as your company's recovery passphrase, in place of the old one, then type it back.
    > Then it saves the new recovery bundle by itself. Tell me "done" when it says  Go back to your coding agent.
 
    Ask for "done" here: `wait-for-the-setup` ends at once on a desk whose
@@ -71,19 +79,19 @@ servers over SSH. Then follow this page.
    push the bundle. It never changes the vault. One run at a time: a
    second terminal is refused.
    **Check:** on the desk,
-   `jq '{steps, stopped_with}' /var/lib/monkeymaxxing-stack/setup_results.json`
-   shows the step `new_recovery_bundle` as `done` and no `stopped_with`.
+   `jq '{steps, stopped_with, desk: .for_the_coding_agent.recovery_bundle_systems_desk_name}' /var/lib/monkeymaxxing-stack/setup_results.json`
+   shows the step `new_recovery_bundle` as `done`, no `stopped_with`, and
+   the desk's name.
    With a stop, say in one plain sentence what `stopped_with` says, fix
-   the cause, and ask the person to run the command again, except when
-   `stopped_with` says "do not run make-a-new-recovery-bundle again":
-   - **A stop before the upload** changed nothing on the desk. The rerun
-     makes a new passphrase, so the person saves the newest one.
-   - **A stop after the upload** says the rerun finishes that bundle. The
-     rerun shows no screen and makes no new passphrase.
-   - **"do not run make-a-new-recovery-bundle again"**: the commit or the
-     push failed, after the checkout got the new bundle. A rerun would make
-     another passphrase. Instead, in your checkout on the desk, commit
-     `recovery_bundle.age` when `git status` lists it, and push `main`.
+   the cause, and ask the person to run the command again:
+   - **A stop before the person typed the passphrase back** changed
+     nothing on the desk. The rerun makes a new passphrase, so the person
+     saves the newest one.
+   - **A stop after it** says the rerun finishes that bundle. The rerun
+     shows no screen and makes no new passphrase: it copies the bundle
+     into the backup bucket unless the bucket holds it already, gives the
+     phone code its emergency codes unless it has them already, and
+     commits and pushes it.
 2. **The person checks that the new passphrase opens the new bundle,**
    in their own laptop terminal, after you pull `main` into the laptop's
    clone, and after loading `with_recovery_passphrase` as

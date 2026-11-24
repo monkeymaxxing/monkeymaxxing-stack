@@ -118,7 +118,7 @@ func TestTheAccountsFromTheCodingAgentThenTheLock(t *testing.T) {
 	}
 	keys := h.bundleKeys()
 	for _, key := range []string{bundleVaultPassphrase, bundleProductionKey, bundleWireGuardKey, bundleProviderCredential, bundleCloudflareDeskToken,
-		bundleConsolePassword, bundlePhoneCodeEmergencyCode, "pgbackrest_repository_cipher_passphrase", "pgbackrest_b2_read_only_key_id", "pgbackrest_b2_read_only_application_key"} {
+		bundleConsolePassword, bundlePhoneCodeEmergencyCode, bundleSystemsDeskName, "pgbackrest_repository_cipher_passphrase", "pgbackrest_b2_read_only_key_id", "pgbackrest_b2_read_only_application_key"} {
 		if !keys[key] {
 			t.Errorf("the bundle lacks %s", key)
 		}

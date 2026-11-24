@@ -38,7 +38,21 @@ const (
 	bundleStagingAccessSecret    = "staging_access_client_secret"
 	bundleConsolePassword        = "shared_root_console_password"
 	bundlePhoneCodeEmergencyCode = "phone_code_emergency_codes"
+	// bundleSystemsDeskName names the desk whose SSH and WireGuard keys the
+	// bundle holds: the desk that made it, which a rebuild gives back.
+	bundleSystemsDeskName = "systems_desk_name"
 )
+
+// recoveryBundleDeskNote is the results file's note that names the desk
+// the published bundle covers.
+const recoveryBundleDeskNote = "recovery_bundle_systems_desk_name"
+
+// bundleCoversLine names the desk a bundle made here covers, for the
+// commit that saves it, so a coding agent finds the name without the
+// passphrase.
+func (e *environment) bundleCoversLine() string {
+	return "The recovery bundle covers " + e.deskName + "."
+}
 
 // copiedIntoTheBundle are the vault keys the recovery bundle keeps a copy
 // of, because the desk keeps them nowhere else readable: the backups'
@@ -278,10 +292,13 @@ func (e *environment) completeTheBundle(settings systemSettings, bundle *savedKe
 	return checkThePersonsItems(bundle, "lock-the-desk")
 }
 
-// addTheDesksItems adds the items the desk keeps in files and the account
-// commands' items, refusing with the missing ones' names. command is the
-// command to run again then.
+// addTheDesksItems adds this desk's name, the items the desk keeps in
+// files and the account commands' items, refusing with the missing ones'
+// names. command is the command to run again then.
 func (e *environment) addTheDesksItems(settings systemSettings, bundle *savedKeys, providerCredential, command string) error {
+	if err := bundle.save(bundleSystemsDeskName, e.deskName); err != nil {
+		return err
+	}
 	fromTheDesk := []struct{ key, path string }{
 		{bundleVaultPassphrase, deskVaultPassphraseFile},
 		{bundleProductionKey, e.productionKeyFile()},
@@ -345,7 +362,7 @@ func (e *environment) uploadTheBundle(settings systemSettings) error {
 	if len(lines) != 2 {
 		return fmt.Errorf("%s does not hold a key ID and a key", e.backupWriteKeyFile)
 	}
-	upload, err := e.backupBucketUpload(settings, lines[0], lines[1])
+	bucket, err := e.signInToTheBackupBucket(settings, lines[0], lines[1])
 	if err != nil {
 		return err
 	}
@@ -353,14 +370,25 @@ func (e *environment) uploadTheBundle(settings systemSettings) error {
 	if err != nil {
 		return err
 	}
-	return upload(content)
+	return bucket.upload(e.newBundleCopyName(), content)
 }
 
-// backupBucketUpload signs in to Backblaze with a write key on the
-// production backup bucket, finds the bucket, and returns the upload of one
-// copy of a bundle. The bucket's lock keeps each copy from deletion; no
-// lifecycle rule hides a current file, so each copy stays.
-func (e *environment) backupBucketUpload(settings systemSettings, keyID, applicationKey string) (func(content []byte) error, error) {
+// backupBucket is the production backup bucket, signed in with a write key,
+// where each recovery bundle gets a copy. The bucket's lock keeps each copy
+// from deletion; no lifecycle rule hides a current file, so each copy stays.
+type backupBucket struct {
+	e      *environment
+	client *b2Client
+	bucket *b2Bucket
+}
+
+// bundleDigestFileInfo is the file info that keeps a copy's SHA-256 at
+// Backblaze, so a rerun can tell whether its own copy arrived.
+const bundleDigestFileInfo = "bundle_sha256"
+
+// signInToTheBackupBucket signs in to Backblaze with a write key on the
+// production backup bucket and finds the bucket.
+func (e *environment) signInToTheBackupBucket(settings systemSettings, keyID, applicationKey string) (*backupBucket, error) {
 	client, err := authorizeB2(e.b2AuthorizeURL, keyID, applicationKey)
 	if err != nil {
 		return nil, err
@@ -372,14 +400,32 @@ func (e *environment) backupBucketUpload(settings systemSettings, keyID, applica
 	if bucket == nil {
 		return nil, fmt.Errorf("Backblaze has no bucket %s for the recovery bundle's copy", settings.Vars.Backups.ProductionBucket)
 	}
-	return func(content []byte) error {
-		name := "recovery_bundle/recovery_bundle_" + e.now().UTC().Format("20060102T150405Z") + ".age"
-		if _, err := client.uploadFile(bucket.BucketID, name, "application/octet-stream", content); err != nil {
-			return err
-		}
-		e.say("Copied the recovery bundle into the locked backup bucket %s as %s.", bucket.BucketName, name)
-		return nil
-	}, nil
+	return &backupBucket{e: e, client: client, bucket: bucket}, nil
+}
+
+// newBundleCopyName names a new copy of the bundle by the time it is made.
+func (e *environment) newBundleCopyName() string {
+	return "recovery_bundle/recovery_bundle_" + e.now().UTC().Format("20060102T150405Z") + ".age"
+}
+
+// upload copies a bundle into the bucket as name, with its SHA-256.
+func (b *backupBucket) upload(name string, content []byte) error {
+	info := map[string]string{bundleDigestFileInfo: sha256Hex(content)}
+	if _, err := b.client.uploadFile(b.bucket.BucketID, name, "application/octet-stream", content, info); err != nil {
+		return err
+	}
+	b.e.say("Copied the recovery bundle into the locked backup bucket %s as %s.", b.bucket.BucketName, name)
+	return nil
+}
+
+// holds says whether the bucket holds a copy named name whose SHA-256 is
+// digest.
+func (b *backupBucket) holds(name, digest string) (bool, error) {
+	info, err := b.client.fileInfoOf(b.bucket.BucketID, name)
+	if err != nil {
+		return false, err
+	}
+	return info != nil && info[bundleDigestFileInfo] == digest, nil
 }
 
 // trimmedLines splits a file's text into its non-empty lines.

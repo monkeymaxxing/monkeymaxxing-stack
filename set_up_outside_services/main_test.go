@@ -187,7 +187,7 @@ func newHarness(t *testing.T, staging, uploads bool) *harness {
 	}
 	writeFile(t, filepath.Join(directory, inventoryFile), inventory)
 	h.e = &environment{
-		directory: directory, home: t.TempDir(), person: "alex", out: h.out, vault: h.vault,
+		directory: directory, home: t.TempDir(), person: "alex", deskName: "desk01", out: h.out, vault: h.vault,
 		prompt: func(label string) (string, error) {
 			if len(h.answers) == 0 {
 				return "", errors.New("unexpected prompt " + label)

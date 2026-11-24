@@ -74,13 +74,16 @@ each term. Pushover is the push app that puts the alerts on the phone.
 
 1. **Find an emergency code.** Each code works once, in place of a phone
    code.
-   - For the first desk, `desk01`: the codes are in the recovery bundle, as
-     `phone_code_emergency_codes`. The person prints them in their own
+   - For the desk the recovery bundle covers, usually `desk01`: the codes
+     are in the bundle, as `phone_code_emergency_codes`.
+     "Which desk this page rebuilds" in
+     [Rebuild a systems desk](rebuild_a_systems_desk.md) says how to find
+     that desk's name. The person prints them in their own
      terminal with `with_recovery_passphrase ~/.local/bin/mmx secrets show --vault recovery_bundle.age phone_code_emergency_codes`,
      in the systems repository, after loading `with_recovery_passphrase` as
      [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
      says.
-   - For a desk added later, such as `desk02`: the codes are in the team's
+   - For any other desk, such as `desk02`: the codes are in the team's
      password manager, as "desk02 phone code emergency codes".
 
    **Check:** the person has one unused code.
@@ -120,12 +123,12 @@ Keep that login open until step 4.
    did not match", type the phone's next code. The command asks until one
    matches.
 3. **Save the new emergency codes.**
-   - For the first desk, in the recovery bundle: the person follows
+   - For the desk the recovery bundle covers, in the bundle: the person follows
      [Change an item in the recovery bundle](rebuild_a_systems_desk.md#change-an-item-in-the-recovery-bundle)
      with `phone_code_emergency_codes` and the file
      `~/phone-code-emergency-codes`, and you publish the bundle once your
      login works again (step 5).
-   - For a desk added later: the person replaces the password manager's
+   - For any other desk: the person replaces the password manager's
      entry "desk02 phone code emergency codes" with the file's codes, then
      deletes the file: `rm ~/phone-code-emergency-codes`.
 

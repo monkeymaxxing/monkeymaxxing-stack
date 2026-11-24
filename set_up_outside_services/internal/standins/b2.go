@@ -69,6 +69,8 @@ type B2File struct {
 	RetainUntil int64  `json:"retainUntilTimestamp"`
 	Hidden      bool   `json:"hidden"`
 	Deleted     bool   `json:"deleted"`
+	// Info is the file's info, from its X-Bz-Info-* headers.
+	Info map[string]string `json:"fileInfo"`
 }
 
 // B2 is a stand-in Backblaze account.
@@ -249,7 +251,7 @@ func validLifecycle(rules []B2LifecycleRule) bool {
 
 func (b *B2) call(name string, key *B2Key, r *http.Request) (any, *b2Refusal) {
 	need := map[string]string{"b2_list_buckets": "listBuckets", "b2_create_bucket": "writeBuckets", "b2_update_bucket": "writeBuckets",
-		"b2_get_upload_url": "writeFiles", "b2_get_file_info": "readFiles", "b2_delete_file_version": "deleteFiles", "b2_hide_file": "writeFiles",
+		"b2_get_upload_url": "writeFiles", "b2_list_file_names": "listFiles", "b2_get_file_info": "readFiles", "b2_delete_file_version": "deleteFiles", "b2_hide_file": "writeFiles",
 		"b2_create_key": "writeKeys", "b2_list_keys": "listKeys", "b2_delete_key": "deleteKeys"}[name]
 	if need == "" {
 		return nil, &b2Refusal{404, "not_found", "unknown call " + name}
@@ -354,6 +356,37 @@ func (b *B2) call(name string, key *B2Key, r *http.Request) (any, *b2Refusal) {
 		token := "upload_" + random(12)
 		b.uploads[token] = body.BucketID
 		return map[string]any{"bucketId": body.BucketID, "uploadUrl": b.BaseURL + "/upload/" + body.BucketID, "authorizationToken": token}, nil
+	// https://www.backblaze.com/apidocs/b2-list-file-names: the visible
+	// files from startFileName on, by name.
+	case "b2_list_file_names":
+		var body struct {
+			BucketID      string `json:"bucketId"`
+			StartFileName string `json:"startFileName"`
+			MaxFileCount  int    `json:"maxFileCount"`
+			Prefix        string `json:"prefix"`
+		}
+		if decodeStrict(r, &body) != nil || body.BucketID == "" {
+			return nil, bad
+		}
+		var names []string
+		latest := map[string]*B2File{}
+		for _, file := range b.Files {
+			if file.BucketID != body.BucketID || file.Deleted || file.Name < body.StartFileName || !strings.HasPrefix(file.Name, body.Prefix) {
+				continue
+			}
+			if latest[file.Name] == nil {
+				names = append(names, file.Name)
+			}
+			latest[file.Name] = file
+		}
+		sort.Strings(names)
+		files := []map[string]any{}
+		for _, name := range names {
+			if file := latest[name]; !file.Hidden && (body.MaxFileCount == 0 || len(files) < body.MaxFileCount) {
+				files = append(files, map[string]any{"fileId": file.ID, "fileName": file.Name, "fileInfo": file.Info, "action": "upload"})
+			}
+		}
+		return map[string]any{"files": files, "nextFileName": nil}, nil
 	// https://www.backblaze.com/apidocs/b2-get-file-info
 	case "b2_get_file_info":
 		var body struct {
@@ -496,7 +529,13 @@ func (b *B2) upload(r *http.Request) (any, *b2Refusal) {
 	}
 	bucket := b.bucketByID(bucketID)
 	b.nextNumber++
-	file := &B2File{ID: fmt.Sprintf("4_z%s_f%06d", bucketID, b.nextNumber), Name: name, BucketID: bucketID}
+	info := map[string]string{}
+	for header, values := range r.Header {
+		if name, found := strings.CutPrefix(strings.ToLower(header), "x-bz-info-"); found {
+			info[name] = values[0]
+		}
+	}
+	file := &B2File{ID: fmt.Sprintf("4_z%s_f%06d", bucketID, b.nextNumber), Name: name, BucketID: bucketID, Info: info}
 	if bucket.FileLockEnabled && bucket.DefaultRetention.Mode != nil && bucket.DefaultRetention.Period != nil {
 		file.Mode = *bucket.DefaultRetention.Mode
 		days := bucket.DefaultRetention.Period.Duration

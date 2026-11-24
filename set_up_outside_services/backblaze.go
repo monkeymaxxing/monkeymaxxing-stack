@@ -246,7 +246,7 @@ func (c *b2Client) checkLockRefusesDeletion(bucket *b2Bucket, lockDays int, now 
 	random := make([]byte, 4)
 	_, _ = rand.Read(random)
 	fileName := "set_up_outside_services_lock_check/" + now.UTC().Format("20060102T150405Z") + "-" + hex.EncodeToString(random) + ".txt"
-	file, err := c.uploadFile(bucket.BucketID, fileName, "text/plain", []byte("Monkeymaxxing Stack Object Lock check\n"))
+	file, err := c.uploadFile(bucket.BucketID, fileName, "text/plain", []byte("Monkeymaxxing Stack Object Lock check\n"), nil)
 	if err != nil {
 		return err
 	}
@@ -290,8 +290,9 @@ type b2File struct {
 	FileName string `json:"fileName"`
 }
 
-// uploadFile uploads one small file into a bucket.
-func (c *b2Client) uploadFile(bucketID, fileName, contentType string, content []byte) (b2File, error) {
+// uploadFile uploads one small file into a bucket, with info, the file's
+// own name-value pairs at Backblaze, which may be nil.
+func (c *b2Client) uploadFile(bucketID, fileName, contentType string, content []byte, info map[string]string) (b2File, error) {
 	// https://www.backblaze.com/apidocs/b2-get-upload-url
 	var upload struct {
 		UploadURL          string `json:"uploadUrl"`
@@ -310,6 +311,9 @@ func (c *b2Client) uploadFile(bucketID, fileName, contentType string, content []
 	request.Header.Set("X-Bz-File-Name", url.PathEscape(fileName))
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("X-Bz-Content-Sha1", hex.EncodeToString(checksum[:]))
+	for name, value := range info {
+		request.Header.Set("X-Bz-Info-"+name, url.PathEscape(value))
+	}
 	response, err := httpClient.Do(request)
 	if err != nil {
 		return b2File{}, &networkError{Provider: "Backblaze", Call: "b2_upload_file", Err: stripURLFromError(err)}
@@ -325,6 +329,30 @@ func (c *b2Client) uploadFile(bucketID, fileName, contentType string, content []
 		return b2File{}, errors.New("Backblaze answered b2_upload_file with something this command cannot read")
 	}
 	return file, nil
+}
+
+// fileInfoOf returns the info of the bucket's visible file of that name,
+// or nil when the bucket has none.
+// https://www.backblaze.com/apidocs/b2-list-file-names
+func (c *b2Client) fileInfoOf(bucketID, fileName string) (map[string]string, error) {
+	var answer struct {
+		Files []struct {
+			FileName string            `json:"fileName"`
+			FileInfo map[string]string `json:"fileInfo"`
+		} `json:"files"`
+	}
+	if err := c.call("b2_list_file_names", map[string]any{"bucketId": bucketID, "startFileName": fileName, "maxFileCount": 1, "prefix": fileName}, &answer); err != nil {
+		return nil, err
+	}
+	for _, file := range answer.Files {
+		if file.FileName == fileName {
+			if file.FileInfo == nil {
+				file.FileInfo = map[string]string{}
+			}
+			return file.FileInfo, nil
+		}
+	}
+	return nil, nil
 }
 
 // https://www.backblaze.com/apidocs/b2-list-keys
