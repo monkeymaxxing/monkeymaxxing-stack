@@ -71,10 +71,12 @@ const deskWireGuardPrivateKeyFile = "/etc/wireguard/wg0.private_key"
 // 0600; lock-the-desk deletes it after the upload.
 const backupWriteKeyFile = "/var/lib/monkeymaxxing-stack/backup_write_key_until_the_bundle_is_uploaded"
 
-// backupWriteKeyIDVaultName is the vault key of the key the bundle's
-// upload uses: the database servers' write key on the production backup
-// bucket.
-const backupWriteKeyIDVaultName = "pgbackrest_b2_write_key_id"
+// The vault keys of the key the bundle's uploads use: the database
+// servers' write key on the production backup bucket.
+const (
+	backupWriteKeyIDVaultName          = "pgbackrest_b2_write_key_id"
+	backupWriteApplicationKeyVaultName = "pgbackrest_b2_write_application_key"
+)
 
 // productionKeyFile is the production private key, which the desk role
 // makes in the person's own home (roles/systems_desk/main.yml,
@@ -316,9 +318,7 @@ func sortedKeys(values map[string]string) []string {
 
 // uploadTheBundle copies the pushed bundle into the locked backup bucket
 // with the kept write key; lock-the-desk deletes the kept key's file once
-// the upload is recorded. The bucket's
-// lock keeps the copy from deletion; no lifecycle rule hides a current
-// file, so it stays.
+// the upload is recorded.
 func (e *environment) uploadTheBundle(settings systemSettings) error {
 	kept, err := e.readRootFile(e.backupWriteKeyFile)
 	if err != nil {
@@ -328,7 +328,7 @@ func (e *environment) uploadTheBundle(settings systemSettings) error {
 	if len(lines) != 2 {
 		return fmt.Errorf("%s does not hold a key ID and a key", e.backupWriteKeyFile)
 	}
-	client, err := authorizeB2(e.b2AuthorizeURL, lines[0], lines[1])
+	upload, err := e.backupBucketUpload(settings, lines[0], lines[1])
 	if err != nil {
 		return err
 	}
@@ -336,19 +336,33 @@ func (e *environment) uploadTheBundle(settings systemSettings) error {
 	if err != nil {
 		return err
 	}
+	return upload(content)
+}
+
+// backupBucketUpload signs in to Backblaze with a write key on the
+// production backup bucket, finds the bucket, and returns the upload of one
+// copy of a bundle. The bucket's lock keeps each copy from deletion; no
+// lifecycle rule hides a current file, so each copy stays.
+func (e *environment) backupBucketUpload(settings systemSettings, keyID, applicationKey string) (func(content []byte) error, error) {
+	client, err := authorizeB2(e.b2AuthorizeURL, keyID, applicationKey)
+	if err != nil {
+		return nil, err
+	}
 	bucket, err := client.findBucket(settings.Vars.Backups.ProductionBucket)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if bucket == nil {
-		return fmt.Errorf("Backblaze has no bucket %s for the recovery bundle's copy", settings.Vars.Backups.ProductionBucket)
+		return nil, fmt.Errorf("Backblaze has no bucket %s for the recovery bundle's copy", settings.Vars.Backups.ProductionBucket)
 	}
-	name := "recovery_bundle/recovery_bundle_" + e.now().UTC().Format("20060102T150405Z") + ".age"
-	if _, err := client.uploadFile(bucket.BucketID, name, "application/octet-stream", content); err != nil {
-		return err
-	}
-	e.say("Copied the recovery bundle into the locked backup bucket %s as %s.", bucket.BucketName, name)
-	return nil
+	return func(content []byte) error {
+		name := "recovery_bundle/recovery_bundle_" + e.now().UTC().Format("20060102T150405Z") + ".age"
+		if _, err := client.uploadFile(bucket.BucketID, name, "application/octet-stream", content); err != nil {
+			return err
+		}
+		e.say("Copied the recovery bundle into the locked backup bucket %s as %s.", bucket.BucketName, name)
+		return nil
+	}, nil
 }
 
 // trimmedLines splits a file's text into its non-empty lines.

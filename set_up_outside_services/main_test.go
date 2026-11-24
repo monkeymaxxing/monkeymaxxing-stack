@@ -101,6 +101,14 @@ func (v *fakeVault) set(key, value string, replace bool) error {
 	return nil
 }
 
+func (v *fakeVault) value(key string) (string, error) {
+	value, ok := v.values[key]
+	if !ok {
+		return "", fmt.Errorf("mmx secrets pipe-to %s failed: the vault has no secret key %s", key, key)
+	}
+	return value, nil
+}
+
 func (v *fakeVault) addRandom(key string, length int, replace bool) error {
 	return v.set(key, strings.Repeat("r", length)+"-"+key, replace)
 }

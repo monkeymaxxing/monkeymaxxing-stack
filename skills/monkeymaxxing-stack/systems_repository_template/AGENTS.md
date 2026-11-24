@@ -600,6 +600,7 @@ operating procedure.
 | A phone is lost | [Recover from a lost phone](operating_procedures/recover_from_a_lost_phone.md) |
 | A laptop is lost or stolen | [Recover from a lost or stolen laptop](operating_procedures/recover_from_a_lost_or_stolen_laptop.md) |
 | A systems desk is lost | [Rebuild a systems desk](operating_procedures/rebuild_a_systems_desk.md) |
+| Nobody can find the recovery passphrase, or the password manager lacks the shared root console password, while the systems desk works | [Make a new recovery passphrase](operating_procedures/make_a_new_recovery_passphrase.md) |
 | A server of a pool that `triage_agent_server_work` lists stops reporting (MMWatchdog's `node_reports/NODE`) | The triage agent's three playbooks ([Replacing a failed server](triage_agent_rules.md#replacing-a-failed-server)); by hand, the same three ([A failed server: the three replacement playbooks](operating_procedures/replace_a_server.md#a-failed-server-the-three-replacement-playbooks)) |
 | An app, jobs, or load-balancer server dies, or both load-balancer servers are lost | [Replace a server](operating_procedures/replace_a_server.md) |
 | The database primary fails and a healthy replica remains | [Replace a server](operating_procedures/replace_a_server.md#the-database-primary-dies) |

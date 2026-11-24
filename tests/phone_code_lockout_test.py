@@ -129,6 +129,51 @@ class Rendered(unittest.TestCase):
         self.assertEqual(script.count('lock that laptop out'), 1)
         self.assertIn("'5' '7'", script)
 
+    def test_new_emergency_codes_keep_the_phones_secret(self):
+        # make-a-new-recovery-bundle needs emergency codes for the new bundle
+        # without a new scan: only the code lines change, and the old codes stop working.
+        import re
+        import stat
+        script = self.render('roles/systems_desk/files/set-up-the-phone-code', **self.lockout())
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root/'bin').mkdir()
+            (root/'bin/id').write_text('#!/bin/sh\necho 0\n')
+            # install as the desk's GNU install runs it here: -o U -g G -m MODE /dev/stdin PATH.
+            (root/'bin/install').write_text('#!/bin/sh\nwhile [ "$#" -gt 2 ]; do case $1 in -m) mode=$2; shift;; esac; shift; done\n'
+                                            'cat "$1" > "$2" && chmod "$mode" "$2"\n')
+            for stub in ('id', 'install'):
+                (root/'bin'/stub).chmod(0o755)
+            (root/'desk').mkdir()
+            (root/'set-up-the-phone-code').write_text(script.replace('/etc/systems-desk', str(root/'desk')))
+            code_file = root/'desk/phone-code'
+            kept = 'JBSWY3DPEHPK3PXP\n" RATE_LIMIT 3 30 1700000000\n" WINDOW_SIZE 3\n" DISALLOW_REUSE 56666666\n" TOTP_AUTH\n'
+            old_codes = ['11111111', '22222222', '33333333', '44444444', '55555555']
+            code_file.write_text(kept + '\n'.join(old_codes) + '\n')
+            environment = dict(os.environ, PATH='%s:%s' % (root/'bin', os.environ['PATH']), SUDO_UID=str(os.getuid()), SUDO_GID=str(os.getgid()))
+
+            def run(path):
+                return subprocess.run(['bash', str(root/'set-up-the-phone-code'), '--new-emergency-codes-to', str(path)],
+                                      env=environment, text=True, capture_output=True)
+            result = run(root/'codes')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            new_codes = (root/'codes').read_text().split()
+            self.assertEqual(len(new_codes), 5)
+            self.assertTrue(all(re.fullmatch('[1-9][0-9]{7}', code) for code in new_codes), new_codes)
+            self.assertFalse(set(new_codes) & set(old_codes))
+            self.assertEqual(code_file.read_text(), kept + '\n'.join(new_codes) + '\n')
+            self.assertEqual(stat.S_IMODE(code_file.stat().st_mode), 0o400)
+            self.assertEqual(stat.S_IMODE((root/'codes').stat().st_mode), 0o600)
+            self.assertIn('Your phone keeps working as before', result.stdout)
+            # An existing codes file, or a desk with no phone code, changes nothing.
+            self.assertEqual(run(root/'codes').returncode, 1)
+            self.assertEqual(code_file.read_text(), kept + '\n'.join(new_codes) + '\n')
+            code_file.unlink()
+            result = run(root/'other-codes')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('no phone code yet', result.stderr)
+            self.assertEqual(sorted(path.name for path in (root/'desk').iterdir()), [])
+
     def test_public_site_checks_start_only_after_go_live(self):
         apps = dict(shop=dict(health_url_path='/up'))
         names = dict(production=dict(shop='shop.example.com'))

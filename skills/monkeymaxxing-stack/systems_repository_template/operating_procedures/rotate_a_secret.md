@@ -91,7 +91,7 @@ the exceptions in the section for the secret you are replacing.
 ## The shared root console password
 
 `shared_root_console_password_hash` holds the shared root console password's hash.
-The first password is in the recovery bundle. A new one goes into the team's password manager.
+The team's password manager keeps the password as the item `Shared root console password`, and the recovery bundle keeps the one that lock-the-desk or make-a-new-recovery-bundle made.
 
 1. **Check for a running `restore01`** before rotating the password, with
    `./server_management_scripts/list_the_servers_at_the_provider`.

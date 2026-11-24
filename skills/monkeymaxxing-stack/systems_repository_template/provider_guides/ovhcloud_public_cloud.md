@@ -855,7 +855,24 @@ rules allow these requests.
 
 ## Console and rescue access
 
-In Manager, select **Public Cloud**, the project, **Instances**, the instance,
+**A VPS** (every server meant to stay): the OVHcloud US Control Panel
+shows no KVM console button for a VPS. Get the console's link through the
+desk's API proxy instead, as the coding agent on the desk, with the VPS's
+`vars.provider_server_name`:
+
+```sh
+# This systems desk, as the coding agent. The answer is the link, in quotes.
+curl -sS -X POST http://127.0.0.1:8081/vps/vps-77f3667b.vps.ovh.us/getConsoleUrl
+```
+
+The answer is a noVNC link that opens the VPS's console in the browser,
+for a short time; request a new one when it stops working. Give the link
+to the person, who opens it and logs in as `root` with the shared root
+console password. The link opens only the login prompt, so it is no
+secret, but keep it out of commits and notes. Proved on an OVHcloud US
+VPS; the desk's credential allows the call (`POST=/vps/*`).
+
+**A Public Cloud instance:** in Manager, select **Public Cloud**, the project, **Instances**, the instance,
 then **VNC console**. No separate console activation is documented.
 v1 `POST /instance/INSTANCE_ID/vnc` beneath the project path returns a temporary console URL; the person's
 credential allows it. Keep the console URL out of logs and command-line arguments.

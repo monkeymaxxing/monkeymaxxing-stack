@@ -616,15 +616,23 @@ const consolePasswordVaultKey = "shared_root_console_password_hash"
 // consolePasswordLetters are lowercase letters that sit in the same place on
 // the common keyboard layouts (QWERTY, QWERTZ, AZERTY): a provider's web
 // console often cannot paste and may assume another layout than the
-// person's. 30 of them carry about 129 bits.
+// person's.
 const consolePasswordLetters = "bcdefghijklnoprstuvx"
 
-// newConsolePassword makes six groups of five such letters, joined by
-// hyphens, such as "kbdte-ronvx-...", so a person can read it off a screen
-// and type it at a console.
+// consolePasswordGroups is how many groups of five letters the password
+// has. Four groups are 20 letters of the 20 above, about 86 bits (20 x
+// log2 20): out of reach of guessing at a console, which only the provider
+// account reaches, and of cracking the SHA-512 hash in /etc/shadow, while
+// the person types it blind into a console that cannot paste. SSH never
+// accepts it.
+const consolePasswordGroups = 4
+
+// newConsolePassword makes groups of five such letters, joined by hyphens,
+// such as "kbdte-ronvx-...", so a person can read it off a screen and type
+// it at a console.
 func newConsolePassword() (string, error) {
 	var groups []string
-	for range 6 {
+	for range consolePasswordGroups {
 		group := make([]byte, 5)
 		for i := range group {
 			n, err := rand.Int(rand.Reader, big.NewInt(int64(len(consolePasswordLetters))))
@@ -652,7 +660,7 @@ func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan, bun
 	e.say("%s, saved as its hash in %s.", capitalize(item.What), item.Key)
 	e.say("  Why: %s", item.Why)
 	for {
-		e.say("  Save it in your team's password manager as a new item named %q. It shows here once:", consolePasswordItem)
+		e.say("  Save it in your team's password manager as the item named %q, in place of any older one. It shows here once:", consolePasswordItem)
 		e.setValueOnScreen(true)
 		e.say("  ----")
 		e.say("  %s", password)

@@ -142,8 +142,12 @@ func (e *environment) runTheLockSteps(settings systemSettings) error {
 		return fmt.Errorf("the backup write key that set-up-outside-services backblaze keeps for the recovery bundle's upload is missing (%v). Run set-up-outside-services backblaze --replace-key %s, which makes a new one and keeps it, then run lock-the-desk again", err, backupWriteKeyIDVaultName)
 	}
 	steps := []lockStep{
-		{"shared_root_console_password", func() error { return e.consolePasswordScreen(settings, saved, bundle) }},
-		{"recovery_passphrase", func() error { return e.recoveryPassphraseScreen(settings, passphrase) }},
+		{"shared_root_console_password", func() error {
+			return e.consolePasswordScreen(settings, saved, bundle, "Your keys locked away: step 1 of 3, your servers' console password")
+		}},
+		{"recovery_passphrase", func() error {
+			return e.recoveryPassphraseScreen(settings, passphrase, "Your keys locked away: step 2 of 3, your recovery passphrase", "Save it in")
+		}},
 		{"phone_code", func() error { return e.phoneCodeScreen(settings, bundle) }},
 		{"recovery_bundle", func() error {
 			if err := e.completeTheBundle(settings, bundle, providerCredential); err != nil {
@@ -177,9 +181,10 @@ func (e *environment) runTheLockSteps(settings systemSettings) error {
 // consolePasswordScreen makes the servers' shared root console password,
 // shows it once, and saves its hash in the vault and the password itself in
 // the recovery bundle.
-func (e *environment) consolePasswordScreen(settings systemSettings, saved, bundle *savedKeys) error {
+// title is the screen's first line, which names the command's step.
+func (e *environment) consolePasswordScreen(settings systemSettings, saved, bundle *savedKeys, title string) error {
 	e.show(`
-Your keys locked away: step 1 of 3, your servers' console password
+` + title + `
 
 What this is for:
   Your server provider's web console lets root log in with it, the way in when everything else fails.
@@ -192,11 +197,14 @@ What this is for:
 	return errors.New("the secrets plan has no console password")
 }
 
-func (e *environment) recoveryPassphraseScreen(settings systemSettings, passphrase string) error {
+// recoveryPassphraseScreen shows the recovery passphrase once and has the
+// person type it back. title is the screen's first line; saveIn starts the
+// line that says where to save it, such as "Save it in".
+func (e *environment) recoveryPassphraseScreen(settings systemSettings, passphrase, title, saveIn string) error {
 	words := strings.Fields(passphrase)
 	e.setValueOnScreen(true)
 	e.show(fmt.Sprintf(`
-Your keys locked away: step 2 of 3, your recovery passphrase
+%s
 
 What this is for:
   If you lose your systems desk, this one passphrase brings everything back.
@@ -206,10 +214,10 @@ What this is for:
     %s
 
 Do this now:
-  1. Save it in %s as  "%s recovery passphrase".
+  1. %s %s as  "%s recovery passphrase".
   2. Type it here to prove you saved it.
 
-`, strings.Join(words, "  "), passwordManager(settings), companyName(settings)))
+`, title, strings.Join(words, "  "), saveIn, passwordManager(settings), companyName(settings)))
 	for {
 		typed, err := e.prompt("  Recovery passphrase: ")
 		if errors.Is(err, errEmptyValue) {

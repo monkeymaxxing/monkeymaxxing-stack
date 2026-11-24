@@ -11,12 +11,15 @@ import (
 	"syscall"
 )
 
-// vault is the systems repository's MMX vault. This command only lists its
-// keys and adds values; it never reads a value back, and it never writes the
-// vault's file itself: MMX owns the vault's format.
+// vault is the systems repository's MMX vault. This command lists its keys
+// and adds values, and never writes the vault's file itself: MMX owns the
+// vault's format. Only make-a-new-recovery-bundle reads a value back, to
+// copy it into the new bundle or to upload with it, never to the screen.
 type vault interface {
 	keys() (map[string]bool, error)
 	set(key, value string, replace bool) error
+	// value reads one saved value, through MMX.
+	value(key string) (string, error)
 	// addRandom makes a random value of length characters inside MMX.
 	addRandom(key string, length int, replace bool) error
 	// missing lists the keys the playbooks read that the vault lacks.
@@ -115,6 +118,19 @@ func (v mmxVault) set(key, value string, replace bool) error {
 		return fmt.Errorf("mmx secrets set %s failed: %s", key, firstLine(errorOutput.String(), err))
 	}
 	return nil
+}
+
+// value reads one value with mmx secrets pipe-to, which writes it to cat's
+// standard input; cat's output comes back here, never to the screen. MMX
+// ends the value with a newline, which is not part of it.
+func (v mmxVault) value(key string) (string, error) {
+	command := v.command(append(v.arguments("secrets", "pipe-to", key), "--", "cat")...)
+	var output, errorOutput bytes.Buffer
+	command.Stdout, command.Stderr = &output, &errorOutput
+	if err := command.Run(); err != nil {
+		return "", fmt.Errorf("mmx secrets pipe-to %s failed: %s", key, firstLine(errorOutput.String(), err))
+	}
+	return strings.TrimSuffix(output.String(), "\n"), nil
 }
 
 func firstLine(text string, fallback error) string {

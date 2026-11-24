@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -92,6 +93,15 @@ Commands:
                                 every item, commits and pushes it with the vault, and copies
                                 it into the locked backup bucket. A rerun continues where a
                                 run stopped.
+  make-a-new-recovery-bundle    After a lost recovery passphrase, in your own terminal
+                                (ssh -t desk01 set-up-outside-services make-a-new-recovery-bundle),
+                                on a systems desk whose lock is done: a new recovery bundle
+                                with a new recovery passphrase, a new console password for
+                                your servers and new emergency codes for your phone code,
+                                each shown once or saved only in the bundle. It copies the
+                                bundle into the locked backup bucket, then commits and
+                                pushes it in place of the old one. Your phone needs no new
+                                scan.
   personal-token server-provider --server-listing-path PATH [--token-header NAME]
                                 Replace your server provider token in the systems desk's API proxy,
                                 such as after a rotation. PATH is the provider guide's server
@@ -114,8 +124,8 @@ Commands:
                                 every random vault secret and takes nothing. It prints no key.
   version                       Print this program's version.
 
-backblaze, cloudflare, secrets, lock-the-desk and the coding agent's commands each
-commit and push the vault to the main copy on util01, and refuse a repository with
+backblaze, cloudflare, secrets, lock-the-desk, make-a-new-recovery-bundle and the
+coding agent's commands each commit and push the vault to the main copy on util01, and refuse a repository with
 other changes not pushed. Before util01 exists, the systems desk's checkout is the
 main copy: they commit there.
 `
@@ -207,11 +217,14 @@ func (e *environment) dispatch(arguments []string) error {
 			return errNoTerminal
 		}
 		return runPersonsSaveAKey(e, arguments[1:])
-	case "lock-the-desk":
+	case "lock-the-desk", makeANewRecoveryBundleCommand:
 		// The console password and the recovery passphrase show only in a
 		// terminal the person watches.
 		if !stdinIsTerminal() {
 			return errNoTerminal
+		}
+		if arguments[0] == makeANewRecoveryBundleCommand {
+			return e.withNoMoreArguments(arguments, runMakeANewRecoveryBundle)
 		}
 		return e.withNoMoreArguments(arguments, runLockTheDesk)
 	}
@@ -271,6 +284,9 @@ type environment struct {
 	// sudo; setUpThePhoneCode runs the desk's phone-code setup as root.
 	readRootFile      func(path string) ([]byte, error)
 	setUpThePhoneCode func(emergencyCodesPath string) error
+	// makeNewEmergencyCodes gives the desk's phone code new emergency codes,
+	// as root, and writes them to emergencyCodesPath.
+	makeNewEmergencyCodes func(emergencyCodesPath string) error
 	// deskIsLocked says the desk playbook's lock stage ran on this desk.
 	deskIsLocked func() bool
 	// resultsFile is the results file the coding agent reads, and
@@ -347,6 +363,7 @@ func defaultEnvironment(out io.Writer) *environment {
 		stripeAPIURL:                "https://api.stripe.com",
 		readRootFile:                readRootFileWithSudo,
 		setUpThePhoneCode:           setUpThePhoneCodeWithSudo,
+		makeNewEmergencyCodes:       makeNewEmergencyCodesWithSudo,
 		deskIsLocked:                func() bool { return deskIsLockedAt(deskLockedFile, deskRootLoginBeforeTheLockFile) },
 		resultsFile:                 setupResultsFile,
 		backupWriteKeyFile:          backupWriteKeyFile,
@@ -400,6 +417,23 @@ func (e *environment) readRepositoryFile(name string) ([]byte, error) {
 		return readFileAsTheCodingAgent(path)
 	}
 	return os.ReadFile(path)
+}
+
+// writeRepositoryFile replaces a file of the systems repository. In the
+// coding agent's checkout it writes as the coding agent, through sudo, so
+// the file stays the coding agent's own and a symbolic link there reaches
+// only what the coding agent may write itself.
+func (e *environment) writeRepositoryFile(name string, content []byte) error {
+	path := filepath.Join(e.directory, name)
+	if !e.inTheCodingAgentsCheckout {
+		return os.WriteFile(path, content, 0o644)
+	}
+	command := exec.Command("sudo", "-n", "-u", codingAgentAccount, "sh", "-c", `cat > "$1.new" && mv -f -- "$1.new" "$1"`, "sh", path)
+	command.Stdin = bytes.NewReader(content)
+	if output, err := command.CombinedOutput(); err != nil {
+		return fmt.Errorf("writing %s failed: %s", path, firstLine(string(output), err))
+	}
+	return nil
 }
 
 // repositoryHas says whether the systems repository holds a file.

@@ -42,7 +42,10 @@ inventory's real names and addresses, and the next unused desk name.
   first.
 - **The servers keep running** while the desk is missing.
 - **The person needs the recovery passphrase,** in the team's password
-  manager, and a login to the provider's and Cloudflare's websites.
+  manager, and a login to the provider's and Cloudflare's websites. A
+  passphrase that is lost while the desk still works gets replaced with
+  [Make a new recovery passphrase](make_a_new_recovery_passphrase.md);
+  without the desk, the bundle cannot be opened.
 
 ## Tell the person before you start
 

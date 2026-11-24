@@ -365,8 +365,8 @@ func TestSecretsReplacesTheConsolePasswordAndSavesOnlyItsHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("secrets: %v\n%s", err, h.out)
 	}
-	if !regexp.MustCompile(`^([bcdefghijklnoprstuvx]{5}-){5}[bcdefghijklnoprstuvx]{5}$`).MatchString(password) {
-		t.Fatalf("the console password %q is not six groups of five letters", password)
+	if !regexp.MustCompile(`^([bcdefghijklnoprstuvx]{5}-){3}[bcdefghijklnoprstuvx]{5}$`).MatchString(password) {
+		t.Fatalf("the console password %q is not four groups of five letters", password)
 	}
 	// Each time it shows, the screen is cleared before the person types it
 	// back from the password manager; a mismatch shows it again.

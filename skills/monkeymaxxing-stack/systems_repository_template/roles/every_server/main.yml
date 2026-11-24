@@ -462,6 +462,19 @@ node_tasks:
       name: "{{ .setting.key }}"
       value: "{{ .setting.value }}"
 
+  # The provider's web console shows only serious kernel messages, not each
+  # of the firewall's block log lines (level 4, warning), which otherwise
+  # flood the console and break the typing of the console password in an
+  # emergency. Every message still reaches the journal. The four numbers:
+  # the console's level (a message shows when its level is below it, so 3
+  # shows critical, alert and emergency messages), the level of a message
+  # that names none, the lowest console level allowed, and the console's
+  # level at boot.
+  - id: show_only_kernel_errors_on_the_console
+    sysctl_setting:
+      name: kernel.printk
+      value: "3 4 1 3"
+
   # Journal size limits: a disk that fills with logs is the most common
   # outage of a new system.
   - task_block:

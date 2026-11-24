@@ -59,14 +59,18 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
 - **The server still runs at the provider.** The provider's website shows
   the server running.
 - **The person can read the shared root console password.** It is the
-  recovery bundle's item `shared_root_console_password`, which the person
-  reads in their own terminal as
+  password manager item `Shared root console password`: the lock window of
+  chapter 4 and [every rotation](rotate_a_secret.md#the-shared-root-console-password)
+  save it there. The recovery bundle keeps a copy, the item
+  `shared_root_console_password`, which the person reads in their own
+  terminal as
   [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
-  says, never in the chat. After
-  [a rotation](rotate_a_secret.md#the-shared-root-console-password), the
-  password manager item `Shared root console password` holds the current
-  password instead. The password works only at the
-  console, never over SSH.
+  says, never in the chat. When the password manager lacks the item and
+  nobody has the recovery passphrase,
+  [Make a new recovery passphrase](make_a_new_recovery_passphrase.md) gives
+  the servers a new console password, saved in the password manager; it
+  works on a server after `every_server`'s next run there. The password
+  works only at the console, never over SSH.
 - **Know which way in the provider gives.** Some consoles show the running
   system and take a login (step 1; steps 2 to 4 work there as written).
   Others, such as Hetzner Cloud's, need a person at the browser console, and
@@ -122,11 +126,14 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
 ## 1. Log in at the provider's console
 
 1. **The person opens the server in the provider's website and logs in as
-   `root`** with the shared root console password (the recovery bundle's
-   item, or the password manager item after a rotation).
+   `root`** with the shared root console password, from the password
+   manager item `Shared root console password`.
    The console's place in the website is in the provider guide's section
    "Console and rescue access" ([Before you start](#before-you-start) links
-   each guide).
+   each guide). An OVHcloud VPS shows no console button on OVHcloud US:
+   you get the console's link from the desk instead, as
+   [the OVHcloud guide](../provider_guides/ovhcloud_public_cloud.md#console-and-rescue-access)
+   says, and give it to the person.
    **Check:** the console shows a root shell prompt. When the provider's
    way in is the rescue system, follow
    [Rescue system instead of a console login](#rescue-system-instead-of-a-console-login)

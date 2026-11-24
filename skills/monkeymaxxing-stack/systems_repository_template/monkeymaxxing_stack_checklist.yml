@@ -815,9 +815,9 @@ items:
     protects_against: being locked out during a Cloudflare outage, or after a broken SSH or network setting
     verification: >-
       a person logged in as root at one server's provider console with the
-      shared root console password (the recovery bundle's item, which
-      the lock window, ssh desk01-lock, made; after a rotation, the password manager item "Shared
-      root console password"). Every server
+      shared root console password, the password manager item "Shared
+      root console password", which the lock window, ssh desk01-lock, or a
+      rotation saved there. Every server
       has the password hash from vault key shared_root_console_password_hash,
       applied on every MMX run. SSH refuses the console password. The
       second way in, an SSH port-forward (`ssh -L 8480:127.0.0.1:8480 util01`)

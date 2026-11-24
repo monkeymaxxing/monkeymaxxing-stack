@@ -777,7 +777,7 @@ Then read the results file, and carry on as after way A.
 
    The servers' shared root console password, saved as its hash in shared_root_console_password_hash.
      Why: Every server lets root log in with it at your server provider's web console, the way in when SSH and the private network fail. SSH never accepts it. The vault keeps only its hash.
-     Save it in your team's password manager as a new item named "Shared root console password". It shows here once:
+     Save it in your team's password manager as the item named "Shared root console password", in place of any older one. It shows here once:
      ----
      [the password]
      ----
@@ -805,6 +805,10 @@ Then read the results file, and carry on as after way A.
 
      Recovery passphrase:
    ```
+
+   A passphrase that is lost later, while the desk still works, gets
+   replaced with
+   [Make a new recovery passphrase](../operating_procedures/make_a_new_recovery_passphrase.md).
 
    Then the phone code:
 

@@ -2440,9 +2440,11 @@ so a key is needed only while the file has the section that reads it.
 
 Every server shares one root password so a person can type the password
 in a provider console without paste: `set-up-outside-services secrets`
-makes it as six groups of five lowercase letters, chosen from letters
+makes it as four groups of five lowercase letters, chosen from 20 letters
 that sit in the same place on QWERTY, QWERTZ and AZERTY keyboards (about
-129 bits). It shows the password once for the password manager item
+86 bits). Four groups, not more: the person types it blind into a console
+that often cannot paste, and only the provider account reaches the console,
+while 86 bits keep the hash in `/etc/shadow` out of a cracker's reach. It shows the password once for the password manager item
 `Shared root console password`, clears the screen, and has the person type
 it back from the password manager, so a password that was never saved
 cannot reach the servers. The password lives in the team's password
@@ -2451,7 +2453,10 @@ lives in the vault as `shared_root_console_password_hash`. MMX's `user` module s
 `apply_password_hash: on_every_run` and `password_locked: false`. SSH
 keeps `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, and
 `PermitRootLogin prohibit-password`, so the password works only at the
-console. Rotation changes the vault hash and applies `every_server` to
+console. `every_server` sets `kernel.printk` to `3 4 1 3`, so the console
+shows only critical kernel messages and worse: the firewall's block log
+lines (warnings) otherwise flood a provider console and break the typing.
+Every message still reaches the journal. Rotation changes the vault hash and applies `every_server` to
 every normal server. Before rotation, finish and remove a running
 `restore01` through the recovery procedure that created the restore
 server, or apply the new hash through an MMX one-time playbook on the
@@ -4869,6 +4874,7 @@ input.
 | Command | What it does |
 | --- | --- |
 | `set-up-outside-services lock-the-desk` | The lock window, above: the console password, the recovery passphrase, the phone code, and the recovery bundle's check, upload and push. A rerun continues at its first step that is not done |
+| `set-up-outside-services make-a-new-recovery-bundle` | After a lost recovery passphrase, on a desk whose lock is done: a new recovery bundle with a new passphrase, below |
 | `set-up-outside-services backblaze`, with `--replace-key VAULT_KEY` for a rotation and `--delete-the-old-keys-at-once` after a break-in, as for `cloudflare` | Takes the B2 account's master key at two hidden prompts. Creates every bucket the system uses, sets each bucket's Object Lock and lifecycle rule, checks each lock with a test file, makes each server's key with exactly the capabilities below, and saves each key into the vault |
 | `set-up-outside-services cloudflare` | Takes the link token, the one token the person makes by hand from a prepared link, at a hidden prompt. With it, makes the person's desk token and writes it into the API proxy and the token file; with the desk token, creates the tunnels, the apps' R2 buckets (with `staging01`, each app's staging bucket too), and, through `mmhotline status-page set-up`, the status page's bucket, host name, and rule; with the link token, makes the servers' account-owned tokens and R2 keys below and saves them into the vault, and makes the person's own posting key for the status page and writes it into the token file; with a short-lived token it deletes at once, adds the One-time PIN login method when missing and, with `staging01`, makes staging's Access service token, whose two values go into the token file. Before it makes anything, it sets the link token to end by itself after 24 hours, and it deletes the link token when it ends, after a failure too. While the status page's domain is not Active at Cloudflare, it skips the status page and its two keys, says so, and finishes the rest; a rerun adds them |
 | `set-up-outside-services cloudflare --replace-key NAME` (repeatable) or `--replace-every-key`, with `--delete-the-old-keys-at-once` after a break-in | Makes a new key for each named one and saves it where the old one was (the vault, the API proxy, or the token file). A key the servers use keeps its old key until the servers' run passed and the person presses Enter; the at-once flag deletes it without waiting. A tunnel gets a new secret; staging's service token gets a new secret with the same ID |
@@ -4903,6 +4909,39 @@ it. `secrets_from_vault` names where each value comes from, so no screen asks
 "random or pasted?": the coding agent reads that from the app's code. A
 key from an outside service is checked only at an address fixed in the
 command, never one from the settings, which the coding agent can push.
+
+**A lost recovery passphrase gets a new bundle, made on the desk.**
+`set-up-outside-services make-a-new-recovery-bundle`, which the person runs
+in their own terminal (`ssh -t desk01 ...`, with a phone code), builds a
+new bundle with a new passphrase when nobody can open the old one. It
+refuses a desk whose lock is not done, and points to `lock-the-desk`. It
+reads each item from where it lives on the desk: the vault passphrase
+file, the production private key, the desk's WireGuard private key, the
+provider credential in the API proxy, the token file, and the vault keys
+the bundle copies, which it reads as root through MMX (`mmx secrets
+pipe-to`). Reason that reading the vault is allowed here: the person runs
+the command on their own desk, where they are root already, and each
+value goes from one encrypted file, or a root-only file, into another,
+never to the screen or to the coding agent. Two items cannot be read back
+by design, so they get new values: a new console password, shown once and
+typed back as at the lock (hash to the vault, password to the bundle), and
+new emergency codes from `sudo -n set-up-the-phone-code
+--new-emergency-codes-to PATH`, which replaces only the code lines of
+`/etc/systems-desk/phone-code`. The phone's secret stays, so the person
+scans nothing; the old codes stop working, which is harmless, since only
+the unopenable bundle held them. The command builds the bundle in a
+folder of the person's own, so a run that stops leaves the repository's
+bundle as it was and a rerun starts again with a new passphrase. It
+checks the bundle with the lock's completeness check, uploads it into the
+locked backup bucket, and only then replaces `recovery_bundle.age` and
+commits and pushes it with the vault. The upload uses the database
+servers' write key on the production backup bucket, read from the vault,
+the key the lock's upload used. Reason: the person gives no key, the
+Backblaze master key stays never stored, and the key can only add files,
+which the bucket's lock keeps. The older copies stay until their lock ends;
+only the old passphrase opens them. A desk login that is half done while
+the codes change can write the phone code file back with the old codes;
+the person runs nothing else on the desk meanwhile, so this is not guarded.
 
 **Why one Stack command.** Two designs were weighed. Playbooks in the template would need new MMX
 features: a hidden prompt inside a run, and a task that writes the

@@ -237,6 +237,13 @@ a new passphrase too.
    **Check:** [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
    opens the bundle with the new recovery passphrase, after step 3's
    publish.
+
+   When nobody has the old recovery passphrase, run only the block's
+   `sudo install`, `sudo cp` and `cd` lines, without `recovery_bundle.age`
+   in the `install` line. Publish only the vault in step 3, and after
+   step 3 follow
+   [Make a new recovery passphrase](make_a_new_recovery_passphrase.md):
+   its new bundle takes the new vault passphrase from the desk.
 3. **Publish both files, then give `util01` the new passphrase.** Alex's
    coding agent commits `secrets_vault.age` and `recovery_bundle.age` in
    the desk's checkout, publishes them, as
