@@ -34,10 +34,7 @@ func newRemakeHarness(t *testing.T) *remakeHarness {
 	}
 	h.e.deskIsLocked = func() bool { return true }
 	h.rootFiles[deskPhoneCodeFile] = "JBSWY3DPEHPK3PXP\n\" TOTP_AUTH\n" + emergencyCodes + "\n"
-	h.e.replaceEmergencyCodes = func(codes string) error {
-		h.phoneCodes = append(h.phoneCodes, codes)
-		return nil
-	}
+	h.e.replaceEmergencyCodes = h.swapTheCodes
 	h.oldPassphrase, h.oldHash = h.passphrase, h.vault.values[consolePasswordVaultKey]
 	h.oldBundle = h.repositoryBundle()
 	h.oldVault = h.repositoryFile(vaultFile)
@@ -52,6 +49,14 @@ func newRemakeHarness(t *testing.T) *remakeHarness {
 	}
 	h.out.Reset()
 	return h
+}
+
+// swapTheCodes gives the phone code new emergency codes as
+// set-up-the-phone-code does: the secret and options stay, the codes change.
+func (h *remakeHarness) swapTheCodes(codes string) error {
+	h.phoneCodes = append(h.phoneCodes, codes)
+	h.rootFiles[deskPhoneCodeFile] = "JBSWY3DPEHPK3PXP\n\" TOTP_AUTH\n" + codes + "\n"
+	return nil
 }
 
 func (h *remakeHarness) repositoryBundle() string {
@@ -403,8 +408,7 @@ func TestAStopAfterTheUploadFinishesOnTheRerun(t *testing.T) {
 			failedOnce = true
 			return errors.New("set-up-the-phone-code --replace-emergency-codes stopped (exit status 1)")
 		}
-		h.phoneCodes = append(h.phoneCodes, codes)
-		return nil
+		return h.swapTheCodes(codes)
 	}
 	err := runMakeANewRecoveryBundle(h.e)
 	if err == nil || !strings.Contains(err.Error(), "run "+makeANewRecoveryBundleCommand+" again: it finishes publishing this bundle") {
@@ -424,9 +428,8 @@ func TestAFailedPushFinishesOnTheRerunWithoutGivingTheCodesAgain(t *testing.T) {
 	h := newRemakeHarness(t)
 	origin := h.origin
 	h.e.replaceEmergencyCodes = func(codes string) error {
-		h.phoneCodes = append(h.phoneCodes, codes)
 		h.git(h.e.directory, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "unreachable"))
-		return nil
+		return h.swapTheCodes(codes)
 	}
 	err := runMakeANewRecoveryBundle(h.e)
 	if err == nil || !strings.Contains(err.Error(), "run "+makeANewRecoveryBundleCommand+" again: it finishes publishing this bundle") || strings.Contains(err.Error(), "do not run") {
@@ -437,6 +440,30 @@ func TestAFailedPushFinishesOnTheRerunWithoutGivingTheCodesAgain(t *testing.T) {
 	}
 	h.git(h.e.directory, "remote", "set-url", "origin", origin)
 	h.requireTheRerunFinishes(2)
+}
+
+// The phone code got the new codes but the run stopped before it noted
+// that, and the person used one of the new codes meanwhile: the rerun reads
+// the phone code itself, sees only the bundle's codes there, and does not
+// give them again, so the used code stays used.
+func TestAStopRightAfterTheSwapNeverRevivesAUsedCode(t *testing.T) {
+	h := newRemakeHarness(t)
+	h.e.replaceEmergencyCodes = func(codes string) error {
+		h.e.replaceEmergencyCodes = h.swapTheCodes
+		if err := h.swapTheCodes(codes); err != nil {
+			return err
+		}
+		return errors.New("the desk lost power")
+	}
+	if err := runMakeANewRecoveryBundle(h.e); err == nil {
+		t.Fatal("want a stop right after the swap")
+	}
+	used := strings.SplitN(h.phoneCodes[0], "\n", 2)[0]
+	h.rootFiles[deskPhoneCodeFile] = strings.Replace(h.rootFiles[deskPhoneCodeFile], used+"\n", "", 1)
+	h.requireTheRerunFinishes(2)
+	if strings.Contains(h.rootFiles[deskPhoneCodeFile], used) {
+		t.Error("the rerun revived a used emergency code")
+	}
 }
 
 // A teammate pushes to main while the person is at the screens: the

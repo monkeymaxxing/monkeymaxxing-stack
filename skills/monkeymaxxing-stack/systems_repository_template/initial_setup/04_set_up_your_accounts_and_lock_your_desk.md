@@ -793,11 +793,12 @@ Then read the results file, and carry on as after way A.
    Your keys locked away: step 2 of 3, your recovery passphrase
 
    What this is for:
-     If you lose your systems desk (the small server that holds your keys), this one passphrase brings everything back.
+     If you lose your systems desk, this one passphrase brings everything back.
+     This recovery bundle rebuilds desk01, this systems desk.
 
      SAVE IT NOW.  IT IS SHOWN ONLY ONCE.
 
-       maple  orbit  candle  river  stone  pilot
+       maple orbit candle river stone pilot
 
    Do this now:
      1. Save it in 1Password as  "Example recovery passphrase".

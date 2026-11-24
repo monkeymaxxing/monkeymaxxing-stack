@@ -222,8 +222,9 @@ a new passphrase too.
 
    ```sh
    # On the desk, as the person. Type the old recovery passphrase, then press Enter. It does not show.
-   # A run of spaces counts as one, so a copy saved with two spaces between words still opens the bundle.
-   read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD=$(printf '%s' "$MMX_VAULT_PASSWORD" | tr -s ' ')
+   # When the bundle refuses it as typed, a run of spaces counts as one, so a copy saved with two spaces between words still opens the bundle.
+   read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD
+   mmx secrets list-keys --vault recovery_bundle.age >/dev/null 2>&1 || export MMX_VAULT_PASSWORD=$(printf '%s' "$MMX_VAULT_PASSWORD" | tr -s ' ')
    mmx secrets set --vault recovery_bundle.age --replace mmx_vault_passphrase < "$work/vault-passphrase"
    # Type the new recovery passphrase, then press Enter. It does not show.
    (umask 077 && read -rs new_passphrase && printf '%s\n' "$new_passphrase" | tr -s ' ' > "$work/new-recovery-passphrase")

@@ -345,14 +345,23 @@ func newEnvironment(out io.Writer) (*environment, error) {
 	}
 	e := defaultEnvironment(out)
 	e.home, e.person = current.HomeDir, current.Username
-	host, err := os.Hostname()
-	if err != nil {
+	if e.deskName, err = systemsDeskName(); err != nil {
 		return nil, err
 	}
-	e.deskName, _, _ = strings.Cut(host, ".")
 	e.useTheCodingAgentsCheckout()
 	e.handleInterrupts()
 	return e, nil
+}
+
+// systemsDeskName is this desk's name, such as desk01: its host name up
+// to the first dot. The recovery bundle's commits and screens name it.
+func systemsDeskName() (string, error) {
+	host, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+	name, _, _ := strings.Cut(host, ".")
+	return name, nil
 }
 
 // defaultEnvironment is the desk's real environment, without the person.

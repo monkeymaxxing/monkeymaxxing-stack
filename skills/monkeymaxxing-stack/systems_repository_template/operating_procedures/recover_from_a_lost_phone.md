@@ -144,7 +144,7 @@ Keep that login open until step 4.
 
    WAIT FOR A NEW CODE. THE CODE FROM STEP 4 WORKS ONLY ONCE.
 
-   For the first desk, commit `recovery_bundle.age` in the desk's checkout
+   For the desk the recovery bundle covers, commit `recovery_bundle.age` in the desk's checkout
    and publish it, as [Making a change](../AGENTS.md#making-a-change) says.
    **Check:** `~/code/example_systems/ssh/open-the-desk-login --check` says the login is open, and the
    publishing step names the bundle's commit.

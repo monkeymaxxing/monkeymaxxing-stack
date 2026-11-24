@@ -4860,10 +4860,14 @@ A copy that differs only in capitals or spaces is refused with a message
 that says so. Reason: MMX opens the bundle only with the exact
 passphrase, so a looser check would pass a copy that fails at the
 recovery. Versions up to 0.4.0 showed two spaces between words, so a team
-may have saved such a copy: every procedure that takes a recovery
-passphrase from a person (`with_recovery_passphrase` in
-`rebuild_a_systems_desk.md`, and the desk blocks that read it) turns a
-run of spaces into one before MMX gets it.
+may have saved such a copy, and a bundle may be encrypted with two: every
+procedure that takes a recovery passphrase from a person
+(`with_recovery_passphrase` in `rebuild_a_systems_desk.md`, and the desk
+blocks that read it) tries it as typed with `mmx secrets list-keys`, which
+changes no file, and only when MMX refuses it turns a run of spaces into
+one. Reason for the order: an older team-departure procedure encrypted
+the bundle with the spacing the person typed, so squeezing first would
+refuse that bundle's right passphrase.
 
 **Person mode stays.** `backblaze`, `cloudflare` and `secrets` keep their
 hidden prompts for the person: the paste window during the setup, a key
@@ -4982,9 +4986,13 @@ that passphrase, so the bundle it opens is the one to publish. The rerun
 asks Backblaze for the named copy (`b2_list_file_names`) and compares its
 file info `bundle_sha256`, which the upload sets, so a copy whose answer
 never arrived is not made twice; Ctrl-C waits from before the upload
-until the uploaded mark is written. The phone code's new codes get a mark
-too, the SHA-256 of the five codes, written with the swap: a rerun with
-that mark skips the swap, so a code the person used meanwhile stays used.
+until the uploaded mark is written. A rerun skips the phone code's swap when
+every emergency code in `/etc/systems-desk/phone-code` is one of the
+bundle's five, so a code the person used meanwhile stays used. Reason for
+reading the phone code itself, not a mark beside the bundle: a stop right
+after the swap leaves no mark, and the file always says which codes it
+holds. A phone code with no codes left gets the bundle's again; reviving
+a used one then needs all five used between a stop and its rerun.
 The commit holds `recovery_bundle.age` alone; the command pulls the
 team's main and pushes, and a rerun after a failed push pushes the commit
 it left. Each stop gives one instruction: run the command again. One run at a
@@ -4998,7 +5006,12 @@ bundle rebuilds desk02, this systems desk.", the results file's
 `recovery_bundle_systems_desk_name` holds it, and each commit that saves
 the bundle ends with "The recovery bundle covers desk02.", so a coding
 agent finds the name in the clone without the passphrase. The name is the
-desk's host name, which the desk role sets from the inventory. The upload uses the database servers' write key
+desk's host name, which the desk role sets from the inventory. A rebuild
+under a new name takes the keys with it, so its step 18 changes
+`systems_desk_name` with the emergency codes, and its commit carries the
+new name; for a bundle a rebuild left naming the lost desk, the lookup
+follows the rebuild's commit, "Rebuild desk01 as desk02 with the same
+keys". The upload uses the database servers' write key
 on the production backup bucket, read from the vault, the key the lock's
 upload used. Reason: the person gives no key, the Backblaze master key
 stays never stored, and the key can only add files, which the bucket's

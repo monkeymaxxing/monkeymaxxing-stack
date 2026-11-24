@@ -11,22 +11,29 @@ desk is deleted at the provider.
 **Which desk this page rebuilds:** the desk whose keys are in the recovery
 bundle, `recovery_bundle.age`: the desk that made the bundle, at chapter 4
 (set up your accounts and lock your systems desk) or with
-[Make a new recovery passphrase](make_a_new_recovery_passphrase.md). The
-bundle's item `systems_desk_name` names it, and so does the newest commit
-that saved the bundle, which you read in the laptop's clone:
+[Make a new recovery passphrase](make_a_new_recovery_passphrase.md), or
+the desk this page rebuilt from it. The bundle's item `systems_desk_name`
+names it, and so does the newest commit that saved the bundle, which you
+read in the laptop's clone:
 
 ```sh
 # On the laptop, in ~/code/example_systems:
 git log --format=%B -- recovery_bundle.age | grep -m1 '^The recovery bundle covers '
+git log --format=%s | grep '^Rebuild .* as .* with the same keys$'
 ```
 
-When the command prints nothing, the bundle is older than that line, and
-it covers the desk that ran chapter 4, usually `desk01`.
+When the first command prints nothing, the bundle is older than that
+line, and it names the desk that ran chapter 4, usually `desk01`. Then
+follow the second command's lines from the name you have: a line
+`Rebuild desk01 as desk02 with the same keys` means `desk02` holds
+`desk01`'s keys, so the bundle covers `desk02`; repeat with `desk02`.
+Reason: earlier rebuilds left the bundle naming the lost desk, because
+their step 18 did not change the name.
 A desk the bundle does not cover has its own keys, which the bundle does
 not hold. Such a lost desk is replaced with
 [Add or remove a team member](add_or_remove_a_team_member.md): remove the
 lost desk ("Leaving", steps 2 and 3), then add a new desk ("Joining").
-**Check:** the lost desk is the one the command names.
+**Check:** the lost desk is the desk these commands lead to.
 
 **Who acts:**
 
@@ -279,10 +286,21 @@ inventory's real addresses, and the next unused desk name.
     >
     > `ssh -t desk02 'sudo -n set-up-the-phone-code --emergency-codes-to ~/phone-code-emergency-codes'`
 
-    Then the person saves the new emergency codes in the recovery bundle,
-    as [Change an item in the recovery bundle](#change-an-item-in-the-recovery-bundle)
-    says, with `phone_code_emergency_codes` and the file
-    `~/phone-code-emergency-codes`. Then you run the lock stage from the
+    Then the person saves two items in the recovery bundle, as
+    [Change an item in the recovery bundle](#change-an-item-in-the-recovery-bundle)
+    says, with these two lines in place of its one `mmx secrets set` line,
+    and with `~/phone-code-emergency-codes` as its FILE:
+
+    ```sh
+    mmx secrets set --vault recovery_bundle.age --replace phone_code_emergency_codes < ~/phone-code-emergency-codes
+    printf 'desk02' | mmx secrets set --vault recovery_bundle.age --replace systems_desk_name
+    ```
+
+    Reason for the name: the bundle now covers `desk02`, and the next lost
+    desk or phone finds that desk by this name. When you commit the
+    bundle, the message ends with the line
+    `The recovery bundle covers desk02.`
+    Then you run the lock stage from the
     laptop, and clean up as chapter 4's step 8 says:
 
     ```sh
@@ -378,12 +396,15 @@ small shell commands, in their laptop terminal:
 # On the laptop, in your own terminal:
 cd ~/code/example_systems
 # with_recovery_passphrase COMMAND [ARGUMENT ...]: asks for the recovery passphrase, unseen, and runs COMMAND with it.
-# Spaces at the ends go, and a run of spaces counts as one: a copy saved with two spaces between words still opens the bundle.
+# Spaces at the ends go. When the bundle in this folder refuses the passphrase as typed, a run of spaces counts as one:
+# a copy saved with two spaces between words still opens a bundle made with one, and the bundle made with two still opens.
 with_recovery_passphrase() {
   local passphrase
   printf 'Recovery passphrase (hidden): ' >&2
   read -rs passphrase && printf '\n' >&2
-  MMX_VAULT_PASSWORD=$(printf '%s' "$passphrase" | tr -s ' ') "$@"
+  MMX_VAULT_PASSWORD=$passphrase ~/.local/bin/mmx secrets list-keys --vault recovery_bundle.age >/dev/null 2>&1 ||
+    passphrase=$(printf '%s' "$passphrase" | tr -s ' ')
+  MMX_VAULT_PASSWORD=$passphrase "$@"
 }
 # bundle_item KEY COMMAND [ARGUMENT ...]: sends the item KEY to COMMAND's standard input.
 # `mmx secrets pipe-to` only reads the bundle, so the file stays unchanged.
@@ -465,8 +486,9 @@ changed file.
 work=$(mktemp -d) && cd "$work"
 cp /home/coding-agent/systems_repository/recovery_bundle.age .
 # Type the recovery passphrase, then press Enter. It does not show.
-# A run of spaces counts as one, so a copy saved with two spaces between words still opens the bundle.
-read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD=$(printf '%s' "$MMX_VAULT_PASSWORD" | tr -s ' ')
+# When the bundle refuses it as typed, a run of spaces counts as one, so a copy saved with two spaces between words still opens the bundle.
+read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD
+mmx secrets list-keys --vault recovery_bundle.age >/dev/null 2>&1 || export MMX_VAULT_PASSWORD=$(printf '%s' "$MMX_VAULT_PASSWORD" | tr -s ' ')
 mmx secrets set --vault recovery_bundle.age --replace KEY < FILE
 sudo install -o coding-agent -g coding-agent -m 0644 recovery_bundle.age /home/coding-agent/systems_repository/recovery_bundle.age
 cd && rm -r "$work" FILE && unset MMX_VAULT_PASSWORD

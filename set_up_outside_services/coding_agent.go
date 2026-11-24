@@ -71,6 +71,9 @@ func runFromTheCodingAgent(arguments []string, input io.Reader, out io.Writer) e
 		return fmt.Errorf("%s runs as root, through the systems desk's sudo rule: sudo -n /usr/local/bin/set-up-outside-services %s %s", fromTheCodingAgentCommand, fromTheCodingAgentCommand, strings.Join(arguments, " "))
 	}
 	e := defaultEnvironment(out)
+	if e.deskName, err = systemsDeskName(); err != nil {
+		return err
+	}
 	e.useTheCodingAgentsCheckout()
 	if err := e.becomeTheDesksPerson(); err != nil {
 		return err

@@ -54,9 +54,10 @@ explains each term.
    token. The old token creates and deletes servers
    without a desk or a phone code.
    **Check:** the provider's website shows the new token.
-3. **Build the replacement desk:** for the first desk, whose keys are in
-   the recovery bundle, follow
-   [Rebuild a systems desk](rebuild_a_systems_desk.md); for a teammate's
+3. **Build the replacement desk:** for the desk the recovery bundle
+   covers, whose keys are in the bundle, follow
+   [Rebuild a systems desk](rebuild_a_systems_desk.md). "Which desk this
+   page rebuilds" there says how to find that desk's name. For any other
    desk, add a new desk, as "Joining" in
    [Add or remove a team member](add_or_remove_a_team_member.md#joining)
    says, and remove the old one, as "Leaving" steps 2 and 3 say. Use the next desk

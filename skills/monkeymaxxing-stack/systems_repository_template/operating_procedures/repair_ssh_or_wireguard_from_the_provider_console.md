@@ -68,9 +68,11 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
   says, never in the chat. The bundle's copy may be older: a rotation
   leaves the older password in the bundle. The password works only at the
   console, never over SSH.
-  **When nobody has the current password, start with the provider's
-  rescue system:** the password manager lacks the item, or the console
-  rejects the password manager's password and the bundle's copy. Reason: a
+  First try each copy the person has: the password manager's, then the
+  bundle's.
+  **When the console rejects every copy the person has, start with the
+  provider's rescue system,** also when the password manager lacks the
+  item and the bundle's copy is rejected too. Reason: a
   new console password from the desk reaches a server only through
   `every_server`'s run over SSH, the part that fails here. The person boots
   the server into the provider's rescue system, as the provider guide's
@@ -150,7 +152,8 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
    [the OVHcloud guide](../provider_guides/ovhcloud_public_cloud.md#console-and-rescue-access)
    gives; the link never goes through the chat.
    **Check:** the console shows a root shell prompt. When the console
-   rejects the password, start with the rescue system, as
+   rejects the password manager's copy, try the bundle's copy; when it
+   rejects both, start with the rescue system, as
    [Before you start](#before-you-start) says. When the provider's
    way in is the rescue system, follow
    [Rescue system instead of a console login](#rescue-system-instead-of-a-console-login)

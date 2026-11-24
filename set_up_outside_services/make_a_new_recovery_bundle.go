@@ -84,9 +84,10 @@ func newEmergencyCodes() (string, error) {
 //   - recovery_bundle.age and recovery_passphrase, while the run builds;
 //   - copyRecordFile, once the person typed the passphrase back, written
 //     before the upload;
-//   - uploadedMark, once the backup bucket holds the copy;
-//   - installedCodesFile, once the phone code has the bundle's emergency
-//     codes.
+//   - uploadedMark, once the backup bucket holds the copy.
+//
+// Whether the phone code has the bundle's emergency codes, the run reads
+// from the phone code itself.
 //
 // Until copyRecordFile, any stop removes the folder, so a passphrase the
 // person never saved goes. From copyRecordFile on, the folder stays until
@@ -103,10 +104,6 @@ const (
 	copyRecordFile = "backup_bucket_copy.json"
 	// uploadedMark says the backup bucket holds the copy.
 	uploadedMark = "uploaded_to_the_backup_bucket"
-	// installedCodesFile holds the SHA-256 of the emergency codes the phone
-	// code got, so a rerun never gives them again: a code the person used
-	// meanwhile stays used.
-	installedCodesFile = "phone_code_has_these_emergency_codes"
 )
 
 // bundleCopy is copyRecordFile's content: the copy's file name in the
@@ -369,7 +366,7 @@ func (e *environment) publishTheNewBundle(settings systemSettings, directory str
 		if err != nil {
 			return "", "", err
 		}
-		if err := e.giveThePhoneCodeTheNewCodes(directory, codes); err != nil {
+		if err := e.giveThePhoneCodeTheNewCodes(codes); err != nil {
 			return "", "", err
 		}
 		if err := e.writeRepositoryFile(recoveryBundleFile, content); err != nil {
@@ -424,11 +421,18 @@ func (e *environment) copyTheNewBundle(settings systemSettings, directory string
 }
 
 // giveThePhoneCodeTheNewCodes gives the phone code the bundle's emergency
-// codes, unless installedCodesFile says it has them already. Reason: a rerun
-// that gave all five again would revive a code the person used meanwhile.
-func (e *environment) giveThePhoneCodeTheNewCodes(directory, codes string) error {
-	installed := filepath.Join(directory, installedCodesFile)
-	if text, err := os.ReadFile(installed); err == nil && strings.TrimSpace(string(text)) == sha256Hex([]byte(codes)) {
+// codes, unless the phone code has them already: every emergency code it
+// holds is one of the bundle's, and it holds at least one. Reason: a rerun
+// that gave all five again would revive a code the person used meanwhile,
+// and the phone code itself says so even when a run stopped right after
+// the swap. A phone code with no codes left gets the bundle's; reviving
+// them needs all five used between a stop and its rerun.
+func (e *environment) giveThePhoneCodeTheNewCodes(codes string) error {
+	phoneCode, err := e.readRootFile(deskPhoneCodeFile)
+	if err != nil {
+		return err
+	}
+	if phoneCodeHoldsOnly(string(phoneCode), codes) {
 		return nil
 	}
 	e.enterCriticalSection()
@@ -436,11 +440,31 @@ func (e *environment) giveThePhoneCodeTheNewCodes(directory, codes string) error
 	if err := e.replaceEmergencyCodes(codes); err != nil {
 		return err
 	}
-	if err := os.WriteFile(installed, []byte(sha256Hex([]byte(codes))+"\n"), 0o600); err != nil {
-		return err
-	}
 	e.say("Saved the new emergency codes only in the new recovery bundle. The old emergency codes no longer work.")
 	return nil
+}
+
+// phoneCodeHoldsOnly says the phone code's file holds at least one
+// emergency code, and only codes from codes. The file is the phone's
+// secret, option lines that start with a quote, and one 8-digit
+// emergency code per line; a used code is gone from it.
+func phoneCodeHoldsOnly(phoneCode, codes string) bool {
+	bundle := map[string]bool{}
+	for _, code := range strings.Fields(codes) {
+		bundle[code] = true
+	}
+	held := 0
+	for _, line := range strings.Split(phoneCode, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) != 8 || strings.Trim(line, "0123456789") != "" {
+			continue
+		}
+		if !bundle[line] {
+			return false
+		}
+		held++
+	}
+	return held > 0
 }
 
 // backupBucketWithTheVaultsWriteKey signs in to Backblaze with the database

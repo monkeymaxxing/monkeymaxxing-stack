@@ -117,15 +117,17 @@ settings, and do the replacements. Only a person:
    in `mmx_project_settings.yml` to the new provider's address, as the new
    provider's guide gives it. Then move the desks one at a time, at the new
    provider and in a location different from production:
-   - **The first desk,** whose keys are in the recovery bundle: rebuild it with
-     [Rebuild a systems desk](rebuild_a_systems_desk.md). It keeps its old
+   - **The desk the recovery bundle covers,** whose keys are in the bundle:
+     rebuild it with [Rebuild a systems desk](rebuild_a_systems_desk.md),
+     whose "Which desk this page rebuilds" says how to find that desk's
+     name. It keeps its old
      private address, its WireGuard key and its person, so the servers still
      recognize it. Only its public address changes, and that change reaches
      the servers' peers in the `WireGuard peers` item below.
-   - **Each teammate's desk:** add a new desk for that teammate, as "Joining"
+   - **Each other desk:** add a new desk for that desk's person, as "Joining"
      in [Add or remove a team member](add_or_remove_a_team_member.md#joining)
      says, then remove the old desk, as "Leaving" steps 2 and 3 say.
-   - **The old first desk** is powered off before its rebuild starts, because
+   - **The old desk the bundle covers** is powered off before its rebuild starts, because
      two desks must not run one WireGuard identity at once. It stays powered
      off, and is not destroyed, until the rebuilt desk passes that
      procedure's verification. Then the procedure's step 22 destroys it by
@@ -144,8 +146,8 @@ settings, and do the replacements. Only a person:
      Do not press the lock-out button to test it.
 
    **Check:** the checks of [Rebuild a systems desk](rebuild_a_systems_desk.md)
-   pass for the first desk, and the checks of "Joining" for each teammate's
-   desk.
+   pass for the desk the bundle covers, and the checks of "Joining" for
+   each other desk.
 6. **Delete the old provider's API tokens.** Once the old provider holds no server of the system,
    the old desks included, the person deletes, on the old provider's website, every API token of the
    system there: each person's and `util01`'s, where the old provider's guide says: at OVHcloud the

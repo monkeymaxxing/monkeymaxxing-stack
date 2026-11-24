@@ -308,7 +308,7 @@ coding agent, from the first unknown session on.
   without CI, in a container on the laptop, push the image under a new tag, and deploy the new tag, before a server is
   added or replaced.
 - **The password manager or the identity provider** holds the recovery logins and the recovery passphrase, which
-  opens the recovery bundle: the first desk's production and WireGuard keys, and the vault passphrase. So every kept credential is suspect: go to
+  opens the recovery bundle: the production key, the WireGuard key of the desk it covers, and the vault passphrase. So every kept credential is suspect: go to
   [The lock-out: only for these cases](#the-lock-out-only-for-these-cases). The person changes the master password
   from a clean device.
 - **The coding-agent vendor's account** holds the stored conversations and may hold the triage agent's credential.
