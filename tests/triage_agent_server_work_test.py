@@ -298,8 +298,15 @@ class TheRulesTheAgentReads(unittest.TestCase):
     def test_a_finding_is_set_aside_only_on_evidence_for_every_server(self):
         flat = ' '.join(self.rules.split())
         self.assertIn('Your evidence holds for every server with that exact finding', flat)
-        self.assertIn('is allowed only when a Stack role makes that configuration the same on every server: the reason names the role', flat)
-        self.assertIn('request `apply_set_aside_findings`, as it is', flat)
+        self.assertIn('is allowed only when a Stack role makes that configuration the same on every server: the reason names the role and the setting', flat)
+        self.assertIn('`mmhotline triage-agent request-playbook-run --playbook playbooks/apply_set_aside_findings.yml --inventory servers', flat)
+        self.assertIn('report at info with `--about-alert-id ALERT_ID` once for each alert the entry covers', flat)
+        # The example names a setting the role writes; the rule removes an entry before a change makes its reason false.
+        self.assertIn('roles/every_server writes PasswordAuthentication no', flat)
+        every_server = (T/'roles/every_server/main.yml').read_text()
+        self.assertIn('PasswordAuthentication no', every_server)
+        self.assertIn('KbdInteractiveAuthentication no', every_server)
+        self.assertIn("removal confirmed on the hub, before that change deploys", flat)
 
     def test_an_add_or_a_removal_is_reported_only_after_reading_the_runs_result(self):
         """On a real server, the agent wrote "Created a second app server" before reading that the add found nothing to add."""

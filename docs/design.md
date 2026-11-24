@@ -3592,8 +3592,12 @@ The release step, in one commit that the tag then names:
    each such line in every release newer than the system's
    ([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
    Write the line exactly, one flaw on each line, the id and the program
-   without spaces. A later release that fixes the same flaw again repeats
-   nothing: the check already knows the flaw from the earlier release.
+   without spaces. Mark every release that fixes the flaw, also a later
+   release that fixes it again after a release in between brought it
+   back. Reason: a system on the release in between is newer than the
+   first marked release, so only the later marker warns it; the check
+   groups the repeated lines into one finding, under the oldest release
+   newer than the system's.
 
 `tests/release_build_test.py` checks step 3 with stand-ins for the build
 tools; `tests/pinned_program_releases_test.py` checks that every pin is

@@ -142,8 +142,13 @@ review with the finding in the notes:
 A new flaw with no fix changes only the notes, never the report. A flaw
 whose check, finding and exact finding an entry of
 `triage_agent_notes/set_aside_findings.yml` names was investigated and set
-aside: leave it out of the report too. When every finding is unchanged,
-set aside, or only new flaws with no fix appeared, send no report.
+aside: leave it out of the report too, unless this review finds evidence
+for an SOS about it, such as attackers exploiting it on a path that
+reaches the servers. SOS evidence wins over the entry: report the SOS, and
+remove the entry as "Setting a finding aside" in `triage_agent_rules.md`
+says. An SOS always alerts; MMWatchdog never quiets one either. When every
+finding is unchanged, set aside, or only new flaws with no fix appeared,
+send no report.
 
 ### 6. Update the notes, and commit
 

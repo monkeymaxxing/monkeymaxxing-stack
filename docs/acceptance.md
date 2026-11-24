@@ -61,8 +61,10 @@ The contracts below state the required outcomes for changes to the stack.
   waits for the triage agent first, so the person hears its verdict, and
   an alert reaches people whenever the agent cannot look. One finding on
   many servers is one alert and one investigation. A finding the agent
-  set aside, with a reason that holds for every server, alerts again when
-  its package, version, fix or advisory changes, never for an SOS. The
+  set aside, with a reason that holds for every server, stays quiet until
+  its package, version, fix or advisory changes, and then alerts again;
+  setting a finding aside never quiets an SOS, and an SOS always alerts,
+  also in the scheduled review. The
   agent's run limit stops only agent runs, never alerts. A Stack release
   that fixes a flaw attackers exploit now warns every older system.
 - **A short weekly review:** the weekly system review covers the week's

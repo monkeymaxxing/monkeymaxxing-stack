@@ -20,7 +20,7 @@
 #     - check: installed_packages/known_exploited_flaws
 #       finding: CVE-2026-123158 openssh
 #       exact_finding: "Debian:13 CVE-2026-123158 openssh 1:10.0p1-7+deb13u4; fixed version: none; DEBIAN-CVE-2026-123158 modified 2026-11-20T08:12:00Z"
-#       reason: Needs musl without PAM; roles/every_server installs Debian's openssh-server, which links PAM on every server. Debian rates it unimportant.
+#       reason: Needs password or keyboard-interactive login; roles/every_server writes PasswordAuthentication no and KbdInteractiveAuthentication no into /etc/ssh/sshd_config.d on every server. Debian rates it unimportant.
 #       investigation_note: triage_agent_notes/2026-11-23_openssh_package_warning_on_app001.md
 #       set_aside_by: triage agent (MMHotline run b82fdd8b)
 #       set_aside_on: 2026-11-23

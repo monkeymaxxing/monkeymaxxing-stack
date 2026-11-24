@@ -86,7 +86,10 @@ report, and propose, but grants no rights.
   each server's exact finding, with
   `ssh triage@util01 sudo mmwatchdog fleet findings installed_packages/known_exploited_flaws --json`.
   Replace `installed_packages/known_exploited_flaws` with the alert's
-  check, as `CHECK_GROUP/CHECK`, and keep the rest unchanged. The entries
+  check, as `CHECK_GROUP/CHECK`, and keep the rest unchanged. The alert
+  itself prints `mmwatchdog fleet findings CHECK_GROUP/CHECK --finding '<id>'`:
+  run it without `--finding` and with `--json`, because sudo allows only
+  that form, and pick the finding's `id` out of the JSON. The entries
   that are set aside now, with the servers each covers:
   `ssh triage@util01 sudo mmwatchdog fleet set-aside-findings --json`.
 - **Postgres:** log in through the server's local socket as the database
@@ -381,8 +384,12 @@ then hears your verdict instead of the raw warning.
   names the warning.
 - **The wait has an end.** A warning nothing took over reaches people at
   the end of the wait, even while you still work. When the work needs
-  longer, send a short report first, at the level the finding deserves,
-  that names the warning and says what you check next.
+  longer, you may send a short report first that says what you check
+  next. Name a warning in it only at a level at least as urgent as that
+  warning, warn or SOS for a warning. Otherwise leave the warning
+  unnamed: an info report that named it would take it over, and if your
+  run then failed, the warning would never reach people. Unnamed, it
+  still reaches them at the end of its wait.
 
 ### One finding on many servers
 
@@ -721,9 +728,10 @@ alerting for it on every server, including servers added later.
 - **When an entry is allowed.** Your evidence holds for every server with
   that exact finding, such as Debian rating the flaw `unimportant`, or a
   flaw only in a build the Debian package is not. Evidence that rests on a
-  server's configuration, such as "sshd links PAM", is allowed only when a
-  Stack role makes that configuration the same on every server: the
-  reason names the role, such as `roles/every_server`. Otherwise, report at
+  server's configuration, such as "sshd accepts no password", is allowed
+  only when a Stack role makes that configuration the same on every
+  server: the reason names the role and the setting, such as
+  `roles/every_server` writing `PasswordAuthentication no`. Otherwise, report at
   info about the servers you checked, and set nothing aside: another
   server with the finding alerts at its own level.
 - **What MMWatchdog matches:** the check, the finding, and the exact
@@ -739,7 +747,7 @@ alerting for it on every server, including servers added later.
     - check: installed_packages/known_exploited_flaws
       finding: CVE-2026-123158 openssh
       exact_finding: "Debian:13 CVE-2026-123158 openssh 1:10.0p1-7+deb13u4; fixed version: none; DEBIAN-CVE-2026-123158 modified 2026-11-20T08:12:00Z"
-      reason: Needs musl without PAM; roles/every_server installs Debian's openssh-server, which links PAM on every server. Debian rates it unimportant.
+      reason: Needs password or keyboard-interactive login; roles/every_server writes PasswordAuthentication no and KbdInteractiveAuthentication no into /etc/ssh/sshd_config.d on every server. Debian rates it unimportant.
       investigation_note: triage_agent_notes/2026-11-23_openssh_package_warning_on_app001.md
       set_aside_by: triage agent (MMHotline run b82fdd8b)
       set_aside_on: 2026-11-23
@@ -747,15 +755,18 @@ alerting for it on every server, including servers added later.
 
   Keep the file when it has no entry, as `set_aside_findings: []`: MMX
   needs the file.
-- **Apply it.** Commit the file with your note, then request
-  `apply_set_aside_findings`, as it is. It runs at once with every
-  answer, installs the file on the fleet hub only, and checks it first,
-  so a bad file never goes live. Then report at info, naming the alerts
-  the entry covers. MMWatchdog closes their incidents with "Set aside
-  after investigation".
+- **Apply it.** Commit the file with your note, then request the
+  playbook as it is:
+  `mmhotline triage-agent request-playbook-run --playbook playbooks/apply_set_aside_findings.yml --inventory servers --diagnosis-file diagnosis.md`.
+  It runs at once with every answer, installs the file on the fleet hub
+  only, and checks it first, so a bad file never goes live. It takes no
+  warning over, so then report at info with `--about-alert-id ALERT_ID`
+  once for each alert the entry covers. MMWatchdog closes their incidents
+  with "Set aside after investigation".
 - **The entry has no end date.** The weekly system review lists every
-  entry and removes the ones no server matches any more. A change to a
-  role that an entry's reason names removes the entry first
+  entry and removes the ones no server matches any more. A change that
+  would make an entry's reason false needs the entry removed, and its
+  removal confirmed on the hub, before that change deploys
   (`AGENTS.md`, "Set-aside findings").
 
 ### A fix that waits for a reboot
@@ -870,13 +881,16 @@ through a Stack release.
 A newer release is no outage and nothing to wake anyone for. Only a flaw
 that attackers exploit now makes your report an SOS; every other release
 is an info report, which shows without a sound, and only on the phones
-that subscribe to info. MMHotline holds the check's own warning while you
+that subscribe to info. The exception is
+`stack_release_fixes_an_exploited_flaw` below, which is never info. MMHotline holds the check's own warning while you
 look, and delivers it, waking nobody, only when no report of yours names
 it ([Warnings wait for your report](#warnings-wait-for-your-report)).
 
 - **`stack_version_is_the_newest_release`:** a newer Stack release is
-  out. The check is info, so it reaches you only inside a session started
-  by something else, or in the scheduled review. Read its release notes. Report at info, and hand over to a person
+  out. The check is info, and MMHotline starts triage sessions only for
+  warn and SOS, so it never starts one and never joins one: you meet it
+  in the scheduled software review, or the weekly system review lists it.
+  Read its release notes. Report at info, and hand over to a person
   with the two Stack versions, the release's page, and the procedure,
   [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
   Add the release to `triage_agent_notes/open_software_findings.md`. A
@@ -891,9 +905,12 @@ it ([Warnings wait for your report](#warnings-wait-for-your-report)).
   ([Levels of vulnerability findings](#levels-of-vulnerability-findings)):
   report at SOS when it reaches servers in `inventories/servers.yml` and
   users are at risk now; otherwise at warn, because a person must upgrade
-  within days. Hand over with the flaw, the program and its versions,
+  within days, never at info. Hand over with the flaw, the program and its versions,
   both Stack versions, the release's page, and
   [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
+  When the check's alert says that MMWatchdog cannot check it, GitHub's
+  release list has not answered for 6 hours: report at warn, as for
+  `release_sources_answer`.
 - **`PROGRAM_pin_is_the_newest_release`:** read the release notes of
   every release between the pin and the newest, and the program's
   `security_advisories_page` in `software_outside_the_distribution.yml`.

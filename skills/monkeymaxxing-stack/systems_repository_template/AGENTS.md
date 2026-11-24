@@ -310,13 +310,17 @@ button only after the next `ssh desk01-review`.
   its reason; MMWatchdog's fleet hub then stops alerting for that exact
   finding on every server
   ([Setting a finding aside](triage_agent_rules.md#setting-a-finding-aside)).
-  Keep the file, with `set_aside_findings: []` when it has no entry. Before
-  you change a role that an entry's `reason` names, such as
-  `roles/every_server`, remove that entry in the same commit and run
-  `apply_set_aside_findings` with the change: the entry rests on what the
-  role makes the same on every server, and a changed role can make the
-  finding matter again. The weekly system review removes the entries no
-  server matches any more.
+  Keep the file, with `set_aside_findings: []` when it has no entry.
+  Before a change that would make an entry's `reason` false, such as
+  turning on `PasswordAuthentication` in `roles/every_server` when the
+  reason says that role turns it off on every server, remove that entry
+  first: commit the removal alone, run `apply_set_aside_findings`, and
+  confirm that `sudo mmwatchdog fleet set-aside-findings --json` on
+  `util01` no longer lists it. Only then deploy the change. Reason: the
+  entry rests on what the role makes the same on every server, and a
+  change deployed while the entry is in effect would leave the finding
+  quiet on servers where it now matters. The weekly system review removes
+  the entries no server matches any more.
 - **What the triage agent may do without a person** is one setting,
   `what_the_triage_agent_may_do_without_a_person` in
   `mmx_project_settings.yml`: `every_fix_waits_for_a_person`,
