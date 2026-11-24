@@ -3630,9 +3630,9 @@ is a release to read.
   `Fixes an exploited flaw: <CVE or advisory id> in <program> <versions>`
   for each flaw (step 5 of
   [A Stack release pins its own programs](#a-stack-release-pins-its-own-programs)).
-  `util01`'s check `stack_release_fixes_an_exploited_flaw` reads the
-  newest 100 releases (`/releases?per_page=100`), leaves out drafts and
-  pre-releases, and reports each marked flaw of every release newer than
+  `util01`'s check `stack_release_fixes_an_exploited_flaw` reads every
+  page of the release list (`/releases?per_page=100` and each `next` page
+  of GitHub's `Link` header), leaves out drafts and pre-releases, and reports each marked flaw of every release newer than
   the system's as its own finding, at warn: a person must upgrade within
   days, and the triage agent reports at SOS when the flaw reaches the
   servers and users are at risk now. Reasons: reading every newer release,
@@ -3643,9 +3643,15 @@ is a release to read.
   check reports no findings, so the check runs the Stack's own MMWatchdog
   module, a Bash program with `curl` and `jq` like the other release
   checks, installed by the `util_server` role
-  (`roles/util_server/files/mmwatchdog_external_modules/`). While GitHub
-  does not answer, the module reports the findings of its last answer, so
-  an outage neither closes nor opens one. The routine check,
+  (`roles/util_server/files/mmwatchdog_external_modules/`). While any page
+  does not answer, the module answers `unknown`: MMWatchdog keeps each open
+  finding open, and the check's cannot-check warning goes out when GitHub
+  stays silent for its `alert_after_failing_for`, 6 hours, the same wait as
+  for a flaw, because the team upgrades within days. Reason: an outage
+  neither closes nor opens a finding, and the list request itself, not
+  `release_sources_answer`'s `releases/latest`, shows when the check is
+  blind. An installed pre-release, such as `0.6.0-rc.1`, is older than its
+  release. The routine check,
   `stack_version_is_the_newest_release`, is info: a routine release asks
   nobody to act, so it shows on the dashboard and in the weekly review and
   starts no agent run.
