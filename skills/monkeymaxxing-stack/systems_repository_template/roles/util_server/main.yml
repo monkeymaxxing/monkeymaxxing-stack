@@ -91,7 +91,7 @@ inputs:
   codex_release:                            # stack_software.codex: version, download_url, and sha256
     type: mapping
     required: true
-  # The pinned_program_releases checks (mmwatchdog_checks/util_server.yml)
+  # The stack_releases checks (mmwatchdog_checks/util_server.yml)
   # read the Stack's releases for a fix of an exploited flaw, from the
   # Stack's pin (set_up_outside_services).
   stack_software:                           # vars.stack_software
@@ -219,7 +219,7 @@ node_tasks:
       packages:
         - {name: git, version: newest_when_first_installed}
         - {name: openssh-client, version: newest_when_first_installed}
-  # curl asks GitHub for the Stack's releases (pinned_program_releases in
+  # curl asks GitHub for the Stack's releases (stack_releases in
   # mmwatchdog_checks/util_server.yml).
   - id: install_curl
     apt_package:

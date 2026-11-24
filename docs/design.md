@@ -3621,7 +3621,7 @@ Postgres, and the pinned programs, and raise one when it matters
 (`triage_agent_rules.md`, "Upgrades and Stack releases"); Debian's own
 date is also `security_support_lasts_another_half_year`.
 
-MMWatchdog's check group `pinned_program_releases` on `util01` holds one
+MMWatchdog's check group `stack_releases` on `util01` holds one
 check, `stack_release_fixes_an_exploited_flaw`. The Debian packages have
 `known_exploited_flaws`, but nothing reads flaws in the downloaded
 programs (`mmx`, `mmwatchdog`, `mmhotline`, `litestream`, `rclone`), and

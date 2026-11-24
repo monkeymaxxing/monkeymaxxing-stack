@@ -562,8 +562,8 @@ say so. Then, in this order:
 
 Every run of the triage agent for an alert ends with a report, at least
 at info, so the team sees the agent's work and its cost. A scheduled
-software review sends at most one report, and no report when nothing is
-new or changed, as `scheduled_software_review_task.md` says. The review's
+software review sends at most one report, and no report when no finding
+needs a person, as `scheduled_software_review_task.md` says. The review's
 record on MMHotline's Triage agent page shows the review's work and cost.
 
 ### When to hand over
@@ -884,7 +884,7 @@ have. A newer release alone is never a finding, a report, or an alert.
 You know the end-of-support dates of the Debian release, Postgres, and
 the pinned programs, and you raise one when it matters.
 
-MMWatchdog's check group `pinned_program_releases` on `util01` reads the
+MMWatchdog's check group `stack_releases` on `util01` reads the
 Stack's releases once an hour for a fix of an exploited flaw. Only a flaw
 that attackers exploit now makes your report an SOS. MMHotline holds
 the check's own warning while you look, and delivers it, waking nobody,

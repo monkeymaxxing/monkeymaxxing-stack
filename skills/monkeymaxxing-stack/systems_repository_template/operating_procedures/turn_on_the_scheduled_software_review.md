@@ -78,9 +78,9 @@ Read [the systems repository rules](../AGENTS.md#the-rules) first.
 
    **Check:** `state` must be `finished`, with an empty `failure_reason`.
    `report_counts_by_alert_severity` must add up to at most 1: a review
-   sends one summary report, or no report when nothing is new or changed.
-   The first review usually sends one report, because every finding is
-   new. A `failed` or `stopped` review, or exit 4, is in
+   sends one summary report, or no report when no finding needs a person.
+   The first review sends a report only when a finding needs a person.
+   A `failed` or `stopped` review, or exit 4, is in
    [If something is different](#if-something-is-different).
 
    Then read the two numbers:
@@ -90,8 +90,10 @@ Read [the systems repository rules](../AGENTS.md#the-rules) first.
      `cached_input_tokens`, and `output_tokens`: multiply each by the
      model's price.
 
-   Read the report on MMHotline's dashboard with the person: the report
-   shows what a person must do first, then what the review found. A warn
+   When the review sent a report, read the report on MMHotline's
+   dashboard with the person: the report shows what a person must do
+   first, then what the review found. Otherwise show the person
+   `triage_agent_notes/open_software_findings.md`. A warn
    report always names a playbook or procedure for the person to run.
 
    Tell the person the two numbers, and what a month costs at each
@@ -177,7 +179,7 @@ coding agent:
 
 - MMWatchdog's checks warn about the Debian packages' security updates and
   known exploited flaws.
-- The check group `pinned_program_releases` on `util01` warns when a
+- The check group `stack_releases` on `util01` warns when a
   Stack release fixes a flaw that attackers exploit now. The triage agent
   then starts for that warning only.
 - A program from a vendor's apt repository, such as Caddy, updates itself.

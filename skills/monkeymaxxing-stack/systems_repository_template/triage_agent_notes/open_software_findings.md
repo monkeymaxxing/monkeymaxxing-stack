@@ -15,8 +15,8 @@ Then the note has three sections:
   remedy, by its playbook or procedure name.
 - **Other open findings:** the same facts, for a finding that waits for
   no person, such as a fix that the nightly updates install tonight, a
-  database server's fix for the weekly window, or a new release with no
-  security fix.
+  database server's fix for the weekly window, or a downloaded program's
+  security release whose flaw attackers do not exploit now.
 - **Flaws with no fix yet:** for each package, the servers, the installed
   version, and the flaw IDs. A flaw with no fix is never reported until a
   fix appears. Flaws that Debian rates unimportant are left out.

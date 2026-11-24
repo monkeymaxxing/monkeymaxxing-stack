@@ -143,7 +143,7 @@ check_groups:
 {{- end }}
 {{- end }}
 {{- if $stack_repository }}
-  pinned_program_releases:
+  stack_releases:
     check_every: 1h
     time_limit_per_run: 5m
     alert_after_failing_for: 0s

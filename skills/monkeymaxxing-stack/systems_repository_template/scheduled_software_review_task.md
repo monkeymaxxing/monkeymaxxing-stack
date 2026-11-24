@@ -17,11 +17,12 @@ review" and "Levels of vulnerability findings" in `triage_agent_rules.md`
 for the level of each finding.
 
 **At most one report for each review.** Put every new or changed finding
-into one summary report. Send no report when nothing is new or changed:
+into one summary report. Send a report only when a person must act (warn
+or SOS); everything else goes in the notes file and nowhere else:
 the review's record on MMHotline's Triage agent page already shows that
 the review ran, what the review cost, and when the review ended. MMHotline's
 own instructions for a review agree: send the reports the team's task asks
-for, and no report when nothing is new. Reason: the first review on a test
+for, and no other report. Reason: the first review on a test
 system sent 9 alerts, 7 of them at warn, and a phone that rings 7 times
 for one review teaches the team to ignore warnings.
 
@@ -34,7 +35,7 @@ Work in this order:
 4. Look up each flaw in CISA's list of known exploited flaws.
 5. Compare what you found with the notes, to find what is new or changed.
 6. Update the notes and commit the notes, with any one-time playbook.
-7. Send the one report, or no report.
+7. Send the one report, or no report when no finding needs a person.
 
 ### 1. Read the notes of the last review
 
@@ -142,9 +143,8 @@ aside: leave it out of the report too, unless this review finds evidence
 for an SOS about it, such as attackers exploiting it on a path that
 reaches the servers. SOS evidence wins over the entry: report the SOS, and
 remove the entry as "Setting a finding aside" in `triage_agent_rules.md`
-says. An SOS always alerts; MMWatchdog never quiets one either. When every
-finding is unchanged, set aside, or only new flaws with no fix appeared,
-send no report.
+says. An SOS always alerts; MMWatchdog never quiets one either. When no
+finding needs a person, send no report.
 
 ### 6. Update the notes, and commit
 
@@ -170,21 +170,21 @@ person must do:
     Debian published the fix;
   - a security release of a program from a vendor's apt repository that
     the nightly updates did not install a day later.
-- **info:** everything else that is new or changed. For example, a fix that
-  the nightly updates install tonight, a database server's fix for the
-  weekly window, a fix that waits for the weekly reboot, an installed fix,
-  or a downloaded program's security
-  release whose flaw attackers do not exploit now, which a person installs
-  with a new pin at the weekly review.
+
+Everything else goes in the notes file only, with no report: a fix that
+the nightly updates install tonight, a database server's fix for the
+weekly window, a fix that waits for the weekly reboot, an installed fix,
+or a downloaded program's security release whose flaw attackers do not
+exploit now. Reason: a report nobody acts on teaches the team to ignore
+reports.
 
 The report has this form, as "Reports: the why rule" in
 `triage_agent_rules.md` asks:
 
 1. **The title,** one plain line: the servers and the most important
    thing, such as "app001, app002: 3 security fixes wait for a person".
-2. **One to three plain sentences:** what a person must do first, or that
-   nobody needs to act.
-3. **What a person must do,** at warn or SOS only, most urgent first.
+2. **One to three plain sentences:** what a person must do first.
+3. **What a person must do,** most urgent first.
    Give each item the exact playbook or procedure to run, by its file
    name, and the command. Never point to another report or another item,
    such as "the playbook from the brotli report".
@@ -228,18 +228,4 @@ A remedy names one of these:
     - 12 new flaws with no fix yet, in curl and glibc: in the notes only.
 
     What I checked: 4 servers; OSV.dev for 210 source packages on each; CISA's list of 2026-11-10; Caddy, cloudflared, Claude Code, Litestream and rclone at their release and advisory pages; mmx, MMHotline and MMWatchdog against their pins.
-    Confidence: high. The notes are in triage_agent_notes/open_software_findings.md.
-
-### Example of an info report
-
-    Software review: zlib fix installed, a new curl fix installs tonight, Litestream 0.5.19 for the weekly review
-    The nightly security updates installed Debian's zlib fix on every server. Debian published a curl fix today, and the nightly updates install the curl fix tonight. Litestream 0.5.19 fixes a flaw that attackers do not exploit now; a person updates its pin at the weekly review. Nobody needs to act now.
-
-    What changed since the last review (2026-11-12 06:00 UTC):
-    - zlib (3 flaws): the fix is installed on every server.
-    - curl CVE-2026-90211: fixed in 8.14.1-2+deb13u2 today, which the nightly updates install tonight.
-    - db01: the postgresql-17 fix for CVE-2026-88410 waits for the weekly window, update_database_servers on Sunday at 03:00 UTC.
-    - Litestream 0.5.19: a security release (GHSA-xxxx-xxxx-xxxx) that attackers do not exploit now. At the weekly review, a person follows operating_procedures/add_or_update_a_program_from_outside_the_distribution.md, "Updating a program from outside the distribution", with version 0.5.19, download_url https://github.com/benbjohnson/litestream/releases/download/v0.5.19/litestream-0.5.19-linux-x86_64.tar.gz, and sha256 from the release's checksums.txt.
-
-    What I checked: 4 servers; OSV.dev for 210 source packages on each; CISA's list of 2026-11-10; the programs in software_outside_the_distribution.yml.
     Confidence: high. The notes are in triage_agent_notes/open_software_findings.md.
