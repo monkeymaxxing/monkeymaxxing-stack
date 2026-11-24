@@ -47,23 +47,43 @@ Read [the systems repository rules](../AGENTS.md#the-rules) first.
 2. **Hand over the alerts the agent skipped.** A higher limit only lets
    the agent look at new alerts; it never comes back to the alerts that
    went straight to people while the limit held. MMHotline marks each one
-   `passed_over_for_the_run_limit`. List the warn and SOS alerts among
-   them, from the time of MMHotline's warning "Agent run limit reached" as
-   `SINCE`:
+   `passed_over_for_the_run_limit`, also an alert that arrived before the
+   limit and still waited for the agent when the limit came. So read every
+   alert from 24 hours before MMHotline's warning "Agent run limit
+   reached" on, with that time as `SINCE`; work that waits for the agent
+   waits minutes, so a day covers it with room. Save each page whole, as
+   MMHotline prints it:
 
    ```sh
-   ssh -F ssh/config root@10.20.0.1 "mmhotline alerts list --received-since SINCE --json" \
-     | jq '[.alerts[] | select(.passed_over_for_the_run_limit and (.severity == "warn" or .severity == "sos"))
-            | {alert_id, severity, title, received_at, incident_id, sender_incident_key}]'
+   # From the coding agent's checkout on the systems desk. N: 1 for the first page.
+   ssh -F ssh/config root@10.20.0.1 "mmhotline alerts list --received-since SINCE --json" > /tmp/alerts_page_N.json
    ```
 
-   The list holds at most 100 alerts; when it is full, continue with
-   `--older-than-alert-id` and the oldest listed alert's ID. An alert is
-   still open when no later `resolved-warn` or `resolved-sos` alert has
-   its `sender_incident_key`, or, for an SOS, when its incident is not
-   resolved. Show the person each open one, and agree who owns it: the
-   person on call, another team member, or you, who investigate it now
-   as `triage_agent_rules.md` says for its alert.
+   A page holds at most 100 alerts, newest first. While a page holds 100,
+   read the next one with `--older-than-alert-id` and the last alert of
+   that saved page, `jq -r '.alerts[-1].alert_id' /tmp/alerts_page_N.json`,
+   before you filter anything: a filtered page can be empty while older
+   skipped alerts remain. Then list the skipped warn and SOS alerts of all
+   pages together:
+
+   ```sh
+   jq --slurp '[.[].alerts[] | select(.passed_over_for_the_run_limit and (.severity == "warn" or .severity == "sos"))
+               | {alert_id, severity, title, received_at, alert_source_id, sender_incident_key, incident_id}]' /tmp/alerts_page_*.json
+   ```
+
+   - **A skipped warning is still open** unless a later `resolved-warn`
+     alert in the pages has the same `alert_source_id` and the same
+     `sender_incident_key`, and that key is not empty. A warning without
+     a `sender_incident_key` has no recovery to match, so it stays open
+     until someone checks it.
+   - **A skipped SOS is still open** while its incident is open or
+     claimed: read its `status` by its `incident_id`, with
+     `ssh -F ssh/config root@10.20.0.1 "mmhotline incidents show --incident-id INCIDENT_ID --json" | jq -r .incident.status`.
+
+   Show the person each open one, and agree who owns it: the person on
+   call, another team member, or you, who investigate it now as
+   `triage_agent_rules.md` says for its alert. Remove the saved pages
+   afterwards (`rm /tmp/alerts_page_*.json`).
    **Check:** every open warn and SOS that the agent skipped has an owner
    the person named.
 3. **Fix a runaway before you pay for it.** A check that fails over and

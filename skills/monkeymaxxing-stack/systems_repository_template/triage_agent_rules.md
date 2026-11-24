@@ -389,7 +389,11 @@ then hears your verdict instead of the raw warning.
   warning, warn or SOS for a warning. Otherwise leave the warning
   unnamed: an info report that named it would take it over, and if your
   run then failed, the warning would never reach people. Unnamed, it
-  still reaches them at the end of its wait.
+  still reaches them at the end of its wait. **When your run carries only
+  one alert and that alert is a warning, send no short report below the
+  warning's level:** MMHotline counts a report that names no alert as
+  about your run's only alert, so an info report would take the warning
+  over. Let the end of the wait deliver the warning.
 
 ### One finding on many servers
 
