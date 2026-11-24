@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import template_values  # noqa: E402
 
 T = template_values.TEMPLATE
-ROLE_STEPS = ['write_the_candidate_set_aside_findings', 'check_the_candidate_set_aside_findings',
+ROLE_STEPS = ['write_the_candidate_set_aside_findings', 'refuse_the_set_aside_of_routine_security_updates', 'check_the_candidate_set_aside_findings',
               'install_the_set_aside_findings', 'put_the_set_aside_findings_into_effect',
               'put_the_installed_set_aside_findings_back_into_the_candidate']
 
@@ -142,6 +142,25 @@ class SetAsideFindings(unittest.TestCase):
     def listed(self, entry):
         return dict(entry, covered_node_count=3, covered_nodes=['app001', 'db01', 'util01'],
                     matches_no_node_now=False, nodes_that_cannot_check_now=0)
+
+    def test_an_entry_for_routine_security_updates_is_refused_before_anything_goes_live(self):
+        _, tasks = node_tasks(self.explain('apply_set_aside_findings'), 'apply_set_aside_findings')
+        names = [name for name, _ in tasks]
+        refusal = 'refuse_the_set_aside_of_routine_security_updates'
+        self.assertLess(names.index(refusal), names.index('check_the_candidate_set_aside_findings'))
+        self.assertLess(names.index(refusal), names.index('install_the_set_aside_findings'))
+        program = argument(dict(tasks)[refusal], 'shell.env.PROGRAM')
+        root = Path(tempfile.mkdtemp(prefix='sa', dir='/tmp'))
+        self.addCleanup(shutil.rmtree, root, True)
+        candidate = root/'candidate.yml'
+        program = program.replace('/usr/local/lib/mmwatchdog/candidate_config/set_aside_findings.yml', str(candidate))
+        for text, code in (('', 0), ('set_aside_findings:\n  - check: installed_packages/known_exploited_flaws\n', 0),
+                           ('set_aside_findings:\n  - check: security_updates/no_security_update_waits\n    finding: debian 13\n', 1),
+                           ('set_aside_findings:\n  - check: "security_updates/no_security_update_waits"\n', 1)):
+            candidate.write_text(text)
+            result = subprocess.run(['bash', '-c', program], text=True, capture_output=True)
+            self.assertEqual(result.returncode, code, text + result.stdout + result.stderr)
+        self.assertIn('would quiet every routine security update of the release; install the updates instead', result.stdout)
 
     def test_the_step_runs_also_when_the_install_changed_nothing(self):
         _, tasks = node_tasks(self.explain('apply_set_aside_findings'), 'apply_set_aside_findings')

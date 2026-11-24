@@ -741,6 +741,7 @@ alerting for it on every server, including servers added later.
 - **Never set aside a waiting security update** (`security_updates/no_security_update_waits`).
   Its exact finding is only the distribution release, such as `debian 13`,
   so an entry would quiet every later security update of that release.
+  The set-aside step refuses such an entry before anything goes live.
   A waiting update is installed, not set aside. Set-aside entries are for
   findings of `known_exploited_flaws`, one flaw each.
 - **What MMWatchdog matches:** the check, the finding, and the exact

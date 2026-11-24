@@ -35,10 +35,25 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0644"
+      # Refused here, not by MMWatchdog: its exact finding is only the release,
+      # so an entry would quiet every routine security update of it
+      # (triage_agent_rules.md, "Setting a finding aside").
+      validate:
+        - id: refuse_the_set_aside_of_routine_security_updates
+          shell:
+            script: bash -c "$PROGRAM"
+            dryrun: bash -c "$PROGRAM"
+            env:
+              PROGRAM: |
+                candidate=/usr/local/lib/mmwatchdog/candidate_config/set_aside_findings.yml
+                if [ -e "$candidate" ] && grep -Eq '^[[:space:]-]*check:[[:space:]]*["'"'"']?security_updates/no_security_update_waits["'"'"']?[[:space:]]*(#.*)?$' "$candidate"; then
+                  echo "The entry for security_updates/no_security_update_waits in set_aside_findings.yml would quiet every routine security update of the release; install the updates instead."
+                  exit 1
+                fi
+            changed_when: false
       # The check only reads, so a dryrun runs it too, and the daily server
       # settings comparison ends with 0 when nothing differs. A first
       # preview of a new util01 has no MMWatchdog yet, and skips it.
-      validate:
         - id: check_the_candidate_set_aside_findings
           shell:
             script: bash -c "$PROGRAM"
