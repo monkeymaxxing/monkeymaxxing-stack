@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import template_values  # noqa: E402
 
 T = template_values.TEMPLATE
-ROLE_STEPS = ['write_the_candidate_set_aside_findings', 'refuse_the_set_aside_of_routine_security_updates', 'check_the_candidate_set_aside_findings',
+ROLE_STEPS = ['write_the_candidate_set_aside_findings', 'check_the_candidate_set_aside_findings',
               'install_the_set_aside_findings', 'put_the_set_aside_findings_into_effect',
               'put_the_installed_set_aside_findings_back_into_the_candidate']
 
@@ -146,21 +146,33 @@ class SetAsideFindings(unittest.TestCase):
     def test_an_entry_for_routine_security_updates_is_refused_before_anything_goes_live(self):
         _, tasks = node_tasks(self.explain('apply_set_aside_findings'), 'apply_set_aside_findings')
         names = [name for name, _ in tasks]
-        refusal = 'refuse_the_set_aside_of_routine_security_updates'
-        self.assertLess(names.index(refusal), names.index('check_the_candidate_set_aside_findings'))
-        self.assertLess(names.index(refusal), names.index('install_the_set_aside_findings'))
-        program = argument(dict(tasks)[refusal], 'shell.env.PROGRAM')
+        check = 'check_the_candidate_set_aside_findings'
+        self.assertLess(names.index(check), names.index('install_the_set_aside_findings'))
+        program = argument(dict(tasks)[check], 'shell.env.PROGRAM')
         root = Path(tempfile.mkdtemp(prefix='sa', dir='/tmp'))
         self.addCleanup(shutil.rmtree, root, True)
-        candidate = root/'candidate.yml'
-        program = program.replace('/usr/local/lib/mmwatchdog/candidate_config/set_aside_findings.yml', str(candidate))
-        for text, code in (('', 0), ('set_aside_findings:\n  - check: installed_packages/known_exploited_flaws\n', 0),
-                           ('set_aside_findings:\n  - check: security_updates/no_security_update_waits\n    finding: debian 13\n', 1),
-                           ('set_aside_findings:\n  - check: "security_updates/no_security_update_waits"\n', 1)):
-            candidate.write_text(text)
+        # MMWatchdog's own parse is what the step reads (block, quoted-key, flow and folded spellings all reach
+        # .config.set_aside_findings[].check, checked against the real binary), so a stand-in prints that parse as validate --json does.
+        stand_in = root/'mmwatchdog'
+        stand_in.write_text(f'#!/bin/bash\ncat {root}/answer\nexit $(cat {root}/code)\n')
+        stand_in.chmod(0o755)
+        program = program.replace('/usr/local/bin/mmwatchdog', str(stand_in))
+        routine = 'security_updates/no_security_update_waits'
+        other = dict(self.ENTRY, reason=f'Not for {routine}.\ncheck: {routine}\n')
+        for config, code in (({}, 0), ({'set_aside_findings': [self.ENTRY]}, 0), ({'set_aside_findings': [other]}, 0),
+                             ({'set_aside_findings': [self.ENTRY, dict(self.ENTRY, check=routine, finding='debian 13')]}, 1)):
+            (root/'answer').write_text(json.dumps({'valid': True, 'config': config}))
+            (root/'code').write_text('0')
             result = subprocess.run(['bash', '-c', program], text=True, capture_output=True)
-            self.assertEqual(result.returncode, code, text + result.stdout + result.stderr)
-        self.assertIn('would quiet every routine security update of the release; install the updates instead', result.stdout)
+            self.assertEqual(result.returncode, code, str(config) + result.stdout + result.stderr)
+        self.assertIn('installed, not set aside', result.stdout)
+        self.assertIn('installed_packages/known_exploited_flaws', result.stdout)
+        # A file MMWatchdog refuses fails the step too, with its answer shown.
+        (root/'answer').write_text('{"valid": false}')
+        (root/'code').write_text('1')
+        result = subprocess.run(['bash', '-c', program], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('"valid": false', result.stdout)
 
     def test_the_step_runs_also_when_the_install_changed_nothing(self):
         _, tasks = node_tasks(self.explain('apply_set_aside_findings'), 'apply_set_aside_findings')
