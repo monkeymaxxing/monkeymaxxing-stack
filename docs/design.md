@@ -3518,6 +3518,21 @@ The release step, in one commit that the tag then names:
    `set-up-outside-services` archive when a version tag is pushed, and
    attaches the archive to that tag's GitHub release, at the address
    step 3 wrote.
+5. When the release fixes a flaw that attackers exploit now, in any
+   program the Stack pins or in the Stack itself, add one line for each
+   flaw to the release's notes as soon as the workflow has made the
+   release, by hand, because the workflow generates the notes:
+   `Fixes an exploited flaw: <CVE or advisory id> in <program> <versions>`,
+   such as
+   `Fixes an exploited flaw: CVE-2026-1001 in mmhotline 0.6.0 to 0.6.1`,
+   with `gh release edit vVERSION --notes-file NOTES` after
+   `gh release view vVERSION --json body --jq .body > NOTES`. A system's
+   check `stack_release_fixes_an_exploited_flaw` on `util01` warns about
+   each such line in every release newer than the system's
+   ([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
+   Write the line exactly, one flaw on each line, the id and the program
+   without spaces. A later release that fixes the same flaw again repeats
+   nothing: the check already knows the flaw from the earlier release.
 
 `tests/release_build_test.py` checks step 3 with stand-ins for the build
 tools; `tests/pinned_program_releases_test.py` checks that every pin is
@@ -3547,6 +3562,31 @@ nothing else would notice a new release of a downloaded program, and a
 plain comparison needs no coding agent; the agent starts only when there
 is a release to read.
 
+- **A Stack release that fixes a flaw exploited now warns about each
+  flaw.** The Stack's own programs, `mmx`, `mmwatchdog` and `mmhotline`,
+  have no check of their own, and the Stack is the team's supplier for
+  them, so the Stack's release notes carry the news: a line
+  `Fixes an exploited flaw: <CVE or advisory id> in <program> <versions>`
+  for each flaw (step 5 of
+  [A Stack release pins its own programs](#a-stack-release-pins-its-own-programs)).
+  `util01`'s check `stack_release_fixes_an_exploited_flaw` reads the
+  newest 100 releases (`/releases?per_page=100`), leaves out drafts and
+  pre-releases, and reports each marked flaw of every release newer than
+  the system's as its own finding, at warn: a person must upgrade within
+  days, and the triage agent reports at SOS when the flaw reaches the
+  servers and users are at risk now. Reasons: reading every newer release,
+  not only the newest, keeps a later routine release from hiding an
+  earlier flaw; one finding per flaw makes a second flaw alert while the
+  first is open; the exact finding names the oldest release that fixes
+  the flaw, so it stays the same as further releases come out. A shell
+  check reports no findings, so the check runs the Stack's own MMWatchdog
+  module, a Bash program with `curl` and `jq` like the other release
+  checks, installed by the `util_server` role
+  (`roles/util_server/files/mmwatchdog_external_modules/`). While GitHub
+  does not answer, the module reports the findings of its last answer, so
+  an outage neither closes nor opens one. The routine check,
+  `stack_version_is_the_newest_release`, stays as it was: its warning
+  starts the triage agent, whose report is info.
 - **A release is no outage and nothing to wake anyone for, so only a flaw
   exploited now wakes a person.** The triage agent reports a newer release
   at info, including a release with a security fix that attackers do not
@@ -3598,10 +3638,11 @@ is a release to read.
   hours. Reason: a source down for a day means the team no longer learns of
   that program's releases; a shorter outage changes nothing.
 - **Once an hour.** GitHub allows 60 requests an hour from one address
-  without a sign-in. Each program costs 2 requests an hour, so the
-  template's 3 checked programs (the Stack, `litestream`, `rclone`) make 6
-  requests an hour, 54 under the limit. When every request fails and is
-  tried 3 times, they make 18, still 42 under the limit. Each further
+  without a sign-in. Each program costs 2 requests an hour, and the Stack
+  1 more for `stack_release_fixes_an_exploited_flaw`, so the template's 3
+  checked programs (the Stack, `litestream`, `rclone`) make 7 requests an
+  hour, 53 under the limit. When every request fails and is tried 3 times,
+  they make 21, still 39 under the limit. Each further
   pinned program adds 2, or 6 when every request fails. A release an hour
   late changes nothing.
 - **One alert per release, until the pin moves.** MMWatchdog sends one

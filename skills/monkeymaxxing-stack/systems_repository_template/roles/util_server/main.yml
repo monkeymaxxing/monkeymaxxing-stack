@@ -926,6 +926,31 @@ node_tasks:
             group: root
             permissions_mode: "0644"
 
+        # The Stack's own MMWatchdog module, which util01's check
+        # stack_release_fixes_an_exploited_flaw uses
+        # (mmwatchdog_checks/util_server.yml). MMWatchdog checks the
+        # candidate files against it below.
+        - id: create_the_directory_of_the_module_that_reads_stack_releases
+          directory:
+            path: /usr/local/lib/mmwatchdog/external_modules/stack_releases_that_fix_an_exploited_flaw
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - id: install_the_description_of_the_module_that_reads_stack_releases
+          file:
+            path: /usr/local/lib/mmwatchdog/external_modules/stack_releases_that_fix_an_exploited_flaw/module_description.yml
+            source: files/mmwatchdog_external_modules/stack_releases_that_fix_an_exploited_flaw/module_description.yml
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - id: install_the_program_of_the_module_that_reads_stack_releases
+          file:
+            path: /usr/local/lib/mmwatchdog/external_modules/stack_releases_that_fix_an_exploited_flaw/module_executable
+            source: files/mmwatchdog_external_modules/stack_releases_that_fix_an_exploited_flaw/module_executable
+            owner: root
+            group: root
+            permissions_mode: "0755"
+
         # mmhotline_signing_secret_of_the_fleet_hub goes in place before
         # candidate validation, because validation reads the secrets.
         # The hub signs alerts and check-ins to MMHotline with it, so

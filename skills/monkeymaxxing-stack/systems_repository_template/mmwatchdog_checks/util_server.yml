@@ -163,10 +163,11 @@ check_groups:
   # check_every 1h by default. Reason: a release an hour late changes
   # nothing. GitHub allows 60 requests an hour from one address without a
   # sign-in; each program costs 2 requests an hour (its check and
-  # release_sources_answer), so the template's 3 checked programs (the
-  # Stack, litestream, rclone) make 6 requests an hour, 54 under the
-  # limit; when every request fails and is tried 3 times, 18. Each further pinned
-  # program adds 2, or 6 when every request fails.
+  # release_sources_answer), and the Stack 1 more
+  # (stack_release_fixes_an_exploited_flaw), so the template's 3 checked
+  # programs (the Stack, litestream, rclone) make 7 requests an hour, 53
+  # under the limit; when every request fails and is tried 3 times, 21.
+  # Each further pinned program adds 2, or 6 when every request fails.
   # time_limit_per_run 5m: release_sources_answer asks every source in turn,
   # at most 40 seconds each.
   # alert_after_failing_for 0s for a newer release: the release is there
@@ -269,6 +270,31 @@ check_groups:
 {{- else }}
             echo "{{ $program }}: the pin, $pinned, is the newest release, $newest."
 {{- end }}
+        alert_severity: warn
+{{- end }}
+{{- if hasKey $checked_programs "set_up_outside_services" }}
+      # One finding for each flaw that attackers exploit now and that a
+      # Stack release newer than this system's fixes, from the line
+      # "Fixes an exploited flaw: <CVE or advisory id> in <program>
+      # <versions>" that such a release has in its notes (the Stack's
+      # docs/design.md, "A Stack release pins its own programs"). Reason:
+      # the Stack's own programs, mmx, mmwatchdog and mmhotline, have no
+      # check of their own, and the Stack is the team's supplier for them,
+      # so a Stack release is how the team learns of such a fix.
+      # stack_version_is_the_newest_release above says only that a release
+      # is out, and its warning leads to an info report; this check warns
+      # about each flaw on its own, so a second flaw alerts while the first
+      # is open. It reads every release newer than this system's, through
+      # GitHub's /releases?per_page=100, leaving out drafts and
+      # pre-releases, so a later release cannot hide an earlier one's flaw.
+      # The module is roles/util_server/files/mmwatchdog_external_modules/
+      # stack_releases_that_fix_an_exploited_flaw. While GitHub does not
+      # answer, it keeps the findings of its last answer, and
+      # release_sources_answer warns after a day.
+      stack_release_fixes_an_exploited_flaw:
+        stack_releases_that_fix_an_exploited_flaw:
+          repository: {{ index $checked_programs "set_up_outside_services" | squote }}
+          installed_stack_version: {{ (index .inputs.stack_software "set_up_outside_services").version | squote }}
         alert_severity: warn
 {{- end }}
       # Fails when a release source above did not answer, after 3 tries,

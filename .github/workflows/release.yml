@@ -7,6 +7,14 @@ name: Publish the release archive
 # the tag without its v, and stack_software.set_up_outside_services already pins this
 # archive's SHA-256. The build is reproducible, so the job refuses an archive
 # whose SHA-256 differs from the pin.
+#
+# The release notes are generated. When the release fixes a flaw that
+# attackers exploit now, the person who releases adds one line for each
+# flaw to the notes by hand, right after this job made the release:
+#   Fixes an exploited flaw: <CVE or advisory id> in <program> <versions>
+# with gh release edit (docs/design.md, "A Stack release pins its own
+# programs", step 5). Every team's util01 warns about each such line in a
+# release newer than its own (stack_release_fixes_an_exploited_flaw).
 
 on:
   push:
