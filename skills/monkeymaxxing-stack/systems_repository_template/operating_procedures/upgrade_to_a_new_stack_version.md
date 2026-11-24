@@ -263,3 +263,24 @@ the version's commit passed, do each entry's one-time step, as step 6 of
 
 Apply each configuration change as [Making a change](../AGENTS.md#making-a-change)
 says: a push alone changes no server, so run `every_server` or the playbook the step names.
+
+### 0.6.0: alerts that ask for action
+
+No one-time step. Before the push, tell the person what the upgrade run
+changes, in these words or close to them:
+
+- Every warning now waits up to 15 minutes while the triage agent looks,
+  so the person hears the agent's verdict instead of the raw warning. A
+  team that changed `warn_waits_for_the_triage_agent_minutes` keeps its
+  value, now from 0 to 30.
+- MMWatchdog sends one alert for one finding across all servers. During
+  the run, each server's open security-update warning closes once and
+  opens again as one warning per package; the triage agent looks at them
+  as usual.
+- The triage agent has a run limit, 50 runs in 24 hours, which stops only
+  agent runs, never alerts
+  ([Change the triage agent's run limit](change_the_triage_agent_run_limit.md)).
+
+After the run, ask the person to run `ssh desk01-review`: the version
+changes `mmhotline_settings.yml` and the triage user's sudo lines on
+`util01`, which reach the lock-out button only after the desk review.

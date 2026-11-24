@@ -1008,6 +1008,66 @@ load checks are rendered from the same answer ([Reboots](#reboots),
   replacement fails with "reading the boot ID of the controller machine:
   open /proc/sys/kernel/random/boot_id: no such file or directory".
 
+### Alerts that ask for action
+
+An alert is a request for action (owner, 2026-11-24): SOS when users are
+hurt now and the triage agent could not fix it; warn when a person must act
+within days, or must know of a change that costs money or carries risk;
+info for everything else, including "checked, does not affect you", a
+restarted service, routine releases, and security fixes nobody exploits
+now. The triage agent's rules, "Alert levels", say it with examples.
+Reason: on monkeymaxxing.com one OpenSSH flaw that affected no server
+made three warnings and three agent runs, and one warning reached the
+phone before the agent's "does not affect you". The parts:
+
+- **Every warn waits for the agent** (above, in
+  [What the triage agent may do without a person](#what-the-triage-agent-may-do-without-a-person)).
+- **One finding, one alert.** MMWatchdog 0.2.0's fleet hub keeps one open
+  incident per exact finding for every destination, and sends servers
+  that join it in one update on a shared 6-hour tick
+  (`send_newly_affected_nodes_every`, MMWatchdog's default, which the
+  Stack keeps: about 4 growth runs a day, well inside the run limit). The
+  triage user may run `mmwatchdog fleet findings CHECK_GROUP/CHECK --json`
+  and `mmwatchdog fleet set-aside-findings --json` on `util01`, read-only
+  like `fleet readings`, so the agent can list every server an update
+  names only in part.
+- **A second alert source for a hub outage.** While the hub does not
+  answer, every server sends its own alerts straight to MMHotline under
+  `mmwatchdog_nodes_while_the_hub_is_down`, which folds repeats by key and
+  first line; the hub's own source keeps every warning, because a later
+  warning that a new server has the finding must be investigated. Reason:
+  thousands of servers would otherwise use up MMHotline's 1,000 warnings
+  an hour. The second source reuses the hub's signing secret: the joined
+  servers already hold it, so a second vault key would protect nothing.
+- **Set-aside findings.** The agent writes a verdict that holds for every
+  server with an exact finding into
+  `triage_agent_notes/set_aside_findings.yml`, commits it, and requests
+  `apply_set_aside_findings`, `act_then_report` with every answer: the
+  playbook only quiets exact findings written down with a reason, in a
+  file the agent's commits may change anyway, and installs nothing but
+  that file on the hub. The role `set_aside_findings_on_the_fleet_hub`,
+  which `util_server` runs too, writes the candidate, checks it with
+  MMWatchdog, installs it, reloads the hub and confirms the entries in
+  effect, so a bad file never goes live. The file always exists, with
+  `set_aside_findings: []` when empty, because MMX refuses a missing source
+  file and a rebuilt `util01` then needs nothing special. Exact match only
+  and no end date: a changed package, fix or advisory alerts again, and a
+  mistake costs an extra alert, never a lost one; the weekly review lists
+  the entries and removes those no server matches any more
+  (`matches_no_node_now`, and no server unable to check). A verdict that
+  rests on configuration is allowed only when a Stack role makes that
+  configuration the same on every server, and a change to that role
+  removes the entry first. Reason: a verdict about one server must never
+  silence another.
+- **The run limit.** MMHotline's `triage_agent.most_runs_in_24_hours` is
+  50, written out with its reason in `mmhotline_settings.yml`, and stops
+  only agent runs, never alerts.
+  [Change the triage agent's run limit](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/change_the_triage_agent_run_limit.md)
+  reads the usage first, because a runaway check is fixed, not paid for.
+  The weekly review reads `mmhotline triage-agent usage` over the systems
+  desk's root connection to `util01`, since the scheduled software review
+  is off by default.
+
 ### Replacing a failed server
 
 Three playbooks replace a server of a listed pool that stopped reporting,

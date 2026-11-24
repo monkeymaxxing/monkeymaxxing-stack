@@ -54,8 +54,20 @@ The contracts below state the required outcomes for changes to the stack.
   README holds only what the person reads; agent instructions live in the
   team's `AGENTS.md`, the triage agent's rules, and the operating
   procedures.
+- **An alert asks for action:** an SOS means users are hurt now and the
+  triage agent could not fix it; a warning means a person must act within
+  days, or must know of a change that costs money or carries risk; info is
+  everything else, including "checked, does not affect you". Every warning
+  waits for the triage agent first, so the person hears its verdict, and
+  an alert reaches people whenever the agent cannot look. One finding on
+  many servers is one alert and one investigation. A finding the agent
+  set aside, with a reason that holds for every server, alerts again when
+  its package, version, fix or advisory changes, never for an SOS. The
+  agent's run limit stops only agent runs, never alerts. A Stack release
+  that fixes a flaw attackers exploit now warns every older system.
 - **A short weekly review:** the weekly system review covers the week's
-  alerts, the waiting updates, the restore drill's result, and the
+  alerts with the triage agent's runs and cost, the waiting updates with
+  the findings set aside, the restore drill's result, and the
   checklist items that are due, with exact commands. The growth and
   improvement items keep their own section of the checklist with their
   triggers, never count as open, and the weekly review only checks

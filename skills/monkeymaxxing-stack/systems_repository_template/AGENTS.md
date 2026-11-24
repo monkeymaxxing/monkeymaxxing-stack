@@ -305,6 +305,18 @@ button only after the next `ssh desk01-review`.
   main copy itself (root-owned, mode 0700). Reason: the triage agent reads
   untrusted logs, so the push limit stops a log injection from altering
   server settings.
+- **Set-aside findings.** `triage_agent_notes/set_aside_findings.yml`
+  lists findings the triage agent investigated and set aside, each with
+  its reason; MMWatchdog's fleet hub then stops alerting for that exact
+  finding on every server
+  ([Setting a finding aside](triage_agent_rules.md#setting-a-finding-aside)).
+  Keep the file, with `set_aside_findings: []` when it has no entry. Before
+  you change a role that an entry's `reason` names, such as
+  `roles/every_server`, remove that entry in the same commit and run
+  `apply_set_aside_findings` with the change: the entry rests on what the
+  role makes the same on every server, and a changed role can make the
+  finding matter again. The weekly system review removes the entries no
+  server matches any more.
 - **What the triage agent may do without a person** is one setting,
   `what_the_triage_agent_may_do_without_a_person` in
   `mmx_project_settings.yml`: `every_fix_waits_for_a_person`,
@@ -551,8 +563,9 @@ operations, and recovery. Each ends with verification and runs either as:
   `recover_rows_from_a_restored_copy`,
   `end_connections_that_use_an_old_database_password`, failed-server
   replacement (`replace_failed_servers`, `every_server`,
-  `destroy_replaced_servers`), and load scaling
-  (`add_an_app_server_for_the_load`, then `every_server`). Run with
+  `destroy_replaced_servers`), load scaling
+  (`add_an_app_server_for_the_load`, then `every_server`), and
+  `apply_set_aside_findings`. Run with
   `./server_management_scripts/run_mmx_on_util01 run NAME` (check
   `command_line_vars` in `playbooks/NAME.yml`); `reboot_util01_after_updates`
   alone runs through the desk button:
@@ -587,6 +600,7 @@ operating procedure.
 | Updates need reboots, after the database servers have been updated | [Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md) |
 | Updates wait for a reboot (MMWatchdog's `reboots_that_may_run_now` warns, only with `routine_fixes_and_server_work`) | The triage agent requests [Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md) ([A fix that waits for a reboot](triage_agent_rules.md#a-fix-that-waits-for-a-reboot)) |
 | Change MMHotline settings | [Change MMHotline settings](operating_procedures/change_mmhotline_settings.md) |
+| MMHotline warns "Agent run limit reached. Alerts continue.", or the team wants another run limit for the triage agent | [Change the triage agent's run limit](operating_procedures/change_the_triage_agent_run_limit.md) |
 | A team member joins or leaves | [Add or remove a team member](operating_procedures/add_or_remove_a_team_member.md) |
 | Someone leaves, a secret leaks, or the rotation period (`secret_rotation`'s `verify_again_every`) is due | [Rotate a secret](operating_procedures/rotate_a_secret.md) |
 | The weekly system review is due | [Do the weekly system review](operating_procedures/do_the_weekly_system_review.md) |

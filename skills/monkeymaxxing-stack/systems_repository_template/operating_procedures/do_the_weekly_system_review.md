@@ -33,6 +33,19 @@ proposal.
    `alerts list` shows at most 100 alerts. When the list says that older
    alerts were left out, repeat the command with
    `--older-than-alert-id` and the oldest listed alert's ID.
+
+   Then the triage agent's week: its runs, what they cost, whether its run
+   limit was reached, and what happened to the warnings held for it:
+
+   ```sh
+   ssh -F ssh/config root@10.20.0.1 "mmhotline triage-agent usage --since SINCE"
+   ```
+
+   Claude Code reports the runs' cost in US dollars; Codex reports only
+   tokens. Report the week's runs and cost in one line. When the run limit
+   was reached, or the runs nearly reached it, follow
+   [Change the triage agent's run limit](change_the_triage_agent_run_limit.md)
+   from its step 1.
    **Check:** for each alert, say whether the cause is known and fixed.
    A warning that is still open can be a waiting update (part 2) or a
    trigger (part 4).
@@ -65,8 +78,29 @@ proposal.
      open.
    - A newer pinned release than the finding records sends no new alert, so
      read the new release's notes now.
+   - **The findings set aside after investigation,** which no server
+     alerts about:
 
-   **Check:** every server except the desks has a result.
+     ```sh
+     ssh -F ssh/config root@10.20.0.1 "mmwatchdog fleet set-aside-findings --json"
+     ```
+
+     For each entry, tell the person the finding, its reason, and how many
+     servers it covers now. Remove an entry only when its
+     `matches_no_node_now` is `true` and its `nodes_that_cannot_check_now`
+     is `0`: then no server has that exact finding, and none is unable to
+     say. Remove such entries from `triage_agent_notes/set_aside_findings.yml`
+     without the person, keep `set_aside_findings: []` when none is left,
+     publish the commit, and run
+     `./server_management_scripts/run_mmx_on_util01 run apply_set_aside_findings`.
+     Reason: an entry no server matches only makes the list longer, and a
+     later server with the same exact finding is unlikely; it would alert
+     and be investigated again. Keep every other entry: the entries have
+     no end date, because a date would alert again on a finding that has
+     not changed.
+
+   **Check:** every server except the desks has a result, and each
+   set-aside entry is kept or removed by the rule above.
 3. **The restore drill's result.** Read the latest drill's result on
    `util01`, as
    [Read the result](run_the_weekly_database_restore_drill.md#read-the-result)

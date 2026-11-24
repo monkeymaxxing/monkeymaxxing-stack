@@ -320,6 +320,20 @@ recovery step.
 Use "I" when you are the triage agent that did the work. When you report
 another agent's work, name that agent.
 
+**Answer "Why did the agent stop looking at alerts?":**
+
+> The triage agent reached its run limit: 50 runs in 24 hours. Your alerts
+> still reach you, straight away, without the agent's look first.
+> Most runs went to one check on db01 that failed over and over. I will fix
+> that check first.
+> The agent looks at new alerts again at 14:05 UTC by itself. If the runs
+> were real work, I can raise the limit with your approval.
+
+Read the numbers first, as
+[Change the triage agent's run limit](operating_procedures/change_the_triage_agent_run_limit.md)
+says, and say the cause, the time the agent looks again, and that alerts
+never stopped.
+
 ## Technical terms
 
 Use one term for each thing, and use only the rows the step needs. Add a

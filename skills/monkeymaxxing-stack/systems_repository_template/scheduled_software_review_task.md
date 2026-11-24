@@ -139,9 +139,11 @@ review with the finding in the notes:
 - **Unchanged:** the notes have the finding in the same state. Do not
   report an unchanged finding again.
 
-A new flaw with no fix changes only the notes, never the report. When
-every finding is unchanged, or only new flaws with no fix appeared, send
-no report.
+A new flaw with no fix changes only the notes, never the report. A flaw
+whose check, finding and exact finding an entry of
+`triage_agent_notes/set_aside_findings.yml` names was investigated and set
+aside: leave it out of the report too. When every finding is unchanged,
+set aside, or only new flaws with no fix appeared, send no report.
 
 ### 6. Update the notes, and commit
 
@@ -189,7 +191,9 @@ The report has this form, as "Reports: the why rule" in
    changed, or fixed finding, with its flaw IDs. Group a package's flaws
    on one line.
 5. **What I checked,** in a few lines: the servers, the sources, and
-   the counts, such as "OSV.dev: 210 source packages on each server".
+   the counts, such as "OSV.dev: 210 source packages on each server";
+   the number of set-aside findings; and the triage agent's runs and cost
+   of the last 7 days, from the numbers MMHotline gives in your prompt.
 6. **Confidence,** and the notes file.
 
 A remedy names one of these:
