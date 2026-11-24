@@ -135,7 +135,7 @@ func TestANewRecoveryBundleOpensWithTheNewPassphraseAndHoldsEveryItem(t *testing
 		t.Fatalf("make-a-new-recovery-bundle: %v\n%s", err, h.out)
 	}
 	output := h.out.String()
-	if h.passphrase == h.oldPassphrase || strings.Count(output, strings.ReplaceAll(h.passphrase, " ", "  ")) != 1 {
+	if h.passphrase == h.oldPassphrase || strings.Count(output, h.passphrase) != 1 {
 		t.Fatal("the new passphrase is the old one, or shows more than once")
 	}
 	if !strings.Contains(output, "Save it in place of the old one in 1Password") {

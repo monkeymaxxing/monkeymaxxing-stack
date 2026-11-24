@@ -222,10 +222,11 @@ a new passphrase too.
 
    ```sh
    # On the desk, as the person. Type the old recovery passphrase, then press Enter. It does not show.
-   read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD
+   # A run of spaces counts as one, so a copy saved with two spaces between words still opens the bundle.
+   read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD=$(printf '%s' "$MMX_VAULT_PASSWORD" | tr -s ' ')
    mmx secrets set --vault recovery_bundle.age --replace mmx_vault_passphrase < "$work/vault-passphrase"
    # Type the new recovery passphrase, then press Enter. It does not show.
-   (umask 077 && read -rs new_passphrase && printf '%s\n' "$new_passphrase" > "$work/new-recovery-passphrase")
+   (umask 077 && read -rs new_passphrase && printf '%s\n' "$new_passphrase" | tr -s ' ' > "$work/new-recovery-passphrase")
    mmx secrets passwd --vault recovery_bundle.age --new-vault-password-file "$work/new-recovery-passphrase"
    unset MMX_VAULT_PASSWORD
    sudo install -o coding-agent -g coding-agent -m 0644 secrets_vault.age recovery_bundle.age /home/coding-agent/systems_repository/

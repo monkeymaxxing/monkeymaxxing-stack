@@ -86,11 +86,13 @@ servers over SSH. Then follow this page.
      `recovery_bundle.age` when `git status` lists it, and push `main`.
 2. **The person checks that the new passphrase opens the new bundle,**
    in their own laptop terminal, after you pull `main` into the laptop's
-   clone:
+   clone, and after loading `with_recovery_passphrase` as
+   [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
+   says:
 
    ```sh
    # On the laptop, in your own terminal. It asks for the recovery passphrase.
-   cd ~/code/example_systems && ~/.local/bin/mmx secrets list-keys --vault recovery_bundle.age
+   cd ~/code/example_systems && with_recovery_passphrase ~/.local/bin/mmx secrets list-keys --vault recovery_bundle.age
    ```
 
    **Check:** the person says it listed key names, among them

@@ -50,7 +50,9 @@ func newLockHarness(t *testing.T) *lockHarness {
 			return matches[len(matches)-1][1], nil
 		case strings.Contains(label, "Recovery passphrase"):
 			after := text[strings.LastIndex(text, "IT IS SHOWN ONLY ONCE.")+len("IT IS SHOWN ONLY ONCE."):]
-			h.passphrase = strings.Join(strings.Fields(strings.SplitN(strings.TrimLeft(after, "\n"), "\n", 2)[0]), " ")
+			// The line as the screen shows it, without its indent: a copy
+			// pasted as displayed must open the bundle.
+			h.passphrase = strings.TrimSpace(strings.SplitN(strings.TrimLeft(after, "\n"), "\n", 2)[0])
 			return h.passphrase, nil
 		}
 		return "", errors.New("unexpected prompt " + label)
@@ -157,7 +159,7 @@ func TestTheAccountsFromTheCodingAgentThenTheLock(t *testing.T) {
 		}
 	}
 	h.requireNoSecretInOutput(providerToken, masterKey, registryToken, vaultPassphrase, "11111111")
-	if strings.Count(output, strings.ReplaceAll(h.passphrase, " ", "  ")) != 1 {
+	if strings.Count(output, h.passphrase) != 1 {
 		t.Error("the recovery passphrase shows more than once")
 	}
 
@@ -344,5 +346,31 @@ func TestAMissingBundleItemTheVaultHoldsNamesItsRotation(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("want %q in %v", want, err)
 		}
+	}
+}
+
+// The screen shows the passphrase exactly as the bundle needs it, one space
+// between words, and takes back only that exact text, apart from spaces at
+// its ends. A copy that differs only in capital letters or spaces is
+// refused with a message that says so, because MMX would refuse it later.
+func TestTheRecoveryPassphraseScreenWantsTheExactPassphrase(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.e.clearScreen = func() {}
+	passphrase := "apple banana cherry delta echo fox"
+	typed := []string{"apple  banana  cherry  delta  echo  fox", "Apple banana cherry delta echo fox", "  " + passphrase + " "}
+	h.e.prompt = func(string) (string, error) {
+		answer := typed[0]
+		typed = typed[1:]
+		return answer, nil
+	}
+	if err := h.e.recoveryPassphraseScreen(mustSettings(t, h.e), passphrase, "Title", "Save it in", "The lock"); err != nil {
+		t.Fatal(err)
+	}
+	output := h.out.String()
+	if !strings.Contains(output, "\n    "+passphrase+"\n") {
+		t.Errorf("the screen does not show the passphrase with one space between words:\n%s", output)
+	}
+	if len(typed) != 0 || strings.Count(output, "differs from the passphrase above only in capital letters or spaces") != 2 {
+		t.Errorf("want the two near copies refused as such and the exact one taken:\n%s", output)
 	}
 }

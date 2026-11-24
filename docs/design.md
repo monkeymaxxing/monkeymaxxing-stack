@@ -4853,6 +4853,18 @@ the coding agent locks the desk next, because the lock stage runs after
 it. The agent says what the window shows before the person opens it, and
 waits for it with `wait-for-the-setup`.
 
+**The recovery passphrase shows as MMX needs it.** The screen shows the
+six words with one space between them, as the bundle is encrypted, and
+the type-back takes only that exact text, apart from spaces at its ends.
+A copy that differs only in capitals or spaces is refused with a message
+that says so. Reason: MMX opens the bundle only with the exact
+passphrase, so a looser check would pass a copy that fails at the
+recovery. Versions up to 0.4.0 showed two spaces between words, so a team
+may have saved such a copy: every procedure that takes a recovery
+passphrase from a person (`with_recovery_passphrase` in
+`rebuild_a_systems_desk.md`, and the desk blocks that read it) turns a
+run of spaces into one before MMX gets it.
+
 **Person mode stays.** `backblaze`, `cloudflare` and `secrets` keep their
 hidden prompts for the person: the paste window during the setup, a key
 rotation, and a joining teammate. They do the same work as agent mode;

@@ -202,8 +202,13 @@ What this is for:
 // person type it back. title is the screen's first line; saveIn starts the
 // line that says where to save it, such as "Save it in"; running names what
 // waits meanwhile, such as "The lock".
+//
+// The screen shows the passphrase exactly as MMX needs it, one space
+// between words, and takes back only that text, apart from spaces at its
+// ends. Reason: MMX opens the bundle only with the exact passphrase, so a
+// copy that passed here with other spaces or capitals would fail at the
+// recovery.
 func (e *environment) recoveryPassphraseScreen(settings systemSettings, passphrase, title, saveIn, running string) error {
-	words := strings.Fields(passphrase)
 	e.setValueOnScreen(true)
 	e.show(fmt.Sprintf(`
 %s
@@ -219,7 +224,7 @@ Do this now:
   1. %s %s as  "%s recovery passphrase".
   2. Type it here to prove you saved it.
 
-`, title, strings.Join(words, "  "), saveIn, passwordManager(settings), companyName(settings)))
+`, title, passphrase, saveIn, passwordManager(settings), companyName(settings)))
 	for {
 		typed, err := e.prompt("  Recovery passphrase: ")
 		if errors.Is(err, errEmptyValue) {
@@ -229,11 +234,15 @@ Do this now:
 			e.clearValueFromScreen()
 			return err
 		}
-		if strings.Join(strings.Fields(strings.ToLower(typed)), " ") == passphrase {
+		if strings.TrimSpace(typed) == passphrase {
 			break
 		}
 		e.say("")
-		e.say("That is not the passphrase above.  Check the copy in %s, then type it again.", passwordManager(settings))
+		if strings.Join(strings.Fields(strings.ToLower(typed)), " ") == passphrase {
+			e.say("That differs from the passphrase above only in capital letters or spaces.  Your recovery bundle opens only with the exact passphrase: small letters, one space between words.  Correct the copy in %s, then type it again.", passwordManager(settings))
+		} else {
+			e.say("That is not the passphrase above.  Check the copy in %s, then type it again.", passwordManager(settings))
+		}
 		e.say("%s is still running.  It waits for you at the line below.", running)
 		e.say("")
 	}

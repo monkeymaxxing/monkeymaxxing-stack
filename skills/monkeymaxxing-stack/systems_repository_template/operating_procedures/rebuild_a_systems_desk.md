@@ -358,18 +358,26 @@ The recovery bundle, `recovery_bundle.age`, is in the systems repository.
 The recovery passphrase opens it. The person uses it in their own laptop
 terminal; you never see it.
 
-First the person loads `bundle_item`, a small shell command, in their
-laptop terminal:
+First the person loads `bundle_item` and `with_recovery_passphrase`, two
+small shell commands, in their laptop terminal:
 
 ```sh
 # On the laptop, in your own terminal:
 cd ~/code/example_systems
+# with_recovery_passphrase COMMAND [ARGUMENT ...]: asks for the recovery passphrase, unseen, and runs COMMAND with it.
+# Spaces at the ends go, and a run of spaces counts as one: a copy saved with two spaces between words still opens the bundle.
+with_recovery_passphrase() {
+  local passphrase
+  printf 'Recovery passphrase (hidden): ' >&2
+  read -rs passphrase && printf '\n' >&2
+  MMX_VAULT_PASSWORD=$(printf '%s' "$passphrase" | tr -s ' ') "$@"
+}
 # bundle_item KEY COMMAND [ARGUMENT ...]: sends the item KEY to COMMAND's standard input.
 # `mmx secrets pipe-to` only reads the bundle, so the file stays unchanged.
 bundle_item() {
   local key=$1
   shift
-  ~/.local/bin/mmx secrets pipe-to --vault recovery_bundle.age "$key" -- "$@"
+  with_recovery_passphrase ~/.local/bin/mmx secrets pipe-to --vault recovery_bundle.age "$key" -- "$@"
 }
 ```
 
@@ -382,7 +390,7 @@ nothing secret shows. The person never sees the rest of the bundle and
 never edits a file.
 
 To read one item on the screen, the person runs
-`~/.local/bin/mmx secrets show --vault recovery_bundle.age KEY`
+`with_recovery_passphrase ~/.local/bin/mmx secrets show --vault recovery_bundle.age KEY`
 in the terminal (the emergency codes are the case that needs it).
 `show` prints only to a terminal, so run by a coding agent it fails.
 
@@ -444,7 +452,8 @@ changed file.
 work=$(mktemp -d) && cd "$work"
 cp /home/coding-agent/systems_repository/recovery_bundle.age .
 # Type the recovery passphrase, then press Enter. It does not show.
-read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD
+# A run of spaces counts as one, so a copy saved with two spaces between words still opens the bundle.
+read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD=$(printf '%s' "$MMX_VAULT_PASSWORD" | tr -s ' ')
 mmx secrets set --vault recovery_bundle.age --replace KEY < FILE
 sudo install -o coding-agent -g coding-agent -m 0644 recovery_bundle.age /home/coding-agent/systems_repository/recovery_bundle.age
 cd && rm -r "$work" FILE && unset MMX_VAULT_PASSWORD

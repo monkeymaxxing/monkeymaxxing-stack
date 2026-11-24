@@ -76,8 +76,8 @@ each term. Pushover is the push app that puts the alerts on the phone.
    code.
    - For the first desk, `desk01`: the codes are in the recovery bundle, as
      `phone_code_emergency_codes`. The person prints them in their own
-     terminal with `mmx secrets show --vault recovery_bundle.age phone_code_emergency_codes`,
-     in the systems repository, as
+     terminal with `with_recovery_passphrase ~/.local/bin/mmx secrets show --vault recovery_bundle.age phone_code_emergency_codes`,
+     in the systems repository, after loading `with_recovery_passphrase` as
      [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
      says.
    - For a desk added later, such as `desk02`: the codes are in the team's
