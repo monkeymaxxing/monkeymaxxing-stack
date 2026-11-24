@@ -102,7 +102,7 @@ on_call_schedule:
 # use up MMHotline's 1,000 warnings an hour and refuse unrelated ones.
 # Nothing checks in on it, so warn_after_no_check_in_for_minutes is off;
 # MMHotline expects check-ins only from a source that has sent one, so
-# sos_after_no_check_in_for_minutes is never used, and 60 is any value
+# sos_after_no_check_in_for_minutes is never used; 60 is simply a value
 # MMHotline accepts. It lists the hub's signing secrets. Reason: the joined
 # servers already hold the hub's secret to send straight to MMHotline, so
 # a second secret would protect nothing, and one vault key keeps one
@@ -331,9 +331,10 @@ triage_agent:
   # The most runs MMHotline starts by itself in a rolling 24 hours: triage
   # sessions' runs, scheduled software reviews, and commit reviews. A whole
   # number of 1 or more, or no_limit. 50 by default, MMHotline's own
-  # default. Reason: monkeymaxxing.com's busiest day used 7 runs and the
-  # lab's worst incident 13 in 3 hours, while a runaway, such as a check
-  # that fails with a new key every minute, would start 700 to 1,400 a day;
+  # default. Reason: a real small team's busiest day used 7 runs, and the
+  # worst incident on the Stack's test systems 13 in 3 hours, while a
+  # runaway, such as a check that fails with a new key every minute, would
+  # start 700 to 1,400 a day;
   # 50 stops that within hours and still covers a long real incident. The
   # limit stops only agent runs, never alerts: past it, alerts go straight
   # to people, and MMHotline says so once. A run cut short by a restart, a

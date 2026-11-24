@@ -77,6 +77,7 @@ PLAYBOOKS = {  # playbook: the command-line vars each explain needs
     'remove_server': ['server_name=app002'], 'switch_database_primary': ['server_name=db02'],
     'update_database_servers': [], 'weekly_database_restore_drill': [],
     'replace_failed_servers': [], 'destroy_replaced_servers': [], 'add_an_app_server_for_the_load': [],
+    'apply_set_aside_findings': [],
     'restore_database': ['restore_mode=copy_on_restore01', 'server_name=restore01',
                          'recover_to=2026-11-03 14:01:00+00', 'read_backup_bucket_as_of=2026-11-03 15:30:00+00'],
     'recover_rows_from_a_restored_copy': ['recover_to=2026-11-03 14:01:00+00', 'read_backup_bucket_as_of=2026-11-03 15:30:00+00',

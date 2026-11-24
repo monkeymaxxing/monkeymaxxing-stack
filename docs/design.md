@@ -939,7 +939,7 @@ load checks are rendered from the same answer ([Reboots](#reboots),
   (15 by default, MMHotline's own default, validated from 0 to 30 in
   `every_server`). Reason: an alert is a request for action, so the person
   hears the agent's verdict, often "checked, does not affect you" at info,
-  not the raw warning followed by the verdict. On monkeymaxxing.com
+  not the raw warning followed by the verdict. On a real system
   (2026-11-23) a second server's warning joined a running session, was
   not held, and reached the phone 31 seconds before the agent's info
   verdict. A run takes 30 to 70 seconds, plus a queue behind another run
@@ -1016,7 +1016,7 @@ within days, or must know of a change that costs money or carries risk;
 info for everything else, including "checked, does not affect you", a
 restarted service, routine releases, and security fixes nobody exploits
 now. The triage agent's rules, "Alert levels", say it with examples.
-Reason: on monkeymaxxing.com one OpenSSH flaw that affected no server
+Reason: on a real system one OpenSSH flaw that affected no server
 made three warnings and three agent runs, and one warning reached the
 phone before the agent's "does not affect you". The parts:
 
