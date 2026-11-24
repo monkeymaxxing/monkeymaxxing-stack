@@ -272,21 +272,37 @@ says: a push alone changes no server, so run `every_server` or the playbook the 
 
 ### 0.6.0: alerts that ask for action
 
-No one-time step. Before the push, tell the person what the upgrade run
-changes, in these words or close to them:
+Before the push, tell the person what the upgrade run changes, in these
+words or close to them:
 
 - Every warning now waits up to 15 minutes while the triage agent looks,
   so the person hears the agent's verdict instead of the raw warning. A
   team that changed `warn_waits_for_the_triage_agent_minutes` keeps its
   value, now from 0 to 30.
 - MMWatchdog sends one alert for one finding across all servers. During
-  the run, each server's open security-update warning closes once and
-  opens again as one warning per package; the triage agent looks at them
-  as usual.
+  the run, each server's open security-update warning closes once ("maybe
+  not fixed") and opens again as one warning for each Debian release whose
+  servers wait for updates; a newly waiting update sends no new alert.
 - The triage agent has a run limit, 50 runs in 24 hours, which stops only
   agent runs, never alerts
   ([Change the triage agent's run limit](change_the_triage_agent_run_limit.md)).
+- A routine release of the Stack or of a pinned program no longer shows
+  anywhere; only a Stack release that fixes an exploited flaw warns.
 
-After the run, ask the person to run `ssh desk01-review`: the version
+The upgrade is two runs instead of one, `util01` first. Reason: MMWatchdog
+0.2.0 on `util01`, the fleet hub, accepts reports from servers still on
+0.1.x, but a hub still on 0.1.x refuses those of servers already on
+0.2.0, which then alert on their own, one alert per server, and after
+3 minutes say at SOS that they cannot reach the hub.
+
+1. Just before the first run, check on every server except `util01` that
+   `sudo mmwatchdog status --json` shows `delivery.queued_notifications`
+   at `0`. A queued alert sent after the upgrade can leave its incident
+   open in MMHotline, which then starts no new escalation for that check.
+   Wait for a server that shows more, then check again.
+2. Run `./server_management_scripts/run_mmx_on_util01 run every_server --limit util_server`.
+3. Then run `every_server` as usual for every other server.
+
+After the runs, ask the person to run `ssh desk01-review`: the version
 changes `mmhotline_settings.yml` and the triage user's sudo lines on
 `util01`, which reach the lock-out button only after the desk review.
