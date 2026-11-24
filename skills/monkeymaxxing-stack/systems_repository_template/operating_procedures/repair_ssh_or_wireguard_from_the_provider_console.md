@@ -65,12 +65,22 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
   `shared_root_console_password`, which the person reads in their own
   terminal as
   [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
-  says, never in the chat. When the password manager lacks the item and
-  nobody has the recovery passphrase,
+  says, never in the chat. The password works only at the console, never
+  over SSH.
+  **When the password manager lacks the item and nobody has the recovery
+  passphrase, start with the provider's rescue system.** Reason: a new
+  console password from the desk reaches a server only through
+  `every_server`'s run over SSH, the part that fails here. The person boots
+  the server into the provider's rescue system, as the provider guide's
+  "Console and rescue access" says, and logs in to it. There the person
+  mounts the server's disk as steps 2 and 3 of
+  [Rescue system instead of a console login](#rescue-system-instead-of-a-console-login)
+  show, runs `chroot /mnt/root passwd root`, types a new password, saves
+  it in the password manager as `Shared root console password`, and
+  unmounts and reboots as its step 5 shows. That password opens this
+  server's console. Once SSH works again,
   [Make a new recovery passphrase](make_a_new_recovery_passphrase.md) gives
-  the servers a new console password, saved in the password manager; it
-  works on a server after `every_server`'s next run there. The password
-  works only at the console, never over SSH.
+  every server one new console password.
 - **Know which way in the provider gives.** Some consoles show the running
   system and take a login (step 1; steps 2 to 4 work there as written).
   Others, such as Hetzner Cloud's, need a person at the browser console, and
@@ -131,9 +141,10 @@ Start with [step 0](#0-check-the-desk-first). Its result chooses the route:
    The console's place in the website is in the provider guide's section
    "Console and rescue access" ([Before you start](#before-you-start) links
    each guide). An OVHcloud VPS shows no console button on OVHcloud US:
-   you get the console's link from the desk instead, as
+   the person gets the console's link from the desk in their own
+   terminal, with the command that
    [the OVHcloud guide](../provider_guides/ovhcloud_public_cloud.md#console-and-rescue-access)
-   says, and give it to the person.
+   gives; the link never goes through the chat.
    **Check:** the console shows a root shell prompt. When the provider's
    way in is the rescue system, follow
    [Rescue system instead of a console login](#rescue-system-instead-of-a-console-login)

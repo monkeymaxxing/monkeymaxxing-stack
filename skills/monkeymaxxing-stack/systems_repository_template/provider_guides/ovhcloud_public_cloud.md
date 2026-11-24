@@ -857,20 +857,24 @@ rules allow these requests.
 
 **A VPS** (every server meant to stay): the OVHcloud US Control Panel
 shows no KVM console button for a VPS. Get the console's link through the
-desk's API proxy instead, as the coding agent on the desk, with the VPS's
-`vars.provider_server_name`:
+desk's API proxy instead. The person requests and opens the link, in their
+own terminal, never the coding agent. Reason: whoever holds the link gets
+the VPS's console login prompt, with only the console password left
+between them and root, so the link stays out of the coding agent's
+conversation. The coding agent gives the person the command with the VPS's
+`vars.provider_server_name` in it:
 
 ```sh
-# This systems desk, as the coding agent. The answer is the link, in quotes.
-curl -sS -X POST http://127.0.0.1:8081/vps/vps-77f3667b.vps.ovh.us/getConsoleUrl
+# The person's laptop. The answer is the link, in quotes.
+ssh -t desk01 curl -sS -X POST http://127.0.0.1:8081/vps/vps-77f3667b.vps.ovh.us/getConsoleUrl
 ```
 
 The answer is a noVNC link that opens the VPS's console in the browser,
-for a short time; request a new one when it stops working. Give the link
-to the person, who opens it and logs in as `root` with the shared root
-console password. The link opens only the login prompt, so it is no
-secret, but keep it out of commits and notes. Proved on an OVHcloud US
-VPS; the desk's credential allows the call (`POST=/vps/*`).
+for a short time; the person runs the command again when the link stops
+working. The person opens the link and logs in as `root` with the shared
+root console password. Keep the link out of the chat, commits and notes.
+Proved on an OVHcloud US VPS; the desk's credential allows the call
+(`POST=/vps/*`).
 
 **A Public Cloud instance:** in Manager, select **Public Cloud**, the project, **Instances**, the instance,
 then **VNC console**. No separate console activation is documented.
