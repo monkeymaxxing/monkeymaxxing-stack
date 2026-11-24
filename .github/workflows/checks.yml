@@ -86,7 +86,9 @@ jobs:
         shell: bash
         run: |
           go vet ./...
-          go test ./...
+          # The package's tests drive real MMX vaults and take about 9 minutes,
+          # close to go test's default limit of 10, so a busy runner timed out.
+          go test -timeout 30m ./...
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"; exit 1
