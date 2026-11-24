@@ -115,13 +115,25 @@ there, with a reason of your own.
 | What waits | Setting | File | Default |
 | --- | --- | --- | --- |
 | An SOS waits for the triage agent before waking the person on call | `triage_agent.sos_waits_for_the_agent_minutes` | `mmhotline_settings.yml` | 3 minutes |
-| A warning that starts a triage session is held while the triage agent tries first; the agent's request or report in that time takes the warning over, otherwise it sounds at the end of the wait, at once when the agent cannot run. 0 turns holding off; at most 15, MMHotline's limit | `triage_agent_server_work.warn_waits_for_the_triage_agent_minutes`, which `mmhotline_settings.yml` renders as `triage_agent.warn_waits_for_the_agent_minutes` | `mmx_project_settings.yml` | 3 minutes |
+| Each warning, one that starts a triage session or joins a running one, is held while the triage agent looks first; the agent's report that names the warning, or a playbook request that MMHotline tells a person about at once, takes the warning over; otherwise it sounds when the agent's run ends without naming it, at the end of the wait, or at once when the agent cannot run. 0 turns holding off; at most 30, MMHotline's limit | `triage_agent_server_work.warn_waits_for_the_triage_agent_minutes`, which `mmhotline_settings.yml` renders as `triage_agent.warn_waits_for_the_agent_minutes` | `mmx_project_settings.yml` | 15 minutes |
 | While the triage agent replaces a failed server, an SOS waits from the replacement's start before waking the person on call; a failed run, an SOS report or a request for a person wakes at once. 0 turns the longer wait off; at most 60, because MMHotline stops an MMX run after an hour | `triage_agent_server_work.sos_waits_for_a_server_replacement_minutes`, which `mmhotline_settings.yml` renders as `triage_agent.sos_waits_for_a_server_replacement_minutes` | `mmx_project_settings.yml` | 7 minutes |
 | An unclaimed SOS reaches the people of `backup_option` | `on_call_schedule.escalate_if_unclaimed_after_minutes` | `mmhotline_settings.yml` | 5 minutes |
 | The fleet hub on `util01` stops checking in with MMHotline: a warn, then an SOS | `warn_after_no_check_in_for_minutes` and `sos_after_no_check_in_for_minutes` of `alert_sources` | `mmhotline_settings.yml` | 2, then 5 minutes |
 | MMHotline stops checking in with the MMHotline-down alarm: the person on call, then the backup (the named backup, or everyone else available) | `mmhotline_down_alarm.wake_the_person_on_call_after_minutes_without_a_check_in` and `wake_the_backup_after_minutes_without_a_check_in` | `mmhotline_settings.yml` | 5, then 10 minutes |
 | A public address stops answering | `alert_after_failing_for` of `public_sites` | `mmwatchdog_checks/util_server.yml` | 30 seconds |
 | The servers cannot reach the fleet hub on `util01` | `alert_after_hub_unreachable_for` | `roles/util_server/files/mmwatchdog_node_settings.yml` | 2 minutes |
+
+## Hear when the triage agent starts looking
+
+MMHotline sends no message when the triage agent starts looking at a new
+triage session: `triage_agent.send_a_message_when_the_agent_starts_looking`
+in `mmhotline_settings.yml` is `false`, the reason beside it. The
+dashboard and the session's page show the agent at work.
+
+A team that wants a message each time sets the line to `true`, and
+applies it as [Steps](#steps) says. The message is a quiet info alert to
+the person on call. With Pushover it shows on the phone without a sound,
+before the agent has looked, and the agent's report follows.
 
 ## How MMHotline applies settings in parts
 

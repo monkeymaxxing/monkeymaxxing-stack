@@ -558,7 +558,10 @@ The fleet hub signs its alerts and check-ins with `mmhotline_signing_secret_of_t
 `util01`'s run writes `mmhotline_signing_secret_of_the_fleet_hub` into the
 hub's `/etc/mmwatchdog/secrets/mmhotline-signing-secret`.
 The alert source `mmwatchdog_fleet_hub` in `mmhotline_settings.yml` lists
-`mmhotline_signing_secret_of_the_fleet_hub` in `signing_secrets`.
+`mmhotline_signing_secret_of_the_fleet_hub` in `signing_secrets`, and so
+does the second alert source, `mmwatchdog_nodes_while_the_hub_is_down`,
+under which the servers send while the hub does not answer. Change both
+lists together in each step below.
 
 **Use two commits.** MMHotline must accept the old and new signing
 secrets while the second commit changes the hub's signing secret.
@@ -569,7 +572,8 @@ secrets while the second commit changes the hub's signing secret.
    `sudo sh -c 'umask 077 && openssl rand -hex 32 > /root/next-fleet-hub-signing-secret'` and
    `sudo cat /root/next-fleet-hub-signing-secret | mmx secrets set --vault secrets_vault.age mmhotline_next_signing_secret_of_the_fleet_hub`.
    You add the vault template expression after the first entry in
-   `signing_secrets` for `mmwatchdog_fleet_hub` in `mmhotline_settings.yml`:
+   `signing_secrets` for `mmwatchdog_fleet_hub`, and for
+   `mmwatchdog_nodes_while_the_hub_is_down`, in `mmhotline_settings.yml`:
    `"{{ .secrets.mmhotline_next_signing_secret_of_the_fleet_hub }}"`.
    Publish the vault and the settings, as
    [Making a change](../AGENTS.md#making-a-change) says, and run `every_server` on `util01`. MMHotline accepts the
@@ -581,7 +585,7 @@ secrets while the second commit changes the hub's signing secret.
    then deletes the file: `sudo rm /root/next-fleet-hub-signing-secret`.
    The temporary key, `mmhotline_next_signing_secret_of_the_fleet_hub`, stays in the vault unused: MMX has no
    command that removes one key, and the next rotation replaces it with `--replace`.
-   You remove the second entry from `signing_secrets`. Publish both files, and
+   You remove the second entry from both `signing_secrets` lists. Publish both files, and
    run `every_server` on `util01`.
    The second run restarts the hub with the new secret in its `util_server` stage.
    Then, in `every_server`'s final settings stage,
@@ -596,7 +600,8 @@ secrets while the second commit changes the hub's signing secret.
    **Check:**
 
    - `ssh -F ssh/config root@10.20.0.1 'mmhotline alert-sources list'` must
-     list one signing secret for `mmwatchdog_fleet_hub`.
+     list one signing secret for `mmwatchdog_fleet_hub` and one for
+     `mmwatchdog_nodes_while_the_hub_is_down`.
    - On `util01`, send a test from the hub:
      `sudo mmwatchdog send-notice --alert-severity info --title "Test of the alerts. Nothing is wrong." --destination mmhotline_on_call`.
      The test alert must arrive.

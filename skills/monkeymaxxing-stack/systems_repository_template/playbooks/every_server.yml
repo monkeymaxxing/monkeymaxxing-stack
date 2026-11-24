@@ -381,17 +381,17 @@ fleet_stages:
             Use a whole number of minutes from 0 to 60, such as 10: 0 turns the
             longer wait off, and MMHotline stops an MMX run after one hour.
             Nothing changed.
-      - id: warn_waits_for_the_triage_agent_minutes_is_from_0_to_15
+      - id: warn_waits_for_the_triage_agent_minutes_is_from_0_to_30
         assert:
           that:
             all:
               - number_at_least: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 0]
-              - number_at_most: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 15]
+              - number_at_most: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 30]
           message: >-
             triage_agent_server_work.warn_waits_for_the_triage_agent_minutes
             in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}".
-            Use a whole number of minutes from 0 to 15, such as 3: 0 turns
-            holding off, and 15 is the longest MMHotline holds a warning.
+            Use a whole number of minutes from 0 to 30, such as 15: 0 turns
+            holding off, and 30 is the longest MMHotline holds a warning.
             Nothing changed.
       # Adding and removing app servers with the load. The reasons for each
       # range are beside the settings in mmx_project_settings.yml.

@@ -13,11 +13,20 @@ destinations:
   # MMHotline's signing_secrets and the util_server role's input
   # mmhotline_signing_secret_of_the_fleet_hub use the vault key
   # mmhotline_signing_secret_of_the_fleet_hub.
+  # A server sends what it delivers without the hub under the second alert
+  # source, mmwatchdog_nodes_while_the_hub_is_down, which alone folds
+  # repeated warnings, so a hub outage on a large fleet cannot use up
+  # MMHotline's warnings for the hour (mmhotline_settings.yml, alert_sources).
+  # The servers get the block, and the secret, with the fleet settings; it
+  # needs MMWatchdog 0.2.0 or later on every server, which the Stack pins.
   mmhotline_on_call:
     mmhotline:
       mmhotline_url: http://{{ .inputs.private_ip }}:8484
       mmhotline_alert_source_id: mmwatchdog_fleet_hub
       mmhotline_signing_secret_file: /etc/mmwatchdog/secrets/mmhotline-signing-secret
+      alert_source_for_nodes_sending_without_the_hub:
+        mmhotline_alert_source_id: mmwatchdog_nodes_while_the_hub_is_down
+        mmhotline_signing_secret_file: /etc/mmwatchdog/secrets/mmhotline-signing-secret
     alert_severities: [info, warn, sos]
 
 {{- if .inputs.phone_alerts_are_set_up }}

@@ -85,13 +85,41 @@ on_call_schedule:
 # (roles/util_server/files/alert_destinations.yml).
 # While the fleet hub changes from signing with the old secret to signing
 # with the new secret, signing_secrets lists the old and new secrets
-# (operating_procedures/rotate_a_secret.md, "Rotating a secret").
+# (operating_procedures/rotate_a_secret.md, "The fleet hub signing secret").
+#
+# The hub's source keeps every warning (repeated_warnings: keep_each). The
+# hub sends one alert per finding for the whole fleet, and a later warning
+# that a new server has the finding has the same key and first line as the
+# first one; it must reach the triage agent, never be folded away.
+#
+# mmwatchdog_nodes_while_the_hub_is_down takes the alerts that servers send
+# straight to MMHotline while the fleet hub does not answer
+# (alert_source_for_nodes_sending_without_the_hub in
+# roles/util_server/files/alert_destinations.yml). It folds a repeated
+# warning, one with the same key and first line as an unresolved warning of
+# the last hour, into that warning. Reason: during a hub outage every
+# server sends its own copy of one finding, and thousands of copies would
+# use up MMHotline's 1,000 warnings an hour and refuse unrelated ones.
+# Nothing checks in on it, so warn_after_no_check_in_for_minutes is off;
+# MMHotline expects check-ins only from a source that has sent one, so
+# sos_after_no_check_in_for_minutes is never used, and 60 is any value
+# MMHotline accepts. It lists the hub's signing secrets. Reason: the joined
+# servers already hold the hub's secret to send straight to MMHotline, so
+# a second secret would protect nothing, and one vault key keeps one
+# rotation; rotate_a_secret.md changes both lists together.
 alert_sources:
   - alert_source_id: mmwatchdog_fleet_hub
     name: MMWatchdog fleet hub on util01
     signing_secrets: [{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub | toJson }}]
     warn_after_no_check_in_for_minutes: 2
     sos_after_no_check_in_for_minutes: 5
+    repeated_warnings: keep_each
+  - alert_source_id: mmwatchdog_nodes_while_the_hub_is_down
+    name: Servers sending without the fleet hub
+    signing_secrets: [{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub | toJson }}]
+    warn_after_no_check_in_for_minutes: off
+    sos_after_no_check_in_for_minutes: 60
+    repeated_warnings: fold_by_sender_incident_key_and_first_message_line
 
 # The rules_for_running_agent_playbooks entry servers sets what the triage agent's fixes may
 # do without a person for the inventory named servers. The inventory name
@@ -168,6 +196,14 @@ rules_for_running_agent_playbooks:
       every_server: {rule: get_permission_then_act, approvals_needed: 1}
       destroy_replaced_servers: {rule: get_permission_then_act, approvals_needed: 1}
 {{- end }}
+    # With every answer, apply_set_aside_findings runs at once and is
+    # reported. It installs triage_agent_notes/set_aside_findings.yml on the
+    # fleet hub only, after MMWatchdog validated it, so it only quiets the
+    # exact findings the triage agent wrote down, with its reason, in a file
+    # its own commits may change (triage_agent_rules.md, "Setting a finding
+    # aside"). MMWatchdog never quiets an SOS, and any change to a finding's
+    # package, version, fix or advisory alerts again.
+      apply_set_aside_findings: {rule: act_then_report}
 # A playbook that starts, stops, restarts, or changes one of these waits for
 # a person whatever the rules for running the agent's playbooks say: pgautofailover.service runs the
 # keeper on each database server and the failover monitor on util01. The
@@ -272,14 +308,38 @@ triage_agent:
   # starts_a_server_replacement in rules_for_running_agent_playbooks starts
   # the replacement.
   sos_waits_for_a_server_replacement_minutes: {{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}
-  # How long a warning that starts a triage session is held, 0 to 15
-  # minutes, while the triage agent tries first:
-  # triage_agent_server_work.warn_waits_for_the_triage_agent_minutes in
-  # mmx_project_settings.yml, with its reason. The agent's request for a
-  # playbook run, or its report, in that session takes the warning over;
-  # otherwise MMHotline sends the warning at the end of the wait, or at
-  # once when the agent cannot run.
+  # How long each warning is held, 0 to 30 minutes, while the triage agent
+  # looks first: triage_agent_server_work.warn_waits_for_the_triage_agent_minutes
+  # in mmx_project_settings.yml, with its reason. A warning that starts a
+  # session and one that joins a running session are held alike. The
+  # agent's report that names the warning takes it over, and so does a
+  # playbook request that MMHotline tells a person about at once (an
+  # approval request, or a warning before a run). Otherwise MMHotline sends
+  # the warning when the agent's run ends without naming it, at the end of
+  # the wait, or at once when the agent cannot run.
   warn_waits_for_the_agent_minutes: {{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}
+  # Whether MMHotline tells the person on call, with a quiet info alert,
+  # that the triage agent started looking at a new session. false by
+  # default, MMHotline's own default. Reason: the message is an ordinary
+  # info alert, which Pushover delivers to the phone, so it reached people
+  # before the agent had looked; the dashboard and the session's page
+  # already show the agent at work. A team that wants to hear when the
+  # agent starts sets true
+  # (operating_procedures/change_mmhotline_settings.md, "Hear when the
+  # triage agent starts looking").
+  send_a_message_when_the_agent_starts_looking: false
+  # The most runs MMHotline starts by itself in a rolling 24 hours: triage
+  # sessions' runs, scheduled software reviews, and commit reviews. A whole
+  # number of 1 or more, or no_limit. 50 by default, MMHotline's own
+  # default. Reason: monkeymaxxing.com's busiest day used 7 runs and the
+  # lab's worst incident 13 in 3 hours, while a runaway, such as a check
+  # that fails with a new key every minute, would start 700 to 1,400 a day;
+  # 50 stops that within hours and still covers a long real incident. The
+  # limit stops only agent runs, never alerts: past it, alerts go straight
+  # to people, and MMHotline says so once. A run cut short by a restart, a
+  # person's hand-over, and a playbook review are not counted
+  # (operating_procedures/change_the_triage_agent_run_limit.md).
+  most_runs_in_24_hours: 50
 {{ end }}
 
 # The MMHotline-down alarm is a small program running at Cloudflare, called a

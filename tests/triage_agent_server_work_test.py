@@ -80,11 +80,16 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         '      destroy_replaced_servers: {rule: get_permission_then_act, approvals_needed: 1}',
     ]
 
+    # With every answer, the triage agent applies its own set-aside entries to the
+    # fleet hub at once and reports: the playbook only quiets the exact findings the
+    # agent wrote down in a file its commits may change anyway.
+    SET_ASIDE_FINDINGS_RUN_AT_ONCE = ['      apply_set_aside_findings: {rule: act_then_report}']
+
     def test_every_fix_waits_for_a_person(self):
         self.assertEqual(self.rules_entry('every_fix_waits_for_a_person'), [
             '  servers:',
             '    preset: permission_for_every_fix',
-        ] + self.ONE_APPROVAL_FOR_THE_REPLACEMENT)
+        ] + self.ONE_APPROVAL_FOR_THE_REPLACEMENT + self.SET_ASIDE_FINDINGS_RUN_AT_ONCE)
 
     def test_routine_fixes_is_the_template_default(self):
         self.assertRegex((T/'mmx_project_settings.yml').read_text(),
@@ -92,7 +97,7 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         self.assertEqual(self.rules_entry('routine_fixes'), [
             '  servers:',
             '    preset: routine_fixes_without_permission',
-        ] + self.ONE_APPROVAL_FOR_THE_REPLACEMENT)
+        ] + self.ONE_APPROVAL_FOR_THE_REPLACEMENT + self.SET_ASIDE_FINDINGS_RUN_AT_ONCE)
 
     def test_routine_fixes_and_server_work_lists_the_six_playbooks(self):
         self.assertEqual(self.rules_entry('routine_fixes_and_server_work', minutes=25, pool_minutes=12), [
@@ -105,7 +110,7 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
             '      reboot_servers_after_updates: {rule: warn_wait_then_act, warning_wait_minutes: 25}',
             '      add_an_app_server_for_the_load: {rule: warn_wait_then_act, warning_wait_minutes: 12}',
             '      remove_server: {rule: warn_wait_then_act, warning_wait_minutes: 12}',
-        ])
+        ] + self.SET_ASIDE_FINDINGS_RUN_AT_ONCE)
 
     def test_the_covering_key_only_with_get_permission_then_act(self):
         """MMHotline's settings check refuses the key with any other rule, and a named playbook that is not listed."""
@@ -150,12 +155,54 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
 
     def test_the_held_warn_wait_comes_from_the_stack_setting_for_every_answer(self):
         settings = (T/'mmx_project_settings.yml').read_text()
-        self.assertRegex(settings, r'(?m)^    warn_waits_for_the_triage_agent_minutes: 3$')
+        # 15 by default since MMHotline 0.7.0 holds every warning, also one that joins a running session.
+        self.assertRegex(settings, r'(?m)^    warn_waits_for_the_triage_agent_minutes: 15$')
         for answer in ('every_fix_waits_for_a_person', 'routine_fixes', 'routine_fixes_and_server_work'):
             with self.subTest(answer=answer):
                 text = self.rendered(answer, held_warn_minutes=7)
                 section = re.search(r'(?ms)^triage_agent:\n(.*?)^(?=\S)', text).group(1)
                 self.assertRegex(section, r'(?m)^  warn_waits_for_the_agent_minutes: 7$')
+
+    def test_the_run_limit_and_the_start_message_are_set_with_their_defaults(self):
+        """MMHotline 0.7.0's run limit and start message, written out with MMHotline's defaults, for every answer."""
+        for answer in ('every_fix_waits_for_a_person', 'routine_fixes', 'routine_fixes_and_server_work'):
+            with self.subTest(answer=answer):
+                section = re.search(r'(?ms)^triage_agent:\n(.*?)^(?=\S)', self.rendered(answer)).group(1)
+                self.assertRegex(section, r'(?m)^  most_runs_in_24_hours: 50$')
+                self.assertRegex(section, r'(?m)^  send_a_message_when_the_agent_starts_looking: false$')
+
+    def alert_sources(self, text):
+        """Each rendered alert source as a mapping of its plain keys."""
+        block = re.search(r'(?ms)^alert_sources:\n(.*?)^(?=\S)', text).group(1)
+        sources = []
+        for line in block.splitlines():
+            entry = re.match(r'^  (- |  )(\w+): (.*)$', line)
+            if entry:
+                if entry[1] == '- ':
+                    sources.append({})
+                sources[-1][entry[2]] = entry[3]
+        return sources
+
+    def test_the_nodes_send_without_the_hub_under_a_source_that_folds_repeats(self):
+        """The hub keeps every warning; only the nodes' direct sends during a hub outage fold, under their own source."""
+        hub, nodes = self.alert_sources(self.rendered('routine_fixes'))
+        self.assertEqual(hub['alert_source_id'], 'mmwatchdog_fleet_hub')
+        self.assertEqual(hub['repeated_warnings'], 'keep_each')
+        self.assertEqual(nodes['alert_source_id'], 'mmwatchdog_nodes_while_the_hub_is_down')
+        self.assertEqual(nodes['repeated_warnings'], 'fold_by_sender_incident_key_and_first_message_line')
+        self.assertEqual(nodes['warn_after_no_check_in_for_minutes'], 'off')
+        # MMHotline accepts 1 to 60 minutes; nothing checks in on the source, so the value is never used.
+        self.assertTrue(1 <= int(nodes['sos_after_no_check_in_for_minutes']) <= 60)
+        # Joined nodes already hold the hub's signing secret, so the second source reuses it: no new vault key.
+        self.assertEqual(nodes['signing_secrets'], hub['signing_secrets'])
+        destinations = (T/'roles/util_server/files/alert_destinations.yml').read_text()
+        self.assertIn('    mmhotline:\n'
+                      '      mmhotline_url: http://{{ .inputs.private_ip }}:8484\n'
+                      '      mmhotline_alert_source_id: mmwatchdog_fleet_hub\n'
+                      '      mmhotline_signing_secret_file: /etc/mmwatchdog/secrets/mmhotline-signing-secret\n'
+                      '      alert_source_for_nodes_sending_without_the_hub:\n'
+                      '        mmhotline_alert_source_id: mmwatchdog_nodes_while_the_hub_is_down\n'
+                      '        mmhotline_signing_secret_file: /etc/mmwatchdog/secrets/mmhotline-signing-secret\n', destinations)
 
     def test_every_server_refuses_other_values_first(self):
         playbook = (T/'playbooks/every_server.yml').read_text()
@@ -175,7 +222,7 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
                       'number_at_least: ["{{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}", 0]',
                       'number_at_most: ["{{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}", 60]',
                       'number_at_least: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 0]',
-                      'number_at_most: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 15]',
+                      'number_at_most: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 30]',
                       'number_at_least: ["{{ .vars.growth_limits.app_servers.smallest_number_of_servers }}", 1]',
                       'number_at_most: ["{{ .vars.growth_limits.app_servers.smallest_number_of_servers }}", "{{ .vars.growth_limits.app_servers.largest_number_of_servers }}"]',
                       'number_at_least: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}", 1]',
@@ -240,10 +287,19 @@ class TheRulesTheAgentReads(unittest.TestCase):
         self.assertNotIn('wait for the session to end', replace)
         self.assertIn('claim the incident in MMHotline with a note, or give a reason when you refuse an approval or press Stop. The agent reads it at its next step.', replace)
 
-    def test_a_session_a_warning_started_requests_or_reports_in_the_first_minutes(self):
+    def test_a_report_names_the_warnings_it_covers(self):
+        """MMHotline 0.7.0 holds every warning, and only a report or a told-about request that names it takes it over."""
         flat = ' '.join(self.rules.split())
-        self.assertIn('request the playbook run or send a report within the first minute or two', flat)
-        self.assertIn('MMHotline sends the warning at the end of the wait', flat)
+        self.assertIn('**Name each alert your report or request is about** with `--about-alert-id ALERT_ID`', flat)
+        self.assertIn('A playbook that runs at once and reports (`act_then_report`) takes nothing over', flat)
+        self.assertIn('**A warning that nothing of your run names reaches people when your run ends,**', flat)
+        self.assertIn('a verdict about one server never covers another', flat)
+
+    def test_a_finding_is_set_aside_only_on_evidence_for_every_server(self):
+        flat = ' '.join(self.rules.split())
+        self.assertIn('Your evidence holds for every server with that exact finding', flat)
+        self.assertIn('is allowed only when a Stack role makes that configuration the same on every server: the reason names the role', flat)
+        self.assertIn('request `apply_set_aside_findings`, as it is', flat)
 
     def test_an_add_or_a_removal_is_reported_only_after_reading_the_runs_result(self):
         """On a real server, the agent wrote "Created a second app server" before reading that the add found nothing to add."""

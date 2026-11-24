@@ -751,21 +751,24 @@ vars:
     # MMX run after one hour, so a replacement never runs longer. A
     # replacement reads the value once, as it starts.
     sos_waits_for_a_server_replacement_minutes: 7
-    # How long MMHotline holds a warning that starts a triage session before
-    # it reaches people, while the triage agent tries first. 3 by default:
-    # a routine change the agent handles by itself (a fix, a load change)
-    # then makes one sound, MMHotline's own warning or approval request or
-    # the agent's report, and not a warning followed by the report. The
-    # agent asks for its playbook run or sends a report within the first
-    # minute or two of a session, well inside 3 minutes. Nothing is dropped:
-    # a warning the agent does not take sounds at the end of the wait, and
-    # at once when the agent cannot run (not set up, its sandbox or
-    # MMHotline's copy of this repository is missing, or its run fails or
-    # ends with no request or report). A warning that joins a session already
-    # running is never held. From 0 to 15: 0 turns holding off, and 15 is
-    # MMHotline's own limit, because a stuck agent would hold a warning
-    # longer than that.
-    warn_waits_for_the_triage_agent_minutes: 3
+    # How long MMHotline holds each warning before it reaches people, while
+    # the triage agent looks first: a warning that starts a triage session
+    # and one that joins a running session alike. 15 by default, MMHotline's
+    # own default. Reason: a triage run takes 30 to 70 seconds, plus a queue
+    # behind another run or an MMX run that holds the systems repository's
+    # lock, and a warning is not urgent. A warning that the agent's report
+    # names reaches people as that report, often at info ("checked, does
+    # not affect you"); a playbook request that MMHotline tells a person
+    # about at once (an approval request, or a warning before a run) takes
+    # the warning over too. Nothing is dropped: a warning that nothing of
+    # the agent's run names reaches people when the run ends, at the end of
+    # the wait, and at once when the agent cannot run (not set up, its
+    # sandbox or MMHotline's copy of this repository is missing, its run
+    # fails, or its run limit is reached). From 0 to 30: 0 turns holding
+    # off, and 30 is MMHotline's own limit, because a warning held longer
+    # than half an hour no longer gives a person the news in time to plan
+    # the day's work.
+    warn_waits_for_the_triage_agent_minutes: 15
     # Adding and removing app servers with the load, inside
     # growth_limits.app_servers (smallest_number_of_servers to
     # largest_number_of_servers). The app pool's CPU is each app server's

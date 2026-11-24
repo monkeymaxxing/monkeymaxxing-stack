@@ -142,6 +142,13 @@ chapter.
        signing_secrets: ["{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub }}"]
        warn_after_no_check_in_for_minutes: 2
        sos_after_no_check_in_for_minutes: 5
+       repeated_warnings: keep_each
+     - alert_source_id: mmwatchdog_nodes_while_the_hub_is_down  # the servers' own alerts while the hub does not answer
+       name: Servers sending without the fleet hub
+       signing_secrets: ["{{ .secrets.mmhotline_signing_secret_of_the_fleet_hub }}"]
+       warn_after_no_check_in_for_minutes: off
+       sos_after_no_check_in_for_minutes: 60
+       repeated_warnings: fold_by_sender_incident_key_and_first_message_line
    rules_for_running_agent_playbooks:
      servers:                                 # the inventory's name: every inventory needs an entry
        preset: routine_fixes_without_permission

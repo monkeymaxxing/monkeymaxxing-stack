@@ -845,7 +845,7 @@ load checks are rendered from the same answer ([Reboots](#reboots),
   range MMHotline accepts for `warning_wait_minutes`, and
   `sos_waits_for_a_server_replacement_minutes` is from 0 to 60, the range
   MMHotline accepts, and `warn_waits_for_the_triage_agent_minutes` is from
-  0 to 15, MMHotline's cap.
+  0 to 30, MMHotline's cap.
 - **One approval for the whole replacement:** with the first two answers,
   the three replacement playbooks are listed as `get_permission_then_act`
   with `approvals_needed: 1`, and `replace_failed_servers` carries
@@ -931,21 +931,33 @@ load checks are rendered from the same answer ([Reboots](#reboots),
   resolved message for an urgent alert that was never sent, and the start
   warning could name a wake time earlier than the real one (seen on test
   servers).
-- **A warn waits for the triage agent first.** MMHotline holds a warn that
-  starts a triage session for `triage_agent.warn_waits_for_the_agent_minutes`,
+- **Every warn waits for the triage agent first.** MMHotline holds each
+  warn, one that starts a triage session and one that joins a running
+  session alike, for `triage_agent.warn_waits_for_the_agent_minutes`,
   rendered from the Stack setting
   `triage_agent_server_work.warn_waits_for_the_triage_agent_minutes`
-  (3 by default, validated from 0 to 15 in `every_server`). Reason: the
-  agent tries first, so a routine change it handles makes one sound,
-  MMHotline's own warning or approval request, or the agent's report, and
-  not a warning followed by the report. Nothing is dropped: a warn the
-  agent does not take sounds at the end of the wait, and at once when the
-  agent is not set up, its sandbox or MMHotline's copy of the repository
-  is missing, or the session ended, failed or ended with no request or
-  report. A warn that joins a running session, and MMHotline's own warns,
-  are never held. 15 is MMHotline's cap; 0 turns holding off. The rules
-  tell the agent to request the playbook run or report within the first
-  minute or two of a session a warn started, well inside 3.
+  (15 by default, MMHotline's own default, validated from 0 to 30 in
+  `every_server`). Reason: an alert is a request for action, so the person
+  hears the agent's verdict, often "checked, does not affect you" at info,
+  not the raw warning followed by the verdict. On monkeymaxxing.com
+  (2026-11-23) a second server's warning joined a running session, was
+  not held, and reached the phone 31 seconds before the agent's info
+  verdict. A run takes 30 to 70 seconds, plus a queue behind another run
+  or an MMX run holding the lock, so 15 minutes covers the usual case,
+  and 30 is MMHotline's cap: a warning held longer no longer gives a
+  person the news in time to plan the day. A warn ends once: taken over by
+  the agent's report that names it (`--about-alert-id`, or the run's only
+  alert), or by a playbook request that MMHotline tells a person about at
+  once; resolved; sent when the run that carried it ends without naming
+  it; sent at once when the agent cannot run or its run limit holds; or
+  sent at its deadline. A playbook that runs and reports takes nothing
+  over. MMHotline's own warns are never held; 0 turns holding off.
+- **Nothing reaches people while the agent looks.** MMHotline's start
+  message is off (`send_a_message_when_the_agent_starts_looking: false`),
+  because it was an ordinary info alert that Pushover put on the phone
+  before the agent had looked; the dashboard shows the agent at work.
+  [Change MMHotline settings](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/change_mmhotline_settings.md#hear-when-the-triage-agent-starts-looking)
+  says how to turn it on.
 - **The MMHotline-down alarm escalates like an SOS.** The person on call
   is woken at the first wait, then the backup at the backup wait, where
   the backup is the named backup or, under the default
@@ -1437,10 +1449,10 @@ fleet hub and the provider's list, never from a file of its own on
   low priority in Pushover, without a sound.
   The start is one sound: `util01`'s
   check is warn, which starts a triage session, but MMHotline holds that
-  warn for `triage_agent.warn_waits_for_the_agent_minutes` (3). The
+  warn for `triage_agent.warn_waits_for_the_agent_minutes` (15). The
   triage agent requests the playbook within the first minute or two,
-  MMHotline's own warning with Stop is the one start sound, and the held
-  warn is never sent. So the person's timeline for a load change is: the
+  naming the warn, MMHotline's own warning with Stop is the one start
+  sound and takes the held warn over, so the held warn is never sent. So the person's timeline for a load change is: the
   held warn, the request, MMHotline's warning with Stop, silent progress,
   a silent end.
 - **The price** comes from a fifth provider script,
