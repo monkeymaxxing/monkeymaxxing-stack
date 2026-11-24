@@ -1047,8 +1047,9 @@ phone before the agent's "does not affect you". The parts:
   file the agent's commits may change anyway, and installs nothing but
   that file on the hub. The role `set_aside_findings_on_the_fleet_hub`,
   which `util_server` runs too, writes the candidate, checks it with
-  MMWatchdog, installs it, reloads the hub and confirms the entries in
-  effect, so a bad file never goes live. The file always exists, with
+  MMWatchdog, installs it, and reloads the hub whenever the entries in
+  effect differ from the installed file's, then confirms them, so a bad
+  file never goes live and a reload that failed heals at the next run. The file always exists, with
   `set_aside_findings: []` when empty, because MMX refuses a missing source
   file and a rebuilt `util01` then needs nothing special. Exact match only
   and no end date: a changed package, fix or advisory alerts again, and a

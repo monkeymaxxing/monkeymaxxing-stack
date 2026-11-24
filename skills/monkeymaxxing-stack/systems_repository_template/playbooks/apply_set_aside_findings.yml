@@ -9,7 +9,7 @@
 # commits may change anyway.
 #
 # The role checks the file with MMWatchdog before it installs it, reloads
-# the hub, and confirms the entries in effect: a file MMWatchdog refuses
+# the hub when its entries in effect differ, and confirms them: a file MMWatchdog refuses
 # fails the run and never goes live. util01's every_server runs the same
 # role, so the two never disagree.
 #

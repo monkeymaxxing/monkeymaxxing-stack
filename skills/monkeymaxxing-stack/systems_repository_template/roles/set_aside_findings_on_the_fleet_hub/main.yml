@@ -10,8 +10,14 @@
 # then install it and reload MMWatchdog. So a file that MMWatchdog refuses
 # never goes live, and the hub keeps the entries it had. A reload, not a
 # restart: the hub settles the file against its open incidents at every
-# reload, and a reload keeps the hub's alerts flowing. Last, the entries
-# in effect, which the hub lists, must be the installed file's entries.
+# reload, and a reload keeps the hub's alerts flowing.
+#
+# The reload follows the entries in effect, which the hub lists, not the
+# install: whenever they differ from the installed file's entries, the run
+# reloads, then requires them equal. Reason: a reload that failed after the
+# install leaves the file installed, so a rerun that reloaded only after a
+# changed install would never reload, and a removed entry would keep
+# silencing its finding.
 #
 # The candidate sits beside the hub's other candidate files, which
 # MMWatchdog checks together. When the check refuses it, on_failure puts
@@ -53,27 +59,58 @@ node_tasks:
             owner: root
             group: root
             permissions_mode: "0644"
-        - id: reload_mmwatchdog_for_the_set_aside_findings
-          when: {equals: ["{{ .node_tasks.install_the_set_aside_findings.change }}", changed]}
-          shell:
-            script: /usr/local/bin/mmwatchdog reload
-      verify:
-        - id: confirm_the_set_aside_findings_in_effect
+        # Fails when the hub or either listing does not answer, so two
+        # empty answers never count as equal. The dryrun reloads nothing,
+        # and passes when MMWatchdog does not run, as on a new util01, or
+        # runs a release without set-aside findings, as in the preview of
+        # an upgrade from MMWatchdog 0.1: the run installs the new release
+        # first, and then checks.
+        - id: put_the_set_aside_findings_into_effect
           shell:
             script: bash -c "$PROGRAM"
-            dryrun: bash -c "$PROGRAM"
-            run_only_if_this_path_exists: /run/mmwatchdog/mmwatchdog.sock
+            dryrun: |
+              if [ ! -S /run/mmwatchdog/mmwatchdog.sock ] || ! /usr/local/bin/mmwatchdog --help 2>/dev/null | grep -q 'fleet set-aside-findings'; then
+                echo "MMWatchdog on util01 does not run a release with set-aside findings yet; the run installs it before it puts the entries into effect."
+                exit 0
+              fi
+              DRYRUN=yes bash -c "$PROGRAM"
             env:
               PROGRAM: |
-                entries='[(. // [])[] | [.check, .finding, .exact_finding]]'
-                installed=$(/usr/local/bin/mmwatchdog validate --json | jq --compact-output ".config.set_aside_findings | $entries") || exit 1
-                in_effect=$(/usr/local/bin/mmwatchdog fleet set-aside-findings --json | jq --compact-output ".set_aside_findings | $entries") || exit 1
-                if [ "$installed" != "$in_effect" ]; then
-                  echo "The fleet hub does not have the entries of /etc/mmwatchdog/set_aside_findings.yml in effect. Installed: $installed. In effect: $in_effect. Read journalctl -u mmwatchdog for the reload."
-                  exit 1
+                set -euo pipefail
+                entries='[(. // [])[] | [.check, .finding, .exact_finding, .reason]]'
+                # Sets installed and in_effect; true when they are equal.
+                compare() {
+                  installed=$(/usr/local/bin/mmwatchdog validate --json | jq --compact-output ".config.set_aside_findings | $entries") \
+                    || { echo "mmwatchdog validate --json did not list the entries of /etc/mmwatchdog/set_aside_findings.yml."; exit 1; }
+                  in_effect=$(/usr/local/bin/mmwatchdog fleet set-aside-findings --json | jq --compact-output ".set_aside_findings | $entries") \
+                    || { echo "mmwatchdog fleet set-aside-findings --json did not list the entries in effect; read journalctl -u mmwatchdog."; exit 1; }
+                  if [ -z "$installed" ] || [ -z "$in_effect" ]; then
+                    echo "mmwatchdog validate --json or mmwatchdog fleet set-aside-findings --json gave no answer."
+                    exit 1
+                  fi
+                  [ "$installed" = "$in_effect" ]
+                }
+                in_effect_now() {
+                  echo "The fleet hub has $(printf '%s' "$in_effect" | jq length) set-aside findings in effect, the entries of /etc/mmwatchdog/set_aside_findings.yml."
+                }
+                if compare; then
+                  in_effect_now
+                  exit 0
                 fi
-                echo "The fleet hub has $(printf '%s' "$in_effect" | jq length) set-aside findings in effect, the entries of /etc/mmwatchdog/set_aside_findings.yml."
-            changed_when: false
+                if [ "${DRYRUN:-}" = yes ]; then
+                  echo "A run would reload MMWatchdog: the fleet hub's entries in effect differ from /etc/mmwatchdog/set_aside_findings.yml. Installed: $installed. In effect: $in_effect."
+                  exit 2
+                fi
+                /usr/local/bin/mmwatchdog reload
+                if compare; then
+                  echo "Reloaded MMWatchdog."
+                  in_effect_now
+                  exit 2
+                fi
+                echo "The fleet hub does not have the entries of /etc/mmwatchdog/set_aside_findings.yml in effect after a reload. Installed: $installed. In effect: $in_effect. Read journalctl -u mmwatchdog for the reload."
+                exit 1
+            success_exit_codes: [0, 2]
+            changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
       on_failure:
         - id: put_the_installed_set_aside_findings_back_into_the_candidate
           shell:

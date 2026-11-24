@@ -10,10 +10,15 @@ with MMX's explain of the real playbooks on a filled copy of the template:
   - the template ships the file with an empty list, which MMX needs;
   - the playbook selects util01 alone and runs only the role;
   - both run the steps in order: the candidate, MMWatchdog's check of it,
-    the install, the reload, and the confirmation; every_server runs them
-    after the hub's own files and restart;
-  - the confirmation passes when the hub has the installed entries in
-    effect, and fails, naming both lists, when it has not.
+    the install, and the step that puts the entries into effect;
+    every_server runs them after the hub's own files and restart;
+  - that step reloads the hub whenever the entries in effect differ from
+    the installed file's, also when the install changed nothing, so a
+    failed reload heals at the next run; it fails, naming both lists, when
+    a reload does not bring them into effect, and when the hub or either
+    listing does not answer;
+  - its dryrun reloads nothing, and passes on a hub whose MMWatchdog does
+    not have set-aside findings yet, as in the preview of an upgrade.
 It needs Python 3, bash and jq.
 """
 import json
@@ -21,6 +26,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -31,8 +37,7 @@ import template_values  # noqa: E402
 
 T = template_values.TEMPLATE
 ROLE_STEPS = ['write_the_candidate_set_aside_findings', 'check_the_candidate_set_aside_findings',
-              'install_the_set_aside_findings', 'reload_mmwatchdog_for_the_set_aside_findings',
-              'confirm_the_set_aside_findings_in_effect',
+              'install_the_set_aside_findings', 'put_the_set_aside_findings_into_effect',
               'put_the_installed_set_aside_findings_back_into_the_candidate']
 
 
@@ -88,41 +93,111 @@ class SetAsideFindings(unittest.TestCase):
         # The check uses the installed MMWatchdog and its candidate directory, so it follows the hub's own files.
         self.assertLess(names.index('check_that_mmwatchdog_answers'), names.index('write_the_candidate_set_aside_findings'))
 
-    def confirm(self, installed, in_effect):
-        """Runs the confirmation step's program with a stand-in mmwatchdog."""
+    def put_into_effect(self, installed, in_effect, dryrun=False, fleet_answers=True, knows_set_aside_findings=True,
+                        reload_takes_effect=True):
+        """Runs the step that puts the entries into effect, or its dryrun, with a stand-in mmwatchdog and hub socket.
+
+        Returns the result and the stand-in's calls, one line each."""
         _, tasks = node_tasks(self.explain('apply_set_aside_findings'), 'apply_set_aside_findings')
-        program = argument(dict(tasks)['confirm_the_set_aside_findings_in_effect'], 'shell.env.PROGRAM')
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            stand_in = root/'mmwatchdog'
-            stand_in.write_text('#!/bin/bash\n'
-                                f'case "$1" in validate) cat {root}/installed ;; fleet) cat {root}/in_effect ;; *) exit 9 ;; esac\n')
-            stand_in.chmod(0o755)
-            (root/'installed').write_text(json.dumps({'valid': True, 'config': installed}))
-            (root/'in_effect').write_text(json.dumps({'set_aside_findings': in_effect}))
-            return subprocess.run(['bash', '-c', program.replace('/usr/local/bin/mmwatchdog', str(stand_in))],
-                                  text=True, capture_output=True)
+        task = dict(tasks)['put_the_set_aside_findings_into_effect']
+        program = argument(task, 'shell.env.PROGRAM')
+        command = argument(task, 'shell.dryrun' if dryrun else 'shell.script')
+        # A short directory: a Unix socket path has a length limit.
+        root = Path(tempfile.mkdtemp(prefix='sa', dir='/tmp'))
+        self.addCleanup(shutil.rmtree, root, True)
+        stand_in = root/'mmwatchdog'
+        help_line = '  mmwatchdog fleet set-aside-findings [--json]' if knows_set_aside_findings else ''
+        stand_in.write_text('#!/bin/bash\n'
+                            f'echo "$*" >> {root}/calls\n'
+                            'case "$1" in\n'
+                            f'  --help) echo "  mmwatchdog fleet findings CHECK_GROUP/CHECK"; echo "{help_line}" ;;\n'
+                            f'  validate) cat {root}/installed ;;\n'
+                            f'  fleet) {"cat " + str(root/"in_effect") if fleet_answers else "echo no hub >&2; exit 4"} ;;\n'
+                            f'  reload) {"cp " + str(root/"after_reload") + " " + str(root/"in_effect") if reload_takes_effect else "true"} ;;\n'
+                            '  *) exit 9 ;;\n'
+                            'esac\n')
+        stand_in.chmod(0o755)
+        socket_path = root/'hub.sock'
+        listener = socket.socket(socket.AF_UNIX)
+        listener.bind(str(socket_path))
+        self.addCleanup(listener.close)
+        (root/'installed').write_text(json.dumps({'valid': True, 'config': installed}))
+        (root/'in_effect').write_text(json.dumps({'set_aside_findings': in_effect}))
+        listed = [dict(entry, covered_node_count=0, covered_nodes=[], matches_no_node_now=True, nodes_that_cannot_check_now=0)
+                  for entry in installed.get('set_aside_findings', [])]
+        (root/'after_reload').write_text(json.dumps({'set_aside_findings': listed}))
+        replace = lambda text: text.replace('/usr/local/bin/mmwatchdog', str(stand_in)).replace(
+            '/run/mmwatchdog/mmwatchdog.sock', str(socket_path))
+        result = subprocess.run(['bash', '-c', replace(command)], env=dict(os.environ, PROGRAM=replace(program)),
+                                text=True, capture_output=True)
+        calls = (root/'calls').read_text().splitlines() if (root/'calls').exists() else []
+        return result, calls
 
     ENTRY = {'check': 'installed_packages/known_exploited_flaws', 'finding': 'CVE-2026-123158 openssh',
              'exact_finding': 'Debian:13 CVE-2026-123158 openssh 1:10.0p1-7+deb13u4; fixed version: none',
              'reason': 'Debian rates it unimportant.'}
 
-    def test_the_confirmation_passes_when_the_hub_has_the_installed_entries_in_effect(self):
-        listed = dict(self.ENTRY, covered_node_count=3, covered_nodes=['app001', 'db01', 'util01'],
-                      matches_no_node_now=False, nodes_that_cannot_check_now=0)
-        result = self.confirm({'set_aside_findings': [self.ENTRY]}, [listed])
+    def listed(self, entry):
+        return dict(entry, covered_node_count=3, covered_nodes=['app001', 'db01', 'util01'],
+                    matches_no_node_now=False, nodes_that_cannot_check_now=0)
+
+    def test_the_step_runs_also_when_the_install_changed_nothing(self):
+        _, tasks = node_tasks(self.explain('apply_set_aside_findings'), 'apply_set_aside_findings')
+        task = dict(tasks)['put_the_set_aside_findings_into_effect']
+        # No condition on the install, and no guard that skips it while the hub is down.
+        self.assertEqual(task['status'], 'ready')
+        self.assertEqual([item['field'] for item in task['arguments'] if 'when' == item['field'] or 'run_only_if' in item['field']], [])
+
+    def test_nothing_reloads_when_the_hub_has_the_installed_entries_in_effect(self):
+        result, calls = self.put_into_effect({'set_aside_findings': [self.ENTRY]}, [self.listed(self.ENTRY)])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('The fleet hub has 1 set-aside findings in effect', result.stdout)
+        self.assertNotIn('reload', calls)
         # No entry: MMWatchdog leaves the empty list out of its configuration.
-        result = self.confirm({}, [])
+        result, calls = self.put_into_effect({}, [])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn('reload', calls)
 
-    def test_the_confirmation_fails_when_the_hub_has_other_entries_in_effect(self):
-        result = self.confirm({'set_aside_findings': [self.ENTRY]}, [])
+    def test_entries_that_differ_reload_the_hub_also_after_an_earlier_failed_reload(self):
+        # The installed file already has the removal; the hub still has the entry, as after a reload that failed.
+        result, calls = self.put_into_effect({}, [self.listed(self.ENTRY)])
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn('reload', calls)
+        self.assertIn('The fleet hub has 0 set-aside findings in effect', result.stdout)
+        # A changed reason counts too: the hub names it in its alerts.
+        changed = dict(self.ENTRY, reason='Debian rates it minor.')
+        result, calls = self.put_into_effect({'set_aside_findings': [changed]}, [self.listed(self.ENTRY)])
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn('reload', calls)
+
+    def test_it_fails_when_a_reload_does_not_bring_the_entries_into_effect(self):
+        changed = dict(self.ENTRY, exact_finding=self.ENTRY['exact_finding'].replace('u4', 'u5'))
+        result, _ = self.put_into_effect({'set_aside_findings': [self.ENTRY]}, [self.listed(changed)], reload_takes_effect=False)
         self.assertEqual(result.returncode, 1)
         self.assertRegex(result.stdout, r'does not have the entries of /etc/mmwatchdog/set_aside_findings.yml in effect')
-        changed = dict(self.ENTRY, exact_finding=self.ENTRY['exact_finding'].replace('u4', 'u5'))
-        result = self.confirm({'set_aside_findings': [self.ENTRY]}, [changed])
+        self.assertIn('u5', result.stdout)
+
+    def test_it_fails_when_the_hub_does_not_answer(self):
+        # Both listings empty: the comparison must not pass on two empty answers.
+        result, calls = self.put_into_effect({}, [], fleet_answers=False)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn('reload', calls)
+        self.assertIn('mmwatchdog fleet set-aside-findings', result.stdout)
+
+    def test_the_dryrun_reloads_nothing_and_reports_a_difference(self):
+        result, calls = self.put_into_effect({}, [self.listed(self.ENTRY)], dryrun=True)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertNotIn('reload', calls)
+        result, calls = self.put_into_effect({'set_aside_findings': [self.ENTRY]}, [self.listed(self.ENTRY)], dryrun=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_the_dryrun_passes_on_a_hub_whose_mmwatchdog_has_no_set_aside_findings_yet(self):
+        # MMWatchdog 0.1.x, before the upgrade to the Stack version that brings set-aside findings.
+        result, calls = self.put_into_effect({}, [], dryrun=True, fleet_answers=False, knows_set_aside_findings=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn('fleet set-aside-findings --json', calls)
+        # A real run after the install of the new release still checks.
+        result, _ = self.put_into_effect({}, [], fleet_answers=False, knows_set_aside_findings=False)
         self.assertEqual(result.returncode, 1)
 
 
