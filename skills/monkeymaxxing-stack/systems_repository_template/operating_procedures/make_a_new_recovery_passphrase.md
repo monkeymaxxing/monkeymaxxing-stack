@@ -61,17 +61,32 @@ rebuilt from the bundle.
    Ask for "done" here: `wait-for-the-setup` ends at once on a desk whose
    lock is done, so no wait reads this command's end.
 
-   The command refuses a desk whose lock is not done, and names the step
-   it needs. It then reads each item from the desk, makes new emergency
-   codes for the phone code, copies the new bundle into the locked backup
-   bucket with the database backups' write key from the vault, and commits
-   and pushes the bundle and the vault.
+   The command refuses a desk that is not locked, and names the step it
+   needs. It checks every item first, then shows the two screens, builds
+   the new bundle, and copies it into the locked backup bucket with the
+   database backups' write key from the vault. Only then does it save the
+   new console password's hash in the vault, give the phone code new
+   emergency codes, and commit and push the bundle and the vault. One run
+   at a time: a second terminal is refused.
    **Check:** on the desk,
    `jq '{steps, stopped_with}' /var/lib/monkeymaxxing-stack/setup_results.json`
    shows the step `new_recovery_bundle` as `done` and no `stopped_with`.
    With a stop, say in one plain sentence what `stopped_with` says, fix
-   the cause, and ask the person to run the command again. Each run makes
-   a new passphrase, so the person saves the newest one.
+   the cause, and ask the person to run the command again, except when
+   `stopped_with` says "do not run make-a-new-recovery-bundle again":
+   - **A stop before the upload** changed nothing on the desk or the
+     servers. The rerun makes a new passphrase and a new console password,
+     so the person saves the newest of each. Until the rerun finishes, the
+     servers keep the old console password, though the person may have
+     replaced it in the password manager already; most password managers
+     keep the old value in the item's history.
+   - **A stop after the upload** says the rerun finishes that bundle. The
+     rerun shows no screen and makes no new passphrase.
+   - **"do not run make-a-new-recovery-bundle again"**: the commit or the
+     push failed, after the checkout got the new bundle. A rerun would make
+     another passphrase. Instead, in your checkout on the desk, commit
+     `recovery_bundle.age` and `secrets_vault.age` when `git status` lists
+     them, and push `main`.
 3. **The person checks that the new passphrase opens the new bundle,**
    in their own laptop terminal, after you pull `main` into the laptop's
    clone:

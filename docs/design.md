@@ -4917,34 +4917,55 @@ command, never one from the settings, which the coding agent can push.
 `set-up-outside-services make-a-new-recovery-bundle`, which the person runs
 in their own terminal (`ssh -t desk01 ...`, with a phone code), builds a
 new bundle with a new passphrase when nobody can open the old one. It
-refuses a desk whose lock is not done, and points to `lock-the-desk`. It
-reads each item from where it lives on the desk: the vault passphrase
-file, the production private key, the desk's WireGuard private key, the
-provider credential in the API proxy, the token file, and the vault keys
-the bundle copies, which it reads as root through MMX (`mmx secrets
-pipe-to`). Reason that reading the vault is allowed here: the person runs
-the command on their own desk, where they are root already, and each
-value goes from one encrypted file, or a root-only file, into another,
-never to the screen or to the coding agent. Two items cannot be read back
-by design, so they get new values: a new console password, shown once and
-typed back as at the lock (hash to the vault, password to the bundle), and
-new emergency codes from `sudo -n set-up-the-phone-code
---new-emergency-codes-to PATH`, which replaces only the code lines of
-`/etc/systems-desk/phone-code`. The phone's secret stays, so the person
+refuses a desk that is not locked (`/etc/systems-desk/locked` exists and
+root's login from a laptop is closed), and points to `lock-the-desk`.
+Reason for the lock itself, not `setup_results.json`'s `finished`: a
+rebuilt desk or a teammate's desk is locked by the lock stage alone and
+never runs `lock-the-desk`. It reads each item from where it lives on the
+desk: the vault passphrase file, the production private key, the desk's
+WireGuard private key, the provider credential in the API proxy, the
+token file, and the vault keys the bundle copies, which it reads as root
+through MMX (`mmx secrets pipe-to`). Reason that reading the vault is
+allowed here: the person runs the command on their own desk, where they
+are root already, and each value goes from one encrypted file, or a
+root-only file, into another, never to the screen or to the coding agent.
+Two items cannot be read back by design, so they get new values: a new
+console password, shown once and typed back as at the lock (hash to the
+vault, password to the bundle), and new emergency codes, which the
+command makes as google-authenticator does and gives the phone code with
+`sudo -n set-up-the-phone-code --replace-emergency-codes` on standard
+input. That replaces only the code lines of `/etc/systems-desk/phone-code`
+and checks, before its atomic swap, that the new file keeps the old
+file's secret and option lines. The phone's secret stays, so the person
 scans nothing; the old codes stop working, which is harmless, since only
-the unopenable bundle held them. The command builds the bundle in a
-folder of the person's own, so a run that stops leaves the repository's
-bundle as it was and a rerun starts again with a new passphrase. It
-checks the bundle with the lock's completeness check, uploads it into the
-locked backup bucket, and only then replaces `recovery_bundle.age` and
-commits and pushes it with the vault. The upload uses the database
-servers' write key on the production backup bucket, read from the vault,
-the key the lock's upload used. Reason: the person gives no key, the
-Backblaze master key stays never stored, and the key can only add files,
-which the bucket's lock keeps. The older copies stay until their lock ends;
-only the old passphrase opens them. A desk login that is half done while
-the codes change can write the phone code file back with the old codes;
-the person runs nothing else on the desk meanwhile, so this is not guarded.
+the unopenable bundle held them.
+
+The command changes nothing live until the new bundle is safe. It reads
+the settings after its pull, so a `staging01` a teammate added is in the
+bundle; it checks every input (the desk's files, the vault's keys, the
+phone code, and that the upload's key signs in) before the first screen;
+it runs both screens and builds the bundle in a folder of the person's
+own; it checks the bundle with the lock's completeness check and uploads
+it into the locked backup bucket. Only then, in one finishing step, does
+it save the hash in the vault, give the phone code the new emergency
+codes, replace `recovery_bundle.age`, and commit and push it with the
+vault. Reason: a stop before the upload leaves the vault, the phone code
+and the repository's bundle in step, and a later account command never
+commits an orphaned vault change. Any stop before the upload removes the
+folder, which holds the new passphrase in plain text, Ctrl-C and a lost
+connection too, and a rerun starts again. After the upload the folder
+stays with a mark, so a rerun finishes that bundle and makes no new
+passphrase; once the checkout holds the bundle, the folder goes, and a
+failed commit or push says not to run the command again. One run at a
+time: a lock file in the person's folder refuses a second terminal, which
+would share the folder. The upload uses the database servers' write key
+on the production backup bucket, read from the vault, the key the lock's
+upload used. Reason: the person gives no key, the Backblaze master key
+stays never stored, and the key can only add files, which the bucket's
+lock keeps. The older copies stay until their lock ends; only the old
+passphrase opens them. A desk login that is half done while the codes
+change can write the phone code file back with the old codes; the person
+runs nothing else on the desk meanwhile, so this is not guarded.
 
 **Why one Stack command.** Two designs were weighed. Playbooks in the template would need new MMX
 features: a hidden prompt inside a run, and a task that writes the
@@ -4979,9 +5000,13 @@ input, and an error message holds only the provider's status, code, and
 message, never a request or a response body. It never edits a file in Git
 other than the vault; the settings it reads, such as bucket names, stay
 the coding agent's to change, and the command prints the values the agent
-needs, such as `r2_bucket_url`. It never reads a value back out of the
-vault: MMX has no command for that, and the command does not decrypt the
-vault itself.
+needs, such as `r2_bucket_url`. It never decrypts the vault itself, and
+reads a value back out of the vault in one command only:
+`make-a-new-recovery-bundle` reads the values the new bundle copies, and
+the backup write key its upload uses, with `mmx secrets pipe-to`, as root,
+straight into the new bundle or the upload, never to the screen. Reason:
+the old bundle cannot be opened, and the vault is the one place those
+values live on the desk.
 
 **One source of truth for what exists.** The command reads the bucket
 names, the apps, and whether `staging01` exists from `mmx_project_settings.yml`

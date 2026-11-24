@@ -478,7 +478,11 @@ func (e *environment) saveSecrets(replace string) error {
 			made = append(made, item.Key)
 			continue
 		case consolePasswordSecret:
-			if err := e.saveConsolePassword(saved, item, nil); err != nil {
+			password, err := e.showANewConsolePassword(item)
+			if err != nil {
+				return err
+			}
+			if err := e.saveTheConsolePassword(saved, nil, password); err != nil {
 				return err
 			}
 			made = append(made, item.Key)
@@ -646,15 +650,13 @@ func newConsolePassword() (string, error) {
 	return strings.Join(groups, "-"), nil
 }
 
-// saveConsolePassword makes the servers' shared root console password,
-// shows it once for the team's password manager, has the person type it
-// back from there, and saves only its hash in the vault, and the password
-// itself in the recovery bundle when one is open. Every way out clears the
-// screen.
-func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan, bundle *savedKeys) error {
+// showANewConsolePassword makes the servers' shared root console password,
+// shows it once for the team's password manager, and returns it once the
+// person typed it back from there. Every way out clears the screen.
+func (e *environment) showANewConsolePassword(item secretPlan) (string, error) {
 	password, err := newConsolePassword()
 	if err != nil {
-		return err
+		return "", err
 	}
 	e.say("")
 	e.say("%s, saved as its hash in %s.", capitalize(item.What), item.Key)
@@ -668,17 +670,24 @@ func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan, bun
 		_, err := e.confirm("  Press Enter once it is saved. The screen is cleared then: ")
 		e.clearValueFromScreen()
 		if err != nil {
-			return err
+			return "", err
 		}
 		typed, err := e.prompt(fmt.Sprintf("  Type the password from the item %q (hidden), to check the saved copy: ", consolePasswordItem))
 		if err != nil {
-			return err
+			return "", err
 		}
 		if strings.TrimSpace(typed) == password {
 			break
 		}
 		e.say("  That is not the password shown. It shows again; check the item in the password manager.")
 	}
+	e.say("  The password manager's copy matches.")
+	return password, nil
+}
+
+// saveTheConsolePassword saves only the console password's hash in the
+// vault, and the password itself in the recovery bundle when one is open.
+func (e *environment) saveTheConsolePassword(saved, bundle *savedKeys, password string) error {
 	hash, err := consolePasswordHash(password)
 	if err != nil {
 		return err
@@ -689,10 +698,10 @@ func (e *environment) saveConsolePassword(saved *savedKeys, item secretPlan, bun
 			return err
 		}
 	}
-	if err := saved.save(item.Key, hash); err != nil {
+	if err := saved.save(consolePasswordVaultKey, hash); err != nil {
 		return err
 	}
-	e.say("  The password manager's copy matches. Saved only its hash as %s; the servers get it at their next MMX run.", item.Key)
+	e.say("  Saved only its hash as %s; the servers get it at their next MMX run.", consolePasswordVaultKey)
 	return nil
 }
 

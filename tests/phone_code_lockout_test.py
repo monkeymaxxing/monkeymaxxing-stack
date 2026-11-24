@@ -130,46 +130,65 @@ class Rendered(unittest.TestCase):
         self.assertIn("'5' '7'", script)
 
     def test_new_emergency_codes_keep_the_phones_secret(self):
-        # make-a-new-recovery-bundle needs emergency codes for the new bundle
-        # without a new scan: only the code lines change, and the old codes stop working.
-        import re
+        # make-a-new-recovery-bundle gives the phone code the new bundle's
+        # emergency codes without a new scan: only the code lines change, and
+        # the old codes stop working.
         import stat
         script = self.render('roles/systems_desk/files/set-up-the-phone-code', **self.lockout())
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root/'bin').mkdir()
             (root/'bin/id').write_text('#!/bin/sh\necho 0\n')
-            # install as the desk's GNU install runs it here: -o U -g G -m MODE /dev/stdin PATH.
-            (root/'bin/install').write_text('#!/bin/sh\nwhile [ "$#" -gt 2 ]; do case $1 in -m) mode=$2; shift;; esac; shift; done\n'
-                                            'cat "$1" > "$2" && chmod "$mode" "$2"\n')
-            for stub in ('id', 'install'):
-                (root/'bin'/stub).chmod(0o755)
+            (root/'bin/id').chmod(0o755)
             (root/'desk').mkdir()
             (root/'set-up-the-phone-code').write_text(script.replace('/etc/systems-desk', str(root/'desk')))
             code_file = root/'desk/phone-code'
             kept = 'JBSWY3DPEHPK3PXP\n" RATE_LIMIT 3 30 1700000000\n" WINDOW_SIZE 3\n" DISALLOW_REUSE 56666666\n" TOTP_AUTH\n'
-            old_codes = ['11111111', '22222222', '33333333', '44444444', '55555555']
-            code_file.write_text(kept + '\n'.join(old_codes) + '\n')
-            environment = dict(os.environ, PATH='%s:%s' % (root/'bin', os.environ['PATH']), SUDO_UID=str(os.getuid()), SUDO_GID=str(os.getgid()))
+            old = kept + '11111111\n22222222\n33333333\n44444444\n55555555\n'
+            new_codes = '61234567\n62345678\n63456789\n64567890\n65678901\n'
+            code_file.write_text(old)
+            code_file.chmod(0o400)
+            environment = dict(os.environ, PATH='%s:%s' % (root/'bin', os.environ['PATH']))
 
-            def run(path):
-                return subprocess.run(['bash', str(root/'set-up-the-phone-code'), '--new-emergency-codes-to', str(path)],
-                                      env=environment, text=True, capture_output=True)
-            result = run(root/'codes')
+            def run(codes):
+                return subprocess.run(['bash', str(root/'set-up-the-phone-code'), '--replace-emergency-codes'],
+                                      input=codes, env=environment, text=True, capture_output=True)
+
+            def unchanged(result, message):
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn(message, result.stderr)
+                code_file.chmod(0o400)
+                self.assertEqual(code_file.read_text(), old)
+                self.assertEqual([path.name for path in (root/'desk').iterdir()], ['phone-code'])
+
+            # Codes that are not five 8-digit codes change nothing.
+            unchanged(run('61234567\n62345678\n'), 'Nothing changed')
+            unchanged(run(new_codes.replace('61234567', '01234567')), 'Nothing changed')
+            # A phone code file that cannot be read changes nothing: the old
+            # script wrote the codes alone over the phone's secret then.
+            code_file.chmod(0)
+            unchanged(run(new_codes), 'Reading')
+            # Nor does one whose first line is not the phone's secret.
+            code_file.chmod(0o600)
+            code_file.write_text('" TOTP_AUTH\n' + old)
+            result = run(new_codes)
+            old = '" TOTP_AUTH\n' + old
+            unchanged(result, "does not start with the phone's secret")
+            old = kept + '11111111\n22222222\n33333333\n44444444\n55555555\n'
+            code_file.chmod(0o600)
+            code_file.write_text(old)
+
+            result = run(new_codes)
             self.assertEqual(result.returncode, 0, result.stderr)
-            new_codes = (root/'codes').read_text().split()
-            self.assertEqual(len(new_codes), 5)
-            self.assertTrue(all(re.fullmatch('[1-9][0-9]{7}', code) for code in new_codes), new_codes)
-            self.assertFalse(set(new_codes) & set(old_codes))
-            self.assertEqual(code_file.read_text(), kept + '\n'.join(new_codes) + '\n')
+            self.assertEqual(code_file.read_text(), kept + new_codes)
             self.assertEqual(stat.S_IMODE(code_file.stat().st_mode), 0o400)
-            self.assertEqual(stat.S_IMODE((root/'codes').stat().st_mode), 0o600)
             self.assertIn('Your phone keeps working as before', result.stdout)
-            # An existing codes file, or a desk with no phone code, changes nothing.
-            self.assertEqual(run(root/'codes').returncode, 1)
-            self.assertEqual(code_file.read_text(), kept + '\n'.join(new_codes) + '\n')
+            # A rerun with the same codes, as a resumed run gives, leaves the same file.
+            self.assertEqual(run(new_codes).returncode, 0)
+            self.assertEqual(code_file.read_text(), kept + new_codes)
+            # A desk with no phone code changes nothing.
             code_file.unlink()
-            result = run(root/'other-codes')
+            result = run(new_codes)
             self.assertEqual(result.returncode, 1)
             self.assertIn('no phone code yet', result.stderr)
             self.assertEqual(sorted(path.name for path in (root/'desk').iterdir()), [])

@@ -337,8 +337,8 @@ func TestLockTheDeskKeepsTheEmergencyCodesUntilTheBundleHoldsThem(t *testing.T) 
 // by the command that made it, which skips a key the vault holds.
 func TestAMissingBundleItemTheVaultHoldsNamesItsRotation(t *testing.T) {
 	vault := &savedKeys{names: map[string]bool{"pgbackrest_repository_cipher_passphrase": true, "pgbackrest_b2_read_only_key_id": true}}
-	err := refuseMissingItems([]string{"pgbackrest_b2_read_only_key_id", "pgbackrest_repository_cipher_passphrase", bundleCloudflareDeskToken}, vault)
-	for _, want := range []string{"pgbackrest_repository_cipher_passphrase (set-up-outside-services secrets --replace pgbackrest_repository_cipher_passphrase)",
+	err := refuseMissingItems([]string{"pgbackrest_b2_read_only_key_id", "pgbackrest_repository_cipher_passphrase", bundleCloudflareDeskToken}, vault, makeANewRecoveryBundleCommand)
+	for _, want := range []string{"then run " + makeANewRecoveryBundleCommand + " again", "pgbackrest_repository_cipher_passphrase (set-up-outside-services secrets --replace pgbackrest_repository_cipher_passphrase)",
 		"pgbackrest_b2_read_only_key_id (set-up-outside-services backblaze --replace-key pgbackrest_b2_read_only_key_id)",
 		bundleCloudflareDeskToken + " (set-up-outside-services cloudflare)"} {
 		if err == nil || !strings.Contains(err.Error(), want) {

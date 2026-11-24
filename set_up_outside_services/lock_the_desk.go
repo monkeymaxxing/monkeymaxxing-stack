@@ -136,17 +136,21 @@ func (e *environment) runTheLockSteps(settings systemSettings) error {
 	// Before the first screen, so the person never does the lock's steps
 	// for a run that then stops on a missing account.
 	if _, missing := e.bundleItemsFromTheAccounts(settings, bundle); len(missing) > 0 {
-		return refuseMissingItems(missing, saved)
+		return refuseMissingItems(missing, saved, "lock-the-desk")
 	}
 	if _, err := e.readRootFile(e.backupWriteKeyFile); err != nil {
 		return fmt.Errorf("the backup write key that set-up-outside-services backblaze keeps for the recovery bundle's upload is missing (%v). Run set-up-outside-services backblaze --replace-key %s, which makes a new one and keeps it, then run lock-the-desk again", err, backupWriteKeyIDVaultName)
 	}
 	steps := []lockStep{
 		{"shared_root_console_password", func() error {
-			return e.consolePasswordScreen(settings, saved, bundle, "Your keys locked away: step 1 of 3, your servers' console password")
+			password, err := e.consolePasswordScreen(settings, "Your keys locked away: step 1 of 3, your servers' console password")
+			if err != nil {
+				return err
+			}
+			return e.saveTheConsolePassword(saved, bundle, password)
 		}},
 		{"recovery_passphrase", func() error {
-			return e.recoveryPassphraseScreen(settings, passphrase, "Your keys locked away: step 2 of 3, your recovery passphrase", "Save it in")
+			return e.recoveryPassphraseScreen(settings, passphrase, "Your keys locked away: step 2 of 3, your recovery passphrase", "Save it in", "The lock")
 		}},
 		{"phone_code", func() error { return e.phoneCodeScreen(settings, bundle) }},
 		{"recovery_bundle", func() error {
@@ -179,10 +183,9 @@ func (e *environment) runTheLockSteps(settings systemSettings) error {
 }
 
 // consolePasswordScreen makes the servers' shared root console password,
-// shows it once, and saves its hash in the vault and the password itself in
-// the recovery bundle.
-// title is the screen's first line, which names the command's step.
-func (e *environment) consolePasswordScreen(settings systemSettings, saved, bundle *savedKeys, title string) error {
+// shows it once, and returns it once the person typed it back. title is the
+// screen's first line, which names the command's step.
+func (e *environment) consolePasswordScreen(settings systemSettings, title string) (string, error) {
 	e.show(`
 ` + title + `
 
@@ -191,16 +194,17 @@ What this is for:
 `)
 	for _, item := range secretsPlan(settings) {
 		if item.Kind == consolePasswordSecret {
-			return e.saveConsolePassword(saved, item, bundle)
+			return e.showANewConsolePassword(item)
 		}
 	}
-	return errors.New("the secrets plan has no console password")
+	return "", errors.New("the secrets plan has no console password")
 }
 
 // recoveryPassphraseScreen shows the recovery passphrase once and has the
 // person type it back. title is the screen's first line; saveIn starts the
-// line that says where to save it, such as "Save it in".
-func (e *environment) recoveryPassphraseScreen(settings systemSettings, passphrase, title, saveIn string) error {
+// line that says where to save it, such as "Save it in"; running names what
+// waits meanwhile, such as "The lock".
+func (e *environment) recoveryPassphraseScreen(settings systemSettings, passphrase, title, saveIn, running string) error {
 	words := strings.Fields(passphrase)
 	e.setValueOnScreen(true)
 	e.show(fmt.Sprintf(`
@@ -232,7 +236,7 @@ Do this now:
 		}
 		e.say("")
 		e.say("That is not the passphrase above.  Check the copy in %s, then type it again.", passwordManager(settings))
-		e.say("The lock is still running.  It waits for you at the line below.")
+		e.say("%s is still running.  It waits for you at the line below.", running)
 		e.say("")
 	}
 	e.clearValueFromScreen()

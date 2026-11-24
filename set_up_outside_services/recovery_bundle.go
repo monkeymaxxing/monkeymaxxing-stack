@@ -252,25 +252,36 @@ var rotatedBy = map[string]string{
 
 // refuseMissingItems names each missing item and the command that makes it,
 // or the rotation that makes it again when the vault holds it already.
-func refuseMissingItems(missing []string, vault *savedKeys) error {
+// command is the command to run again then, such as lock-the-desk.
+func refuseMissingItems(missing []string, vault *savedKeys, command string) error {
 	var named []string
 	for _, key := range missing {
-		command := madeBy[key]
+		madeWith := madeBy[key]
 		if rotation := rotatedBy[key]; rotation != "" && vault != nil && vault.hasAll(key) {
-			command = rotation
+			madeWith = rotation
 		}
-		if command != "" {
-			named = append(named, key+" (set-up-outside-services "+command+")")
+		if madeWith != "" {
+			named = append(named, key+" (set-up-outside-services "+madeWith+")")
 		} else {
 			named = append(named, key)
 		}
 	}
-	return fmt.Errorf("the recovery bundle lacks %s. Run the command named beside each, then run lock-the-desk again", strings.Join(named, ", "))
+	return fmt.Errorf("the recovery bundle lacks %s. Run the command named beside each, then run %s again", strings.Join(named, ", "), command)
 }
 
 // completeTheBundle adds the items the desk keeps in files and checks that
 // the bundle holds every item.
 func (e *environment) completeTheBundle(settings systemSettings, bundle *savedKeys, providerCredential string) error {
+	if err := e.addTheDesksItems(settings, bundle, providerCredential, "lock-the-desk"); err != nil {
+		return err
+	}
+	return checkThePersonsItems(bundle, "lock-the-desk")
+}
+
+// addTheDesksItems adds the items the desk keeps in files and the account
+// commands' items, refusing with the missing ones' names. command is the
+// command to run again then.
+func (e *environment) addTheDesksItems(settings systemSettings, bundle *savedKeys, providerCredential, command string) error {
 	fromTheDesk := []struct{ key, path string }{
 		{bundleVaultPassphrase, deskVaultPassphraseFile},
 		{bundleProductionKey, e.productionKeyFile()},
@@ -287,7 +298,7 @@ func (e *environment) completeTheBundle(settings systemSettings, bundle *savedKe
 	}
 	values, missing := e.bundleItemsFromTheAccounts(settings, bundle)
 	if len(missing) > 0 {
-		return refuseMissingItems(missing, nil)
+		return refuseMissingItems(missing, nil, command)
 	}
 	values[bundleProviderCredential] = providerCredential
 	for _, key := range sortedKeys(values) {
@@ -295,6 +306,12 @@ func (e *environment) completeTheBundle(settings systemSettings, bundle *savedKe
 			return err
 		}
 	}
+	return nil
+}
+
+// checkThePersonsItems checks that the bundle holds the items only the
+// person's screens make. command makes each.
+func checkThePersonsItems(bundle *savedKeys, command string) error {
 	var lacks []string
 	for _, key := range []string{bundleConsolePassword, bundlePhoneCodeEmergencyCode} {
 		if !bundle.names[key] {
@@ -302,7 +319,7 @@ func (e *environment) completeTheBundle(settings systemSettings, bundle *savedKe
 		}
 	}
 	if len(lacks) > 0 {
-		return fmt.Errorf("the recovery bundle lacks %s. Run lock-the-desk again: it asks for each", strings.Join(lacks, ", "))
+		return fmt.Errorf("the recovery bundle lacks %s. Run %s again: it makes each", strings.Join(lacks, ", "), command)
 	}
 	return nil
 }

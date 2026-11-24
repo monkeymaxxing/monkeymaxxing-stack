@@ -10,56 +10,75 @@
 # 0400) and the emergency codes to PATH (0600, owned by the person who ran
 # sudo), for the recovery bundle. The secret itself goes nowhere else.
 #
-#     sudo -n set-up-the-phone-code --new-emergency-codes-to PATH
-# gives the phone code that is set up new emergency codes and writes them to
-# PATH, as above. The secret stays, so the phone needs no new scan, and the
-# old emergency codes stop working. set-up-outside-services
-# make-a-new-recovery-bundle runs it, after a lost recovery passphrase.
+#     sudo -n set-up-the-phone-code --replace-emergency-codes < CODES
+# gives the phone code that is set up the new emergency codes on standard
+# input, one per line. The secret and the option lines stay, so the phone
+# needs no new scan, and the old emergency codes stop working.
+# set-up-outside-services make-a-new-recovery-bundle runs it, after a lost
+# recovery passphrase, once the new recovery bundle holding the codes is safe.
 set -euo pipefail
 umask 077
 code_file=/etc/systems-desk/phone-code
 # The number of one-time emergency codes, for a lost phone.
 emergency_code_count=5
-usage='Usage: sudo -n set-up-the-phone-code --emergency-codes-to PATH | --new-emergency-codes-to PATH'
-if [ "$#" -ne 2 ] || { [ "$1" != --emergency-codes-to ] && [ "$1" != --new-emergency-codes-to ]; } || [ -z "$2" ]; then
-    printf '%s\n' "$usage" >&2
-    exit 64
-fi
-mode=$1
-emergency_codes_file=$2
+usage='Usage: sudo -n set-up-the-phone-code --emergency-codes-to PATH | --replace-emergency-codes < CODES'
 if [ "$(id -u)" != 0 ]; then
     printf 'set-up-the-phone-code writes a root-owned file. %s\n' "$usage" >&2
     exit 1
 fi
+
+if [ "$#" -eq 1 ] && [ "$1" = --replace-emergency-codes ]; then
+    if [ ! -f "$code_file" ]; then
+        printf 'This systems desk has no phone code yet, in %s. Nothing changed.\n' "$code_file" >&2
+        exit 1
+    fi
+    new_codes=$(cat)
+    # 8 digits that do not start with 0, as google-authenticator makes them.
+    if [ "$(grep -cxE '[1-9][0-9]{7}' <<< "$new_codes" || true)" != "$emergency_code_count" ] ||
+        [ "$(wc -l <<< "$new_codes")" -ne "$emergency_code_count" ]; then
+        printf 'Standard input is not %s emergency codes of 8 digits, one per line. Nothing changed.\n' "$emergency_code_count" >&2
+        exit 1
+    fi
+    # A failed read must stop here: a file built from nothing would drop the
+    # phone's secret and lock the person out.
+    if ! old=$(cat -- "$code_file"); then
+        printf 'Reading %s failed. Nothing changed.\n' "$code_file" >&2
+        exit 1
+    fi
+    secret_line=$(head -n 1 <<< "$old")
+    if ! [[ "$secret_line" =~ ^[A-Z2-7]+=*$ ]]; then
+        printf '%s does not start with the phone'"'"'s secret. Nothing changed.\n' "$code_file" >&2
+        exit 1
+    fi
+    kept_lines=$(grep -vxE '[0-9]{8}' <<< "$old")
+    pending_file=$(mktemp /etc/systems-desk/.phone-code-new-emergency-codes.XXXXXXXX)
+    trap 'rm -f -- "$pending_file"' EXIT
+    # The secret and the option lines stay as they are; only the code lines change.
+    printf '%s\n%s\n' "$kept_lines" "$new_codes" > "$pending_file"
+    # Checked before the swap: the secret first, every other line of the
+    # old file kept, and the new codes.
+    if [ "$(head -n 1 "$pending_file")" != "$secret_line" ] ||
+        [ "$(grep -vxE '[0-9]{8}' "$pending_file")" != "$kept_lines" ] ||
+        [ "$(grep -xE '[0-9]{8}' "$pending_file")" != "$new_codes" ]; then
+        printf 'The new %s would not keep the phone'"'"'s secret and options. Nothing changed.\n' "$code_file" >&2
+        exit 1
+    fi
+    chmod 0400 "$pending_file"
+    mv -f -- "$pending_file" "$code_file"
+    printf 'Gave your phone code %s new emergency codes. Your phone keeps working as before.\n' "$emergency_code_count"
+    exit 0
+fi
+
+if [ "$#" -ne 2 ] || [ "$1" != --emergency-codes-to ] || [ -z "$2" ]; then
+    printf '%s\n' "$usage" >&2
+    exit 64
+fi
+emergency_codes_file=$2
 if [ -e "$emergency_codes_file" ] || [ -L "$emergency_codes_file" ]; then
     printf '%s already exists. Name a new file for the emergency codes. Nothing changed.\n' "$emergency_codes_file" >&2
     exit 1
 fi
 owner=${SUDO_UID:-0}:${SUDO_GID:-0}
-
-if [ "$mode" = --new-emergency-codes-to ]; then
-    if [ ! -f "$code_file" ]; then
-        printf 'This systems desk has no phone code yet, in %s. Nothing changed.\n' "$code_file" >&2
-        exit 1
-    fi
-    pending_file=$(mktemp /etc/systems-desk/.phone-code-new-emergency-codes.XXXXXXXX)
-    trap 'rm -f -- "$pending_file"' EXIT
-    # 8 digits, as google-authenticator makes them. The modulo's bias, under
-    # one in 40, is no help to a guesser of 90 million codes.
-    new_codes=$(for _ in $(seq "$emergency_code_count"); do
-        printf '%08d\n' "$(( 10000000 + $(od -An -N4 -tu4 /dev/urandom) % 90000000 ))"
-    done)
-    # The secret and the option lines stay as they are; only the code lines change.
-    { grep -Ev '^[0-9]{8}$' "$code_file" || true; printf '%s\n' "$new_codes"; } > "$pending_file"
-    printf '%s\n' "$new_codes" | install -o "${owner%:*}" -g "${owner#*:}" -m 0600 /dev/stdin "$emergency_codes_file"
-    chmod 0400 "$pending_file"
-    if ! mv -f -- "$pending_file" "$code_file"; then
-        rm -f -- "$emergency_codes_file"
-        exit 1
-    fi
-    printf 'Made %s new emergency codes for your phone code. Your phone keeps working as before.\n' "$emergency_code_count"
-    exit 0
-fi
 
 if [ -e "$code_file" ]; then
     printf 'This systems desk'"'"'s phone code is already set up, in %s. Nothing changed.\n' "$code_file" >&2

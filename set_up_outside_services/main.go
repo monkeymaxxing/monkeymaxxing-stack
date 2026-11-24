@@ -284,9 +284,9 @@ type environment struct {
 	// sudo; setUpThePhoneCode runs the desk's phone-code setup as root.
 	readRootFile      func(path string) ([]byte, error)
 	setUpThePhoneCode func(emergencyCodesPath string) error
-	// makeNewEmergencyCodes gives the desk's phone code new emergency codes,
-	// as root, and writes them to emergencyCodesPath.
-	makeNewEmergencyCodes func(emergencyCodesPath string) error
+	// replaceEmergencyCodes gives the desk's phone code new emergency codes,
+	// one per line, as root; the phone's secret stays.
+	replaceEmergencyCodes func(codes string) error
 	// deskIsLocked says the desk playbook's lock stage ran on this desk.
 	deskIsLocked func() bool
 	// resultsFile is the results file the coding agent reads, and
@@ -319,6 +319,9 @@ type environment struct {
 	// valueOnScreen is true while a secret shows on the screen, such as the
 	// recovery passphrase, so Ctrl-C clears the screen before it stops.
 	valueOnScreen bool
+	// folderToRemoveOnStop holds a secret only while the command runs, such
+	// as a new recovery bundle's passphrase, so Ctrl-C removes it.
+	folderToRemoveOnStop string
 }
 
 // The accounts that must never run this command: the coding agent, so it
@@ -363,7 +366,7 @@ func defaultEnvironment(out io.Writer) *environment {
 		stripeAPIURL:                "https://api.stripe.com",
 		readRootFile:                readRootFileWithSudo,
 		setUpThePhoneCode:           setUpThePhoneCodeWithSudo,
-		makeNewEmergencyCodes:       makeNewEmergencyCodesWithSudo,
+		replaceEmergencyCodes:       replaceEmergencyCodesWithSudo,
 		deskIsLocked:                func() bool { return deskIsLockedAt(deskLockedFile, deskRootLoginBeforeTheLockFile) },
 		resultsFile:                 setupResultsFile,
 		backupWriteKeyFile:          backupWriteKeyFile,
@@ -463,11 +466,14 @@ func (e *environment) handleInterrupts() {
 				fmt.Fprintln(screen, "\nStopping once the key being saved is saved or revoked.")
 				continue
 			}
-			clear := e.valueOnScreen
+			clear, folder := e.valueOnScreen, e.folderToRemoveOnStop
 			e.interruptMutex.Unlock()
 			restoreTerminal()
 			if clear {
 				e.clearScreen()
+			}
+			if folder != "" {
+				os.RemoveAll(folder)
 			}
 			fmt.Fprintln(screen, "\nStopped. A rerun continues where this run stopped.")
 			os.Exit(130)
@@ -499,6 +505,14 @@ func (e *environment) stopIfInterrupted() error {
 		return errors.New("interrupted. A rerun continues where this run stopped")
 	}
 	return nil
+}
+
+// removeOnStop names the folder Ctrl-C removes before the command stops;
+// "" removes none.
+func (e *environment) removeOnStop(folder string) {
+	e.interruptMutex.Lock()
+	e.folderToRemoveOnStop = folder
+	e.interruptMutex.Unlock()
 }
 
 func (e *environment) setValueOnScreen(on bool) {
