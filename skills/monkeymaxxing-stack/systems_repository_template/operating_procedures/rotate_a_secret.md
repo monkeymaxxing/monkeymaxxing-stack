@@ -560,11 +560,16 @@ hub's `/etc/mmwatchdog/secrets/mmhotline-signing-secret`.
 The alert source `mmwatchdog_fleet_hub` in `mmhotline_settings.yml` lists
 `mmhotline_signing_secret_of_the_fleet_hub` in `signing_secrets`, and so
 does the second alert source, `mmwatchdog_nodes_while_the_hub_is_down`,
-under which the servers send while the hub does not answer. Change both
-lists together in each step below.
+under which the servers send while the hub does not answer. Each server
+learns the hub's signing secret from the hub, in the fleet settings that
+come with the hub's answer to its report, and signs with it when it sends
+without the hub.
 
-**Use two commits.** MMHotline must accept the old and new signing
-secrets while the second commit changes the hub's signing secret.
+**Use three commits.** MMHotline must accept the old and new signing
+secrets while the second commit changes the hub's signing secret. The
+second source keeps the old one longer, until every server holds the new
+fleet settings. Reason: a server cut off from the hub signs with the
+secret it last learned, and its SOS must not be refused.
 
 1. **Add the new secret beside the old one.** The person makes the new secret in a root-only file on the desk,
    and pipes it into a second key, so it never appears in output, as
@@ -578,25 +583,51 @@ secrets while the second commit changes the hub's signing secret.
    Publish the vault and the settings, as
    [Making a change](../AGENTS.md#making-a-change) says, and run `every_server` on `util01`. MMHotline accepts the
    old and new signing secrets while the hub still signs with the old signing secret.
-   **Check:** wait for `util01`'s run to pass.
-2. **Make the new secret the only one.** The person sets it as the main key from the same file, as
+   **Check:** wait for `util01`'s run to pass. Then note the fleet
+   settings version that every server holds now:
+   `./server_management_scripts/run_mmx_on_util01 run-command --nodes all -- "mmwatchdog status --json | jq -r '.joined_fleet_hub.fleet_settings_version // \"not joined\"'"`.
+   `util01`, the systems desks and the restore servers print `not joined`.
+2. **Make the new secret the hub's only one.** The second source must
+   still accept the old secret, so the old secret moves into the
+   temporary key, `mmhotline_next_signing_secret_of_the_fleet_hub`, as the
+   new one becomes the main key. The person does it as
    [Change the vault by hand](#change-the-vault-by-hand) says, with
-   `sudo cat /root/next-fleet-hub-signing-secret | mmx secrets set --vault secrets_vault.age --replace mmhotline_signing_secret_of_the_fleet_hub`,
-   then deletes the file: `sudo rm /root/next-fleet-hub-signing-secret`.
-   The temporary key, `mmhotline_next_signing_secret_of_the_fleet_hub`, stays in the vault unused: MMX has no
-   command that removes one key, and the next rotation replaces it with `--replace`.
-   You remove the second entry from both `signing_secrets` lists. Publish both files, and
-   run `every_server` on `util01`.
+   `mmx secrets pipe-to --vault secrets_vault.age mmhotline_signing_secret_of_the_fleet_hub -- sudo sh -c 'umask 077 && cat > /root/old-fleet-hub-signing-secret'`,
+   `sudo cat /root/next-fleet-hub-signing-secret | mmx secrets set --vault secrets_vault.age --replace mmhotline_signing_secret_of_the_fleet_hub`
+   and
+   `sudo cat /root/old-fleet-hub-signing-secret | mmx secrets set --vault secrets_vault.age --replace mmhotline_next_signing_secret_of_the_fleet_hub`,
+   then deletes both files:
+   `sudo rm /root/next-fleet-hub-signing-secret /root/old-fleet-hub-signing-secret`.
+   In `signing_secrets` for `mmwatchdog_fleet_hub` only, remove the second
+   entry. `mmwatchdog_nodes_while_the_hub_is_down` keeps both entries: the
+   main key with the new secret, and the temporary key with the old one.
+   Publish both files, and run `every_server` on `util01`.
    The second run restarts the hub with the new secret in its `util_server` stage.
    Then, in `every_server`'s final settings stage,
-   `apply_the_mmhotline_settings`, MMHotline applies the source with only
+   `apply_the_mmhotline_settings`, MMHotline applies the hub's source with only
    the new signing secret.
    [Startup order](change_mmhotline_settings.md#startup-order) explains how the settings
    stage follows the earlier `mmhotline` stage.
    Until MMHotline applies the source with only the new signing secret,
    MMHotline accepts the old and new signing secrets, so no alert is refused.
    **Check:** the run passes.
-3. **Verify and revoke.**
+3. **Wait until every server holds the new fleet settings.** Run the
+   command of step 1's check again. Every joined server must print the
+   same version, and none the version that step 1 noted. A server reports
+   every 30 seconds, so this takes a minute after the run; a server that
+   still prints the old version, or no version, cannot reach the hub:
+   repair its connection first, as `mmwatchdog status` on that server
+   shows.
+   **Check:** every joined server prints the new version.
+4. **Remove the old secret from the second source.** In `signing_secrets`
+   for `mmwatchdog_nodes_while_the_hub_is_down`, remove the second entry,
+   `"{{ .secrets.mmhotline_next_signing_secret_of_the_fleet_hub }}"`.
+   Publish the settings, and run `every_server` on `util01`.
+   The temporary key stays in the vault, unused, with the old secret: MMX
+   has no command that removes one key, and the next rotation replaces it
+   with `--replace`.
+   **Check:** the run passes.
+5. **Verify and revoke.**
    **Check:**
 
    - `ssh -F ssh/config root@10.20.0.1 'mmhotline alert-sources list'` must
@@ -606,7 +637,8 @@ secrets while the second commit changes the hub's signing secret.
      `sudo mmwatchdog send-notice --alert-severity info --title "Test of the alerts. Nothing is wrong." --destination mmhotline_on_call`.
      The test alert must arrive.
 
-   The old secret stopped working during the second run.
+   The old secret stopped working at the hub's source during the second
+   run, and at the second source during the third.
    Nothing needs revoking.
 
 ## Personal desk credentials
