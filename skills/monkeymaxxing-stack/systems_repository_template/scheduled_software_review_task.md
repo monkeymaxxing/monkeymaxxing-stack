@@ -165,14 +165,14 @@ person must do:
 - **warn:** a person must act. For example:
   - a fix that the nightly security updates did not install a day after
     Debian published the fix;
-  - a security release of a downloaded program, which needs a person's
-    new pin;
   - a security release of a program from a vendor's apt repository that
     the nightly updates did not install a day later.
 - **info:** everything else that is new or changed. For example, a fix that
   the nightly updates install tonight, a database server's fix for the
   weekly window, a fix that waits for the weekly reboot, an installed fix,
-  or a new release with no security fix.
+  a new release with no security fix, or a downloaded program's security
+  release whose flaw attackers do not exploit now, which a person installs
+  with a new pin at the weekly review.
 
 The report has this form, as "Reports: the why rule" in
 `triage_agent_rules.md` asks:
@@ -215,12 +215,10 @@ A remedy names one of these:
 
     What a person must do:
     1. Run one_time_playbooks/2026-11-12_install_security_updates_on_app001_and_app002.yml from the systems desk: ./server_management_scripts/run_mmx_on_util01 run 2026-11-12_install_security_updates_on_app001_and_app002. The playbook installs the waiting fixes on app001 and app002. Risk: low. needrestart restarts the services that use the old libraries.
-    2. Update Litestream on util01 from 0.5.18 to 0.5.19, which fixes GHSA-xxxx-xxxx-xxxx: follow operating_procedures/add_or_update_a_program_from_outside_the_distribution.md, "Updating a program from outside the distribution", with version 0.5.19, download_url https://github.com/benbjohnson/litestream/releases/download/v0.5.19/litestream-0.5.19-linux-x86_64.tar.gz, and sha256 from the release's checksums.txt.
 
     What changed since the last review (2026-11-11 06:00 UTC):
     - brotli CVE-2026-111497: fixed in 1.1.0-2+deb13u1, not installed. CISA's list names the flaw, but only internal tools decode brotli here.
     - apt CVE-2026-109518 and expat (6 flaws): fixed, not installed.
-    - Litestream 0.5.19: a security release (GHSA-xxxx-xxxx-xxxx).
     - zlib (3 flaws): the fix is installed on every server.
     - 12 new flaws with no fix yet, in curl and glibc: in the notes only.
 
@@ -229,14 +227,15 @@ A remedy names one of these:
 
 ### Example of an info report
 
-    Software review: zlib fix installed, a new curl fix installs tonight, nobody needs to act
-    The nightly security updates installed Debian's zlib fix on every server. Debian published a curl fix today, and the nightly updates install the curl fix tonight. Nobody needs to act.
+    Software review: zlib fix installed, a new curl fix installs tonight, Litestream 0.5.19 for the weekly review
+    The nightly security updates installed Debian's zlib fix on every server. Debian published a curl fix today, and the nightly updates install the curl fix tonight. Litestream 0.5.19 fixes a flaw that attackers do not exploit now; a person updates its pin at the weekly review. Nobody needs to act now.
 
     What changed since the last review (2026-11-12 06:00 UTC):
     - zlib (3 flaws): the fix is installed on every server.
     - curl CVE-2026-90211: fixed in 8.14.1-2+deb13u2 today, which the nightly updates install tonight.
     - db01: the postgresql-17 fix for CVE-2026-88410 waits for the weekly window, update_database_servers on Sunday at 03:00 UTC.
     - Caddy 2.11.10: a new release with no security fix, which the nightly updates install.
+    - Litestream 0.5.19: a security release (GHSA-xxxx-xxxx-xxxx) that attackers do not exploit now. At the weekly review, a person follows operating_procedures/add_or_update_a_program_from_outside_the_distribution.md, "Updating a program from outside the distribution", with version 0.5.19, download_url https://github.com/benbjohnson/litestream/releases/download/v0.5.19/litestream-0.5.19-linux-x86_64.tar.gz, and sha256 from the release's checksums.txt.
 
     What I checked: 4 servers; OSV.dev for 210 source packages on each; CISA's list of 2026-11-10; the programs in software_outside_the_distribution.yml.
     Confidence: high. The notes are in triage_agent_notes/open_software_findings.md.

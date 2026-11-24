@@ -188,9 +188,10 @@ Codex runs a new model with fallback settings.
 MMWatchdog's check group `pinned_program_releases` on `util01` warns when a
 pinned third-party program, such as `rclone`, has a newer release, and the
 triage agent's report gives the release's security fixes and the new pin's
-`version`, `download_url`, and `sha256`. The report reaches a phone only for
-a flaw that attackers exploit now; every other release is an info note for
-the weekly review.
+`version`, `download_url`, and `sha256`. The report is an SOS, which wakes
+the person on call, only for a flaw that attackers exploit now; every
+other release is an info report for the weekly review, which shows without
+a sound only on the phones that subscribe to info.
 
 The Stack's own programs, `mmx`, `mmwatchdog`, and `mmhotline`, have no
 check: a team gets a newer release of them through a Stack release, and the

@@ -3536,10 +3536,13 @@ plain comparison needs no coding agent; the agent starts only when there
 is a release to read.
 
 - **A release is no outage and nothing to wake anyone for, so only a flaw
-  exploited now reaches a phone.** The triage agent reports a newer release
+  exploited now wakes a person.** The triage agent reports a newer release
   at info, including a release with a security fix that attackers do not
   exploit now, and at SOS only for a flaw exploited now that reaches the
-  servers. The report hands over to a person and the release goes into
+  servers. An info report shows without a sound, and only on the phones
+  that subscribe to info; the check's own warning reaches the phones,
+  waking nobody, only when MMHotline's wait for the triage agent ends
+  with no report. The report hands over to a person and the release goes into
   `open_software_findings.md`, so the weekly review still sees it. Reason
   (owner, 2026-11-23, after a warning on his phone when MMHotline 0.6.1 came
   out an hour after Stack 0.4.0, which pins it): "kind of confusing that I

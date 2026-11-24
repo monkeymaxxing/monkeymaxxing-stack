@@ -636,15 +636,18 @@ of a break-in, and a flaw that attackers exploit now and that reaches
   servers in `inventories/servers.yml`: in a program that faces the
   internet, or from inside an app's container.
 - **warn:** a flaw with a fix that a person must install: the nightly
-  security updates did not install the fix a day after the fix appeared,
-  or a downloaded program has a security release. A fix that the nightly
-  updates or the weekly window install is info. A flaw with no fix and no
+  security updates did not install the fix a day after the fix appeared.
+  A fix that the nightly updates or the weekly window install is info, and
+  so is a downloaded program's security release whose flaw attackers do
+  not exploit now: a person installs it with a new pin at the weekly
+  review. A flaw with no fix and no
   workaround, and no SOS by the bullet above, is not reported: record the
   flaw in `triage_agent_notes/open_software_findings.md`, and report the
   flaw once a fix becomes available. Leave out the flaws Debian rates
   `unimportant`. Send the warning at once, waking nobody.
-- **info:** every other new or changed finding, such as a new release with
-  no security fix, or a fix the nightly updates install.
+- **info:** every other new or changed finding, such as a new release,
+  with or without a security fix that attackers do not exploit now, or a
+  fix the nightly updates install.
 
 Programs face the internet through three paths: `cloudflared`, Caddy, and
 the apps' containers (forwarded by Cloudflare, which terminates public
@@ -770,7 +773,11 @@ the newest version, and the release's page. The Stack's own programs
 through a Stack release.
 
 A newer release is no outage and nothing to wake anyone for. Only a flaw
-that attackers exploit now reaches a phone.
+that attackers exploit now makes your report an SOS; every other release
+is an info report, which shows without a sound, and only on the phones
+that subscribe to info. MMHotline holds the check's own warning while you
+look, and delivers it, waking nobody, only when its wait ends with no
+report and no playbook run request from you.
 
 - **`stack_version_is_the_newest_release`:** a newer Stack release is
   out. Read its release notes. Report at info, whatever the release
