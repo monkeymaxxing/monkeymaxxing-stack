@@ -1,8 +1,9 @@
 # Add or update a program from outside the distribution
 
 **When to use this page:** a server needs a program that the distribution
-does not supply, or MMWatchdog's `pinned_program_releases` warns about a
-newer release of a pinned program.
+does not supply, or the team moves a pinned program to another release
+for a reason: a flaw being exploited, support ending, or something the
+team needs.
 
 **What this page does:** the program is installed from the vendor's apt
 repository or from a pinned download, and gets an entry in the software
@@ -20,7 +21,7 @@ When `gpg` is missing on the desk, the person runs
 | Situation | Follow |
 | --- | --- |
 | A new program that the distribution lacks or supplies outdated | [Adding a program from outside the distribution](#adding-a-program-from-outside-the-distribution) |
-| A newer release of a program the system has, or a `pinned_program_releases` warning | [Updating a program from outside the distribution](#updating-a-program-from-outside-the-distribution) |
+| A newer release of a program the system has, which the team needs | [Updating a program from outside the distribution](#updating-a-program-from-outside-the-distribution) |
 | A new stack version that needs a newer MMX | [A change that needs a newer MMX comes after its pin](#a-change-that-needs-a-newer-mmx-comes-after-its-pin) |
 
 ## Before you start
@@ -182,28 +183,6 @@ Codex runs a new model with fallback settings.
    `sudo mmhotline triage-agent run-software-review` with an API key. Its
    first lines have no "Model metadata for MODEL not found". When it
    fails, move the pin back.
-
-### The pinned-release warning
-
-MMWatchdog's check group `pinned_program_releases` on `util01` warns when a
-pinned third-party program, such as `rclone`, has a newer release, and the
-triage agent's report gives the release's security fixes and the new pin's
-`version`, `download_url`, and `sha256`. The report is an SOS, which wakes
-the person on call, only for a flaw that attackers exploit now; every
-other release is an info report for the weekly review, which shows without
-a sound only on the phones that subscribe to info.
-
-The Stack's own programs, `mmx`, `mmwatchdog`, and `mmhotline`, have no
-check: a team gets a newer release of them through a Stack release, and the
-check `stack_version_is_the_newest_release` says when one is out
-([Upgrade to a new Stack version](upgrade_to_a_new_stack_version.md)).
-
-The warning stays open, without repeating, until the pin names the newest
-release, and a later release while it is open sends no new alert. A team
-that will not take a release leaves the warning open. The triage agent
-records the release in `triage_agent_notes/open_software_findings.md`, and
-the [weekly system review](do_the_weekly_system_review.md) checks for a
-newer release than the one recorded.
 
 ## If something is different
 

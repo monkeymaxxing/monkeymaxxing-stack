@@ -11,8 +11,8 @@ says how the coding agent fits this task to the team's software.
 
 ## The task
 
-You are the triage agent. Check the servers' software for known flaws and
-new releases, then send at most one report. Follow "The scheduled software
+You are the triage agent. Check the servers' software for known flaws,
+then send at most one report. Follow "The scheduled software
 review" and "Levels of vulnerability findings" in `triage_agent_rules.md`
 for the level of each finding.
 
@@ -55,16 +55,13 @@ a finding. When SSH to a server is refused, such as to a systems desk,
 name the server under "What I checked" in the report. The refusal alone
 is not a finding.
 
-Then find the newest release, and read the security advisories:
+Then read the security advisories:
 
-- **An entry with a `releases_page`:** read the newest release there.
-  Read the advisories on the `security_advisories_page` published since
-  the last review that finished. At the first review, read every advisory
-  for the installed version.
-- **An entry with an empty `releases_page`:** the program has no public
-  release list yet, so fetch no page for the program. The newest release
-  the team has is the pin in `stack_software` in `mmx_project_settings.yml`.
-  Compare the installed version with the pin's `version`.
+- **An entry with a `security_advisories_page`:** read the advisories
+  published since the last review that finished. At the first review,
+  read every advisory for the installed version. For a flaw in the
+  installed version, read the program's `releases_page`, when it has one,
+  only to see whether a release fixes the flaw.
 - **An empty `security_advisories_page`:** the program has no advisory
   page. Fetch nothing, and do not report the missing page.
 
@@ -126,8 +123,7 @@ once, then search the list's `vulnerabilities` by `cveID`:
 
 ### 5. Find what is new or changed
 
-A finding is identified by its package or program and its flaw ID, or by
-the release's version for a new release. Compare each finding of this
+A finding is identified by its package or program and its flaw ID. Compare each finding of this
 review with the finding in the notes:
 
 - **New:** the notes do not have the finding.
@@ -177,7 +173,7 @@ person must do:
 - **info:** everything else that is new or changed. For example, a fix that
   the nightly updates install tonight, a database server's fix for the
   weekly window, a fix that waits for the weekly reboot, an installed fix,
-  a new release with no security fix, or a downloaded program's security
+  or a downloaded program's security
   release whose flaw attackers do not exploit now, which a person installs
   with a new pin at the weekly review.
 
@@ -243,7 +239,6 @@ A remedy names one of these:
     - zlib (3 flaws): the fix is installed on every server.
     - curl CVE-2026-90211: fixed in 8.14.1-2+deb13u2 today, which the nightly updates install tonight.
     - db01: the postgresql-17 fix for CVE-2026-88410 waits for the weekly window, update_database_servers on Sunday at 03:00 UTC.
-    - Caddy 2.11.10: a new release with no security fix, which the nightly updates install.
     - Litestream 0.5.19: a security release (GHSA-xxxx-xxxx-xxxx) that attackers do not exploit now. At the weekly review, a person follows operating_procedures/add_or_update_a_program_from_outside_the_distribution.md, "Updating a program from outside the distribution", with version 0.5.19, download_url https://github.com/benbjohnson/litestream/releases/download/v0.5.19/litestream-0.5.19-linux-x86_64.tar.gz, and sha256 from the release's checksums.txt.
 
     What I checked: 4 servers; OSV.dev for 210 source packages on each; CISA's list of 2026-11-10; the programs in software_outside_the_distribution.yml.

@@ -92,9 +92,8 @@ inputs:
     type: mapping
     required: true
   # The pinned_program_releases checks (mmwatchdog_checks/util_server.yml)
-  # compare the pins of third-party programs and the Stack's own version
-  # (set_up_outside_services) with their newest releases; mmx, mmwatchdog,
-  # mmhotline, codex and doubleshell get no check.
+  # read the Stack's releases for a fix of an exploited flaw, from the
+  # Stack's pin (set_up_outside_services).
   stack_software:                           # vars.stack_software
     type: mapping
     required: true
@@ -220,8 +219,8 @@ node_tasks:
       packages:
         - {name: git, version: newest_when_first_installed}
         - {name: openssh-client, version: newest_when_first_installed}
-  # curl asks the pinned programs' release sources for their newest
-  # releases (pinned_program_releases in mmwatchdog_checks/util_server.yml).
+  # curl asks GitHub for the Stack's releases (pinned_program_releases in
+  # mmwatchdog_checks/util_server.yml).
   - id: install_curl
     apt_package:
       packages:

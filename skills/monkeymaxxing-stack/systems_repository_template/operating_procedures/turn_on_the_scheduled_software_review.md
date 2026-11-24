@@ -178,9 +178,8 @@ coding agent:
 - MMWatchdog's checks warn about the Debian packages' security updates and
   known exploited flaws.
 - The check group `pinned_program_releases` on `util01` warns when a
-  third-party program pinned in `stack_software` has a newer release, or
-  when a newer Stack release is out. The triage agent then starts for that
-  warning only.
+  Stack release fixes a flaw that attackers exploit now. The triage agent
+  then starts for that warning only.
 - A program from a vendor's apt repository, such as Caddy, updates itself.
 
 The review adds what a plain check cannot do, such as reading the vendors'

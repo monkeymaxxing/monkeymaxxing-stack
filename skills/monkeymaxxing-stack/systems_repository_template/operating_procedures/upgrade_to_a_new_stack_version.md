@@ -1,5 +1,11 @@
 # Upgrade to a new stack version
 
+Stable systems upgrade only for a reason: a flaw being exploited, support
+ending, or something the team needs. Otherwise stay on the version you
+have. The coding agent knows the end-of-support dates of the Debian
+release, Postgres, and the pinned programs, and raises one when it
+matters.
+
 **When to use this page:** the person asks to move the system to a new
 stack version.
 

@@ -2,15 +2,15 @@
 #
 # MMWatchdog's vulnerability checks cover the distribution's packages only.
 # For the downloaded programs, pinned under stack_software in
-# mmx_project_settings.yml, MMWatchdog's check group pinned_program_releases
-# on util01 warns when a newer release of a third-party program exists, and
-# when a newer Stack release is out (mmwatchdog_checks/util_server.yml).
-# mmx, mmwatchdog and mmhotline come with a Stack release and have no check.
+# mmx_project_settings.yml, a flaw that attackers exploit now reaches the
+# team through a Stack release marked "Fixes an exploited flaw", which
+# util01 warns about (mmwatchdog_checks/util_server.yml).
 # A program from a vendor's apt repository updates itself.
 # The scheduled software review, when the team turns it on, reads
-# software_outside_the_distribution.yml too: the triage agent compares each
-# program's installed version with the vendor's latest release and reads
-# the vendor's security advisories (scheduled_software_review_task.md;
+# software_outside_the_distribution.yml too: the triage agent reads the
+# vendor's security advisories for each program's installed version, and
+# the releases page only to see whether a release fixes a flaw
+# (scheduled_software_review_task.md;
 # operating_procedures/turn_on_the_scheduled_software_review.md).
 #
 # An empty releases_page or security_advisories_page means the program has

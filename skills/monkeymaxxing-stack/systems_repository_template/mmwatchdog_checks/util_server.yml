@@ -1,14 +1,13 @@
 {{- /*
   MMWatchdog's check groups for util01, the fleet hub: util01's own size,
-  the public sites as users reach them, the weekly restore drill, new
-  releases of the pinned programs, and the nightly copy of the apps'
+  the public sites as users reach them, the weekly restore drill, Stack
+  releases that fix an exploited flaw, and the nightly copy of the apps'
   uploads. This
   file is an MMX template: MMX renders it on util01 into
   /etc/mmwatchdog/check_groups/util_server.yml. It reads the role inputs apps,
   public_host_names (the inventory's public_host_names), public_site_checks_run,
   backups, whose uploads_backup_runs_on decides whether the uploads'
-  checks are here, stack_software and triage_agent_coding_agent for the
-  pinned programs' release checks, and
+  checks are here, stack_software for the Stack's release checks, and
   app_pool_load_settings and inventory_nodes for the checks that add and
   remove app servers with the load.
 */ -}}
@@ -117,179 +116,46 @@ check_groups:
           file_age_days: 8
         alert_severity: warn
 
-  # New releases of the third-party programs pinned in stack_software
-  # (mmx_project_settings.yml), and of the Stack itself, without a coding
-  # agent: one check per such program that util01's settings install,
-  # written from stack_software below, compares the pin with the newest
-  # release at the program's release source, GitHub's releases/latest,
-  # taken from the pin's download_url.
-  # releases/latest leaves out pre-releases and drafts, so a pre-release
-  # never warns; a program pinned at a pre-release warns when the release
-  # it leads to is out. The triage agent starts only for a warning, and
-  # reads the release notes (triage_agent_rules.md, "A newer release of a
-  # pinned program"). Programs from vendors' apt repositories, such as
-  # Caddy, update themselves and need no check. A pin whose download_url is
-  # not a GitHub release gets no check; the comment below names it, and the
-  # scheduled software review covers it when the team turns the review on.
-  # mmx, mmwatchdog and mmhotline get no check: a team gets a newer release
-  # of them through a Stack release, and the Stack's own check,
-  # stack_version_is_the_newest_release (the set_up_outside_services pin
-  # is the Stack's version), tells the team that one is out. Reason: a
-  # warning minutes after a Stack release, because a program came out an
-  # hour later, is a weird thing to send people (owner, 2026-11-23); a
-  # release is no outage and nothing to wake anyone for.
-  # codex gets no check: the team moves its pin when it wants a newer
-  # model, and a newer Codex alone is nothing a person acts on (Codex
-  # releases several times a week; a team's real setup got a warning
-  # minutes after setup, 2026-11-23). doubleshell runs on laptops and gets
-  # none. rclone is checked only while
-  # backups.uploads_backup_runs_on names util01, because only then does the
-  # system install the program.
+  # Stack releases that fix a flaw attackers exploit now. A stable system
+  # upgrades only for a reason, so a routine release of the Stack or of a
+  # program it pins sends nothing: no check exists for it. Reason: alerts
+  # about releases that ask nobody to act teach a team to ignore its alerts,
+  # and then it misses the one that matters (owner, 2026-11-24).
+  # known_exploited_flaws (every_server.yml) covers Debian's packages only.
+  # A flaw in a program the Stack pins, such as mmx, mmwatchdog, mmhotline,
+  # litestream or rclone, reaches the team only through a Stack release
+  # whose notes mark it "Fixes an exploited flaw", which
+  # stack_release_fixes_an_exploited_flaw reads.
   #
-  # A warning goes out once and stays open, without repeating, until the
-  # pin names the newest release; a later release while it is open sends
-  # no new alert. MMWatchdog has no way to quiet one release of one check:
-  # a team that will not take a release leaves the warning open, and the
-  # weekly system review reads it
-  # (operating_procedures/do_the_weekly_system_review.md).
-  #
-  # Each check asks its source up to 3 times, 5 seconds apart, with 10
-  # seconds for each answer, so a short outage or a slow answer is no
-  # failure. A source that still does not answer is not a new release: the
-  # program's check passes, and release_sources_answer below fails instead.
-  # A source that answers "not found" counts as an answer with no release:
-  # GitHub answers so for a project that has published only pre-releases.
-  #
-  # check_every 1h by default. Reason: a release an hour late changes
-  # nothing. GitHub allows 60 requests an hour from one address without a
-  # sign-in; each program costs 2 requests an hour (its check and
-  # release_sources_answer), and the Stack 1 more for each 100 of its
-  # releases (stack_release_fixes_an_exploited_flaw), so the template's 3
-  # checked programs (the Stack, litestream, rclone) make 7 requests an
-  # hour while the Stack has at most 100 releases, 53 under the limit; when
-  # every request fails and is tried 3 times, 21.
-  # Each further pinned program adds 2, or 6 when every request fails.
-  # time_limit_per_run 5m: release_sources_answer asks every source in turn,
-  # at most 40 seconds each.
-  # alert_after_failing_for 0s for a newer release: the release is there
-  # until the pin moves, so waiting adds nothing.
-  # Reason for warn: a new release is no outage; the check only starts the
-  # triage agent, whose report goes to a phone as sos only for a flaw
-  # attackers exploit now.
-{{- define "ask_for_the_newest_release" }}
-            # ask_for_the_newest_release OWNER/REPO: sets newest_tag and
-            # release_page and returns 0 when the source answered, or sets
-            # no_answer and returns 1.
-            ask_for_the_newest_release() {
-              local attempt response http_status_code body curl_exit_code
-              newest_tag='' release_page='' no_answer=''
-              for attempt in 1 2 3; do
-                [ "$attempt" = 1 ] || sleep 5
-                curl_exit_code=0
-                response=$(curl --silent --location --max-time 10 \
-                  --header 'Accept: application/vnd.github+json' \
-                  --write-out '\n%{http_code}' "https://api.github.com/repos/$1/releases/latest") || curl_exit_code=$?
-                if [ "$curl_exit_code" != 0 ]; then
-                  no_answer="no answer, curl exit code $curl_exit_code"
-                  continue
-                fi
-                http_status_code=${response##*$'\n'}
-                body=${response%$'\n'*}
-                case "$http_status_code" in
-                  200)
-                    if newest_tag=$(printf '%s' "$body" | jq --raw-output --exit-status '.tag_name | strings') \
-                        && release_page=$(printf '%s' "$body" | jq --raw-output '.html_url // empty'); then
-                      return 0
-                    fi
-                    newest_tag=''
-                    no_answer='the answer holds no tag_name' ;;
-                  404) return 0 ;;
-                  *) no_answer="HTTP $http_status_code: $(printf '%s' "$body" | jq --raw-output '.message // empty' 2>/dev/null | head -c 300)" ;;
-                esac
-              done
-              return 1
-            }
+  # check_every 1h by default. Reason: an hour late changes nothing. GitHub
+  # allows 60 requests an hour from one address without a sign-in. Each run
+  # makes 1 request for each 100 of the Stack's releases: 1 request an hour
+  # while the Stack has at most 100 releases, and 3 when every request
+  # fails and is tried 3 times.
+  # time_limit_per_run 5m: each page is tried at most 3 times, with 10
+  # seconds for each answer and 5 seconds between tries.
+{{- $stack_repository := "" }}
+{{- $stack_release := dict }}
+{{- if hasKey .inputs.stack_software "set_up_outside_services" }}
+{{- $stack_release = index .inputs.stack_software "set_up_outside_services" }}
+{{- if regexMatch "^https://github[.]com/[^/]+/[^/]+/releases/download/" $stack_release.download_url }}
+{{- $stack_repository = regexReplaceAll "^https://github[.]com/([^/]+/[^/]+)/releases/download/.*$" $stack_release.download_url "${1}" }}
 {{- end }}
+{{- end }}
+{{- if $stack_repository }}
   pinned_program_releases:
     check_every: 1h
     time_limit_per_run: 5m
     alert_after_failing_for: 0s
     recovered_after_healthy_for: 0s
     checks:
-{{- $checked_programs := dict }}
-{{- range $program, $release := .inputs.stack_software }}
-{{- $installed := true }}
-{{- if has $program (list "codex" "mmx" "mmwatchdog" "mmhotline") }}{{ $installed = false }}{{ end }}
-{{- if eq $program "rclone" }}{{ $installed = not (empty $.inputs.backups.uploads_backup_runs_on) }}{{ end }}
-{{- if eq $program "doubleshell" }}{{ $installed = false }}{{ end }}
-{{- if $installed }}
-{{- if regexMatch "^https://github[.]com/[^/]+/[^/]+/releases/download/" $release.download_url }}
-{{- $_ := set $checked_programs $program (regexReplaceAll "^https://github[.]com/([^/]+/[^/]+)/releases/download/.*$" $release.download_url "${1}") }}
-{{- else }}
-      # {{ $program }}: no check, because its download_url is not a GitHub release.
-{{- end }}
-{{- end }}
-{{- end }}
-{{- range $program, $repository := $checked_programs }}
-{{- $release := index $.inputs.stack_software $program }}
-      {{ if eq $program "set_up_outside_services" }}stack_version_is_the_newest_release{{ else }}{{ $program }}_pin_is_the_newest_release{{ end }}:
-        shell:
-          script: |
-{{- template "ask_for_the_newest_release" }}
-            # version_is_newer NEWEST PINNED: a release without a pre-release
-            # part, such as 1.2.0, is newer than its pre-release 1.2.0-rc.1.
-            version_is_newer() {
-              [ "$1" != "$2" ] || return 1
-              if [ "${1%%-*}" != "${2%%-*}" ]; then
-                [ "$(printf '%s\n%s\n' "${1%%-*}" "${2%%-*}" | sort -V | tail -n 1)" = "${1%%-*}" ]
-                return
-              fi
-              [ "$1" != "${1%%-*}" ] || return 0
-              [ "$2" != "${2%%-*}" ] || return 1
-              [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
-            }
-            pinned={{ $release.version | squote }}
-            if ! ask_for_the_newest_release {{ $repository | squote }}; then
-              echo "{{ $repository }} did not answer ($no_answer), so this run learned no release; release_sources_answer warns when it stays so for a day."
-              exit 0
-            fi
-            if [ -z "$newest_tag" ]; then
-              echo "{{ $repository }} has published no release that is not a pre-release; stack_software.{{ $program }} pins $pinned."
-              exit 0
-            fi
-            newest=${newest_tag#"${newest_tag%%[0-9]*}"}
-            if version_is_newer "$newest" "$pinned"; then
-{{- if eq $program "set_up_outside_services" }}
-              echo "A newer Stack release is out, $newest; this system runs Stack $pinned (stack_software.set_up_outside_services in mmx_project_settings.yml). Release notes: $release_page. Upgrade with operating_procedures/upgrade_to_a_new_stack_version.md."
-{{- else }}
-              echo "{{ $program }} has a newer release, $newest; stack_software.{{ $program }} in mmx_project_settings.yml pins $pinned. Release notes: $release_page. Update it with operating_procedures/add_or_update_a_program_from_outside_the_distribution.md, \"Updating a program from outside the distribution\"."
-{{- end }}
-              exit 1
-            fi
-{{- if eq $program "set_up_outside_services" }}
-            echo "This system runs Stack $pinned, the newest release."
-{{- else }}
-            echo "{{ $program }}: the pin, $pinned, is the newest release, $newest."
-{{- end }}
-        # A routine Stack release asks nobody to act, so it is info: the
-        # team sees it on the dashboard and in the weekly review, and no
-        # agent run is spent on it. A Stack release that fixes a flaw
-        # exploited now is the warning below.
-        alert_severity: {{ if eq $program "set_up_outside_services" }}info{{ else }}warn{{ end }}
-{{- end }}
-{{- if hasKey $checked_programs "set_up_outside_services" }}
       # One finding for each flaw that attackers exploit now and that a
       # Stack release newer than this system's fixes, from the line
       # "Fixes an exploited flaw: <CVE or advisory id> in <program>
       # <versions>" that such a release has in its notes (the Stack's
-      # docs/design.md, "A Stack release pins its own programs"). Reason:
-      # the Stack's own programs, mmx, mmwatchdog and mmhotline, have no
-      # check of their own, and the Stack is the team's supplier for them,
-      # so a Stack release is how the team learns of such a fix.
-      # stack_version_is_the_newest_release above says only that a release
-      # is out, at info; this check warns
-      # about each flaw on its own, so a second flaw alerts while the first
-      # is open. It reads every page of GitHub's /releases?per_page=100,
+      # docs/design.md, "A Stack release pins its own programs"). Each flaw
+      # is its own finding, so a second flaw alerts while the first is
+      # open. It reads every page of GitHub's /releases?per_page=100,
       # leaving out drafts and pre-releases, so a later release cannot hide
       # an earlier one's flaw. The module is
       # roles/util_server/files/mmwatchdog_external_modules/
@@ -298,36 +164,21 @@ check_groups:
       # open, and sends the check's cannot-check warning when it stays
       # unknown for alert_after_failing_for.
       # alert_after_failing_for 6h, for a flaw and for a GitHub that does
-      # not answer. Reason: the team upgrades within days, so a warning a
-      # few hours later changes nothing, while 6 hourly runs ride out a
-      # short GitHub outage or rate limit without a warning. A Stack that
+      # not answer, such as a refused or rate-limited request or a project
+      # that moved; the cannot-check warning names the cause. Reason: the
+      # team upgrades within days, so a warning a few hours later changes
+      # nothing, while 6 hourly runs ride out a short GitHub outage or rate
+      # limit without a warning. A Stack that
       # needs to hear sooner sets a shorter time here.
+      # Reason for warn: the triage agent reads the release notes and
+      # reports at sos only a flaw that reaches this system's servers.
       stack_release_fixes_an_exploited_flaw:
         stack_releases_that_fix_an_exploited_flaw:
-          repository: {{ index $checked_programs "set_up_outside_services" | squote }}
-          installed_stack_version: {{ (index .inputs.stack_software "set_up_outside_services").version | squote }}
+          repository: {{ $stack_repository | squote }}
+          installed_stack_version: {{ $stack_release.version | squote }}
         alert_after_failing_for: 6h
         alert_severity: warn
 {{- end }}
-      # Fails when a release source above did not answer, after 3 tries,
-      # such as a refused or rate-limited request or a project that moved.
-      # Reason for 24h: a source that is down for a day means the team no
-      # longer learns of that program's releases; a shorter outage changes
-      # nothing. Reason for warn: nothing is down.
-      release_sources_answer:
-        shell:
-          script: |
-{{- template "ask_for_the_newest_release" }}
-            sources_that_did_not_answer=0
-{{- range $program, $repository := $checked_programs }}
-            if ! ask_for_the_newest_release {{ $repository | squote }}; then
-              echo "{{ $program }}'s release source, {{ $repository }} at GitHub, did not answer: $no_answer"
-              sources_that_did_not_answer=1
-            fi
-{{- end }}
-            exit "$sources_that_did_not_answer"
-        alert_after_failing_for: 24h
-        alert_severity: warn
 
   # MMHotline's own database holds the on-call settings, changes to who is
   # on call, and alert history. Litestream copies MMHotline's database to

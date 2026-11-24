@@ -50,12 +50,10 @@ proposal.
    A warning that is still open can be a waiting update (part 2) or a
    trigger (part 4).
 2. **The waiting updates.** Each server's waiting security updates and
-   reboots, and each pinned third-party program or the Stack itself with a
-   newer release:
+   reboots:
 
    ```sh
    ssh -F ssh/config root@10.20.1.1 "mmwatchdog check-now security_updates"
-   ssh -F ssh/config root@10.20.0.1 "mmwatchdog check-now pinned_program_releases"
    ```
 
    - Run the first command on every server in `inventories/servers.yml`,
@@ -76,8 +74,6 @@ proposal.
      fix: tell the person each open item. "Flaws with no fix yet" needs
      nobody until a fix appears. "No open findings." means no finding is
      open.
-   - A newer pinned release than the finding records sends no new alert, so
-     read the new release's notes now.
    - **The findings set aside after investigation,** which no server
      alerts about:
 

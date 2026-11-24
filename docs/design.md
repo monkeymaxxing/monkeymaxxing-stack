@@ -3468,11 +3468,11 @@ cost.
 **mmx, MMHotline, MMWatchdog and `set-up-outside-services` have empty
 pages in `software_outside_the_distribution.yml`.** The entries say that
 the team gets each release from the archive pinned in `stack_software`,
-and the task file has the agent compare the installed version with the
-pin and fetch no page. MMHotline lists no host for an empty page. Reason:
-a team gets a new release of these programs through a Stack release, and
-`stack_version_is_the_newest_release` tells the team that one is out
-([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
+and the review fetches no page for them. MMHotline lists no host for an
+empty page. Reason: a team gets these programs through a Stack release,
+and `stack_release_fixes_an_exploited_flaw` warns when one fixes a flaw
+that attackers exploit now
+([Stack releases that fix an exploited flaw](#stack-releases-that-fix-an-exploited-flaw)).
 When a product publishes an advisory page, the product's entry gets the
 address.
 
@@ -3480,8 +3480,9 @@ While the review is off, plain checks watch the software and the coding
 agent starts only when a check finds something: MMWatchdog's
 `apt_security_updates` and `known_exploited_flaws` for the Debian
 packages, unattended-upgrades for the programs from vendors' apt
-repositories, and `pinned_program_releases` for the downloaded programs
-([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
+repositories, and `stack_release_fixes_an_exploited_flaw` for the
+programs the Stack pins
+([Stack releases that fix an exploited flaw](#stack-releases-that-fix-an-exploited-flaw)).
 
 - **The triage agent is Claude Code or Codex, by default the same kind as
   the person's own coding agent.** `triage_agent_coding_agent` in
@@ -3590,7 +3591,7 @@ The release step, in one commit that the tag then names:
    `gh release view vVERSION --json body --jq .body > NOTES`. A system's
    check `stack_release_fixes_an_exploited_flaw` on `util01` warns about
    each such line in every release newer than the system's
-   ([New releases of the pinned programs](#new-releases-of-the-pinned-programs)).
+   ([Stack releases that fix an exploited flaw](#stack-releases-that-fix-an-exploited-flaw)).
    Write the line exactly, one flaw on each line, the id and the program
    without spaces. Mark every release that fixes the flaw, also a later
    release that fixes it again after a release in between brought it
@@ -3606,125 +3607,59 @@ refused while it holds zeros. Each release is published on GitHub, under
 `gitlab.com/monkeymaxxing` holds a public mirror of each repository, for
 when GitHub is down.
 
-### New releases of the pinned programs
+### Stack releases that fix an exploited flaw
 
-MMWatchdog's check group `pinned_program_releases` on `util01` has one
-shell check per third-party program pinned in `stack_software` that the
-settings install, `PROGRAM_pin_is_the_newest_release`, one check for the
-Stack itself, `stack_version_is_the_newest_release`, and one check
-`release_sources_answer`. Each check asks GitHub's `releases/latest` for the
-newest release and fails at warn when it is newer than the pin, with a
-message that names the program (or both Stack versions), the release's
-page, and the update procedure (for the Stack,
-`operating_procedures/upgrade_to_a_new_stack_version.md`). The warning
-starts the triage agent like any warning; `triage_agent_rules.md`, "A newer
-release of a pinned program", has the agent read the release notes, judge
-the security fixes, and hand over to a person with the facts and the new
-pin's values. The agent never changes a pin: the pin is in
-`mmx_project_settings.yml`, outside the folders the triage key may change.
-Reason (no agent without work): with the scheduled software review off,
-nothing else would notice a new release of a downloaded program, and a
-plain comparison needs no coding agent; the agent starts only when there
-is a release to read.
+A stable system upgrades only for a reason: a flaw being exploited,
+support ending, or something the team needs. Otherwise it stays on the
+version it has. A newer release alone is never a check, a finding, a
+report, or an alert: no check compares a pin with the newest release, and
+the scheduled software review reads flaws, not releases. Reason (owner,
+2026-11-24): alerts that ask nobody to act teach a team to ignore its
+alerts, and then it misses a real vulnerability. The triage agent and the
+coding agent know the end-of-support dates of the Debian release,
+Postgres, and the pinned programs, and raise one when it matters
+(`triage_agent_rules.md`, "Upgrades and Stack releases"); Debian's own
+date is also `security_support_lasts_another_half_year`.
 
-- **A Stack release that fixes a flaw exploited now warns about each
-  flaw.** The Stack's own programs, `mmx`, `mmwatchdog` and `mmhotline`,
-  have no check of their own, and the Stack is the team's supplier for
-  them, so the Stack's release notes carry the news: a line
-  `Fixes an exploited flaw: <CVE or advisory id> in <program> <versions>`
-  for each flaw (step 5 of
-  [A Stack release pins its own programs](#a-stack-release-pins-its-own-programs)).
-  `util01`'s check `stack_release_fixes_an_exploited_flaw` reads every
-  page of the release list (`/releases?per_page=100` and each `next` page
-  of GitHub's `Link` header), leaves out drafts and pre-releases, and reports each marked flaw of every release newer than
-  the system's as its own finding, at warn: a person must upgrade within
-  days, and the triage agent reports at SOS when the flaw reaches the
-  servers and users are at risk now. Reasons: reading every newer release,
-  not only the newest, keeps a later routine release from hiding an
-  earlier flaw; one finding per flaw makes a second flaw alert while the
-  first is open; the exact finding names the oldest release that fixes
-  the flaw, so it stays the same as further releases come out. A shell
-  check reports no findings, so the check runs the Stack's own MMWatchdog
-  module, a Bash program with `curl` and `jq` like the other release
-  checks, installed by the `util_server` role
-  (`roles/util_server/files/mmwatchdog_external_modules/`). While any page
-  does not answer, the module answers `unknown`: MMWatchdog keeps each open
-  finding open, and the check's cannot-check warning goes out when GitHub
-  stays silent for its `alert_after_failing_for`, 6 hours, the same wait as
-  for a flaw, because the team upgrades within days. Reason: an outage
-  neither closes nor opens a finding, and the list request itself, not
-  `release_sources_answer`'s `releases/latest`, shows when the check is
-  blind. An installed pre-release, such as `0.6.0-rc.1`, is older than its
-  release. The routine check,
-  `stack_version_is_the_newest_release`, is info: a routine release asks
-  nobody to act, so it shows on the dashboard and in the weekly review and
-  starts no agent run.
-- **A release is no outage and nothing to wake anyone for, so only a flaw
-  exploited now wakes a person.** The triage agent reports a newer release
-  at info, including a release with a security fix that attackers do not
-  exploit now, and at SOS only for a flaw exploited now that reaches the
-  servers. An info report shows without a sound, and only on the phones
-  that subscribe to info; the check's own warning reaches the phones,
-  waking nobody, only when MMHotline's wait for the triage agent ends
-  with no report. The report hands over to a person and the release goes into
-  `open_software_findings.md`, so the weekly review still sees it. Reason
-  (owner, 2026-11-23, after a warning on his phone when MMHotline 0.6.1 came
-  out an hour after Stack 0.4.0, which pins it): "kind of confusing that I
-  would get an alert if hotline got updated ... a weird thing to send
-  people".
-- **`mmx`, `mmwatchdog` and `mmhotline` get no check; the Stack's own check
-  covers them.** A team gets a newer release of these programs through a
-  Stack release, which pins the releases it was tested with. The
-  `set_up_outside_services` pin's version is the Stack version itself (its
-  `download_url` is the Stack's own GitHub release), so its check is the one
-  check that a newer Stack release is out, and its message names both Stack
-  versions, the release's page, and the upgrade procedure. Reason: a
-  warning about a program that a Stack release has not yet pinned tells the
-  team to do something the Stack's own upgrade does better.
+MMWatchdog's check group `pinned_program_releases` on `util01` holds one
+check, `stack_release_fixes_an_exploited_flaw`. The Debian packages have
+`known_exploited_flaws`, but nothing reads flaws in the downloaded
+programs (`mmx`, `mmwatchdog`, `mmhotline`, `litestream`, `rclone`), and
+the Stack is the team's supplier for them, so the Stack's release notes
+carry the news: a line
+`Fixes an exploited flaw: <CVE or advisory id> in <program> <versions>`
+for each flaw (step 5 of
+[A Stack release pins its own programs](#a-stack-release-pins-its-own-programs)).
 
-- **The checks come from `stack_software`, not from
-  `software_outside_the_distribution.yml`.** MMX templates cannot read
-  another file of the project, and `stack_software` holds every downloaded
-  program's pin and download address under the entry's name. The template
-  repeats the uploads copy's install condition: `rclone` only while
-  `backups.uploads_backup_runs_on` is not empty, so a program the system
-  does not install raises no warning. `mmx`, `mmwatchdog` and `mmhotline`
-  get no check (see above). `codex` gets no check: the team moves
-  its pin when it wants a newer model, and a newer Codex alone is nothing
-  a person acts on. Codex releases several times a week; a team's real setup
-  got a warning minutes after its setup (2026-11-23). `doubleshell` runs on
-  laptops, not `util01`, and gets none either. Programs from
-  vendors' apt repositories update themselves and get no check. A pin whose
-  `download_url` is not a GitHub release, such as Google's gcloud, gets a
-  comment and no check; the scheduled software review covers it when the
-  team turns it on. `tests/pinned_program_releases_test.py` checks that the
-  real playbook gives one check per installed downloaded program.
-- **Pre-releases never warn.** `releases/latest` leaves out pre-releases
-  and drafts, and answers 404 for a project with only pre-releases, which
-  counts as an answer with no release. A pin at a pre-release
-  `0.1.0` of a checked program warns once `0.1.0`, or any later release, is out. No list of skipped releases exists, so none was added.
-- **A source that does not answer is not a new release.** A check tries 3
-  times, 5 seconds apart, then passes. `release_sources_answer` asks every
-  source again and fails when one still does not answer: a refused,
-  rate-limited, or malformed answer, or no connection. It warns after 24
-  hours. Reason: a source down for a day means the team no longer learns of
-  that program's releases; a shorter outage changes nothing.
+- **One finding per flaw, from every newer release.** The check reads
+  every page of the release list (`/releases?per_page=100` and each `next`
+  page of GitHub's `Link` header), leaves out drafts and pre-releases, and
+  reports each marked flaw of every release newer than the system's as its
+  own finding, at warn: a person must upgrade within days, and the triage
+  agent reports at SOS when the flaw reaches the servers and users are at
+  risk now. Reasons: reading every newer release, not only the newest,
+  keeps a later routine release from hiding an earlier flaw; one finding
+  per flaw makes a second flaw alert while the first is open; the exact
+  finding names the oldest release that fixes the flaw, so it stays the
+  same as further releases come out. An installed pre-release, such as
+  `0.6.0-rc.1`, is older than its release.
+- **A module, not a shell check.** A shell check reports no findings, so
+  the check runs the Stack's own MMWatchdog module, a Bash program with
+  `curl` and `jq`, installed by the `util_server` role
+  (`roles/util_server/files/mmwatchdog_external_modules/`).
+- **A GitHub that does not answer is the check's own cannot-check
+  warning.** While any page does not answer after 3 tries, 5 seconds
+  apart, the module answers `unknown`: MMWatchdog keeps each open finding
+  open, and the check's cannot-check warning, which names the cause, goes
+  out when GitHub stays silent for its `alert_after_failing_for`, 6 hours,
+  the same wait as for a flaw, because the team upgrades within days.
+  Reason: an outage neither closes nor opens a finding, and the list
+  request itself shows when the check is blind, so no separate check asks
+  GitHub again.
 - **Once an hour.** GitHub allows 60 requests an hour from one address
-  without a sign-in. Each program costs 2 requests an hour, and the Stack
-  1 more for `stack_release_fixes_an_exploited_flaw`, so the template's 3
-  checked programs (the Stack, `litestream`, `rclone`) make 7 requests an
-  hour, 53 under the limit. When every request fails and is tried 3 times,
-  they make 21, still 39 under the limit. Each further
-  pinned program adds 2, or 6 when every request fails. A release an hour
-  late changes nothing.
-- **One alert per release, until the pin moves.** MMWatchdog sends one
-  alert for an incident, and the MMHotline destination takes no reminders,
-  so a failing check stays one open warning. A later release while it is
-  open sends no new alert. MMWatchdog has no way to quiet one release of
-  one check (maintenance quiets the whole group, including the other
-  programs), so a team that will not take a release leaves the warning
-  open, and the weekly system review reads the newest release from the
-  checks' output.
+  without a sign-in. The check makes 1 request an hour for each 100 of the
+  Stack's releases, and 3 when every request fails and is tried 3 times.
+  A warning an hour late changes nothing.
 
 ## Reboots
 

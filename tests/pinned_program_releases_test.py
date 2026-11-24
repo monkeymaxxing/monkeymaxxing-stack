@@ -1,189 +1,33 @@
 #!/usr/bin/env python3
-"""Check MMWatchdog's pinned_program_releases checks on util01.
+"""Check that every program pin is refused while it holds no release.
 
   MMX_BINARY=/path/to/mmx python3 tests/pinned_program_releases_test.py
 
-The checks are written in mmwatchdog_checks/util_server.yml from
-stack_software in mmx_project_settings.yml. This file proves:
-  - the real every_server playbook passes the inputs, and util01 gets one
-    check per downloaded program that the settings install: every
-    downloaded_binary entry of software_outside_the_distribution.yml except
-    the Stack's own programs mmx, mmwatchdog and mmhotline (a team gets
-    them through a Stack release), codex, and rclone while the uploads'
-    copy runs elsewhere; the Stack itself gets stack_version_is_the_newest_release;
-    a pin that is not a GitHub release gets no check;
-  - each generated script against a stand-in GitHub API: a newer release
-    fails and names the program, both versions and the update procedure;
-    the same, an older, or no stable release (GitHub's 404 when only
-    pre-releases exist) passes; a source that does not answer, refuses
-    with 403, or answers malformed JSON passes the program's check after
-    3 tries and fails release_sources_answer, which names the program.
-It needs Python 3, bash, curl, jq, and sort with -V, as on util01.
+Between releases, the Stack's main branch pins its programs with SHA-256
+values of zeros. This file proves that every_server and the desk playbook
+check every pin in stack_software for zeros before any task that downloads
+or installs anything.
 """
-import http.server
-import json
 import os
-from pathlib import Path
 import re
 import shutil
-import socket
 import subprocess
-import tempfile
-import threading
 import unittest
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import template_values  # noqa: E402
 
 T = Path(__file__).resolve().parents[1]/'skills/monkeymaxxing-stack/systems_repository_template'
-CHECK_SUFFIX = '_pin_is_the_newest_release'
-STACK_CHECK = 'stack_version_is_the_newest_release'
-THE_STACKS_OWN_PROGRAMS = {'mmx', 'mmwatchdog', 'mmhotline'}
 
 
-def downloaded_programs():
-    """The entries of software_outside_the_distribution.yml installed from a downloaded binary."""
-    names, current = [], None
-    for line in (T/'software_outside_the_distribution.yml').read_text().splitlines():
-        entry = re.match(r'^  ([a-z0-9_]+):\s*$', line)
-        if entry:
-            current = entry.group(1)
-        elif current and re.match(r'^\s+installed_from:\s*downloaded_binary\b', line):
-            names.append(current)
-    return names
-
-
-def checks_of_group(text, group):
-    """{check name: script text} of one check group in a rendered check file."""
-    lines = text.splitlines()
-    start = lines.index(f'  {group}:')
-    checks, name, script, in_script = {}, None, [], False
-    for line in lines[start + 1:]:
-        if re.match(r'^  \S', line):
-            break
-        check = re.match(r'^      ([a-z0-9_]+):$', line)
-        if check:
-            if name:
-                checks[name] = '\n'.join(script)
-            name, script, in_script = check.group(1), [], False
-        elif line.strip() == 'script: |':
-            in_script = True
-        elif in_script and (line.startswith('            ') or not line.strip()):
-            script.append(line[12:])
-        elif in_script:
-            in_script = False
-    if name:
-        checks[name] = '\n'.join(script)
-    return checks
-
-
-class StandInGitHub(http.server.BaseHTTPRequestHandler):
-    answers = {}       # repository: list of (status, body); the last one repeats
-    requests = {}
-
-    def do_GET(self):
-        match = re.match(r'^/repos/([^/]+/[^/]+)/releases/latest$', self.path)
-        repository = match.group(1) if match else ''
-        StandInGitHub.requests[repository] = StandInGitHub.requests.get(repository, 0) + 1
-        queue = StandInGitHub.answers.get(repository, [(404, '{"message": "Not Found"}')])
-        status, body = queue.pop(0) if len(queue) > 1 else queue[0]
-        data = body.encode()
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def log_message(self, *arguments):
-        pass
-
-
-def release(tag, repository):
-    return (200, json.dumps({'tag_name': tag, 'prerelease': False,
-                             'html_url': f'https://github.com/{repository}/releases/tag/{tag}'}))
-
-
-class PinnedProgramReleases(unittest.TestCase):
+class PinsWithoutARelease(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mmx = os.environ.get('MMX_BINARY') or shutil.which('mmx')
         if not cls.mmx:
             raise RuntimeError('Set MMX_BINARY to test the actual MMX templates.')
-        cls.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), StandInGitHub)
-        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
-        cls.stand_in_url = f'http://127.0.0.1:{cls.server.server_address[1]}'
-        cls.default_checks = cls.util01_checks()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.shutdown()
-
-    @classmethod
-    def util01_checks(cls, settings_changes=()):
-        """The pinned_program_releases checks that the real every_server playbook renders for util01."""
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)/'systems'
-            shutil.copytree(T, root, ignore=shutil.ignore_patterns('.mmx'))
-            template_values.fill_the_values_the_setup_fills(root)
-            template_values.show_util01_check_files_to_explain(root)
-            settings = (root/'mmx_project_settings.yml').read_text()
-            for old, new in settings_changes:
-                assert settings.count(old) == 1, old
-                settings = settings.replace(old, new)
-            (root/'mmx_project_settings.yml').write_text(settings)
-            result = subprocess.run([cls.mmx, 'explain', 'every_server', '--json'], cwd=root, text=True, capture_output=True)
-            assert result.returncode == 0, result.stderr
-        texts = []
-
-        def walk(value):
-            if isinstance(value, dict):
-                if value.get('field') == 'file.template' and '\n  pinned_program_releases:' in value.get('text', ''):
-                    texts.append(value['text'])
-                for item in value.values():
-                    walk(item)
-            elif isinstance(value, list):
-                for item in value:
-                    walk(item)
-        walk(json.loads(result.stdout))
-        assert len(texts) == 1, f'{len(texts)} rendered files hold pinned_program_releases'
-        return checks_of_group(texts[0], 'pinned_program_releases'), texts[0]
-
-    def programs(self, checks):
-        """The programs with a check; the Stack's own check counts as set_up_outside_services."""
-        names = sorted(name[:-len(CHECK_SUFFIX)] for name in checks if name.endswith(CHECK_SUFFIX))
-        return sorted(names + (['set_up_outside_services'] if STACK_CHECK in checks else []))
-
-    # Which checks util01 gets.
-
-    def test_util01_gets_one_check_per_downloaded_program_that_its_settings_install(self):
-        checks, _ = self.util01_checks([('  triage_agent_coding_agent: claude_code', '  triage_agent_coding_agent: codex')])
-        self.assertEqual(self.programs(checks), sorted(set(downloaded_programs()) - {'codex'} - THE_STACKS_OWN_PROGRAMS))
-        self.assertIn('release_sources_answer', checks)
-
-    def test_codex_and_the_stacks_own_programs_get_no_check(self):
-        # codex: the team moves its pin; mmx, mmwatchdog, mmhotline: a team gets them through a Stack release.
-        for checks, _ in (self.default_checks, self.util01_checks([('  triage_agent_coding_agent: claude_code', '  triage_agent_coding_agent: codex')])):
-            for program, repository in (('codex', 'openai/codex'), ('mmx', 'monkeymaxxing/mmx'),
-                                        ('mmwatchdog', 'monkeymaxxing/mmwatchdog'), ('mmhotline', 'monkeymaxxing/mmhotline')):
-                self.assertNotIn(program + CHECK_SUFFIX, checks)
-                self.assertNotIn(f"'{repository}'", checks['release_sources_answer'])
-            self.assertIn(STACK_CHECK, checks)
-            self.assertIn("'monkeymaxxing/monkeymaxxing-stack'", checks['release_sources_answer'])
-
-    def test_rclone_is_checked_only_while_the_uploads_copy_runs_on_util01(self):
-        checks, _ = self.util01_checks([('    uploads_backup_runs_on: [util_server]', '    uploads_backup_runs_on: []')])
-        self.assertNotIn('rclone' + CHECK_SUFFIX, checks)
-        self.assertNotIn("'rclone/rclone'", checks['release_sources_answer'])
-
-    def test_a_pin_that_is_not_a_github_release_gets_no_check_and_a_comment(self):
-        checks, text = self.util01_checks([(
-            '      download_url: https://github.com/rclone/rclone/releases/download/v1.75.2/rclone-v1.75.2-linux-amd64.zip',
-            '      download_url: https://downloads.example.com/rclone-v1.75.2-linux-amd64.zip')])
-        self.assertNotIn('rclone' + CHECK_SUFFIX, checks)
-        self.assertIn('# rclone: no check, because its download_url is not a GitHub release.', text)
-
-    # A pin without a release stops the run before any change.
 
     def test_every_pin_is_checked_for_zeros_before_any_change(self):
         settings = (T/'mmx_project_settings.yml').read_text().split('\n  stack_software:\n', 1)[1]
@@ -202,121 +46,6 @@ class PinnedProgramReleases(unittest.TestCase):
                 last = max(tasks.index(task) for task in zero_checks)
                 self.assertLessEqual(last, 1 + len(pins))
                 self.assertIn('"' + '0' * 64 + '"', result.stdout)
-
-    # What each generated script does.
-
-    def run_script(self, script, answers):
-        StandInGitHub.answers = {repository: list(queue) for repository, queue in answers.items()}
-        StandInGitHub.requests = {}
-        script = script.replace('https://api.github.com', self.stand_in_url).replace('sleep 5', 'sleep 0')
-        result = subprocess.run(['bash', '--noprofile', '--norc', '-o', 'pipefail', '-c', script],
-                                text=True, capture_output=True, timeout=120)
-        return result.returncode, result.stdout + result.stderr
-
-    def check(self, program):
-        checks, _ = self.default_checks
-        if program == 'set_up_outside_services':
-            return checks[STACK_CHECK]
-        return checks[program + CHECK_SUFFIX]
-
-    def test_a_newer_release_fails_and_names_the_program_both_versions_and_the_procedure(self):
-        pinned = re.search(r'(?m)^    litestream:\n      version: "(\d+\.\d+)\.(\d+)"', (T/'mmx_project_settings.yml').read_text())
-        newer = f'{pinned[1]}.{int(pinned[2]) + 1}'
-        code, output = self.run_script(self.check('litestream'), {
-            'benbjohnson/litestream': [release('v' + newer, 'benbjohnson/litestream')]})
-        self.assertEqual(code, 1, output)
-        for text in (f'litestream has a newer release, {newer}', f'pins {pinned[1]}.{pinned[2]}',
-                     f'https://github.com/benbjohnson/litestream/releases/tag/v{newer}',
-                     'add_or_update_a_program_from_outside_the_distribution.md'):
-            self.assertIn(text, output)
-
-    def test_a_newer_stack_release_fails_and_names_both_stack_versions_the_page_and_the_procedure(self):
-        pinned = re.search(r'(?m)^    set_up_outside_services:\n      version: "(\d+\.\d+)\.(\d+)"', (T/'mmx_project_settings.yml').read_text())
-        newer = f'{pinned[1]}.{int(pinned[2]) + 1}'
-        code, output = self.run_script(self.default_checks[0][STACK_CHECK], {
-            'monkeymaxxing/monkeymaxxing-stack': [release('v' + newer, 'monkeymaxxing/monkeymaxxing-stack')]})
-        self.assertEqual(code, 1, output)
-        for text in (f'A newer Stack release is out, {newer}', f'runs Stack {pinned[1]}.{pinned[2]}',
-                     f'https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/tag/v{newer}',
-                     'operating_procedures/upgrade_to_a_new_stack_version.md'):
-            self.assertIn(text, output)
-
-    def test_a_newer_stack_release_is_found_by_its_semantic_version(self):
-        # The Stack tags vMAJOR.MINOR.PATCH as the tools do; a minor of 10 is newer than one of 9.
-        pinned = re.search(r'(?m)^    set_up_outside_services:\n      version: "(\d+)\.(\d+)\.(\d+)"',
-                           (T/'mmx_project_settings.yml').read_text())
-        major, minor, patch = (int(part) for part in pinned.groups())
-        for newer in (f'{major}.{minor}.{patch + 1}', f'{major}.{minor + 1}.0', f'{major}.{minor + 10}.0'):
-            code, output = self.run_script(self.check('set_up_outside_services'), {
-                'monkeymaxxing/monkeymaxxing-stack': [release('v' + newer, 'monkeymaxxing/monkeymaxxing-stack')]})
-            self.assertEqual(code, 1, output)
-            self.assertIn('A newer Stack release is out, ' + newer, output)
-        code, output = self.run_script(self.check('set_up_outside_services'), {
-            'monkeymaxxing/monkeymaxxing-stack': [release(f'v{major}.{minor}.{patch}', 'monkeymaxxing/monkeymaxxing-stack')]})
-        self.assertEqual(code, 0, output)
-
-    def test_a_newer_release_by_number_fails_whatever_the_tag_prefix(self):
-        code, output = self.run_script(self.check('rclone'), {'rclone/rclone': [release('v1.100.0', 'rclone/rclone')]})
-        self.assertEqual(code, 1, output)
-        code, output = self.run_script(self.check('litestream'), {
-            'benbjohnson/litestream': [release('litestream-99.0.0', 'benbjohnson/litestream')]})
-        self.assertEqual(code, 1, output)
-
-    def test_the_same_or_an_older_release_passes(self):
-        for tag in ('v0.5.16', 'v0.4.99', 'v0.0.1'):
-            code, output = self.run_script(self.check('litestream'), {
-                'benbjohnson/litestream': [release(tag, 'benbjohnson/litestream')]})
-            self.assertEqual(code, 0, f'{tag}: {output}')
-
-    def test_a_pre_release_pin_passes_until_its_release_and_before_any_stable_release(self):
-        # releases/latest answers 404 while a project has published only pre-releases.
-        code, output = self.run_script(self.check('litestream'), {
-            'benbjohnson/litestream': [(404, '{"message": "Not Found"}')]})
-        self.assertEqual(code, 0, output)
-        self.assertIn('no release that is not a pre-release', output)
-        code, output = self.run_script(self.check('litestream'), {
-            'benbjohnson/litestream': [release('v0.0.9', 'benbjohnson/litestream')]})
-        self.assertEqual(code, 0, output)
-
-    def test_a_source_that_does_not_answer_passes_after_3_tries(self):
-        for name, answer in (('rate-limited', (403, '{"message": "API rate limit exceeded for 203.0.113.7."}')),
-                             ('malformed', (200, '{"tag_name": ')),
-                             ('no tag', (200, '{"name": "x"}')),
-                             ('server error', (502, 'Bad gateway'))):
-            code, output = self.run_script(self.check('rclone'), {'rclone/rclone': [answer]})
-            self.assertEqual(code, 0, f'{name}: {output}')
-            self.assertIn('did not answer', output, name)
-            self.assertEqual(StandInGitHub.requests.get('rclone/rclone'), 3, name)
-
-    def test_a_failed_request_is_tried_again_in_the_same_run(self):
-        code, output = self.run_script(self.check('rclone'), {'rclone/rclone': [
-            (502, 'Bad gateway'), release('v99.0.0', 'rclone/rclone')]})
-        self.assertEqual(code, 1, output)
-        self.assertEqual(StandInGitHub.requests['rclone/rclone'], 2)
-
-    def test_release_sources_answer_fails_and_names_each_source_that_did_not_answer(self):
-        checks, _ = self.default_checks
-        script = checks['release_sources_answer']
-        every_source = {'monkeymaxxing/monkeymaxxing-stack': [release('v0.1.0', 'monkeymaxxing/monkeymaxxing-stack')],
-                        'benbjohnson/litestream': [release('v0.5.17', 'benbjohnson/litestream')],
-                        'rclone/rclone': [release('v1.75.2', 'rclone/rclone')]}
-        code, output = self.run_script(script, every_source)
-        self.assertEqual(code, 0, output)
-        code, output = self.run_script(script, dict(every_source, **{
-            'rclone/rclone': [(403, '{"message": "API rate limit exceeded"}')]}))
-        self.assertEqual(code, 1, output)
-        self.assertIn("rclone's release source, rclone/rclone at GitHub, did not answer: HTTP 403: API rate limit exceeded", output)
-        self.assertNotIn('litestream', output)
-
-    def test_no_connection_counts_as_no_answer(self):
-        with socket.socket() as unused:
-            unused.bind(('127.0.0.1', 0))
-            closed_url = f'http://127.0.0.1:{unused.getsockname()[1]}'
-        script = self.check('rclone').replace('https://api.github.com', closed_url).replace('sleep 5', 'sleep 0')
-        result = subprocess.run(['bash', '--noprofile', '--norc', '-o', 'pipefail', '-c', script],
-                                text=True, capture_output=True, timeout=120)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('no answer, curl exit code 7', result.stdout)
 
 
 if __name__ == '__main__':

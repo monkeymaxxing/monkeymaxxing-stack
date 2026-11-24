@@ -671,7 +671,7 @@ person must do, never by how much you found.
 | --- | --- | --- |
 | SOS (`sos` in the files) | Users are hurt now, and you could not fix it. It wakes the person on call, even at night, and repeats until someone claims the SOS in MMHotline: presses "Claim: I'm handling the incident", or acknowledges the SOS in Pushover. | The site is down and no fix you may run exists; signs of data loss or of a break-in; a flaw that attackers exploit now and that reaches servers in `inventories/servers.yml` |
 | warn | A person must act within days, or must know of a change that costs money or carries risk. A notification that wakes nobody; a person looks when they're next working. | A fix that worked but found the disk 98% full; a trigger's warning; a reboot that waits for the weekly window; a server added for the load, with its price; a fix the nightly updates did not install a day later |
-| info | Everything else. Sent as a quiet alert, only to the contact methods that subscribe to info; nobody needs to act. | "I checked, and the finding does not affect you"; a fix that worked; a restarted service; a new release with no security fix; a security fix that attackers do not exploit now |
+| info | Everything else. Sent as a quiet alert, only to the contact methods that subscribe to info; nobody needs to act. | "I checked, and the finding does not affect you"; a fix that worked; a restarted service; a security fix that attackers do not exploit now |
 
 MMHotline sends its own alert about each playbook that waits for a person:
 a playbook request needing a person's approval at SOS, and a warning
@@ -704,9 +704,9 @@ of a break-in, and a flaw that attackers exploit now and that reaches
   flaw in `triage_agent_notes/open_software_findings.md`, and report the
   flaw once a fix becomes available. Leave out the flaws Debian rates
   `unimportant`. Send the warning at once, waking nobody.
-- **info:** every other new or changed finding, such as a new release,
-  with or without a security fix that attackers do not exploit now, or a
-  fix the nightly updates install.
+- **info:** every other new or changed finding, such as a security fix
+  that attackers do not exploit now, or a fix the nightly updates install.
+  A release with no security fix is no finding.
 
 Programs face the internet through three paths: `cloudflared`, Caddy, and
 the apps' containers (forwarded by Cloudflare, which terminates public
@@ -866,8 +866,7 @@ installed, so keep the open findings in one note,
 `triage_agent_notes/open_software_findings.md`, with a section for the
 flaws with no fix yet, which are never reported until a fix appears:
 for each, the program or package, the flaw's ID, its level, the date it was
-first reported, and its fix. A new release with no security fix takes the
-release's version in place of the flaw's ID. Report a finding only when the finding is
+first reported, and its fix. Report a finding only when the finding is
 new or changed:
 the level rose (attackers exploit the flaw now, for example), a fix became
 available, or the fix is installed, which is reported at info once the
@@ -877,34 +876,21 @@ and commit it. A finding whose fix took effect leaves the note; Git keeps
 the earlier entries. An unchanged open finding isn't reported again; the weekly
 review reads the note.
 
-### A newer release of a pinned program
+### Upgrades and Stack releases
 
-MMWatchdog's check group `pinned_program_releases` on `util01` asks each
-checked program's release source once an hour for the newest release,
-and compares it with the program's pin in `stack_software` in
-`mmx_project_settings.yml`. Its warning names the program, the pinned and
-the newest version, and the release's page. The Stack's own programs
-(`mmx`, `mmwatchdog`, `mmhotline`) have no check: the team gets them
-through a Stack release.
+Stable systems upgrade only for a reason: a flaw being exploited, support
+ending, or something the team needs. Otherwise stay on the version you
+have. A newer release alone is never a finding, a report, or an alert.
+You know the end-of-support dates of the Debian release, Postgres, and
+the pinned programs, and you raise one when it matters.
 
-A newer release is no outage and nothing to wake anyone for. Only a flaw
-that attackers exploit now makes your report an SOS; every other release
-is an info report, which shows without a sound, and only on the phones
-that subscribe to info. The exception is
-`stack_release_fixes_an_exploited_flaw` below, which is never info. MMHotline holds the check's own warning while you
-look, and delivers it, waking nobody, only when no report of yours names
-it ([Warnings wait for your report](#warnings-wait-for-your-report)).
+MMWatchdog's check group `pinned_program_releases` on `util01` reads the
+Stack's releases once an hour for a fix of an exploited flaw. Only a flaw
+that attackers exploit now makes your report an SOS. MMHotline holds
+the check's own warning while you look, and delivers it, waking nobody,
+only when no report of yours names it
+([Warnings wait for your report](#warnings-wait-for-your-report)).
 
-- **`stack_version_is_the_newest_release`:** a newer Stack release is
-  out. The check is info, and MMHotline starts triage sessions only for
-  warn and SOS, so it never starts one and never joins one: you meet it
-  in the scheduled software review, or the weekly system review lists it.
-  Read its release notes. Report at info, and hand over to a person
-  with the two Stack versions, the release's page, and the procedure,
-  [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
-  Add the release to `triage_agent_notes/open_software_findings.md`. A
-  release that fixes a flaw attackers exploit now says so in its notes,
-  and the next check below warns about it.
 - **`stack_release_fixes_an_exploited_flaw`:** a Stack release newer than
   this system's fixes a flaw that attackers exploit now, in one of the
   Stack's programs. Each flaw is its own finding, named in the release's
@@ -918,27 +904,7 @@ it ([Warnings wait for your report](#warnings-wait-for-your-report)).
   both Stack versions, the release's page, and
   [Upgrade to a new Stack version](operating_procedures/upgrade_to_a_new_stack_version.md).
   When the check's alert says that MMWatchdog cannot check it, GitHub's
-  release list has not answered for 6 hours: report at warn, as for
-  `release_sources_answer`.
-- **`PROGRAM_pin_is_the_newest_release`:** read the release notes of
-  every release between the pin and the newest, and the program's
-  `security_advisories_page` in `software_outside_the_distribution.yml`.
-  Judge whether a release fixes a security flaw, and whether the flaw
-  reaches the servers. Report at the finding's
-  [level](#levels-of-vulnerability-findings): SOS only when attackers
-  exploit the flaw now and it reaches servers in `inventories/servers.yml`;
-  info for every other release, including one with a security fix that
-  attackers do not exploit now. The
-  report hands over to a person with the facts: the program, the pinned
-  and the newest version, each security fix with its ID, the project edits
-  the release notes require, the new pin's `version`, `download_url`, and
-  `sha256` (from the release's checksum file), and the procedure,
-  [Updating a program from outside the distribution](operating_procedures/add_or_update_a_program_from_outside_the_distribution.md#updating-a-program-from-outside-the-distribution).
-  Add the release to `triage_agent_notes/open_software_findings.md`.
-  Never change a pin yourself: a pin is in `mmx_project_settings.yml`,
-  outside the folders your commits may change, so only a person's commit
-  updates a program.
-- **`release_sources_answer`:** a release source has not answered for a
-  day, so the team no longer learns of that program's releases. Report at
-  warn with the check's output, such as a refused or rate-limited request,
-  and what a person can do, such as correcting the pin's `download_url`.
+  release list has not answered for 6 hours, so the team no longer learns
+  of such a fix: report at warn with the check's output, such as a refused
+  or rate-limited request, and what a person can do, such as correcting
+  the Stack pin's `download_url`.
