@@ -80,7 +80,7 @@ class EachPauseIsTheSumOfItsWaits(unittest.TestCase):
         playbook = text('playbooks/reboot_servers_after_updates.yml')
         default = self.come_back_wait(playbook)
         self.the_settings_check_refuses_other_values(playbook)
-        work = minutes(one(r'command_succeeds: /usr/local/bin/check-that-this-server-does-its-work\n\s+wait_at_most: (\S+)', playbook))
+        work = minutes(one(r"timeout (\S+) bash -c 'until /usr/local/bin/check-that-this-server-does-its-work", playbook))
         # The default, and a dedicated server's own value from the inventory.
         for wait in (default, '15m'):
             with self.subTest(wait=wait):
@@ -134,7 +134,9 @@ class EachPauseIsTheSumOfItsWaits(unittest.TestCase):
 
     def switchover(self, playbook, primary_task):
         switch = minutes(one(rf'id: {primary_task}\n(?:.*\n)*?\s+time_limit: (\S+)', playbook))
-        per_app = minutes(one(r'expected_http_status_codes: \[200\]\n\s+wait_at_most: (\S+)', playbook))
+        # The switchover's own wait for each app, the first one after its task.
+        after = playbook.split(f'id: {primary_task}\n', 1)[1]
+        per_app = minutes(re.findall(r'expected_http_status_codes: \[200\]\n\s+wait_at_most: (\S+)', after)[0])
         return switch, per_app
 
     def test_switch_database_primary(self):
@@ -175,7 +177,9 @@ class EachPauseIsTheSumOfItsWaits(unittest.TestCase):
         """A new pause gets its own sum in this test before it ships."""
         known = {'playbooks/reboot_servers_after_updates.yml': 1, 'playbooks/reboot_util01_after_updates.yml': 1,
                  'playbooks/switch_database_primary.yml': 1, 'playbooks/update_database_servers.yml': 3,
-                 'playbooks/remove_server.yml': 1, 'roles/mmwatchdog_joined_node/main.yml': 1, 'roles/util_server/main.yml': 1}
+                 'playbooks/remove_server.yml': 1, 'roles/mmwatchdog_joined_node/main.yml': 1, 'roles/util_server/main.yml': 1,
+                 'roles/systems_desk/files/reboot-this-desk-after-updates': 1,
+                 'roles/util_server/files/reboot-util01-after-the-weekly-maintenance': 1}
         found = {}
         for path in sorted(T.rglob('*')):
             if path.is_file() and path.suffix in ('.yml', ''):
@@ -185,6 +189,95 @@ class EachPauseIsTheSumOfItsWaits(unittest.TestCase):
                 if count and relative.startswith(('playbooks/', 'roles/')) and relative != 'roles/util_server/files/util01-alert-pause':
                     found[relative] = count
         self.assertEqual(found, known)
+
+
+class PlannedPausesAreSilentAndShort(unittest.TestCase):
+    """Planned work sends no maintenance on and off notices, and the weekly reboots and the public site pause are short."""
+
+    PAUSE = re.compile(r'(?:mmwatchdog maintenance on |util01-alert-pause start |public-site-checks-pause start )[^\n]*')
+
+    def test_every_planned_pause_sends_no_on_and_off_notice(self):
+        found = 0
+        for path in sorted(T.rglob('*')):
+            relative = str(path.relative_to(T))
+            if not path.is_file() or not relative.startswith(('playbooks/', 'roles/', 'operating_procedures/')):
+                continue
+            if relative in ('roles/util_server/files/util01-alert-pause', 'roles/util_server/files/public-site-checks-pause'):
+                continue
+            for line in self.PAUSE.findall(path.read_text(errors='ignore')):
+                if '--for' not in line:
+                    continue
+                found += 1
+                with self.subTest(path=relative, line=line):
+                    self.assertIn('--without-maintenance-on-and-off-alerts', line)
+        self.assertGreater(found, 10)
+
+    def test_the_weekly_reboots_of_util01_and_a_desk_pause_for_5_minutes(self):
+        for path, pause in (('roles/util_server/files/reboot-util01-after-the-weekly-maintenance', 'util01-alert-pause start'),
+                            ('roles/systems_desk/files/reboot-this-desk-after-updates', 'mmwatchdog maintenance on --every-check-group')):
+            with self.subTest(path=path):
+                self.assertIn(f'{pause} --for 5m --reason "weekly_maintenance" --without-maintenance-on-and-off-alerts', text(path))
+
+    def test_a_pools_only_server_pauses_only_the_public_site_checks_briefly(self):
+        # 3 minutes for a reboot; 10 minutes for db01 alone, whose updates install inside the pause.
+        for playbook, length in (('reboot_servers_after_updates', '3m'), ('update_database_servers', '10m')):
+            with self.subTest(playbook=playbook):
+                source = text(f'playbooks/{playbook}.yml')
+                starts = re.findall(r'/usr/local/bin/public-site-checks-pause start --for (\S+) --reason "' + playbook + r': ', source)
+                self.assertEqual(starts, [length])
+                # util01 opens it right before the restart and ends it once the server does its work again.
+                restart = (source.rindex('- id: restart_each_service_that_uses_a_replaced_file') if playbook == 'update_database_servers'
+                           else source.index('- id: reboot_the_server\n            reboot:'))
+                self.assertLess(source.index('public-site-checks-pause start'), restart)
+                end = source.rindex('script: /usr/local/bin/public-site-checks-pause end')
+                self.assertGreater(end, source.rindex('run_only_if_this_path_exists: /var/run/reboot-required'))
+                if playbook == 'reboot_servers_after_updates':
+                    # After the server does its work again, not as soon as it answers SSH.
+                    self.assertGreater(end, source.index("until /usr/local/bin/check-that-this-server-does-its-work"))
+                else:
+                    # db01 alone: downloaded before the pause, installed inside it, and the
+                    # pause ends after Postgres and each app answer, in cleanup.
+                    self.assertLess(source.index('--download-only full-upgrade'), source.index('public-site-checks-pause start'))
+                    self.assertLess(source.index('public-site-checks-pause start'), source.rindex('- id: install_every_update'))
+                    block = source[source.index('id: wait_until_the_site_answers_then_end_the_public_site_pause'):]
+                    self.assertLess(block.index('pg_isready'), block.index('cleanup:'))
+                    self.assertLess(block.index('url_responds:'), block.index('cleanup:'))
+                    self.assertGreater(block.index('public-site-checks-pause end'), block.index('cleanup:'))
+
+    def run_public_site_pause(self, *arguments, checks=('public_sites/shop_answers_at_its_public_host_name', 'clock/synchronized'), status_exit=1):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log = root/'log'
+            status = {'checks': {name: {} for name in checks}}
+            (root/'mmwatchdog').write_text(f'#!/bin/bash\necho "$*" >> {log}\n'
+                                           f'[ "$1" = status ] && {{ echo \'{json.dumps(status)}\'; exit {status_exit}; }}\nexit 0\n')
+            (root/'mmwatchdog').chmod(0o755)
+            program = (T/'roles/util_server/files/public-site-checks-pause').read_text().replace('/usr/local/bin/mmwatchdog', str(root/'mmwatchdog'))
+            result = subprocess.run(['bash', '-c', program, 'public-site-checks-pause', *arguments], text=True,
+                                    capture_output=True, stdin=subprocess.DEVNULL)
+            return result, log.read_text().splitlines() if log.exists() else []
+
+    def test_the_public_site_pause_names_public_sites_alone(self):
+        result, log = self.run_public_site_pause('start', '--for', '3m', '--reason', 'r', '--without-maintenance-on-and-off-alerts')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log[1], 'maintenance on public_sites --for 3m --reason r --without-maintenance-on-and-off-alerts')
+        result, log = self.run_public_site_pause('end', status_exit=0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log[1], 'maintenance off public_sites')
+
+    def test_before_go_live_the_public_site_pause_changes_nothing(self):
+        for action in (['start', '--for', '3m', '--reason', 'r'], ['end']):
+            with self.subTest(action=action[0]):
+                result, log = self.run_public_site_pause(*action, checks=('clock/synchronized',))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(log, ['status --json'])
+                self.assertIn('before go-live', result.stdout)
+
+    def test_a_public_site_pause_without_an_answer_from_mmwatchdog_fails(self):
+        result, log = self.run_public_site_pause('start', '--for', '3m', status_exit=4)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(log, ['status --json'])
 
 
 class Util01sPublicSiteChecksAreNeverPaused(unittest.TestCase):
@@ -271,6 +364,12 @@ class AFailureEndsThePauseWhereMMXOffersIt(unittest.TestCase):
     def test_reboot_servers_after_updates(self):
         self.check(self.tasks('reboot_servers_after_updates'),
                    [('wait_until_the_server_does_its_work_then_end_its_alert_pause', 'cleanup')])
+
+    def test_the_public_site_pause_ends_at_once_when_it_does_not_start_fully(self):
+        for playbook in ('reboot_servers_after_updates', 'update_database_servers'):
+            with self.subTest(playbook=playbook):
+                self.check(self.tasks(playbook), [('pause_the_public_site_checks', 'on_failure')],
+                           start='public-site-checks-pause start', end='/usr/local/bin/public-site-checks-pause end')
 
     def test_reboot_util01_after_updates(self):
         self.check(self.tasks('reboot_util01_after_updates'),

@@ -4,13 +4,12 @@
 times, or other features.
 
 **What this page does:** a change to `mmhotline_settings.yml` reaches
-MMHotline on `util01`, and every desk's lock-out button gets the new
-settings.
+MMHotline on `util01`. No desk review follows: the lock-out button leaves
+MMHotline's settings as they are.
 
 **Who acts:** the coding agent edits, previews, pushes, and runs the
 change. The person sets any new secret in the vault, in the person's own
-desk terminal. Each person runs the desk review in the person's own
-terminal, and adds and changes the person's own contact methods.
+desk terminal, and adds and changes the person's own contact methods.
 
 ## Before you start
 
@@ -72,15 +71,6 @@ terminal, and adds and changes the person's own contact methods.
    `./server_management_scripts/run_mmx_on_util01 results` from the desk.
    MMX records each settings part's apply output and refusal reason without
    secret values.
-5. **Review and apply each desk's settings.** Tell each person to run
-   `review-and-apply-the-systems-desk-settings` and read the
-   MMHotline change it shows.
-   **Check:** each person's desk review shows the MMHotline change and
-   applies it.
-   Reason: the lock-out button applies the MMHotline settings of the
-   person's last desk review, so until then a lock-out would bring back the earlier
-   people and on-call rotation. The lock-out button applies MMHotline's settings as root on `util01`,
-   so it must not apply settings that an outside attacker could push to the Git host.
 
 ## If something is different
 

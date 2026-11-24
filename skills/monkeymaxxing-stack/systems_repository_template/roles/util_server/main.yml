@@ -6,7 +6,8 @@
 # - MMHotline's private pages through util01's own Cloudflare tunnel.
 # - MMHotline's copy of the systems repository, and the Git settings for
 #   the triage agent's Unix user.
-# - The daily server settings comparison and the weekly database restore drill.
+# - The daily server settings comparison, the weekly database restore drill,
+#   and the automatic weekly maintenance, with util01's own reboot.
 #
 # After util_server, MMX reads the hub's join code: the hub's address,
 # certificate fingerprint, and secret that lets servers join the hub.
@@ -55,11 +56,19 @@ inputs:
     type: string
     required: true
     secret: true
-  # Read only by the reboot check of mmwatchdog_checks/every_server.yml,
-  # which util01 never gets: MMX never reboots the machine it runs on. So
-  # util01 passes neither, and both stay empty.
+  # Read by mmwatchdog_checks/every_server.yml for a server's pool. util01
+  # passes none: util01 is in no production pool, so its reboot reminder is
+  # the one of a server that the automatic weekly maintenance reboots.
   inventory_groups: {type: mapping, default: {}}
-  reboot_check_settings: {type: mapping, default: {}}
+  # From mmx_project_settings.yml: the automatic weekly maintenance runs on
+  # util01 at the start of maintenance_window, only while
+  # automatic_weekly_maintenance is true.
+  maintenance_window:                       # weekday, starts_at (UTC), and length_minutes
+    type: mapping
+    required: true
+  automatic_weekly_maintenance:
+    type: boolean
+    required: true
   # For util01's checks app_servers_to_add_for_the_load and
   # app_servers_to_remove_for_the_load (mmwatchdog_checks/util_server.yml):
   # what_the_triage_agent_may_do_without_a_person, the inventory group
@@ -225,6 +234,12 @@ node_tasks:
     apt_package:
       packages:
         - {name: curl, version: newest_when_first_installed}
+  # gitleaks scans every push to the main copy of the systems repository
+  # for a secret (files/refuse_a_push_that_adds_a_secret).
+  - id: install_gitleaks
+    apt_package:
+      packages:
+        - {name: gitleaks, version: newest_when_first_installed}
 
   # Two SSH keys, each made on util01, so the private half never leaves it.
   # The coding agent reads each public_key from the first run's results.
@@ -443,6 +458,30 @@ node_tasks:
       env:
         MAIN_COPY: "{{ .inputs.systems_repository.main_copy_path_on_util01 }}"
       skip_if_this_path_exists: "{{ .inputs.systems_repository.main_copy_path_on_util01 }}"
+  # The main copy refuses a push whose commits add what looks like a secret,
+  # whoever pushes: a desk, MMHotline's triage notes, or a server
+  # replacement. Reason: a secret pushed once stays in every clone's
+  # history, so the check comes before main changes, not in a later review.
+  - id: directory_for_the_gitleaks_configuration
+    directory:
+      path: /etc/gitleaks
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: configure_gitleaks_for_the_systems_repository
+    file:
+      path: /etc/gitleaks/systems_repository.toml
+      source: files/gitleaks.toml
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - id: refuse_a_push_that_adds_a_secret_to_the_main_copy
+    file:
+      path: "{{ .inputs.systems_repository.main_copy_path_on_util01 }}/hooks/pre-receive"
+      source: files/refuse_a_push_that_adds_a_secret
+      owner: root
+      group: root
+      permissions_mode: "0755"
   # util01's copy of the systems repository belongs to mmhotline. MMHotline, the
   # helper run_mmx_on_util01 and the scheduled jobs share the copy and
   # systems_repository.lock. After the clone, only MMHotline moves the
@@ -501,7 +540,8 @@ node_tasks:
         flock /var/lib/mmhotline/systems_repository.lock true
         # Ask MMHotline first, without the lock: MMHotline's check takes the
         # lock itself.
-        trusted=$(find_the_trusted_commit_of_the_systems_repository)
+        # Exit 3: everyone is locked out, and the job runs nothing.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 3 ] && exit 0; exit "$status"; }
         exec 9>> /var/lib/mmhotline/systems_repository.lock
         if ! flock --nonblock 9; then
           holder=$(cat /var/lib/mmhotline/systems_repository.lock)
@@ -509,6 +549,11 @@ node_tasks:
           flock 9
         fi
         printf '%s; user mmhotline; process %s; started %s\n' "$JOB_NAME" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        # A lock-out that started while this job waited for the lock: run nothing.
+        if [ -e /etc/mmhotline/everyone-locked-out ]; then
+          printf '%s\n' 'everyone is locked out (/etc/mmhotline/everyone-locked-out), so this job runs nothing until the person undoes the lock-out with the lock-out button'
+          exit 0
+        fi
         changes=$(git status --porcelain)
         [ -z "$changes" ]
         [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
@@ -597,7 +642,8 @@ node_tasks:
         export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
         # Ask MMHotline first, without the lock: MMHotline's check takes the
         # lock itself.
-        trusted=$(find_the_trusted_commit_of_the_systems_repository)
+        # Exit 3: everyone is locked out, and the job runs nothing.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 3 ] && exit 0; exit "$status"; }
         exec 9>> /var/lib/mmhotline/systems_repository.lock
         if ! flock --nonblock 9; then
           holder=$(cat /var/lib/mmhotline/systems_repository.lock)
@@ -605,6 +651,11 @@ node_tasks:
           flock 9
         fi
         printf '%s; user mmhotline; process %s; started %s\n' "$JOB_NAME" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        # A lock-out that started while this job waited for the lock: run nothing.
+        if [ -e /etc/mmhotline/everyone-locked-out ]; then
+          printf '%s\n' 'everyone is locked out (/etc/mmhotline/everyone-locked-out), so this job runs nothing until the person undoes the lock-out with the lock-out button'
+          exit 0
+        fi
         changes=$(git status --porcelain)
         [ -z "$changes" ]
         [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
@@ -671,6 +722,206 @@ node_tasks:
         # Managed by MMX from roles/util_server/main.yml.
         [Unit]
         After=copy_uploads_to_the_backup_bucket.service
+
+  # The automatic weekly maintenance, at the start of maintenance_window
+  # (mmx_project_settings.yml, in UTC), while automatic_weekly_maintenance
+  # is true. One job, so no two clocks race: it holds util01's lock and runs,
+  # in order,
+  #   1. update_database_servers, only with two or more database servers,
+  #      and only when one of them waits for a security update, a restart
+  #      for a library or a setting, or a reboot (the playbook checks
+  #      first, and a replica always takes over before the old primary
+  #      restarts). db01 alone is never restarted automatically.
+  #   2. reboot_servers_after_updates, which reboots the waiting servers of
+  #      the pools of two or more servers and staging01, never a production
+  #      pool's only server.
+  # each with run_as_the_automatic_weekly_maintenance: true. Before each
+  # server's turn, util01 runs weekly-maintenance-goes-on: when MMHotline
+  # waits for the lock, for a run the triage agent or a person asked for,
+  # or the window has ended, the run ends after the server before finished
+  # its whole turn, the job exits 0, and the lock is free. Unlike the
+  # restore drill, it does not run again later the same night: what it did
+  # not reach waits for next week, and MMWatchdog reminds after 15 days.
+  #   3. When the job ends with success, systemd starts util01's own reboot
+  #      (OnSuccess= below), which reboots util01 only when its updates wait
+  #      for a reboot and nothing else is going on.
+  # run_missed_job_after_downtime: false. Reason: a util01 that was down at
+  # the window's start must not run the maintenance when it boots at
+  # midday; the maintenance waits for next week's window.
+  # During a lock-out the job runs nothing: the servers refuse util01's key.
+  # The trusted commit is found before the lock, as in the jobs above,
+  # because MMHotline's check takes the lock itself.
+  # /var/lib/weekly_maintenance belongs to root: root writes
+  # ended_early_because into it (weekly-maintenance-goes-on runs as root in
+  # the playbooks' util_server stages), and root reads it before util01's
+  # own reboot. The mmhotline user only reads it. Reason: a directory the
+  # mmhotline user owned would let that user put a link where root writes.
+  # systemd removes the file as root before each start of the job
+  # (10-forget-the-last-early-end.conf below).
+  - id: create_the_directory_of_the_weekly_maintenance
+    directory:
+      path: /var/lib/weekly_maintenance
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: run_the_weekly_maintenance
+    when: "{{ .inputs.automatic_weekly_maintenance }}"
+    systemd_scheduled_job:
+      name: weekly_maintenance
+      systemd_calendar_schedule: "{{ .inputs.maintenance_window.weekday }} *-*-* {{ .inputs.maintenance_window.starts_at }}:00 UTC"
+      run_missed_job_after_downtime: false
+      run_as_user_account: mmhotline
+      run_from_directory: /var/lib/mmhotline
+      script: |
+        set -euo pipefail
+        cd systems_repository
+        export MMX_VAULT_PASSWORD_FILE=/var/lib/mmhotline/mmx_vault_passphrase
+        if [ -e /etc/mmhotline/everyone-locked-out ]; then
+          printf '%s\n' 'everyone is locked out (/etc/mmhotline/everyone-locked-out), so the weekly maintenance runs nothing; it runs again in next week'"'"'s window after the person undoes the lock-out'
+          exit 0
+        fi
+        # Wait while another holder, such as a run the team started, has the
+        # lock, and only then ask MMHotline, as compare_every_server_with_the_repository does.
+        flock /var/lib/mmhotline/systems_repository.lock true
+        # Exit 3: everyone is locked out, and the job runs nothing.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 3 ] && exit 0; exit "$status"; }
+        exec 9>> /var/lib/mmhotline/systems_repository.lock
+        if ! flock --nonblock 9; then
+          holder=$(cat /var/lib/mmhotline/systems_repository.lock)
+          printf 'waiting for the lock holder: %s\n' "${holder:-another process on util01 (no holder line)}"
+          flock 9
+        fi
+        printf '%s; user mmhotline; process %s; started %s\n' "$JOB_NAME" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        # A lock-out that started while this job waited for the lock: run nothing.
+        if [ -e /etc/mmhotline/everyone-locked-out ]; then
+          printf '%s\n' 'everyone is locked out (/etc/mmhotline/everyone-locked-out), so this job runs nothing until the person undoes the lock-out with the lock-out button'
+          exit 0
+        fi
+        changes=$(git status --porcelain)
+        [ -z "$changes" ]
+        [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
+        git merge-base --is-ancestor "$trusted" HEAD || { printf "util01's copy is at %s, not at or past the trusted commit %s; nothing ran, and next week's maintenance tries again\n" "$(git rev-parse --short=12 HEAD)" "${trusted:0:12}" >&2; exit 1; }
+        # systemd removed the last run's file before this start
+        # (10-forget-the-last-early-end.conf).
+        ended_early=/var/lib/weekly_maintenance/ended_early_because
+        # One playbook at a time. A stop by systemd lets MMX finish the node
+        # task it runs, cleanup included, as the restore drill's job does.
+        run_the_playbook() {
+          local status=0
+          mmx run "$1" --var run_as_the_automatic_weekly_maintenance=true --non-interactive &
+          controller_pid=$!
+          trap 'mmx stop --non-interactive; wait "$controller_pid"; exit 1' TERM INT HUP
+          wait "$controller_pid" || status=$?
+          trap - TERM INT HUP
+          if [ "$status" -ne 0 ] && [ -s "$ended_early" ]; then
+            printf 'the weekly maintenance ended early in %s: %s\n' "$1" "$(head -n 1 "$ended_early")"
+            exit 0
+          fi
+          return "$status"
+        }
+        database_servers=$(mmx nodes --json | jq '(.groups.database_servers // []) | length')
+        if [ "$database_servers" -ge 2 ]; then
+          run_the_playbook update_database_servers
+        else
+          printf '%s\n' 'one database server: the weekly maintenance never restarts it, because its users would see the restart; a person restarts it in the maintenance window when MMWatchdog reminds'
+        fi
+        run_the_playbook reboot_servers_after_updates
+      env:
+        JOB_NAME: weekly_maintenance
+  - id: let_the_weekly_maintenance_finish_its_node_task_after_a_stop
+    when: "{{ .inputs.automatic_weekly_maintenance }}"
+    systemd_unit:
+      name: weekly_maintenance.service
+      drop_in: 10-finish-the-node-task.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Service]
+        KillMode=process
+        TimeoutStopSec=infinity
+  # Root removes the last run's early-end reason before each start: the
+  # "+" runs the command with full privileges, while the job itself runs as
+  # the mmhotline user, which cannot write in the root-owned directory.
+  - id: forget_the_last_early_end_of_the_weekly_maintenance
+    when: "{{ .inputs.automatic_weekly_maintenance }}"
+    systemd_unit:
+      name: weekly_maintenance.service
+      drop_in: 10-forget-the-last-early-end.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Service]
+        ExecStartPre=+/bin/rm -f /var/lib/weekly_maintenance/ended_early_because
+  - id: reboot_util01_when_the_weekly_maintenance_succeeded
+    when: "{{ .inputs.automatic_weekly_maintenance }}"
+    systemd_unit:
+      name: weekly_maintenance.service
+      drop_in: 10-then-reboot-util01.conf
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Unit]
+        OnSuccess=reboot_util01_after_the_weekly_maintenance.service
+  # util01's own reboot, as root, which the mmhotline user cannot start: no
+  # sudo line allows it. Its guards are in the program's comment.
+  - id: install_the_reboot_of_util01_after_the_weekly_maintenance
+    file:
+      path: /usr/local/sbin/reboot-util01-after-the-weekly-maintenance
+      source: files/reboot-util01-after-the-weekly-maintenance
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  - id: create_the_directory_of_util01s_weekly_reboot
+    directory:
+      path: /var/lib/util01_weekly_reboot
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  - id: describe_the_reboot_of_util01_after_the_weekly_maintenance
+    systemd_unit:
+      name: reboot_util01_after_the_weekly_maintenance.service
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Unit]
+        Description=Reboot util01 for its installed updates after the weekly maintenance
+        [Service]
+        Type=oneshot
+        Environment=WINDOW_WEEKDAY={{ .inputs.maintenance_window.weekday }} WINDOW_STARTS_AT={{ .inputs.maintenance_window.starts_at }} WINDOW_LENGTH_MINUTES={{ .inputs.maintenance_window.length_minutes }}
+        ExecStart=/usr/local/sbin/reboot-util01-after-the-weekly-maintenance
+  # After the boot, the pause of util01's alerts ends as soon as MMWatchdog
+  # answers, so util01's checks watch again within a minute, not after the
+  # pause's 5 minutes. It does nothing when no weekly reboot left a marker.
+  - id: describe_the_end_of_the_alert_pause_after_the_weekly_util01_reboot
+    systemd_unit:
+      name: end_the_alert_pause_after_the_weekly_util01_reboot.service
+      content: |
+        # Managed by MMX from roles/util_server/main.yml.
+        [Unit]
+        Description=End util01's alert pause after its weekly reboot
+        After=mmwatchdog.service
+        Wants=mmwatchdog.service
+        ConditionPathExists=/var/lib/util01_weekly_reboot/the_alert_pause_waits_for_the_boot
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/reboot-util01-after-the-weekly-maintenance --end-the-alert-pause-after-the-boot
+        [Install]
+        WantedBy=multi-user.target
+  - id: end_the_alert_pause_after_each_weekly_util01_reboot
+    systemd_service:
+      name: end_the_alert_pause_after_the_weekly_util01_reboot.service
+      state: do_not_start_or_stop
+      start_at_boot: true
+  - id: remove_the_weekly_maintenance_while_it_is_turned_off
+    when: {not: "{{ .inputs.automatic_weekly_maintenance }}"}
+    systemd_scheduled_job:
+      name: weekly_maintenance
+      state: absent
+      run_as_user_account: mmhotline
+  - id: remove_the_drop_ins_of_the_weekly_maintenance_while_it_is_turned_off
+    when: {not: "{{ .inputs.automatic_weekly_maintenance }}"}
+    loop: [10-finish-the-node-task.conf, 10-forget-the-last-early-end.conf, 10-then-reboot-util01.conf]
+    as: drop_in
+    systemd_unit:
+      name: weekly_maintenance.service
+      drop_in: "{{ .drop_in }}"
+      state: absent
   # The daily check waits for an active drill, then refuses any leftover.
   # UTC: nightly_work_starts_at plus 3 hours 45 minutes.
   - id: work_out_the_time_of_the_leftover_restore01_check
@@ -698,7 +949,8 @@ node_tasks:
         flock /var/lib/mmhotline/systems_repository.lock true
         # Ask MMHotline first, without the lock: MMHotline's check takes the
         # lock itself.
-        trusted=$(find_the_trusted_commit_of_the_systems_repository)
+        # Exit 3: everyone is locked out, and the job runs nothing.
+        trusted=$(find_the_trusted_commit_of_the_systems_repository) || { status=$?; [ "$status" -eq 3 ] && exit 0; exit "$status"; }
         exec 9>> /var/lib/mmhotline/systems_repository.lock
         if ! flock --nonblock 9; then
           holder=$(cat /var/lib/mmhotline/systems_repository.lock)
@@ -706,6 +958,11 @@ node_tasks:
           flock 9
         fi
         printf '%s; user mmhotline; process %s; started %s\n' "$JOB_NAME" "$$" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+        # A lock-out that started while this job waited for the lock: run nothing.
+        if [ -e /etc/mmhotline/everyone-locked-out ]; then
+          printf '%s\n' 'everyone is locked out (/etc/mmhotline/everyone-locked-out), so this job runs nothing until the person undoes the lock-out with the lock-out button'
+          exit 0
+        fi
         changes=$(git status --porcelain)
         [ -z "$changes" ]
         [ "$(git symbolic-ref --quiet --short HEAD)" = main ]
@@ -850,13 +1107,33 @@ node_tasks:
       group: root
       permissions_mode: "0755"
   # The alert pause of util01's own planned work, which never pauses the
-  # public site checks: MMWatchdog's restart below and
-  # playbooks/reboot_util01_after_updates.yml use it. Installed before the
-  # restart that uses it.
+  # public site checks: MMWatchdog's restart below,
+  # playbooks/reboot_util01_after_updates.yml and util01's weekly reboot
+  # use it. Installed before the restart that uses it.
   - id: install_the_alert_pause_of_util01
     file:
       path: /usr/local/bin/util01-alert-pause
       source: files/util01-alert-pause
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # The short pause of the public site checks while a person restarts a
+  # production pool's only server: reboot_servers_after_updates and
+  # update_database_servers run it on util01.
+  - id: install_the_pause_of_the_public_site_checks
+    file:
+      path: /usr/local/bin/public-site-checks-pause
+      source: files/public-site-checks-pause
+      owner: root
+      group: root
+      permissions_mode: "0755"
+  # The automatic weekly maintenance's check before each server's turn:
+  # update_database_servers and reboot_servers_after_updates run it on
+  # util01.
+  - id: install_the_check_before_each_turn_of_the_weekly_maintenance
+    file:
+      path: /usr/local/bin/weekly-maintenance-goes-on
+      source: files/weekly-maintenance-goes-on
       owner: root
       group: root
       permissions_mode: "0755"

@@ -142,7 +142,7 @@ as when a server dies, while `app002` serves alone:
    about `app001` during the power-off:
 
    ```sh
-   ssh -F ssh/config root@10.20.1.1 'mmwatchdog maintenance on --every-check-group --for 15m --reason "second_app_server test: app001 powered off"'
+   ssh -F ssh/config root@10.20.1.1 'mmwatchdog maintenance on --every-check-group --for 15m --reason "second_app_server test: app001 powered off" --without-maintenance-on-and-off-alerts'
    ```
 
    Reason for 15 minutes: the test takes about 5, with the power-off, the
@@ -215,7 +215,7 @@ as when a server dies, while `app002` serves alone:
 - **If no app server runs yet:** the first app server starts the tag in
   `deployed_image_tags`.
 - **If the pool mixes server sizes:** MMWatchdog's CPU warning assumes equal
-  app servers, so the [weekly system review](do_the_weekly_system_review.md)
+  app servers, so a [system review](review_the_system.md)
   checks that the other servers can carry the load when the biggest server
   fails. [A pool of mixed server sizes](#a-pool-of-mixed-server-sizes) says
   how the servers share the requests.

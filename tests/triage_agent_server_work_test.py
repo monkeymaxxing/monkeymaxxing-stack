@@ -34,16 +34,16 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         if not cls.mmx:
             raise RuntimeError('Set MMX_BINARY to render the actual MMX template.')
 
-    def rules_entry(self, answer, minutes=10, pool_minutes=10, replacement_minutes=10, held_warn_minutes=3):
+    def rules_entry(self, answer, pool_minutes=10, replacement_minutes=10, held_warn_minutes=3):
         """The rendered lines of rules_for_running_agent_playbooks, up to the next top-level key."""
-        text = self.rendered(answer, minutes, pool_minutes, replacement_minutes, held_warn_minutes)
+        text = self.rendered(answer, pool_minutes, replacement_minutes, held_warn_minutes)
         entry = re.search(r'(?ms)^rules_for_running_agent_playbooks:\n(.*?)^(?=\S)', text)
         self.assertIsNotNone(entry, text)
         # The next top-level line is a comment or a key of its own, never glued to the entry.
         self.assertRegex(text, r'(?m)^# A playbook that starts, stops, restarts, or changes one of these waits for$')
         return [line for line in entry.group(1).splitlines() if line.strip() and not line.lstrip().startswith('#')]
 
-    def rendered(self, answer, minutes=10, pool_minutes=10, replacement_minutes=10, held_warn_minutes=3):
+    def rendered(self, answer, pool_minutes=10, replacement_minutes=10, held_warn_minutes=3):
         """The whole of mmhotline_settings.yml as MMX renders it, with stand-in secrets."""
         source = (T/'mmhotline_settings.yml').read_text().replace('.secrets.', '.vars.secret_')
         with tempfile.TemporaryDirectory() as temporary:
@@ -54,8 +54,7 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
             values.update(everyone_locked_out_except_desk='', triage_ssh_public_key='ssh-ed25519 AAAA stand-in',
                           root_ssh_public_keys=['ssh-ed25519 BBBB stand-in desk'], triage_agent_coding_agent='claude_code',
                           what_the_triage_agent_may_do_without_a_person=answer,
-                          triage_agent_server_work={'minutes_between_the_warning_and_a_reboot': minutes,
-                                                    'minutes_between_the_warning_and_adding_or_removing_an_app_server': pool_minutes,
+                          triage_agent_server_work={'minutes_between_the_warning_and_adding_or_removing_an_app_server': pool_minutes,
                                                     'sos_waits_for_a_server_replacement_minutes': replacement_minutes,
                                                     'warn_waits_for_the_triage_agent_minutes': held_warn_minutes},
                           util01_private_page_host_names={'mmhotline': 'ops.example.com'}, private_ip='10.20.0.1',
@@ -99,15 +98,15 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
             '    preset: routine_fixes_without_permission',
         ] + self.ONE_APPROVAL_FOR_THE_REPLACEMENT + self.SET_ASIDE_FINDINGS_RUN_AT_ONCE)
 
-    def test_routine_fixes_and_server_work_lists_the_six_playbooks(self):
-        self.assertEqual(self.rules_entry('routine_fixes_and_server_work', minutes=25, pool_minutes=12), [
+    def test_routine_fixes_and_server_work_lists_the_five_playbooks(self):
+        """Reboots for updates are no triage agent work: the automatic weekly maintenance runs them."""
+        self.assertEqual(self.rules_entry('routine_fixes_and_server_work', pool_minutes=12), [
             '  servers:',
             '    preset: routine_fixes_without_permission',
             '    playbooks:',
             '      replace_failed_servers: {rule: act_then_report, starts_a_server_replacement: true}',
             '      every_server: {rule: act_then_report}',
             '      destroy_replaced_servers: {rule: act_then_report}',
-            '      reboot_servers_after_updates: {rule: warn_wait_then_act, warning_wait_minutes: 25}',
             '      add_an_app_server_for_the_load: {rule: warn_wait_then_act, warning_wait_minutes: 12}',
             '      remove_server: {rule: warn_wait_then_act, warning_wait_minutes: 12}',
         ] + self.SET_ASIDE_FINDINGS_RUN_AT_ONCE)
@@ -148,11 +147,13 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         (trusted_commits: every_commit_on_origin, since 0.3.0 under triage_agent, and in systems_repository_commits from 0.5.0);
         publishes the status page with titles, impacts, components, edit/delete, and Atom feed (since 0.6.0); and clears
         the triage agent's home before each run, so a newer coding agent's settings files never carry over (since 0.6.1);
-        and holds every warning for the triage agent's report, with a daily run limit that never stops alerts (since 0.7.0).
+        and holds every warning for the triage agent's report, with a daily run limit that never stops alerts (since 0.7.0);
+        and defaults personal contact methods to SOS and Warning only, honors /etc/mmhotline/everyone-locked-out directly,
+        and requires --about-alert-id for info reports to take over held warnings (since 0.8.0).
         The pin names the release that does all of this."""
         settings = (T/'mmx_project_settings.yml').read_text()
         version = re.search(r'(?m)^    mmhotline:\n      version: "(.*?)"', settings)[1]
-        self.assertEqual(version, '0.7.0')
+        self.assertEqual(version, '0.8.0')
 
     def test_the_held_warn_wait_comes_from_the_stack_setting_for_every_answer(self):
         settings = (T/'mmx_project_settings.yml').read_text()
@@ -218,8 +219,6 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         self.assertLess(stages.index('validate_what_the_triage_agent_may_do_without_a_person'), stages.index('every_server'))
         self.assertIn('on_node_failure: stop_run', playbook.split('- id: validate_what_the_triage_agent_may_do_without_a_person')[1][:200])
         for limit in ('number_at_least: ["{{ .vars.triage_agent_server_work.tries_to_replace_a_failed_server }}", 1]',
-                      'number_at_least: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}", 1]',
-                      'number_at_most: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}", 1440]',
                       'number_at_least: ["{{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}", 0]',
                       'number_at_most: ["{{ .vars.triage_agent_server_work.sos_waits_for_a_server_replacement_minutes }}", 60]',
                       'number_at_least: ["{{ .vars.triage_agent_server_work.warn_waits_for_the_triage_agent_minutes }}", 0]',
@@ -269,7 +268,9 @@ class TheRulesTheAgentReads(unittest.TestCase):
 
     def test_a_request_is_once_for_its_warning_not_once_for_the_session(self):
         self.assertNotIn('once for the session', ' '.join(self.rules.split()))
-        self.assertEqual(' '.join(self.rules.split()).count('once for this warning'), 3)
+        # The add and the removal for the load; reboots for updates are no
+        # longer the triage agent's work (the automatic weekly maintenance).
+        self.assertEqual(' '.join(self.rules.split()).count('once for this warning'), 2)
 
     def test_nothing_is_committed_between_a_request_and_its_run(self):
         self.assertIn('**Commit nothing between a request for a run and the run.**', ' '.join(self.rules.split()))
@@ -317,7 +318,9 @@ class TheRulesTheAgentReads(unittest.TestCase):
 
     def test_the_rules_say_the_measured_time_of_a_replacement(self):
         flat = ' '.join(self.rules.split())
-        self.assertIn('your site should answer again in about 3 minutes. The new server installs its waiting security updates after your site answers again."', flat)
+        self.assertIn('Your site should answer again in about 3 minutes.", with the new server\'s type and monthly price', flat)
+        # One report per completed run: none before a run starts or while it runs.
+        self.assertIn('Send no report before a run starts and none while it runs', flat)
         self.assertIn("Take the minutes from when your site answered again", flat)
         self.assertNotIn('about 6 minutes', flat)
 

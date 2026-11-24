@@ -251,14 +251,14 @@ fleet_stages:
             matches: ["{{ .vars.maintenance_window.weekday }}", '^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$']
           message: >-
             maintenance_window.weekday in mmx_project_settings.yml is "{{ .vars.maintenance_window.weekday }}".
-            Use a lowercase weekday name, such as tuesday. Nothing changed.
+            Use a lowercase weekday name, such as wednesday. Nothing changed.
       - id: maintenance_window_starts_at_a_utc_time
         assert:
           that:
             matches: ["{{ .vars.maintenance_window.starts_at }}", '^([01][0-9]|2[0-3]):[0-5][0-9]$']
           message: >-
             maintenance_window.starts_at in mmx_project_settings.yml is "{{ .vars.maintenance_window.starts_at }}".
-            Use a UTC time as "HH:MM", such as "21:00". Nothing changed.
+            Use a UTC time as "HH:MM", such as "03:00". Nothing changed.
       - id: uploads_copy_every_hours_divides_a_day
         assert:
           that:
@@ -298,16 +298,13 @@ fleet_stages:
               - number_at_most: ["{{ .vars.maintenance_window.length_minutes }}", 1440]
           message: >-
             maintenance_window.length_minutes in mmx_project_settings.yml is "{{ .vars.maintenance_window.length_minutes }}".
-            Use a whole number of minutes from 30 to 1440, such as 60. The only
-            app server reboots for updates only inside the window, and the
-            reboot needs about 25 minutes of it: the check waits 10 minutes,
-            the triage agent about 1, MMHotline's warning 10 by default, and
-            the reboot under a minute. A window longer than a day is no
-            longer a quiet time, and users would see reboots on most days.
-            Nothing changed.
+            Use a whole number of minutes from 30 to 1440, such as 120. One
+            database server's turn in the weekly maintenance takes up to
+            about 20 minutes. A window longer than a day is no longer a quiet
+            time the team chose. Nothing changed.
   # what_the_triage_agent_may_do_without_a_person and triage_agent_server_work
   # in mmx_project_settings.yml, checked before any server changes, because
-  # mmhotline_settings.yml and the reboot check of every_server.yml are
+  # mmhotline_settings.yml and the checks of util01 and the app servers are
   # rendered from them. Each message gives the reason for the limit.
   - id: validate_what_the_triage_agent_may_do_without_a_person
     nodes: util_server
@@ -358,17 +355,6 @@ fleet_stages:
             triage_agent_server_work.hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person
             in mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person }}".
             Use a whole number of hours of at least 0, such as 24. Nothing changed.
-      - id: minutes_between_the_warning_and_a_reboot_is_from_1_to_1440
-        assert:
-          that:
-            all:
-              - number_at_least: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}", 1]
-              - number_at_most: ["{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}", 1440]
-          message: >-
-            triage_agent_server_work.minutes_between_the_warning_and_a_reboot in
-            mmx_project_settings.yml is "{{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}".
-            Use a whole number of minutes from 1 to 1440, such as 10: MMHotline
-            accepts a warning's wait from 1 minute to one day. Nothing changed.
       - id: sos_waits_for_a_server_replacement_minutes_is_from_0_to_60
         assert:
           that:
@@ -877,6 +863,8 @@ fleet_stages:
           backups: "{{ .vars.backups }}"
           nightly_work_starts_at: "{{ .vars.nightly_work_starts_at }}"
           weekly_work_day: "{{ .vars.weekly_work_day }}"
+          maintenance_window: "{{ .vars.maintenance_window }}"
+          automatic_weekly_maintenance: "{{ .vars.automatic_weekly_maintenance }}"
           app_pool_load_settings:
             what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
             app_servers: "{{ .inventory.groups.app_servers }}"
@@ -1163,10 +1151,7 @@ fleet_stages:
           pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
-          reboot_check_settings:
-            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
-            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
-            maintenance_window: "{{ .vars.maintenance_window }}"
+          what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
 
   # The database servers, before the apps that use them: Postgres under
   # pg_auto_failover in the formation production, the apps' databases, and
@@ -1318,10 +1303,7 @@ fleet_stages:
           pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
-          reboot_check_settings:
-            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
-            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
-            maintenance_window: "{{ .vars.maintenance_window }}"
+          what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
 
   # --- Custom extensions (start) ---
   # Add custom fleet stages from recipes inside this block, each with its own id.
@@ -1352,10 +1334,7 @@ fleet_stages:
           pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
-          reboot_check_settings:
-            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
-            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
-            maintenance_window: "{{ .vars.maintenance_window }}"
+          what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
 
   # The app servers of production. First each server says which web
   # container of each app is live (the one Caddy sends requests to) and which
@@ -1651,10 +1630,7 @@ fleet_stages:
           pgbouncer_runs_in_front_of_postgres: "{{ .vars.pgbouncer_runs_in_front_of_postgres }}"
           mmwatchdog_release: "{{ .vars.stack_software.mmwatchdog }}"
           mmwatchdog_join_code: "{{ .outputs.read_the_mmwatchdog_fleet_hub_join_code.util01.join_code }}"
-          reboot_check_settings:
-            what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
-            public_site_checks_run: "{{ .vars.public_site_checks_run }}"
-            maintenance_window: "{{ .vars.maintenance_window }}"
+          what_the_triage_agent_may_do_without_a_person: "{{ .vars.what_the_triage_agent_may_do_without_a_person }}"
 
   # staging01, with staging's image tags, host names, tunnel, and secrets: the
   # vault key of each staging secret is the production key with staging_ in
@@ -1903,8 +1879,8 @@ fleet_stages:
   # path (requests come through the tunnel to Go programs and the app's
   # own image), only WireGuard's UDP port is public, and the kernel's fix
   # waits for a reboot either way. A needed reboot follows the existing
-  # paths (reboots_that_may_run_now, the maintenance window, add_a_server.md
-  # step 7). Database servers, util01 and staging01 install theirs in the
+  # paths (the automatic weekly maintenance, the maintenance window,
+  # add_a_server.md step 7). Database servers, util01 and staging01 install theirs in the
   # every_server role, before their services start. The same marker file as
   # the role's task, so each server runs this once and every existing
   # server skips it.

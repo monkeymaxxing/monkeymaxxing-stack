@@ -136,7 +136,8 @@ class TwoShapes(unittest.TestCase):
                 (root/'playbooks').mkdir()
                 (root/'mmx_project_settings.yml').write_text(json.dumps(dict(
                     project_name='render_test', default_inventory='servers',
-                    vars=dict(is_staging_server=is_staging_server, pgbouncer_runs_in_front_of_postgres=False))))
+                    vars=dict(is_staging_server=is_staging_server, pgbouncer_runs_in_front_of_postgres=False,
+                              inventory_groups={'staging_server': ['db01']}))))
                 (root/'inventories/servers.yml').write_text(json.dumps(dict(nodes={'db01': {'address': '127.0.0.1'}})))
                 (root/'source.template').write_text((T/'mmwatchdog_checks/database_servers.yml').read_text().replace('.inputs', '.vars'))
                 (root/'playbooks/render.yml').write_text(json.dumps(dict(fleet_stages=[dict(id='render', nodes='all', node_tasks=[

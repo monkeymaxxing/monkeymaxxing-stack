@@ -89,10 +89,7 @@ Initial-setup reply guardrails:
   it, "Still open" in at most 4 lines in the person's words: no commit IDs,
   image tags, HTTP codes, check names ("pin check", "memory check"), or
   "checklist" (include the first release's result as one line there if
-  finished). State a known security flaw on a brand-new server plainly
-  ("One program on util01 has a known security flaw. Its fix is not
-  published yet; there is nothing for you to do, and the weekly system
-  review tracks it.") or leave it to the weekly system review.
+  finished).
 - **Now and next at the end of every reply.** Name what you are doing now
   and what the person does next ("Nothing. I carry on." when nothing is
   needed). A chapter's end is not a stop (<=3 lines + start next chapter);

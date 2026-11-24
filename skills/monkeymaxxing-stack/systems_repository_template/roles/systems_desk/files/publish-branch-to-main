@@ -10,7 +10,9 @@
 # are not signed: MMHotline trusts every commit on origin, and only the
 # keys in root_ssh_public_keys can push there.
 # Before util01 exists the checkout has no origin: this checkout is the
-# main copy then, and publishing ends at the fast-forward.
+# main copy then, and publishing ends at the fast-forward. Then gitleaks
+# scans the branch's commits here first, as util01's main copy scans every
+# push later (roles/util_server/files/refuse_a_push_that_adds_a_secret).
 # On a rebase conflict it names the files and changes nothing: BRANCH and
 # main stay as they were.
 set -euo pipefail
@@ -65,6 +67,18 @@ count=$(git rev-list --count "main..$branch")
 if [ "$count" = 0 ]; then
     git branch --quiet -D "$branch"
     stop "$branch adds nothing to main. Deleted $branch; nothing was published."
+fi
+# Before util01 exists: refuse a branch whose commits add what looks like
+# a secret, even one that a later commit removes, which would stay in the
+# history. -m gives a merge commit's diff against each parent, so a secret
+# added in a merge's conflict resolution is refused too.
+if ! "$has_origin"; then
+    if ! scan=$(gitleaks detect --source . --config "${GITLEAKS_CONFIG:-/etc/gitleaks/systems_repository.toml}" --redact --no-banner --verbose --log-opts="-m main..$branch" 2>&1); then
+        git update-ref "refs/heads/$branch" "$branch_before"
+        put_main_back
+        stop "$scan
+gitleaks found what looks like a secret in a commit of $branch (above, with the secret hidden), or gitleaks did not run. Nothing changed: $branch and main are as they were. Remove the secret from every commit of the branch (a later commit that deletes it leaves it in the history), put a real secret in the vault, or add a gitleaks:allow comment to a line that is no secret, then push the branch again."
+    fi
 fi
 git merge --quiet --ff-only "$branch"
 if "$has_origin"; then

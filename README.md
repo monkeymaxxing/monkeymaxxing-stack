@@ -473,11 +473,13 @@ files in R2, and runs as a container image. If your app does not meet a
 condition yet, your coding agent changes your app with your approval, and
 the change can take days.
 
-After the setup, your team has one regular duty. Each week, one person and
-the coding agent do the weekly system review: the week's alerts, the
-waiting updates, the restore drill's result, and the checklist items that
-are due. The checklist is the file that records what is done, what is open,
-and when each growth step is due.
+After the setup, your team has no regular duty. Updates and reboots run by
+themselves each week in a quiet night hour, without taking your site down,
+and your phone rings only when a person must act. A server your users
+would see restart, such as your only app server, waits for you, and a
+reminder comes after 30 days. Many teams like a short monthly check-in:
+ask your coding agent "Review my system". The checklist is the file that
+records what is done, what is open, and when each growth step is due.
 
 ## Give it to your coding agent
 

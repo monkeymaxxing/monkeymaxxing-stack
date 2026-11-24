@@ -1018,4 +1018,4 @@ Follow steps 1 and 2, including both undo commands. Verify the following results
 - Evidence lands on the desk that keeps access and in the backup bucket, with matching checksums.
 - Undo restores fresh authorized sessions, SSH and HTTPS MMX, and proxy access. Re-enroll the harmless revoked company identities separately.
 
-Record the measured results in `break_in_staging_drill` and `break_in_yearly_drill` in the checklist.
+Record the measured results in the checklist: in `break_in_staging_drill` the first time, and in `break_in_yearly_drill` when the team practices again.

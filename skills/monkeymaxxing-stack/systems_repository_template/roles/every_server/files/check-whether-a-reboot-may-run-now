@@ -1,14 +1,24 @@
 #!/usr/bin/python3
 """check-whether-a-reboot-may-run-now: may this server reboot for installed updates now?
 
-Exits 0 and prints why when the reboot may run now, 1 and prints when the
-server waits for the weekly maintenance window, and 2 for wrong arguments.
-The one place of the rule, read by MMWatchdog's check
-no_reboot_waits_that_may_run_now (mmwatchdog_checks/every_server.yml) and by
-playbooks/reboot_servers_after_updates.yml, so the check that starts the
-triage agent and the playbook that reboots cannot disagree.
+Exits 0 and prints why when the reboot may run now, 1 and prints why the
+server waits, and 2 for wrong arguments. The one place of the rule, which
+playbooks/reboot_servers_after_updates.yml runs on each server.
 
-A reboot may run now when one of these holds:
+With --automatic-weekly-maintenance, for the automatic weekly maintenance
+(automatic_weekly_maintenance in mmx_project_settings.yml), a reboot may run
+only when another server of the pool carries the work (2 servers or more)
+or the server is staging01. A production pool's only server, such as app001
+alone or a jobs server alone, always waits for a person: the automatic
+maintenance never takes the site down, never makes the jobs wait, and
+never runs before go-live either. The count of servers in the inventory
+does not say that the other servers work, so the automatic maintenance
+checks that too, right before each reboot:
+playbooks/reboot_servers_after_updates.yml reboots a server of a pool of
+two or more only while another server of the pool passes
+check-that-this-server-does-its-work.
+
+For a person's run, a reboot may run now when one of these holds:
   - another server of the pool carries the work: the pool has 2 servers or more;
   - the server is a jobs server: its jobs wait in the queue for about 20 seconds;
   - the server is staging01: no user reaches it;
@@ -49,6 +59,7 @@ def main():
     parser.add_argument('--starts-at', required=True)
     parser.add_argument('--length-minutes', required=True, type=int)
     parser.add_argument('--a-person-allows-it', action='store_true')
+    parser.add_argument('--automatic-weekly-maintenance', action='store_true')
     parser.add_argument('--at')
     arguments = parser.parse_args()
 
@@ -72,10 +83,14 @@ def main():
 
     if arguments.servers_in_the_pool >= 2:
         reason = f'another server of {arguments.pool} carries the work'
-    elif arguments.pool == 'jobs_servers':
-        reason = 'a jobs server: the jobs wait in the queue during the reboot'
     elif arguments.pool == 'staging_server':
         reason = 'staging01 serves no users'
+    elif arguments.automatic_weekly_maintenance:
+        print(f'waits for a person: the automatic weekly maintenance never reboots the only server of '
+              f'{arguments.pool}; a person reboots it in the maintenance window')
+        return 1
+    elif arguments.pool == 'jobs_servers':
+        reason = 'a jobs server: the jobs wait in the queue during the reboot'
     elif arguments.public_site_checks_run == 'false':
         reason = 'the site is not live yet (public_site_checks_run is false)'
     elif arguments.a_person_allows_it:

@@ -167,7 +167,7 @@ each term. This page also uses these terms:
          # paused no longer.
          - id: hold_the_alerts_of_the_server
            shell:
-             script: /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 2m --reason "marking the split timeline's segments as archived"
+             script: /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 2m --reason "marking the split timeline's segments as archived" --without-maintenance-on-and-off-alerts
          # The primary's own timeline is never marked: its segments would then
          # never reach the archive.
          - id: mark_the_waiting_segments_of_the_split_timeline_as_archived

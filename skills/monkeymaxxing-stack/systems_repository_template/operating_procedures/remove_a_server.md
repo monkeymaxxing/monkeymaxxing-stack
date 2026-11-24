@@ -84,8 +84,8 @@ otherwise it says "nothing to remove" and why.
 
 **Who runs it:** with `what_the_triage_agent_may_do_without_a_person:
 routine_fixes_and_server_work`, the triage agent runs both after
-MMHotline's warning; with the other answers, the weekly review proposes
-it.
+MMHotline's warning; with the other answers, a person runs it, such as
+when a [system review](review_the_system.md) proposes it.
 
 ## Removing a server
 

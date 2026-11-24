@@ -104,14 +104,7 @@ in `mmx_project_settings.yml`; the steps below say where it applies.
    apps, give each app's address on its own line at the top. "Still open"
    has at most 4 lines, in the person's words ("The person's words" in the
    skill): no commit IDs, image tags, HTTP codes, restore times, check
-   names such as "pin check" or "memory check", and no "checklist". A
-   known security flaw on a brand-new server goes there plainly, or waits
-   for the weekly system review:
-
-   ```text
-     One program on util01 has a known security flaw.  Its fix is not published yet.
-     Nothing for you to do: the weekly system review tracks it.
-   ```
+   names such as "pin check" or "memory check", and no "checklist".
 
    When the first release also ended before you wrote this reply, its
    result is one line under "Still open", such as "Your app's newest

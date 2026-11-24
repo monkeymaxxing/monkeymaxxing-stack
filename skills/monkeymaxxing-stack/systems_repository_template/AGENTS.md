@@ -180,10 +180,11 @@ change touches `playbooks/systems_desk.yml`,
 `systems_desk_lockout`, or `work_out_who_this_server_talks_to` roles,
 `server_management_scripts/start_break_in_lockout.py`, `ssh/`,
 `roles/every_server/files/wireguard_wg0.conf`,
-`roles/every_server/files/sudoers_triage`,
-`roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings`, or
-`mmhotline_settings.yml`, and explain that it reaches the desk or lock-out
-button only after the next `ssh desk01-review`.
+`roles/every_server/files/sudoers_triage`, or
+`roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings`, and
+explain that it reaches the desk or lock-out button only after the next
+`ssh desk01-review`. A change of `mmhotline_settings.yml` needs no desk
+review: the lock-out leaves MMHotline's settings as they are.
 
 ## The rules
 
@@ -261,7 +262,7 @@ button only after the next `ssh desk01-review`.
   When an incident leaves no other way (such as stopping a harmful service
   until replacement), first put the server in MMWatchdog maintenance with a
   reason so the triage agent does not undo it:
-  `mmwatchdog maintenance on --every-check-group --for 24h --reason "pgautofailover stopped by hand: db02 is being replaced"`,
+  `mmwatchdog maintenance on --every-check-group --for 24h --reason "pgautofailover stopped by hand: db02 is being replaced" --without-maintenance-on-and-off-alerts`,
   and end it with `mmwatchdog maintenance off --every-check-group`.
 - **Servers are replaced, never upgraded in place.** Bigger size, VPS to
   dedicated, new Debian release, failed hardware, and a failed mirrored
@@ -269,7 +270,12 @@ button only after the next `ssh desk01-review`.
   upgrade Debian in place via apt sources.
 - **Every configured production secret lives in the vault,** `secrets_vault.age`,
   MMHotline's included: never in another repo file, commit message, image,
-  or log. Each key reaches the vault through `set-up-outside-services` on
+  or log. The main copy on `util01` refuses a push whose commits add what
+  looks like a secret, even one a later commit removes (gitleaks, in its
+  pre-receive hook), and `publish-branch-to-main` refuses it before
+  `util01` exists. On a refusal, remove the secret from every commit of
+  the branch, or add a `gitleaks:allow` comment to a line that is no
+  secret, such as a documentation example. Each key reaches the vault through `set-up-outside-services` on
   the desk, which generates random keys and commits and pushes the vault:
   during initial setup you pass each key from the person's clipboard or a
   laptop file straight to its account command; later the person types it
@@ -319,8 +325,8 @@ button only after the next `ssh desk01-review`.
   `util01` no longer lists it. Only then deploy the change. Reason: the
   entry rests on what the role makes the same on every server, and a
   change deployed while the entry is in effect would leave the finding
-  quiet on servers where it now matters. The weekly system review removes
-  the entries no server matches any more.
+  quiet on servers where it now matters. An entry that no server matches
+  any more quiets nothing; a person may remove it in a system review.
 - **What the triage agent may do without a person** is one setting,
   `what_the_triage_agent_may_do_without_a_person` in
   `mmx_project_settings.yml`: `every_fix_waits_for_a_person`,
@@ -600,14 +606,14 @@ operating procedure.
 | Remove a server | [Remove a server](operating_procedures/remove_a_server.md) |
 | **Running** | |
 | Release or roll back an app version | [Deploy and roll back an app release](operating_procedures/deploy_and_roll_back_an_app_release.md) |
-| The team's weekly maintenance period (`maintenance_window` in `mmx_project_settings.yml`, in UTC) for database updates and server reboots arrives, or a Postgres setting needs a restart | [Update and restart the database servers](operating_procedures/update_and_restart_the_database_servers.md) |
-| Updates need reboots, after the database servers have been updated | [Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md) |
-| Updates wait for a reboot (MMWatchdog's `reboots_that_may_run_now` warns, only with `routine_fixes_and_server_work`) | The triage agent requests [Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md) ([A fix that waits for a reboot](triage_agent_rules.md#a-fix-that-waits-for-a-reboot)) |
+| `db01` alone waits for its updates or a restart (MMWatchdog's `no_security_update_waits`, `no_reboot_waits` or `services_restarted_after_library_updates` warns after 30 days), or a person changed a Postgres setting that needs a restart | [Update and restart the database servers](operating_procedures/update_and_restart_the_database_servers.md), in the maintenance window (`maintenance_window` in `mmx_project_settings.yml`, in UTC); with two or more database servers the automatic weekly maintenance runs it |
+| A production pool's only server, such as `app001` alone, waits for a reboot (MMWatchdog's `no_reboot_waits` warns after 30 days) | [Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md), in the maintenance window; every other server reboots in the automatic weekly maintenance |
+| The automatic weekly maintenance failed (`no_systemd_unit_has_failed` on `util01` names `weekly_maintenance.service`), or a reboot reminder comes on a server it restarts | [Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md#when-the-automatic-weekly-maintenance-stops-short) |
 | Change MMHotline settings | [Change MMHotline settings](operating_procedures/change_mmhotline_settings.md) |
 | MMHotline warns "Agent run limit reached. Alerts continue.", or the team wants another run limit for the triage agent | [Change the triage agent's run limit](operating_procedures/change_the_triage_agent_run_limit.md) |
 | A team member joins or leaves | [Add or remove a team member](operating_procedures/add_or_remove_a_team_member.md) |
-| Someone leaves, a secret leaks, or the rotation period (`secret_rotation`'s `verify_again_every`) is due | [Rotate a secret](operating_procedures/rotate_a_secret.md) |
-| The weekly system review is due | [Do the weekly system review](operating_procedures/do_the_weekly_system_review.md) |
+| Someone leaves, or a secret may have leaked | [Rotate a secret](operating_procedures/rotate_a_secret.md) |
+| The person asks "Review my system", such as at a monthly check-in | [Review the system](operating_procedures/review_the_system.md) |
 | The person wants extra confidence, such as "Check my system's protections" | [Check my system's protections](operating_procedures/assess_a_running_system_and_recommend_changes.md#check-my-systems-protections) |
 | The weekly database restore drill is due | [Run the weekly database restore drill](operating_procedures/run_the_weekly_database_restore_drill.md) |
 | Add or update a program not supplied by the distribution | [Add or update a program from outside the distribution](operating_procedures/add_or_update_a_program_from_outside_the_distribution.md) |
@@ -724,10 +730,10 @@ MMHotline's dashboard shows its open items. `README.md` links to it.
   what they saw in `last_result`.
 - **`open`** items carry `waits_for`; **`deviated`** items carry
   `deviation` (what differs and why).
-- A `done` item whose `verified_at` is older than `verify_again_every`
-  counts as open again, and the weekly review resets it to `open` (and
-  records the restore drill's result in `backups_restore_every_week` from
-  `util01`'s result file).
+- A `done` item stays done. No item of the template expires; a team whose
+  own rules require a check again after a time adds `verify_again_every`
+  to that item, and a `done` item whose `verified_at` is older then counts
+  as open again.
 - Each item in `items` has a `part`: `setup` items come first and finish
   during initial setup (`done` or `deviated`); `later_when_it_happens`
   items wait for post-setup events or routines.

@@ -1,15 +1,28 @@
 # Update and restart the database servers
 
-**When to use this page:** the team's weekly window, `maintenance_window` in `mmx_project_settings.yml` (a weekday, a UTC start time, and a length in minutes; tell the person the time in the person's local time), arrives, or a change waits for a restart
-of Postgres ([Making a change](../AGENTS.md#making-a-change)).
+**When to use this page:**
+
+- a change waits for a restart of Postgres
+  ([Making a change](../AGENTS.md#making-a-change)), such as a new
+  `shared_buffers`;
+- MMWatchdog reminds on `db01` alone: `no_reboot_waits` or
+  `no_security_update_waits` (after 30 days), or
+  `services_restarted_after_library_updates` (a service still uses a
+  library that an update replaced, after 30 days);
+- the automatic weekly maintenance stopped short on the database servers
+  ([When the automatic weekly maintenance stops short](reboot_servers_after_updates.md#when-the-automatic-weekly-maintenance-stops-short)).
 
 **What this page does:** `update_database_servers` installs waiting
 database server updates and restarts Postgres where a setting waits, one
 database server at a time, while writes continue.
 
 **Who acts:** the coding agent runs every step from the systems desk.
-Outside the weekly window, the person agrees to the quiet moment for the
-run.
+With two or more database servers, the automatic weekly maintenance runs
+`update_database_servers` by itself at the start of the maintenance window
+(`maintenance_window` in `mmx_project_settings.yml`, a weekday, a UTC start
+time, and a length in minutes; tell the person the time in the person's
+local time). The person decides each run of this page: in the maintenance
+window for `db01` alone, or in a quiet moment that the person agrees to.
 
 ## Before you start
 
@@ -21,7 +34,19 @@ run.
 - **What users see:** with a replica, writes fail only for the seconds of
   the switchover (2-6 s measured). With `db01` alone, restarting Postgres
   causes a short outage in the window: the apps' requests fail for a few
-  seconds.
+  seconds. `db01` first downloads its updates; then `util01` pauses its
+  public site checks for 10 minutes while `db01` installs them and
+  restarts, so the planned outage raises no SOS, and ends the pause once
+  Postgres on `db01` and each app answer again.
+- **What the automatic weekly maintenance does** (`automatic_weekly_maintenance`
+  in `mmx_project_settings.yml`): with two or more database servers, it
+  runs `update_database_servers` only when one of them waits for a
+  reboot, a security update, a service restart after a library update, or
+  a Postgres setting. It goes on only when a healthy replica can take over,
+  and stops when the switchover does not confirm the updated replica as the
+  primary. A clean pair changes nothing. `db01` alone never restarts by
+  itself, because its restart is an outage: MMWatchdog reminds after 30
+  days, and a person runs this page in the window.
 - **Postgres's settings on the database servers** are in the input
   `postgresql_settings` of the task `postgres_under_pg_auto_failover` in `roles/database_server/main.yml`.
   The `postgresql_settings` input includes `shared_buffers` and the archive
@@ -36,6 +61,11 @@ run.
    every database server once the coding agent's `every_server` run on `util01` passes.
    **A setting that waits for a restart of Postgres,** such as a new
    `shared_buffers` or `archive_mode`, does not stop `util01`'s run.
+   Apply it at once with step 2, while the person watches, and never leave
+   it for the automatic weekly maintenance: a value that Postgres accepts
+   but cannot start with, such as a `shared_buffers` above the server's
+   memory, shows only at the restart, and the person who made the change
+   knows what to undo.
    The `every_server` run writes the setting on every database server, where
    the setting waits for a restart of Postgres.
    **Check:** the run passes. Each server's task
@@ -48,19 +78,23 @@ run.
    For example, `Run 7f3a9c1e` has the ID `7f3a9c1e`.
    Replace `RUN_ID` with the actual MMX run ID.
    When no setting waits for a restart, the change is done.
-2. **Run `update_database_servers`:**
-   `./server_management_scripts/run_mmx_on_util01 run update_database_servers`,
-   in the team's maintenance window (`maintenance_window`), or, for a
-   setting that waits, in the team's window or in a quiet moment that the
-   person agrees to.
+2. **Run `update_database_servers`, while the person watches:**
+   `./server_management_scripts/run_mmx_on_util01 run update_database_servers`.
+   With `db01` alone, run it in the maintenance window (`maintenance_window`);
+   with a replica, or for a setting that waits, in the window or in a quiet
+   moment that the person agrees to.
    **Check:** the run passes. On `util01`,
    `sudo -u postgres pg_autoctl show state --pgdata /var/lib/postgresql/17/pg_auto_failover_monitor --formation production`
    shows the formation: one node as `primary`, or as `single` while the node
-   is alone.
-3. **Reboot the other servers,** as
-   [Reboot servers after updates](reboot_servers_after_updates.md) says,
-   when this run was the weekly window's.
-   **Check:** the checks of that page.
+   is alone. For a reminder on `db01`, the reminding check group passes
+   again on `db01` (`10.20.2.1`), counted as the scheduled run so its
+   warning closes:
+
+   ```sh
+   # This systems desk, in the coding agent's checkout.
+   ssh -n -F ssh/config root@10.20.2.1 'mmwatchdog check-now security_updates --count-as-scheduled-run'
+   ssh -n -F ssh/config root@10.20.2.1 'mmwatchdog check-now services_restarted_after_library_updates --count-as-scheduled-run'
+   ```
 
 ## If something is different
 
@@ -141,6 +175,10 @@ The database server being updated also reboots when
 hook writes the marker when a kernel package is installed.
 The marker means a new kernel needs a reboot. Library and service
 restarts are needrestart's job, handled in the database server's turn.
+needrestart on a database server only lists the services that still use a
+replaced library, because restarting Postgres at install time would be an
+unplanned outage; MMWatchdog's `services_restarted_after_library_updates`
+check reminds about them, and the database server's turn restarts them.
 
 The update playbook installs waiting database server updates and restarts Postgres where a setting waits:
 

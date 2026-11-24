@@ -127,11 +127,12 @@ check_groups:
   # whose notes mark it "Fixes an exploited flaw", which
   # stack_release_fixes_an_exploited_flaw reads.
   #
-  # check_every 1h by default. Reason: an hour late changes nothing. GitHub
-  # allows 60 requests an hour from one address without a sign-in. Each run
-  # makes 1 request for each 100 of the Stack's releases: 1 request an hour
-  # while the Stack has at most 100 releases, and 3 when every request
-  # fails and is tried 3 times.
+  # check_every 6h by default. Reason: a fix that waits for the team's
+  # upgrade within days is not late by a few hours, and fewer requests meet
+  # fewer of GitHub's limits. GitHub allows 60 requests an hour from one
+  # address without a sign-in. Each run makes 1 request for each 100 of the
+  # Stack's releases: 1 request every 6 hours while the Stack has at most
+  # 100 releases, and 3 when every request fails and is tried 3 times.
   # time_limit_per_run 5m: each page is tried at most 3 times, with 10
   # seconds for each answer and 5 seconds between tries.
 {{- $stack_repository := "" }}
@@ -144,7 +145,7 @@ check_groups:
 {{- end }}
 {{- if $stack_repository }}
   stack_releases:
-    check_every: 1h
+    check_every: 6h
     time_limit_per_run: 5m
     alert_after_failing_for: 0s
     recovered_after_healthy_for: 0s
@@ -163,20 +164,20 @@ check_groups:
       # answer, the check is unknown: MMWatchdog keeps each open finding
       # open, and sends the check's cannot-check warning when it stays
       # unknown for alert_after_failing_for.
-      # alert_after_failing_for 6h, for a flaw and for a GitHub that does
-      # not answer, such as a refused or rate-limited request or a project
-      # that moved; the cannot-check warning names the cause. Reason: the
-      # team upgrades within days, so a warning a few hours later changes
-      # nothing, while 6 hourly runs ride out a short GitHub outage or rate
-      # limit without a warning. A Stack that
-      # needs to hear sooner sets a shorter time here.
+      # check_every 6h and alert_after_failing_for 11h, for a flaw and for
+      # a GitHub that does not answer, such as a refused or rate-limited
+      # request or a project that moved; the cannot-check warning names the
+      # cause. Reason: the team upgrades within days, so a warning half a
+      # day later changes nothing, while three runs 6 hours apart (about 12
+      # hours) ride out a GitHub outage or rate limit without a warning. A
+      # team that needs to hear sooner sets shorter times here.
       # Reason for warn: the triage agent reads the release notes and
       # reports at sos only a flaw that reaches this system's servers.
       stack_release_fixes_an_exploited_flaw:
         stack_releases_that_fix_an_exploited_flaw:
           repository: {{ $stack_repository | squote }}
           installed_stack_version: {{ $stack_release.version | squote }}
-        alert_after_failing_for: 6h
+        alert_after_failing_for: 11h
         alert_severity: warn
 {{- end }}
 
@@ -312,7 +313,9 @@ check_groups:
   # must choose (a higher largest number, bigger servers, or jobs servers),
   # and with this answer the app servers' own CPU warning is only info, so
   # this check is the one alert that tells the team. A removal that a pool
-  # of mixed server types stops raises nothing: the weekly review shows it.
+  # of mixed server types stops raises nothing: the extra server costs
+  # money, not users, and a system review shows it
+  # (operating_procedures/review_the_system.md).
   # Reason for warn: a warn alert starts a triage session, and an info alert
   # never does; a warn wakes nobody. One alert for the pool, not one for each
   # app server. The warn reaches the phone once, at normal priority; the

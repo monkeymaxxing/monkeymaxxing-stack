@@ -672,9 +672,13 @@ Then read the results file, and carry on as after way A.
    servers stop, and wait for "yes". The results file's
    `for_the_coding_agent` then holds
    `container_registry_read_only_token_expires_at`, the end date in UTC,
-   such as `2027-02-15T09:00:00Z`. The weekly review reads it
-   ([Do the weekly system review](../operating_procedures/do_the_weekly_system_review.md)).
-   A token with no end date leaves the field out.
+   such as `2027-02-15T09:00:00Z`. Ask the person who made the token to
+   put one dated reminder in their own calendar, 30 days before the end
+   date, that says "Replace the servers' registry token: ask the coding
+   agent for [The container registry token](../operating_procedures/rotate_a_secret.md#the-container-registry-token)".
+   Nothing else in the Stack reminds them. Write the end date in the
+   README's "Next actions" too. A token with no end date leaves the field
+   out, and needs no reminder.
 
    **Check:** the step for the GitHub token is `done`.
 

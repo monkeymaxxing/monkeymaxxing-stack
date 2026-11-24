@@ -133,7 +133,6 @@ class BreakInButton(unittest.TestCase):
             'roles/every_server/files/wireguard_wg0.conf': '\n[Peer]\nPublicKey = AAAApushed\nAllowedIPs = 10.20.0.0/16\n',
             'roles/every_server/files/sudoers_triage': 'triage ALL=(root) NOPASSWD: ALL\n',
             'roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings': 'triage ALL=(root) NOPASSWD: ALL\n',
-            'mmhotline_settings.yml': 'fleet_view_command: [/bin/sh, -c, "cp /etc/shadow /tmp"]\n',
         }
         for path, line in pushed.items():
             with open(self.repository/path, 'a') as file:
@@ -143,7 +142,7 @@ class BreakInButton(unittest.TestCase):
             self.assertEqual((self.run_directory/path).read_text(), (T/path).read_text(), path)
         self.assertEqual(BUTTON.paths_that_differ(self.repository, self.reviewed), [
             'roles/every_server/files/wireguard_wg0.conf', 'roles/every_server/files/sudoers_triage',
-            'roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings', 'mmhotline_settings.yml'])
+            'roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings'])
         # The person's next desk review installs the change.
         shutil.copy(self.repository/'roles/every_server/files/wireguard_wg0.conf',
                     self.reviewed/'roles/every_server/files/wireguard_wg0.conf')
@@ -201,10 +200,15 @@ class BreakInButton(unittest.TestCase):
 
     def test_the_desk_role_installs_every_reviewed_copy_the_button_reads(self):
         role = (T/'roles/systems_desk/main.yml').read_text()
-        installed = set(re.findall(r'/usr/local/lib/systems-desk/lock-everyone-out/(\w[\w/.]*)', role))
+        named = set(re.findall(r'/usr/local/lib/systems-desk/lock-everyone-out/(\w[\w/.]*)', role))
+        # A copy that earlier versions installed and the button no longer
+        # reads is removed, so a stale copy never comes back into a run.
+        removed = set(re.findall(r'/usr/local/lib/systems-desk/lock-everyone-out/(\w[\w/.]*), state: absent', role))
+        self.assertEqual(removed, {'mmhotline_settings.yml'})
+        self.assertNotIn('mmhotline_settings.yml', BUTTON.REVIEWED_PATHS)
         # The evidence copy is installed beside the button's copies, for its
         # reviewed SSH settings, but the button itself does not read it.
-        self.assertEqual(installed - {'server_management_scripts/save_break_in_evidence.py'}, set(BUTTON.REVIEWED_PATHS))
+        self.assertEqual(named - removed - {'server_management_scripts/save_break_in_evidence.py'}, set(BUTTON.REVIEWED_PATHS))
         self.assertEqual(str(BUTTON.REVIEWED), '/usr/local/lib/systems-desk/lock-everyone-out')
 
 
@@ -790,9 +794,6 @@ PULLED_DATA = ['inventories', 'mmx_project_settings.yml', 'ssh/known_hosts']
 # - cloudflare_account_id and util01_private_page_host_names: where the
 #   lock-out ends Cloudflare Access sessions. A wrong value makes that step
 #   fail, which the button reports.
-# mmhotline_settings.yml, a reviewed copy, renders triage_ssh_public_key
-# (compared), cloudflare_account_id, util01_private_page_host_names and
-# status_page_host_name; MMX's explain output names no origin for those.
 SETTINGS_THAT_LET_NOBODY_IN = {'everyone_locked_out_except_desk',
                                'tunnel_connector_and_caddy_run_only_on_the_load_balancer_servers',
                                'cloudflare_account_id', 'util01_private_page_host_names'}

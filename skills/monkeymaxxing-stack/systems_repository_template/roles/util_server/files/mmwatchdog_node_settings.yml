@@ -8,7 +8,11 @@ undelivered_alerts_content_size_limit: 8MiB
 # The hub-outage alerters, app001 and db01 during the initial setup, send an SOS
 # alert when util01 stops reporting: then nothing operates the system.
 alert_severity_when_this_node_goes_silent: sos
-alert_severity_when_this_node_has_rebooted: warn
+# info, as on the app, load-balancer, jobs and desk servers: util01 reboots
+# by plan (the weekly maintenance, reboot_util01_after_updates), and a
+# util01 that stays down is silent, which the hub-outage alerters raise as
+# an SOS after 2 minutes. An unplanned reboot shows on the dashboard.
+alert_severity_when_this_node_has_rebooted: info
 # MMHotline runs on util01 and stops with util01, so the hub-outage alerters send
 # the alert about util01 going silent straight to Pushover.
 {{- if .inputs.phone_alerts_are_set_up }}

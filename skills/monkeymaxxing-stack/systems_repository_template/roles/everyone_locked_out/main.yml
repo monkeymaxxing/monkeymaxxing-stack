@@ -1,6 +1,9 @@
 # Server admission, with one inventory state for the button and ordinary runs.
 inputs:
   apply_peer_changes: {type: boolean, default: false}
+  # true only in playbooks/lock_everyone_out.yml, the lock-out button: only
+  # its undo removes util01's lock-out marker, /etc/mmhotline/everyone-locked-out.
+  run_by_the_lock_out_button: {type: boolean, default: false}
   # From work_out_who_this_server_talks_to, which leaves out every desk but
   # the kept one while everyone_locked_out_except_desk is set.
   wireguard_peer_names: {type: list, required: true}
@@ -178,10 +181,16 @@ node_tasks:
       activate:
         - id: load_the_triage_run_conditions
           shell: {script: systemctl daemon-reload, dryrun: systemctl daemon-reload, changed_when: false}
+  # The lock-out's marker on util01, whether the triage agent is set up or
+  # not: triage runs, util01's scheduled jobs
+  # (files/find_the_trusted_commit_of_the_systems_repository in
+  # roles/util_server) and util01's weekly reboot run nothing while it
+  # exists. Only the lock-out button's undo removes it, never every_server:
+  # an ordinary run must not end a lock-out's containment.
   - id: retain_the_triage_lockout_after_reboot
     when:
       all:
-        - path_exists: /etc/systemd/system/mmhotline-triage-agent-run.socket
+        - path_exists: /etc/mmhotline
         - not: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
     file:
       path: /etc/mmhotline/everyone-locked-out
@@ -190,7 +199,10 @@ node_tasks:
       group: root
       permissions_mode: "0600"
   - id: remove_the_triage_lockout_on_undo
-    when: {equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]}
+    when:
+      all:
+        - "{{ .inputs.run_by_the_lock_out_button }}"
+        - equals: ["{{ .inputs.everyone_locked_out_except_desk }}", ""]
     file: {path: /etc/mmhotline/everyone-locked-out, state: absent}
   - id: stop_new_triage_runs
     when:

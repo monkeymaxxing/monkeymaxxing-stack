@@ -20,16 +20,30 @@
 #
 # Exit codes:
 # 0  the commit is on standard output.
-# 1  the main copy cannot be reached, or the copy is broken; nothing ran.
-# When MMHotline does not answer, such as while MMHotline is stopped, the
-# script prints the commit the copy already has, with one line that says
-# so: the job runs nothing newer than what util01 ran before. During a
-# lock-out, MMHotline's settings have no systems_repository_commits section, which
-# holds trusted_commits (mmhotline_settings.yml), so MMHotline refuses the check;
-# the one line then says that, in place of MMHotline's own error.
+# 1  the main copy cannot be reached, the copy is broken, or MMHotline
+#    answered but trusts no commit; nothing ran.
+# 3  everyone is locked out: the lock-out button wrote
+#    /etc/mmhotline/everyone-locked-out on util01, and only its undo removes
+#    it (roles/everyone_locked_out). The caller runs nothing and exits 0:
+#    the servers refuse util01's key during a lock-out, and a failed job
+#    would only add a warning to the incident.
+# 4  MMHotline refused the check, such as while its settings trust no
+#    commit; nothing ran.
+# Only when MMHotline does not answer at all (its command socket is missing
+# or does not answer, as while MMHotline is stopped) does the script print
+# the commit the copy already has, with one line that says so: the job
+# runs nothing newer than what util01 ran before. An answer or a refusal
+# from MMHotline never falls back to that commit, and the lock-out is
+# checked again right before the fallback, so a lock-out that starts
+# while the check waits never falls back to it either.
 set -euo pipefail
-SETTINGS=/etc/mmhotline/mmhotline_settings.yml
+LOCKED_OUT=/etc/mmhotline/everyone-locked-out
 say() { printf 'find_the_trusted_commit_of_the_systems_repository: %s\n' "$*" >&2; }
+
+if [ -e "$LOCKED_OUT" ]; then
+  say "everyone is locked out ($LOCKED_OUT), so this job runs nothing until the person undoes the lock-out with the lock-out button"
+  exit 3
+fi
 
 current=$(git rev-parse --verify --quiet 'HEAD^{commit}') || { say "util01's copy of the systems repository has no commit checked out; nothing ran"; exit 1; }
 if ! head=$(git ls-remote --exit-code origin refs/heads/main) || [ -z "${head%%[[:space:]]*}" ]; then
@@ -46,10 +60,21 @@ if [ "$status" -le 1 ] && trusted=$(jq -er '.commit_check.trusted_through_commit
   printf '%s\n' "$trusted"
   exit 0
 fi
-if [ -r "$SETTINGS" ] && ! grep -q '^systems_repository_commits:' "$SETTINGS"; then
-  say "MMHotline checks no commit during a lock-out, because its settings then hold no systems_repository_commits.trusted_commits; this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"
-else
-  cat "$errors" >&2
-  say "MMHotline did not answer the commit check (exit $status); this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"
+cat "$errors" >&2
+if [ -e "$LOCKED_OUT" ]; then
+  say "everyone is locked out ($LOCKED_OUT), so this job runs nothing until the person undoes the lock-out with the lock-out button"
+  exit 3
 fi
-printf '%s\n' "$current"
+# mmhotline exits 4 both for a refusal and for a command socket that does
+# not answer; only its own words for the socket tell them apart.
+if [ "$status" -eq 4 ] && grep -Eq 'mmhotline serve is not running at command socket|cannot reach mmhotline serve at command socket' "$errors"; then
+  say "MMHotline did not answer the commit check; this job runs at the commit util01 already has, ${current:0:12}, and at nothing newer"
+  printf '%s\n' "$current"
+  exit 0
+fi
+if [ "$status" -eq 4 ]; then
+  say "MMHotline refused the commit check of ${head:0:12}; nothing ran"
+  exit 4
+fi
+say "MMHotline trusts no commit through ${head:0:12} (exit $status); nothing ran"
+exit 1

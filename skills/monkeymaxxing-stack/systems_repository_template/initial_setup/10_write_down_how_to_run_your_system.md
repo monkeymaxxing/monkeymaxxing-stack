@@ -88,8 +88,9 @@ and when.
      responsible person and its date or starting event. Group related
      work into one action, such as the account protection still to add. Leave
      the later checks and the growth and improvement items, such as
-     `second_database_server`, to the checklist, and say that the weekly
-     review checks whether a trigger arrived.
+     `second_database_server`, to the checklist, and say that an MMWatchdog
+     warning, or a system review whenever the person asks, notices a
+     trigger.
 
    Keep a missing measurement marked as not measured. If a person or date
    is not agreed, record that fact. Do not replace an unknown result with

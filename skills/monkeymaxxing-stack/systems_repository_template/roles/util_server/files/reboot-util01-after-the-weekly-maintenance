@@ -1,0 +1,133 @@
+#!/bin/bash
+# reboot-util01-after-the-weekly-maintenance: util01 reboots itself for its
+# installed updates, as the last step of the automatic weekly maintenance.
+# Managed by MMX from roles/util_server.
+#
+#   reboot-util01-after-the-weekly-maintenance
+#   reboot-util01-after-the-weekly-maintenance --end-the-alert-pause-after-the-boot
+#
+# Root runs it, as its own unit, reboot_util01_after_the_weekly_maintenance.service,
+# which systemd starts when weekly_maintenance.service ends with success
+# (OnSuccess=). So one schedule orders the whole maintenance: the database
+# servers, the other servers, then util01 itself. The maintenance job runs as
+# the mmhotline user, which gets no sudo for a reboot.
+#
+# It changes nothing and exits 0, so the reboot waits for next week, when:
+#   - no reboot waits (/var/run/reboot-required is missing);
+#   - everyone is locked out (/etc/mmhotline/everyone-locked-out);
+#   - the weekly maintenance ended early
+#     (/var/lib/weekly_maintenance/ended_early_because is not empty), such
+#     as when it gave way to MMHotline or the window ended;
+#   - something holds util01's lock (/var/lib/mmhotline/systems_repository.lock),
+#     such as a run that the triage agent or a person asked for;
+#   - weekly-maintenance-goes-on says no, with the lock held: MMHotline
+#     waits for the lock, or the maintenance window has ended (the unit
+#     passes the window in WINDOW_WEEKDAY, WINDOW_STARTS_AT and
+#     WINDOW_LENGTH_MINUTES);
+#   - MMHotline has an SOS incident that is not resolved (mmhotline
+#     incidents list), or does not answer: during an incident, util01 runs
+#     the triage agent and reaches people.
+# Otherwise, with util01's lock held so no run starts, it pauses util01's
+# alerts for 5 minutes (util01-alert-pause, which never pauses the public
+# site checks), writes a marker, and asks systemd to reboot without
+# waiting. The lock ends when systemctl --no-block reboot exits, a moment
+# after it queued the reboot, and the shutdown stops every service anyway.
+# After the boot, end_the_alert_pause_after_the_weekly_util01_reboot.service
+# runs the second form, which ends the pause as soon as MMWatchdog answers
+# again and removes the marker. A util01 that does not come back stays
+# silent past the pause: the hub-outage alerters wake the person on call
+# after 2 minutes, as whenever util01 stops.
+# Reason for 5 minutes: util01 answered within 28 seconds in three measured
+# reboots, and MMHotline and MMWatchdog start within a minute after that.
+#
+# Root never opens a path inside /var/lib/mmhotline, which the mmhotline
+# user owns and could replace with a link. A helper that runs as the
+# mmhotline user takes the lock, writes the holder line, and holds the lock
+# while this script's process lives: the script ends, or becomes the
+# reboot command (exec), which keeps its process ID until it exits.
+set -euo pipefail
+
+MARKER=/var/lib/util01_weekly_reboot/the_alert_pause_waits_for_the_boot
+ENDED_EARLY_BECAUSE=/var/lib/weekly_maintenance/ended_early_because
+say() { printf 'reboot-util01-after-the-weekly-maintenance: %s\n' "$*"; }
+
+if [ "${1:-}" = --end-the-alert-pause-after-the-boot ]; then
+  [ -e "$MARKER" ] || exit 0
+  for _ in $(seq 60); do
+    status=0
+    /usr/local/bin/mmwatchdog status --json > /dev/null 2>&1 || status=$?
+    case $status in 0|1|3) break ;; esac
+    sleep 2
+  done
+  if /usr/local/bin/util01-alert-pause end; then
+    say "util01 is back; its alert pause ended"
+  else
+    say "util01 is back, but its alert pause did not end; it ends by itself within 5 minutes of the reboot"
+  fi
+  rm -f "$MARKER"
+  exit 0
+fi
+[ "$#" -eq 0 ] || { echo 'usage: reboot-util01-after-the-weekly-maintenance [--end-the-alert-pause-after-the-boot]' >&2; exit 4; }
+
+if [ ! -e /var/run/reboot-required ]; then
+  say "no reboot waits on util01; nothing to do"
+  exit 0
+fi
+if [ -e /etc/mmhotline/everyone-locked-out ]; then
+  say "everyone is locked out (/etc/mmhotline/everyone-locked-out), so util01 does not reboot by itself; a person reboots it after the lock-out ends"
+  exit 0
+fi
+if [ -s "$ENDED_EARLY_BECAUSE" ]; then
+  say "the weekly maintenance ended early ($(head -n 1 "$ENDED_EARLY_BECAUSE")); util01's reboot waits for next week's maintenance"
+  exit 0
+fi
+# The helper, as the mmhotline user: it prints "locked" once it holds the
+# lock, or the holder line of the run that holds it and exits. Close its
+# stderr and stdout after reporting so it never holds the caller's pipes open,
+# and exit as soon as the parent process disappears or becomes a zombie.
+coproc LOCK_HOLDER {
+  exec runuser -u mmhotline -- bash -c '
+    set -eu
+    exec 9>> /var/lib/mmhotline/systems_repository.lock
+    if ! flock --nonblock 9; then
+      printf "busy %s\n" "$(head -n 1 /var/lib/mmhotline/systems_repository.lock 2> /dev/null || true)"
+      exit 0
+    fi
+    printf "reboot of util01 after the weekly maintenance; user root; process %s; started %s\n" "$1" "$(date -u +%FT%TZ)" > /var/lib/mmhotline/systems_repository.lock
+    printf "locked\n"
+    exec > /dev/null 2>&1
+    # Hold the lock while the root process lives (stops on exit or zombie).
+    while state=$(awk "/^State:/{print \$2}" "/proc/$1/status" 2> /dev/null) && [ -n "$state" ] && [ "$state" != Z ]; do
+      sleep 0.2
+    done' reboot-util01-lock-holder "$$" 2> /dev/null
+}
+trap 'kill "${LOCK_HOLDER_PID:-}" 2> /dev/null || true' EXIT
+answer=""
+read -r answer <&"${LOCK_HOLDER[0]}" || true
+if [ "$answer" != locked ]; then
+  holder=${answer#busy }
+  say "a run holds util01's lock (${holder:-no holder line}); util01's reboot waits for next week's maintenance"
+  exit 0
+fi
+goes_on=$(/usr/local/bin/weekly-maintenance-goes-on --weekday "$WINDOW_WEEKDAY" --starts-at "$WINDOW_STARTS_AT" \
+  --length-minutes "$WINDOW_LENGTH_MINUTES" --ended-early-because /dev/null) || {
+  say "${goes_on:-weekly-maintenance-goes-on failed}; util01's reboot waits for next week's maintenance"
+  exit 0
+}
+incidents=$(/usr/local/bin/mmhotline incidents list --json 2> /dev/null | jq -er '.incidents | length' 2> /dev/null) || {
+  say "MMHotline did not list its incidents; util01's reboot waits for next week's maintenance"
+  exit 0
+}
+if [ "$incidents" -ne 0 ]; then
+  say "MMHotline has $incidents SOS incident(s) not resolved; util01's reboot waits for next week's maintenance"
+  exit 0
+fi
+if ! /usr/local/bin/util01-alert-pause start --for 5m --reason "weekly_maintenance" --without-maintenance-on-and-off-alerts; then
+  /usr/local/bin/util01-alert-pause end || true
+  say "util01's alert pause did not start, so util01 does not reboot"
+  exit 1
+fi
+mkdir -p "${MARKER%/*}"
+date -u +%FT%TZ > "$MARKER"
+say "util01 reboots for its installed updates"
+exec systemctl --no-block reboot

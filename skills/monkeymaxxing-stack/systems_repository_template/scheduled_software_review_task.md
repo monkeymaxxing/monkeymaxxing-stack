@@ -107,7 +107,9 @@ For each fixed flaw, learn why the fix is not installed:
 
 - On a database server, the nightly updates leave out `postgresql`,
   `pg-auto-failover`, `linux-` and `pgbouncer`. `update_database_servers`
-  installs those packages in the team's weekly window.
+  installs those packages: in the automatic weekly maintenance with two or
+  more database servers, or, for `db01` alone, when a person runs it in the
+  maintenance window after MMWatchdog's 30-day reminder.
 - On every other server, the nightly security updates install the fix
   within a day of Debian publishing the fix. A fix that is still not
   installed a day later means the nightly updates failed or are missing.
@@ -172,8 +174,8 @@ person must do:
     the nightly updates did not install a day later.
 
 Everything else goes in the notes file only, with no report: a fix that
-the nightly updates install tonight, a database server's fix for the
-weekly window, a fix that waits for the weekly reboot, an installed fix,
+the nightly updates install tonight, a database server's fix that waits
+for `update_database_servers`, a fix that waits for a reboot, an installed fix,
 or a downloaded program's security release whose flaw attackers do not
 exploit now. Reason: a report nobody acts on teaches the team to ignore
 reports.
@@ -208,10 +210,10 @@ A remedy names one of these:
   with the new pin's `version`, `download_url`, and `sha256`;
 - for a database server's held package, the procedure
   [Update and restart the database servers](operating_procedures/update_and_restart_the_database_servers.md)
-  in the weekly window;
+  in the maintenance window;
 - for a fix that waits for a reboot, the procedure
   [Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md)
-  in the weekly window.
+  in the maintenance window.
 
 ### Example of a warn report
 

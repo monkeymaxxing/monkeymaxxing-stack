@@ -68,15 +68,15 @@ CLOUDFLARE_SESSIONS_TASK = 'revoke_cloudflare_access_sessions'
 FIRST_LOCK_OUT_TASK = 'stop_untrusted_work_over_ordinary_ssh'
 PRIVATE_AGENT_SOCKET = '/run/desk-ssh-agent/private.sock'
 # Every file the lock-out loads, except data. Everything else in the run
-# directory is the person's pulled repository. The roles load the last
-# three from outside themselves: a pushed WireGuard peer, a wider triage
-# sudo rule or changed alert routing would otherwise reach the servers as
-# root through the lock-out itself. tests/desk_repository_and_lock_out_button_test.py
+# directory is the person's pulled repository. The roles load the
+# WireGuard template and the two triage sudo rules from outside themselves:
+# a pushed WireGuard peer or a wider triage sudo rule would otherwise reach
+# the servers as root through the lock-out itself. tests/desk_repository_and_lock_out_button_test.py
 # fails when the lock-out loads a file that is neither here nor data.
 REVIEWED_PATHS = ['playbooks/lock_everyone_out.yml', 'server_management_scripts/start_break_in_lockout.py',
                   'roles/everyone_locked_out', 'roles/systems_desk_lockout', 'ssh',
                   'roles/every_server/files/wireguard_wg0.conf', 'roles/every_server/files/sudoers_triage',
-                  'roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings', 'mmhotline_settings.yml',
+                  'roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings',
                   'roles/work_out_who_this_server_talks_to']
 # Data from the pulled repository that replaces a reviewed copy's file: new
 # servers' host keys. A host key file runs no command.

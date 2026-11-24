@@ -270,6 +270,39 @@ the version's commit passed, do each entry's one-time step, as step 6 of
 Apply each configuration change as [Making a change](../AGENTS.md#making-a-change)
 says: a push alone changes no server, so run `every_server` or the playbook the step names.
 
+### 0.7.0: a quiet system that maintains itself
+
+Before the push, tell the person what the upgrade run changes, in these
+words or close to them:
+
+- **The automatic weekly maintenance turns on.** At the start of the
+  maintenance window (`maintenance_window` in `mmx_project_settings.yml`;
+  the new template's default is Wednesday 03:00 UTC for 120 minutes, and
+  an upgrade keeps the team's own window), `util01` installs updates and
+  reboots every server whose restart the users do not see, then itself,
+  and each desk reboots itself when nobody uses it. A production pool's
+  only server, such as `app001` alone or `db01` alone, never restarts by
+  itself: MMWatchdog reminds after 30 days, and a person restarts it in
+  the window. A team that wants no automatic restarts sets
+  `automatic_weekly_maintenance: false` before the push.
+- **The phone stays quiet for planned work.** Planned alert pauses send no
+  notice, and `util01`'s own reboot is reported at `info`.
+- **No weekly review.** No checklist item expires any more, and the
+  review runs only when the person asks ("Review my system"), such as at
+  an optional monthly check-in.
+- **Secrets are replaced when someone leaves or a secret may have leaked,**
+  not every year
+  ([Why rotation follows events](rotate_a_secret.md#why-rotation-follows-events)).
+- **`util01` refuses a push that adds a secret,** with gitleaks. Commits
+  already on `main` are not checked again.
+
+After the runs, ask the person to run `ssh desk01-review` once on each
+desk: the version changes the lock-out button, which no longer applies
+MMHotline's settings, adds the desk's quiet-hour reboot, and adds the
+secret check to `publish-branch-to-main`. The review also removes the
+desk's earlier copy of the MMHotline settings. From then on, a change of
+`mmhotline_settings.yml` needs no desk review.
+
 ### 0.6.0: alerts that ask for action
 
 Before the push, tell the person what the upgrade run changes, in these

@@ -45,11 +45,11 @@ Follow the three steps in order.
      (`mmwatchdog fleet readings`).
      MMWatchdog's docs, "Looking at the readings", explain how to read the
      measurements.
-   - Review `monkeymaxxing_stack_checklist.yml`'s open items and done items
-     whose `verified_at` is older than `verify_again_every`.
+   - Review `monkeymaxxing_stack_checklist.yml`'s open items, and any done
+     item to which the team added a `verify_again_every` that has passed.
 
-   [Do the weekly system review](do_the_weekly_system_review.md#what-the-coding-agent-gathers)
-   gives the commands for the week's alerts, updates, and restore drill.
+   [Review the system](review_the_system.md#what-the-coding-agent-gathers)
+   gives the commands for the alerts, updates, and restore drill.
 
    **Check:** you can name, for each of the three parts, what differs or
    that nothing differs, such as the dryrun's exit code.

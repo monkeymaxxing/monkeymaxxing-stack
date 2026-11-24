@@ -205,4 +205,40 @@ check_groups:
         fail_when_measurement_above:
           latest_backup_age_hours: 26
         alert_severity: warn
+
+  # A database server never restarts a service by itself after an update:
+  # needrestart only lists the services that still use a library an update
+  # replaced (roles/every_server/files/needrestart.conf), so Postgres and
+  # PgBouncer keep the old library until update_database_servers restarts
+  # them. Such an update leaves no waiting package and no
+  # /var/run/reboot-required, so security_updates and no_reboot_waits in
+  # every_server.yml stay quiet; this check is the reminder.
+  # Reason for 30 days on db01 alone: its restart is a short outage, so a
+  # person runs it rarely, in the maintenance window
+  # (operating_procedures/update_and_restart_the_database_servers.md); the
+  # servers have no open internet port, and known_exploited_flaws warns
+  # within hours when attackers exploit a flaw in a running library.
+  # Reason for 15 days with two or more: the automatic weekly maintenance
+  # restarts them every week without an outage, so 15 days means two weekly
+  # runs passed without it. Reason for warn: a risk, not an outage.
+  # As root: needrestart reads every process's memory maps. It only reads.
+  # A needrestart that fails fails the check too (exit 2), with its reason,
+  # so a broken needrestart never passes as "nothing waits".
+{{- $database_servers := len (index .inputs.inventory_groups "database_servers" | default list) }}
+  services_restarted_after_library_updates:
+    check_every: 1h
+    time_limit_per_run: 1m
+    alert_after_failing_for: {{ if lt $database_servers 2 }}30d{{ else }}15d{{ end }}
+    recovered_after_healthy_for: 0s
+    checks:
+      no_service_uses_a_replaced_library:
+        shell:
+          script: |
+            listed=$(needrestart -b -r l) || { printf 'needrestart failed (exit %s), so nobody can tell which services still use a replaced library\n' "$?"; exit 2; }
+            services=$(printf '%s\n' "$listed" | sed -n 's/^NEEDRESTART-SVC: //p' | tr '\n' ' ')
+            [ -z "$services" ] && exit 0
+            printf 'these services still use a library that an update replaced: %s\n' "$services"
+            exit 1
+          run_as_user_account: root
+        alert_severity: warn
 {{- end }}

@@ -131,7 +131,7 @@ tells the person nothing.
   | tunnel | "a private connection from your server to Cloudflare" |
   | growth limit, `growth_limits` | "the most your servers may grow by themselves, as a monthly sum" |
   | pin check, pinned release | "a check that each program is the exact version the Stack tested" |
-  | weekly review, before it is explained | "the weekly system review, a short weekly check of alerts, updates and backups that you and I do together" |
+  | system review, before it is explained | "a review of your system: a short look at alerts, updates and backups that you and I do together, whenever you ask" |
   | stage, fleet stage | what the step does: "installing your database" |
   | `app001`, `db01`, `util01`, before it is introduced | its job first: "your app server, app001" |
   | MMWatchdog, before it is introduced | "MMWatchdog, the program that watches every server" |
@@ -393,7 +393,8 @@ say what it reaches ("`ssh desk01-lock` logs in to your systems desk").
 | Pool | The servers that share one job, such as the app servers. |
 | Operating procedure | A tested file of steps for a planned change or recovery. |
 | Checklist | `monkeymaxxing_stack_checklist.yml`: every stack item's state (`done`, `open`, or `deviated`), evidence, and `growth_and_improvement_items`. |
-| Weekly system review | The weekly check of alerts, waiting updates, restore drill results, and due checklist items ([Do the weekly system review](operating_procedures/do_the_weekly_system_review.md)). |
+| System review | An on-demand look at the alerts, the restarts that wait for a person, the restore drill's result, and the checklist items that are due ([Review the system](operating_procedures/review_the_system.md)). No review is required. |
+| Automatic weekly maintenance | The weekly job on `util01`, in the quiet `maintenance_window`, that installs updates and reboots every server whose restart costs the users nothing; a production pool's only server waits for a person (`automatic_weekly_maintenance` in `mmx_project_settings.yml`). |
 | Setup machine | The machine that makes a new server's WireGuard key and first-boot data: `util01`, or the systems desk during setup and `util01` rebuilds. |
 | First-boot data | Settings rendered by `server_management_scripts/render_server_first_boot` that close public SSH and start WireGuard on a new server's first boot. |
 | Ownership receipt | The file written by `create_a_server_at_the_provider --ownership-file` with a new server's ID and name so cleanup deletes only the server that run created. |

@@ -271,7 +271,7 @@ fleet_stages:
     node_tasks:
       - id: start_maintenance_on_the_server
         shell:
-          script: /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 1h --reason "remove_server"
+          script: /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 1h --reason "remove_server" --without-maintenance-on-and-off-alerts
 
   # A database replica, step 2. The replica being removed leaves the
   # formation: MMX stops pgautofailover.service and deletes the systemd unit

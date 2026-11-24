@@ -595,7 +595,9 @@ host name to work through Cloudflare Access, after the domain is active.
 
 **The reboots come now.** No users use the system yet, so the reboots
 finish during chapter 7 (install everything on the production servers),
-before going live.
+before going live. From then on, the automatic weekly maintenance installs
+updates and reboots by itself in the maintenance window, except a
+production pool's only server, which waits for a person.
 
 **Every change is a commit and a run.** Runs take turns under a shared
 lock. Nobody changes a server by hand, because an unrecorded change

@@ -20,8 +20,11 @@
 # state: deviated  the system differs from the item's requirement
 #                  deviation says what differs and why
 #
-# An item becomes done only after its verification passed. When verified_at is
-# older than verify_again_every, the item counts as open again.
+# An item becomes done only after its verification passed, and stays done:
+# the template has no item that expires. A team whose own rules require a
+# check again after a time, such as a yearly secret rotation for an audit,
+# adds verify_again_every to that item, such as verify_again_every: 12 months;
+# when verified_at is older, the item counts as open again.
 #
 # The separate list growth_and_improvement_items holds the items that wait
 # for a trigger that can come late or never: growth, such as a second app
@@ -29,7 +32,8 @@
 # trigger in `trigger`. An item whose trigger has not come has
 # state: waits_for_its_trigger, which never counts as open. MMHotline's
 # dashboard reads only items and apps, so the dashboard does not show the
-# list. The weekly review only checks whether a trigger arrived. While
+# list. A person who reviews the system checks whether a trigger arrived
+# (operating_procedures/review_the_system.md). While
 # the growth waits for a later event, such as staging_server for the next
 # release, the item is open with waits_for. After the growth or improvement
 # happened, the item becomes done or deviated, with the same fields as in
@@ -40,7 +44,7 @@
 # operating_procedures/add_staging01.md finishes both when the team adds
 # staging01, during the setup for a team that chose the fuller system.
 
-stack_version: 0.6.0
+stack_version: 0.7.0
 # stack_commit records the commit of the stack's repository from which the
 # coding agent copied the system's files. The coding agent records the
 # commit during the initial setup and with each new version. During an
@@ -458,14 +462,16 @@ items:
     part: setup
     protects_against: secrets leaking through the repository, an image, or a server that never needed them
     verification: >-
-      the secrets the servers use are in secrets_vault.age, and a secret scan
-      of the repository and its history, such as gitleaks, finds none
-      elsewhere; and the vault passphrase is on each systems desk that runs
+      the secrets the servers use are in secrets_vault.age, and gitleaks
+      finds none elsewhere in the repository and its history: the main copy
+      on util01 refuses every push whose commits add one (its pre-receive
+      hook, roles/util_server/files/refuse_a_push_that_adds_a_secret), as
+      publish-branch-to-main on the desk does before util01 exists; and the
+      vault passphrase is on each systems desk that runs
       MMX and on util01, where only the mmhotline user can read it. That each
       server holds only its role's secrets, as root-only files with the
       modes the Stack sets, is in the optional check of the system's
       protections.
-    verify_again_every: 7d
     waits_for: the initial setup
 
   # Every server uses Debian 13. Which Debian releases the Stack supports:
@@ -764,13 +770,11 @@ items:
       replace_failed_servers, every_server and destroy_replaced_servers with
       the rules that mmhotline_settings.yml renders for the answer: act then
       report with routine_fixes_and_server_work, together with
-      reboot_servers_after_updates, add_an_app_server_for_the_load and
-      remove_server after a warning; or, with the other two answers, get
-      permission then act, where the approval of replace_failed_servers
-      also approves the other two; and with routine_fixes_and_server_work
-      alone, `sudo mmwatchdog status --json` on app001 lists the check
-      reboots_that_may_run_now/no_reboot_waits_that_may_run_now, and on
-      util01 the checks app_servers_to_add_for_the_load/no_app_server_waits_to_be_added
+      add_an_app_server_for_the_load and remove_server after a warning; or,
+      with the other two answers, get permission then act, where the
+      approval of replace_failed_servers also approves the other two; and
+      with routine_fixes_and_server_work alone, `sudo mmwatchdog status
+      --json` on util01 lists the checks app_servers_to_add_for_the_load/no_app_server_waits_to_be_added
       and app_servers_to_remove_for_the_load/no_app_server_waits_to_be_removed,
       each with a message from check-whether-the-load-changes-the-app-pool;
       growth_limits.app_servers holds the person's smallest and largest
@@ -805,7 +809,6 @@ items:
       A drill that gave way to MMHotline ("passed": false with gave_way_to)
       verifies nothing: record the drill that passes when systemd runs it
       again.
-    verify_again_every: 7d
     waits_for: installing everything on the servers, which starts the first drill once the first backup exists
 
   - id: provider_console_and_backup_mmhotline_logins
@@ -825,7 +828,6 @@ items:
       --sign-in-email-address ADDRESS` that signs a browser in to MMHotline at
       http://localhost:8480, is in the optional check of the system's
       protections.
-    verify_again_every: 6 months
     waits_for: the initial setup
 
   - id: break_in_response_page
@@ -903,32 +905,29 @@ items:
       the same way.
     waits_for: a rollback, a commit of the previous tag, after the initial setup's first release
 
-  # No server reboots by itself, so the team's weekly window holds the
-  # database servers' updates and every reboot that updates wait for.
-  # With routine_fixes_and_server_work, the triage agent already reboots
-  # every server but util01 and the database servers when its reboot may
-  # run (a pool's only server inside the window), so in the window
-  # reboot_servers_after_updates often finds nothing waiting; a reboot that
-  # someone stopped waits for this window.
-  - id: weekly_window_updates_and_reboots
-    title: The database servers' updates and every waiting reboot, in the team's weekly window, one server at a time
+  # No server reboots at an hour nobody chose. The automatic weekly
+  # maintenance (automatic_weekly_maintenance in mmx_project_settings.yml)
+  # restarts, in the team's maintenance_window, every server whose restart
+  # costs the users nothing; a production pool's only server waits for a
+  # person (operating_procedures/reboot_servers_after_updates.md).
+  - id: automatic_weekly_maintenance
+    title: Updates and reboots run by themselves in the maintenance window, without taking the site down
     state: open
     part: later_when_it_happens
     protects_against: known flaws left open on the database servers, and fixed flaws, mostly the kernel's, that stay open while a server runs the old code, without a restart or a reboot at an hour nobody chose
     verification: >-
-      in the team's window (maintenance_window in mmx_project_settings.yml),
-      update_database_servers ran: the replica first,
-      then a switchover, then the old primary (db01 alone until db02
-      exists); then reboot_servers_after_updates rebooted, one at a time,
-      each other server but util01 whose updates waited for a reboot, each
-      doing its work again before the next one rebooted; and
-      reboot_util01_after_updates, run from a systems desk, rebooted util01 when
-      its updates waited for one. Afterwards MMWatchdog's
-      check security_updates/no_security_update_waits passes on every
-      database server, and security_updates/no_reboot_waits on every server
-      (operating_procedures/reboot_servers_after_updates.md, "Verify").
-    verify_again_every: 7d
-    waits_for: the team's first weekly window after the initial setup
+      after the first maintenance window (maintenance_window in
+      mmx_project_settings.yml), `journalctl -u weekly_maintenance` on util01
+      shows the run: update_database_servers, with two or more database
+      servers, ran or said that nothing waits; reboot_servers_after_updates
+      rebooted one at a time each waiting server of a pool of two or more
+      and staging01, and said that a production pool's only server waits
+      for a person; and util01 rebooted itself when a reboot waited
+      (`journalctl -u reboot_util01_after_the_weekly_maintenance`), or said
+      why it waits. MMHotline recorded no SOS for the run. A team that set
+      automatic_weekly_maintenance to false records a deviation, with who
+      runs the updates and reboots by hand.
+    waits_for: the first maintenance window after the initial setup
 
   - id: secret_rotation
     title: Secret rotation
@@ -945,11 +944,12 @@ items:
       pushed, util01's run restarted what reads it, end_connections_that_use_an_old_database_password ended the
       old database password's connections, the new one checked working, and
       the old one revoked.
-    # Reason for 12 months: a yearly rotation is enough when the keys are narrow and are
-    # also rotated at once when someone leaves or a key leaks. A team under a rule that
-    # needs faster rotation, such as every 90 days, writes a shorter period here.
-    verify_again_every: 12 months
-    waits_for: the first sweep after the rotation period, someone leaving, or a suspected leak
+    # No fixed period: a secret is rotated at once when someone leaves or a
+    # secret may have leaked. Reason: the keys are narrow and none of them is
+    # known to a person, so a calendar rotation adds work and no protection.
+    # A team whose rules require a period, such as every 90 days, adds
+    # verify_again_every: 90d here (operating_procedures/rotate_a_secret.md).
+    waits_for: someone leaving, or a suspected leak
 
   - id: onboarding_and_offboarding
     title: Onboarding and offboarding a person
@@ -984,21 +984,16 @@ items:
       check of the system's protections.
     waits_for: the first scheduled server settings comparison, which runs after the initial setup
 
-  - id: dashboard_and_weekly_review
-    title: The dashboard, and a weekly review with the coding agent
+  - id: dashboard_shows_the_system
+    title: The dashboard shows the system
     state: open
     part: later_when_it_happens
-    protects_against: alerts, waiting updates, a failed restore drill, due items, and triggers that nobody looks at
+    protects_against: alerts, a failed restore drill, and open items that nobody sees
     verification: >-
       the dashboard at https://ops.example.com shows who is on call, the open
       incidents, one box per pool, the latest commits, and the checklist's
-      open and deviated items; and the weekly review with the coding agent
-      went through the week's alerts, the waiting updates, the restore
-      drill's result, and the checklist items that are due, checked whether
-      a trigger of growth_and_improvement_items arrived, and set expired
-      items back to open (operating_procedures/do_the_weekly_system_review.md).
-    verify_again_every: 7d
-    waits_for: the first weekly review after the initial setup
+      open and deviated items.
+    waits_for: the first look at the dashboard after the initial setup
 
   # The nightly uploads copy: the setup proves the first copy; the nightly
   # run, the weekly full copy, and the restore of a file take days.
@@ -1025,7 +1020,6 @@ items:
       percent of a test app's files in R2 makes the next copy warn
       (uploads_backup/the_latest_copy_hid_no_unusual_share_of_an_apps_files),
       and the copy after a quiet interval closes the warning.
-    verify_again_every: 6 months
     waits_for: a week of nightly copies after the initial setup, and an app that keeps uploads
 
   # Move an existing database into the Stack, when the team has one.
@@ -1049,7 +1043,7 @@ items:
 
 growth_and_improvement_items:
   # GROWTH: each item waits for its trigger, a measured warning or an
-  # event. An MMWatchdog warning or the weekly review notices the trigger.
+  # event. An MMWatchdog warning, or a person's system review, notices the trigger.
   # Most systems need few growth steps, or none for years.
 
   - id: staging_server
@@ -1326,7 +1320,6 @@ growth_and_improvement_items:
       really lost (operating_procedures/recover_rows_lost_to_a_bad_change.md, "Restore a database copy and recover the missing rows", copies them back
       after a real one); and rebuilt util01 from a systems desk, including
       MMHotline's database.
-    verify_again_every: 6 months
     trigger: the team choosing to practice; the drills are optional
 
   - id: break_in_staging_drill
@@ -1344,7 +1337,7 @@ growth_and_improvement_items:
     trigger: the team choosing to practice, on an isolated staging system with two systems desks; the drill is optional
 
   - id: break_in_yearly_drill
-    title: The team practiced the break-in response this year
+    title: The team practiced the break-in response
     state: waits_for_its_trigger
     protects_against: a response plan that nobody remembers how to use
     verification: >-
@@ -1354,8 +1347,7 @@ growth_and_improvement_items:
       operating_procedures/respond_to_a_break_in.md, step 7, and recorded
       the results, times and evidence locations. Company revocations used
       harmless test identities. Every containment and undo check passed.
-    verify_again_every: 12 months
-    trigger: break_in_staging_drill, and the team choosing to practice every year; the drill is optional
+    trigger: break_in_staging_drill, and the team choosing to practice again; the drill is optional
 
   - id: email_sending_service
     title: An email sending service, with SPF, DKIM, and DMARC

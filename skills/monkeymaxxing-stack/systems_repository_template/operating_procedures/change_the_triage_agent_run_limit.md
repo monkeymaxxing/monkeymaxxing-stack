@@ -9,8 +9,7 @@ and MMHotline on `util01` applies it.
 
 **Who acts:** the coding agent reads the numbers, proposes the change,
 edits, pushes and runs it from the systems desk. The person decides the
-new limit, and runs `ssh desk01-review` in the person's own terminal
-(step 6).
+new limit.
 
 Read [the systems repository rules](../AGENTS.md#the-rules) first.
 
@@ -113,16 +112,6 @@ Read [the systems repository rules](../AGENTS.md#the-rules) first.
    **Check:** the run passes, and
    `ssh -F ssh/config root@10.20.0.1 "mmhotline triage-agent usage --since SINCE"`
    prints the new run limit.
-6. **The person reviews the systems desk's settings.** Every change to
-   `mmhotline_settings.yml` reaches the lock-out button only after the next
-   desk review. Tell the person to run, in the person's own terminal:
-
-   ```sh
-   ssh desk01-review
-   ```
-
-   **Check:** the review shows the `mmhotline_settings.yml` change, and the
-   person typed `yes`.
 
 ## If something is different
 

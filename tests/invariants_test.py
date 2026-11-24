@@ -124,19 +124,139 @@ class LivePortStillTheOneTheRunStartedWith(unittest.TestCase):
             self.assertLess(check, role.index(later), later)
 
 
-class ChecklistAndReview(unittest.TestCase):
-    def test_the_vault_checklist_item_is_verified_again_every_week(self):
+class ChecklistAndSecretScan(unittest.TestCase):
+    def test_no_template_item_expires(self):
+        # No chore comes back by date: a team whose own rules require a
+        # check again adds verify_again_every itself.
+        text = (TEMPLATE / 'monkeymaxxing_stack_checklist.yml').read_text()
+        self.assertIsNone(re.search(r'^\s+verify_again_every:', text, re.M))
+
+    def test_the_vault_checklist_item_names_the_pushes_scan(self):
         text = (TEMPLATE / 'monkeymaxxing_stack_checklist.yml').read_text()
         item = text.split('- id: secrets_in_the_vault_scoped_by_role', 1)[1].split('\n  - id: ', 1)[0]
-        self.assertIn('verify_again_every: 7d', item)
+        self.assertIn('roles/util_server/files/refuse_a_push_that_adds_a_secret', item)
+        self.assertIn('publish-branch-to-main', item)
 
-    def test_the_weekly_review_scans_the_weeks_commits_for_secrets(self):
-        text = (TEMPLATE / 'operating_procedures/do_the_weekly_system_review.md').read_text()
-        self.assertIn('Scan the week\'s commits for a secret in clear text', text)
-        # The desk installs Debian's gitleaks 8.16 (roles/systems_desk/main.yml),
-        # which has `detect` and refuses `git`, a subcommand of 8.19.
-        self.assertIn('gitleaks detect --redact --verbose --log-opts="--since=7.days"', text)
-        self.assertNotIn('gitleaks git', text)
+    def test_the_main_copy_and_the_desk_scan_each_pushed_commit(self):
+        # Debian's gitleaks 8.16 has `detect` and refuses `git`, a
+        # subcommand of 8.19. --log-opts with a range reads every pushed
+        # commit, so a secret that a later commit removes is refused too.
+        # -m gives each merge commit's diff against each parent, so a secret
+        # added in a merge's conflict resolution is refused as well.
+        hook = (TEMPLATE / 'roles/util_server/files/refuse_a_push_that_adds_a_secret').read_text()
+        self.assertIn('gitleaks detect --source . --config "${GITLEAKS_CONFIG:-/etc/gitleaks/systems_repository.toml}" --redact --no-banner --verbose --log-opts="-m $range"', hook)
+        self.assertNotIn('gitleaks git', hook)
+        publish = (TEMPLATE / 'roles/systems_desk/files/publish-branch-to-main').read_text()
+        self.assertIn('gitleaks detect --source . --config "${GITLEAKS_CONFIG:-/etc/gitleaks/systems_repository.toml}" --redact --no-banner --verbose --log-opts="-m main..$branch"', publish)
+        self.assertNotIn('gitleaks git', publish)
+        role = (TEMPLATE / 'roles/util_server/main.yml').read_text()
+        self.assertIn('{name: gitleaks, version: newest_when_first_installed}', role)
+        self.assertIn('source: files/refuse_a_push_that_adds_a_secret', role)
+        self.assertIn('source: files/gitleaks.toml', role)
+        desk_role = (TEMPLATE / 'roles/systems_desk/main.yml').read_text()
+        self.assertIn('source: files/gitleaks.toml', desk_role)
+        self.assertEqual(
+            (TEMPLATE / 'roles/util_server/files/gitleaks.toml').read_text(),
+            (TEMPLATE / 'roles/systems_desk/files/gitleaks.toml').read_text(),
+        )
+
+
+class ThePreReceiveHookRefusesAPushThatAddsASecret(unittest.TestCase):
+    """The hook in a real bare repository, with a stand-in gitleaks.
+
+    The stand-in reads the commits of --log-opts with git log -p, as
+    gitleaks detect does, and finds a secret in an added line that holds
+    SECRET-MARKER. It runs inside the push's quarantine, as gitleaks does.
+    """
+
+    STAND_IN = r'''#!/usr/bin/env python3
+import subprocess, sys
+arguments = sys.argv[1:]
+assert arguments[0] == 'detect', arguments
+source = arguments[arguments.index('--source') + 1]
+range_ = next(a.split('=', 1)[1] for a in arguments if a.startswith('--log-opts='))
+log = subprocess.run(['git', '-C', source, 'log', '-p', *range_.split(' ')], capture_output=True, text=True, check=True).stdout
+sys.exit(1 if any(l.startswith('+') and 'SECRET-MARKER' in l for l in log.splitlines()) else 0)
+'''
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        (self.root/'bin').mkdir()
+        (self.root/'bin/gitleaks').write_text(self.STAND_IN)
+        (self.root/'bin/gitleaks').chmod(0o755)
+        self.environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1',
+                            'PATH': '%s:%s' % (self.root/'bin', os.environ['PATH'])}
+        self.main_copy, self.clone = self.root/'main_copy.git', self.root/'clone'
+        self.git(self.root, 'init', '--quiet', '--bare', '-b', 'main', str(self.main_copy))
+        hook = self.main_copy/'hooks/pre-receive'
+        hook.write_text((TEMPLATE/'roles/util_server/files/refuse_a_push_that_adds_a_secret').read_text())
+        hook.chmod(0o755)
+        self.git(self.root, 'init', '--quiet', '-b', 'main', str(self.clone))
+        self.git(self.clone, 'config', 'user.name', 'desk01')
+        self.git(self.clone, 'config', 'user.email', 'desk01@example.com')
+        self.commit('settings.yml', 'setting: one\n', 'Start')
+        self.assertEqual(self.push('main').returncode, 0)
+
+    def git(self, cwd, *arguments):
+        result = subprocess.run(['git', *arguments], cwd=cwd, text=True, capture_output=True, env=self.environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def commit(self, name, text, message):
+        (self.clone/name).write_text(text)
+        self.git(self.clone, 'add', name)
+        self.git(self.clone, 'commit', '--quiet', '-m', message)
+
+    def push(self, ref):
+        return subprocess.run(['git', 'push', '--quiet', str(self.main_copy), 'HEAD:refs/heads/%s' % ref],
+                              cwd=self.clone, text=True, capture_output=True, env=self.environment)
+
+    def test_a_clean_push_passes(self):
+        self.commit('settings.yml', 'setting: two\n', 'Change a setting')
+        self.assertEqual(self.push('main').returncode, 0)
+        self.assertEqual(self.git(self.main_copy, 'rev-parse', 'main'), self.git(self.clone, 'rev-parse', 'HEAD'))
+
+    def test_a_secret_that_a_later_commit_removes_is_refused_and_main_stays(self):
+        before = self.git(self.main_copy, 'rev-parse', 'main')
+        self.commit('settings.yml', 'setting: SECRET-MARKER\n', 'Add a key by mistake')
+        self.commit('settings.yml', 'setting: one\n', 'Remove it again')
+        result = self.push('main')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('refused the push to refs/heads/main', result.stderr)
+        self.assertIn('Nothing changed', result.stderr)
+        self.assertEqual(self.git(self.main_copy, 'rev-parse', 'main'), before)
+
+    def test_a_new_branch_with_a_secret_is_refused(self):
+        self.commit('notes.md', 'SECRET-MARKER\n', 'A note')
+        self.assertNotEqual(self.push('another').returncode, 0)
+        self.assertEqual(self.git(self.main_copy, 'branch', '--list', 'another'), '')
+
+    def test_a_secret_added_only_in_a_merge_commit_is_refused(self):
+        # git log -p shows no diff for a merge commit without -m, so a secret
+        # that only the merge adds, such as in a conflict's resolution, would
+        # pass unseen.
+        before = self.git(self.main_copy, 'rev-parse', 'main')
+        self.git(self.clone, 'switch', '--quiet', '-c', 'side')
+        self.commit('notes.md', 'a note\n', 'A note on a side branch')
+        self.git(self.clone, 'switch', '--quiet', 'main')
+        self.commit('settings.yml', 'setting: two\n', 'Change a setting')
+        self.git(self.clone, 'merge', '--quiet', '--no-ff', '--no-commit', 'side')
+        (self.clone/'merge.yml').write_text('token: SECRET-MARKER\n')
+        self.git(self.clone, 'add', 'merge.yml')
+        self.git(self.clone, 'commit', '--quiet', '-m', 'Merge the side branch')
+        result = self.push('main')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('refused the push to refs/heads/main', result.stderr)
+        self.assertEqual(self.git(self.main_copy, 'rev-parse', 'main'), before)
+
+    def test_a_missing_gitleaks_refuses(self):
+        (self.root/'bin/gitleaks').write_text('#!/bin/sh\nexit 127\n')
+        self.commit('settings.yml', 'setting: two\n', 'Change a setting')
+        result = self.push('main')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('or gitleaks did not run', result.stderr)
 
 
 class DryrunOfAProgramTheSameRunInstalls(unittest.TestCase):

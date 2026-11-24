@@ -86,14 +86,13 @@ inputs:
   mmwatchdog_release:                       # version, download_url, and sha256
     type: mapping
     required: true
-  # For the check group reboots_that_may_run_now of every_server.yml: from
-  # mmx_project_settings.yml, what_the_triage_agent_may_do_without_a_person,
-  # public_site_checks_run, and maintenance_window. Only with
-  # routine_fixes_and_server_work does the check exist. {} on a systems
-  # desk, which never gets the check.
-  reboot_check_settings:
-    type: mapping
-    required: true
+  # From mmx_project_settings.yml, for the app servers' CPU check
+  # (mmwatchdog_checks/app_servers.yml), which is info with
+  # routine_fixes_and_server_work. "" on a systems desk, which never gets
+  # the check.
+  what_the_triage_agent_may_do_without_a_person:
+    type: string
+    default: ""
   mmwatchdog_join_code:                     # the hub's join code: its address, certificate fingerprint, and join secret
     type: string
     required: true

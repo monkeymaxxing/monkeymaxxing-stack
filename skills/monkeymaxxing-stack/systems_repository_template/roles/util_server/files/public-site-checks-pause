@@ -1,0 +1,58 @@
+#!/bin/bash
+# public-site-checks-pause: a short pause of util01's public site checks,
+# public_sites, while a person deliberately restarts a production pool's
+# only server, such as app001 alone or db01 alone. util01 itself opens and
+# ends the pause, never the server that restarts.
+#
+#   public-site-checks-pause start --for 3m --reason "reboot_servers_after_updates: app001, the only server of app_servers, reboots" --without-maintenance-on-and-off-alerts
+#   public-site-checks-pause end
+#
+# reboot_servers_after_updates and update_database_servers run it on util01
+# right before the restart, and end the pause as soon as the server is
+# back. The users' site is down for the restart, about a minute, which the
+# person chose; the pause keeps that planned minute from raising the site's
+# SOS. Reason for 3m: a cloud server came back within 56 seconds in every
+# measured reboot. When util01 cannot end the pause, such as when the run
+# stops because the server did not come back, the pause ends by itself
+# after 3 minutes, and a site that is still down raises its SOS then.
+# util01's own reboots never pause public_sites (util01-alert-pause).
+#
+# Before go-live, util01 runs no public site checks (public_site_checks_run
+# is false in mmx_project_settings.yml), and MMWatchdog refuses a window on a
+# check group it does not run: then both commands change nothing and exit 0.
+# The check groups come from the running MMWatchdog (mmwatchdog status
+# --json, whose checks are named CHECK_GROUP/CHECK).
+set -euo pipefail
+
+# 0: util01 runs public_sites; 1: it does not; 2: MMWatchdog did not answer.
+public_site_checks_run() {
+  local status=0 output
+  output=$(/usr/local/bin/mmwatchdog status --json) || status=$?
+  # 1 and 3 answer whole: a check needs attention, or its health is unknown.
+  case $status in
+    0|1|3) ;;
+    *) printf 'public-site-checks-pause: mmwatchdog status --json exited %s; no window changed\n' "$status" >&2; return 2 ;;
+  esac
+  jq -e '[.checks | keys[] | select(startswith("public_sites/"))] | length > 0' <<< "$output" > /dev/null || return 1
+}
+
+action=${1:-}
+[ "$#" -gt 0 ] && shift
+case $action in
+  start|end)
+    found=0
+    public_site_checks_run || found=$?
+    case $found in
+      0) ;;
+      1) echo 'util01 runs no public site checks yet (before go-live), so there is nothing to pause'; exit 0 ;;
+      *) exit 1 ;;
+    esac
+    if [ "$action" = start ]; then
+      exec /usr/local/bin/mmwatchdog maintenance on public_sites "$@"
+    fi
+    [ "$#" -eq 0 ] || { echo 'public-site-checks-pause end takes no arguments' >&2; exit 4; }
+    exec /usr/local/bin/mmwatchdog maintenance off public_sites ;;
+  *)
+    echo 'usage: public-site-checks-pause start --for DURATION --reason TEXT [--without-maintenance-on-and-off-alerts] | public-site-checks-pause end' >&2
+    exit 4 ;;
+esac

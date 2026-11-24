@@ -156,7 +156,7 @@ and `add_an_app_server_for_the_load` and `remove_server` without
   MMHotline resumes you when the run ends. Until then, commit nothing, not
   even a note in `triage_agent_notes/`: a newer commit can make the warning
   stale, and MMHotline warns again and the run waits again. On 2026-11-12 a
-  notes commit 20 seconds after a request made each reboot wait 20 minutes
+  notes commit 20 seconds after a request made each run wait 20 minutes
   instead of 10. Write the note after MMHotline resumes you.
 - **Confirm a fix with MMWatchdog.** After a fix, confirm with
   `sudo mmwatchdog check-now GROUP --count-as-scheduled-run` on the server
@@ -211,7 +211,7 @@ destroys a server.
   ```
 
   Request each only after the one before succeeded (exit 0), and report
-  each step as the next bullet says. Do not try to
+  each run's result as the next bullet says. Do not try to
   tell a bad server from a network fault: `replace_failed_servers` refuses
   when more than half of the servers are silent at once, and the growth
   limits and the tries bound what a needless replacement costs. You cannot
@@ -231,28 +231,27 @@ destroys a server.
   more than half of the servers are silent at once, or a growth limit
   forbids it. Report a refusal at SOS, as the bullet on refusals below
   says.
-- **Report each step at `--alert-severity info`, one short report per
-  step, so the team can follow the replacement without a sound:**
-  1. before the first request: "Replacing app001: your site should answer
-     again in about 3 minutes. The new server installs its waiting
-     security updates after your site answers again."
+- **Report each completed run once, at `--alert-severity info`,** so the
+  team can follow the replacement without a sound. Send no report before
+  a run starts and none while it runs:
+  1. after `replace_failed_servers` succeeded: "Created app002 (cx33, about
+     7.49 EUR per month). Your site should answer again in about 3
+     minutes.", with the new server's type and monthly price from the
+     run's last lines. When those lines say the price could not be read,
+     leave the price out: "Created app002 (cx33)." Leave out the minutes
+     when the site kept answering.
      <!-- The replacement's usual time, written once here. Measured at
      Hetzner: 2 m 11.4 s to 2 m 21.5 s from the start to a
      serving site, with the new server's waiting security updates installed
      after it serves (the last fleet stage of every_server). -->
-  2. after `replace_failed_servers` succeeded: "Created app002 (cx33, about
-     7.49 EUR per month).", with the new server's type and monthly price
-     from the run's last lines. When those lines say the price could not be
-     read, leave the price out: "Created app002 (cx33)."
-  3. before `every_server`: "Installing app002."
-  4. when a bad new server is replaced again: "app002 was bad, so it is
-     being deleted; creating another."
-  5. after `every_server` succeeded, the outcome, as the last report of
-     the replacement: "Your site answers again after 3 minutes. app002
-     replaced app001 (about 7.49 EUR per month). app001 is being deleted."
-     When the site kept answering, say so: "app002 replaced app001 (about
-     7.49 EUR per month), and your site kept answering. app001 is being
-     deleted." After `destroy_replaced_servers` succeeded, one more report:
+  2. when `every_server` showed a bad new server, which is replaced again:
+     "app002 was bad, so it is being deleted; creating another."
+  3. after `every_server` succeeded, the outcome: "Your site answers again
+     after 3 minutes. app002 replaced app001 (about 7.49 EUR per month).
+     app001 is being deleted." When the site kept answering, say so:
+     "app002 replaced app001 (about 7.49 EUR per month), and your site kept
+     answering. app001 is being deleted."
+  4. after `destroy_replaced_servers` succeeded, the last report:
      "app001 is deleted."
 
      Take the minutes from when your site answered again: the SOS's
@@ -279,10 +278,12 @@ destroys a server.
   report at warn too.
 - **A reboot that never came back is the same trigger, sooner.** When
   `what_the_triage_agent_may_do_without_a_person` is
-  `routine_fixes_and_server_work` and your run of
-  `playbooks/reboot_servers_after_updates.yml` fails because a server did
-  not come back from its reboot, request the three runs at once; do not
-  wait for the alert pause to end. `replace_failed_servers` waits, at most
+  `routine_fixes_and_server_work` and the automatic weekly maintenance
+  (`weekly_maintenance.service` on `util01` failed: read why with
+  `ssh triage@util01 journalctl -u weekly_maintenance`) or a person's run
+  of `playbooks/reboot_servers_after_updates.yml` failed because a server
+  of a listed pool did not come back from its reboot, request the three
+  runs at once; do not wait for the alert pause to end. `replace_failed_servers` waits, at most
   about 2 minutes, until the reboot counts as failed, and replaces only a
   server that did not come back. If you do not request it, the server's
   `node_reports/NODE` warning arrives when its alert pause ends, about 10
@@ -371,8 +372,9 @@ then hears your verdict instead of the raw warning.
 - **Name each alert your report or request is about** with
   `--about-alert-id ALERT_ID`, once per alert, as your prompt lists them.
   A warning your report names reaches people as your report, at your
-  report's level. When your run carries only one alert, you may leave the
-  option out.
+  report's level. When your run carries only one alert, a playbook request
+  or a report at warn or SOS may leave the option out and covers that
+  alert. A report at info covers only the alerts it names, even then.
 - **A warning that nothing of your run names reaches people when your run
   ends,** as it arrived. So never let a warning you looked at go unnamed:
   a report about one finding covers only the alerts it names, and a
@@ -386,14 +388,12 @@ then hears your verdict instead of the raw warning.
   the end of the wait, even while you still work. When the work needs
   longer, you may send a short report first that says what you check
   next. Name a warning in it only at a level at least as urgent as that
-  warning, warn or SOS for a warning. Otherwise leave the warning
-  unnamed: an info report that named it would take it over, and if your
-  run then failed, the warning would never reach people. Unnamed, it
-  still reaches them at the end of its wait. **When your run carries only
-  one alert and that alert is a warning, send no short report below the
-  warning's level:** MMHotline counts a report that names no alert as
-  about your run's only alert, so an info report would take the warning
-  over. Let the end of the wait deliver the warning.
+  warning, warn or SOS for a warning. Otherwise send it at info and leave
+  the warning unnamed: an info report that named it would take it over,
+  and if your run then failed, the warning would never reach people. An
+  info report that names no alert takes nothing over, also when your run
+  carries only one alert, so the warning still reaches people at the end
+  of its wait.
 
 ### One finding on many servers
 
@@ -494,14 +494,15 @@ may not do. Never write a one-time playbook that adds or removes a server.
 - **When someone pressed Stop,** report at info who stopped the change and
   that nothing changed, and request nothing more: util01's check keeps
   its alert open while the load still calls for the change, so no new
-  session starts for it, and the weekly review shows it.
+  session starts for it, and MMHotline's dashboard shows the open alert.
 - **Report the steps and the outcome at info; warn only when the change
   fails or is refused.** Adding or removing an app server with the load is
   routine work, not an outage, so the person hears one sound: MMHotline's
   warning at the start, with Stop. After the playbook's run succeeded
-  and its result shows a server created, report at info before `every_server`, such as "Created app004 (cx33,
-  about 7.49 EUR per month). Installing app004.". After `every_server`
-  succeeded, send the outcome as the last report, at info too: the server
+  and its result shows a server created, report its result at info, such
+  as "Created app004 (cx33, about 7.49 EUR per month).". After
+  `every_server` succeeded, send the outcome as the last report, at info
+  too: the server
   added or removed, its server type and its monthly price (for a removal,
   the price that stops; a line of the run's output; leave the price out
   when the line says it could not be read), the number of app servers now
@@ -519,7 +520,8 @@ may not do. Never write a one-time playbook that adds or removes a server.
   pool that is not busy is investigated as for any warning. Never request
   the two playbooks yourself: each would wait for a person's approval,
   which MMHotline sends at SOS, and slow pages are no reason to wake
-  anyone. The weekly review proposes a removal.
+  anyone. A person removes a server the pool no longer needs when they
+  review the system ([Review the system](operating_procedures/review_the_system.md)).
 
 ### Reports: the why rule
 
@@ -670,7 +672,7 @@ person must do, never by how much you found.
 | Level | When | Examples |
 | --- | --- | --- |
 | SOS (`sos` in the files) | Users are hurt now, and you could not fix it. It wakes the person on call, even at night, and repeats until someone claims the SOS in MMHotline: presses "Claim: I'm handling the incident", or acknowledges the SOS in Pushover. | The site is down and no fix you may run exists; signs of data loss or of a break-in; a flaw that attackers exploit now and that reaches servers in `inventories/servers.yml` |
-| warn | A person must act within days, or must know of a change that costs money or carries risk. A notification that wakes nobody; a person looks when they're next working. | A fix that worked but found the disk 98% full; a trigger's warning; a reboot that waits for the weekly window; a server added for the load, with its price; a fix the nightly updates did not install a day later |
+| warn | A person must act within days, or must know of a change that costs money or carries risk. A notification that wakes nobody; a person looks when they're next working. | A fix that worked but found the disk 98% full; a trigger's warning; a restart that waits for a person; a server added for the load, with its price; a fix the nightly updates did not install a day later |
 | info | Everything else. Sent as a quiet alert, only to the contact methods that subscribe to info; nobody needs to act. | "I checked, and the finding does not affect you"; a fix that worked; a restarted service; a security fix that attackers do not exploit now |
 
 MMHotline sends its own alert about each playbook that waits for a person:
@@ -696,10 +698,10 @@ of a break-in, and a flaw that attackers exploit now and that reaches
   internet, or from inside an app's container.
 - **warn:** a flaw with a fix that a person must install: the nightly
   security updates did not install the fix a day after the fix appeared.
-  A fix that the nightly updates or the weekly window install is info, and
-  so is a downloaded program's security release whose flaw attackers do
-  not exploit now: a person installs it with a new pin at the weekly
-  review. A flaw with no fix and no
+  A fix that the nightly updates or the automatic weekly maintenance
+  install is info, and so is a downloaded program's security release whose
+  flaw attackers do not exploit now: a person installs it with a new pin
+  when convenient. A flaw with no fix and no
   workaround, and no SOS by the bullet above, is not reported: record the
   flaw in `triage_agent_notes/open_software_findings.md`, and report the
   flaw once a fix becomes available. Leave out the flaws Debian rates
@@ -772,25 +774,34 @@ alerting for it on every server, including servers added later.
   warning over, so then report at info with `--about-alert-id ALERT_ID`
   once for each alert the entry covers. MMWatchdog closes their incidents
   with "Set aside after investigation".
-- **The entry has no end date.** The weekly system review lists every
-  entry and removes the ones no server matches any more. A change that
-  would make an entry's reason false needs the entry removed, and its
-  removal confirmed on the hub, before that change deploys
-  (`AGENTS.md`, "Set-aside findings").
+- **The entry has no end date.** An entry that no server matches any more
+  quiets nothing and costs nothing, so it may stay; a person who reviews
+  the system may remove it. A change that would make an entry's reason
+  false needs the entry removed, and its removal confirmed on the hub,
+  before that change deploys (`AGENTS.md`, "Set-aside findings").
 
 ### A fix that waits for a reboot
 
-No server reboots at an unchosen hour. A person reboots servers in the
-weekly window ([Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md)),
-or, with `routine_fixes_and_server_work`, you request the reboot after
-MMHotline's warning below (database kernel updates always wait for the
-weekly window). Debian's unattended-upgrades writes `/var/run/reboot-required`
-for kernel updates (needrestart handles libraries/services); few kernel
-flaws reach servers in `inventories/servers.yml`.
+No server reboots at an hour nobody chose, and you never request a reboot
+for updates. The automatic weekly maintenance
+(`automatic_weekly_maintenance` in `mmx_project_settings.yml`) reboots and
+restarts, in the team's `maintenance_window`, every server whose restart
+costs the users nothing: `util01`, the systems desks, `staging01`, the
+servers of a pool of two or more, and the database servers when there are
+two or more. A production pool's only server, such as `app001` alone or
+`db01` alone, waits for a person, because its users see the restart
+([Reboot servers after updates](operating_procedures/reboot_servers_after_updates.md),
+[Update and restart the database servers](operating_procedures/update_and_restart_the_database_servers.md)).
+Debian's unattended-upgrades writes `/var/run/reboot-required` for kernel
+updates; needrestart restarts the services that use a replaced library,
+except on a database server, where it only lists them. Few kernel flaws
+reach servers in `inventories/servers.yml`.
 
-When `no_reboot_waits` warns (after 8 days by default) or
-`known_exploited_flaws` fails for the running kernel, read
-`/var/run/reboot-required.pkgs`, check the CVEs in
+When `no_reboot_waits` warns (after 30 days on a production pool's only
+server, after 15 days elsewhere), `services_restarted_after_library_updates`
+warns on a database server, or `known_exploited_flaws` fails for the
+running kernel or a running library, read `/var/run/reboot-required.pkgs`
+and the check's output, check the CVEs in
 `/usr/share/doc/PACKAGE/changelog.Debian.gz`, and look up each flaw
 (plus any flaw from `known_exploited_flaws`) at OSV.dev
 (`https://api.osv.dev/v1/vulns/ID`, using the `DEBIAN-CVE-` prefix such as
@@ -799,45 +810,34 @@ When `no_reboot_waits` warns (after 8 days by default) or
 - **SOS, only when both conditions hold:** attackers exploit the flaw now
   and it reaches servers in `inventories/servers.yml`
   ([Levels of vulnerability findings](#levels-of-vulnerability-findings)).
-  Request `playbooks/update_database_servers.yml` for database servers or
-  `playbooks/reboot_servers_after_updates.yml` for other servers except
-  `util01`. Because MMX cannot reboot the controller machine, `util01`'s
-  reboot must run from a systems desk: report that the team's coding agent
-  on the person's laptop runs it through `ssh desk01-agent`:
+  Hand over with the command a person runs at once:
+  `./server_management_scripts/run_mmx_on_util01 run update_database_servers`
+  for database servers;
+  `./server_management_scripts/run_mmx_on_util01 run reboot_servers_after_updates --var reboot_the_only_server_of_a_pool_outside_the_maintenance_window=true`
+  for other servers except `util01`; and for `util01`, which MMX cannot
+  reboot from itself,
   `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers run reboot_util01_after_updates --connection ssh_only`.
-- **Otherwise, once:** report which servers wait, which flaws the reboot
-  fixes, and that it waits for the weekly window (at `warn` for an alert
-  like `no_reboot_waits`, at `info` in a scheduled software review). Record
-  the delayed reboot with the weekly window as its remedy in
+- **On a server that the automatic weekly maintenance restarts,** a
+  reminder means that it stopped short two weeks running. Read why in
+  `ssh triage@util01 journalctl -u weekly_maintenance -u reboot_util01_after_the_weekly_maintenance`
+  (a desk's reason is in its own `reboot_systems_desk_after_updates`
+  journal, which only the person reads), such as an open SOS incident, a
+  busy lock, or a failed run, and report the cause at warn.
+- **Otherwise, once:** report which servers wait, which flaws the restart
+  fixes, and that a person restarts the server in the maintenance window
+  (at `warn` for an alert like `no_reboot_waits`, at `info` in a scheduled
+  software review). Record the waiting restart with that remedy in
   `triage_agent_notes/open_software_findings.md`
   ([The scheduled software review](#the-scheduled-software-review)) so
   later alerts and reviews do not repeat it.
 
-When `what_the_triage_agent_may_do_without_a_person` is
-`routine_fixes_and_server_work`, MMWatchdog's check
-`reboots_that_may_run_now/no_reboot_waits_that_may_run_now` warns when a
-server's reboot may run now. Request
-`playbooks/reboot_servers_after_updates.yml` once for this warning, as it
-is, never with a variable (a later warning, even in the same long session,
-gets its own request): MMHotline warns the team and runs it after
-`triage_agent_server_work.minutes_between_the_warning_and_a_reboot`, unless
-someone presses Stop. The playbook reboots one server at a time, never a
-database server or `util01`, and reboots a pool's only server only inside
-the maintenance window. When someone pressed Stop, request nothing more:
-the weekly review offers the reboot again. When the run fails because a
-server did not come back, follow
-[Replacing a failed server](#replacing-a-failed-server). With the other
-two choices, the weekly window's reboot stays a person's work, as above.
+A planned reboot starts no session: a reboot inside a server's own alert
+pause sends no reboot notice, and `util01`'s reboot notice ("util01
+rebooted") is info. A failed `weekly_maintenance.service` on `util01` warns through
+`no_systemd_unit_has_failed`: read its journal and report what stopped it.
 
-`util01`'s reboot notice ("util01 rebooted", warn) is planned when
-`util01`'s check groups are in maintenance with the reason
-`reboot_util01_after_updates` (`ssh triage@util01 sudo mmwatchdog status --json`,
-`maintenance`): report at info that a person rebooted `util01` for
-updates, and stop. `util01`'s reboot pauses every check group but the
-public site checks, which never pause.
-
-Never ask for permission for an ordinary reboot: MMHotline sends each
-request for permission at SOS, which wakes the person on call.
+Never ask for permission for a reboot: MMHotline sends each request for
+permission at SOS, which wakes the person on call.
 
 ### The scheduled software review
 
@@ -873,8 +873,8 @@ available, or the fix is installed, which is reported at info once the
 fix took effect ([A fix that waits for a reboot](#a-fix-that-waits-for-a-reboot)
 covers a fix waiting for a reboot). Then update the note
 and commit it. A finding whose fix took effect leaves the note; Git keeps
-the earlier entries. An unchanged open finding isn't reported again; the weekly
-review reads the note.
+the earlier entries. An unchanged open finding isn't reported again; the
+note keeps it for a person who reviews the system.
 
 ### Upgrades and Stack releases
 

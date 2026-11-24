@@ -6,9 +6,9 @@
 # apply_set_aside_findings. Every field of an entry is required.
 # MMWatchdog matches check, finding and exact_finding exactly, so a new
 # package version, a published fix or a changed advisory alerts again; it
-# never quiets an SOS. The weekly system review lists every entry and
-# removes the ones no server matches any more
-# (operating_procedures/do_the_weekly_system_review.md).
+# never quiets an SOS. An entry has no end date. One that no server
+# matches any more quiets nothing; a person may remove it in a system
+# review (operating_procedures/review_the_system.md).
 #
 # Keep this file, with set_aside_findings: [] when it has no entry: MMX
 # refuses a missing file, and util01's run installs it on the fleet hub as

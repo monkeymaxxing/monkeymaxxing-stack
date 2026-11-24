@@ -36,9 +36,13 @@ def remote(kept_address, kept_key, removed_peers, session_script):
             retained.append(section)
     replacement=config.with_suffix('.conf.incident-new')
     replacement.write_text(''.join(retained));replacement.chmod(0o600);replacement.replace(config)
+    # On util01, the lock-out's marker: util01's scheduled jobs and its
+    # weekly reboot run nothing while it exists, whether the triage agent is
+    # set up or not. Only the lock-out button's undo removes it.
+    if Path('/etc/mmhotline').is_dir():
+        Path('/etc/mmhotline/everyone-locked-out').write_text('The incident response disabled triage runs.\n')
     # Socket activation must not replace a killed triage run during containment.
     if Path('/etc/systemd/system/mmhotline-triage-agent-run.socket').exists():
-        Path('/etc/mmhotline/everyone-locked-out').write_text('The incident response disabled triage runs.\n')
         for unit in ('mmhotline-triage-agent-run.socket','mmhotline-triage-agent-run@.service'):
             dropin=Path('/etc/systemd/system')/(unit+'.d')
             dropin.mkdir(exist_ok=True)

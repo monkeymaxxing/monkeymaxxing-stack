@@ -1,0 +1,109 @@
+#!/usr/bin/python3
+"""weekly-maintenance-goes-on: may the automatic weekly maintenance start the next server's turn?
+
+The automatic weekly maintenance (weekly_maintenance.service on util01,
+roles/util_server/main.yml) runs update_database_servers and
+reboot_servers_after_updates with run_as_the_automatic_weekly_maintenance:
+true. Before each server's turn, those playbooks run this program on util01.
+The server before has finished its whole turn by then: it caught up, did
+its work again, and its alert pause ended.
+
+Exits 0 and prints why when the next turn may start. Exits 1 when the
+maintenance ends here, and writes the reason as one line into
+/var/lib/weekly_maintenance/ended_early_because, which the maintenance job
+reads to tell an early end from a failure:
+  - MMHotline waits for util01's lock, for a run that the triage agent or a
+    person asked for. MMHotline rewrites the marker
+    /var/lib/mmhotline/systems_repository.lock.waiting every second while it
+    waits, so a marker not rewritten within 2 seconds is left over from an
+    MMHotline that stopped mid-wait, and is ignored, as in
+    playbooks/weekly_database_restore_drill.yml. The maintenance gives way:
+    the server it worked on is done, and the run ends and frees the lock.
+  - The maintenance window has ended (maintenance_window in
+    mmx_project_settings.yml, in UTC), so no turn runs into the users' day.
+Exits 2 for wrong arguments.
+
+A server the maintenance did not reach waits for next week's run, and
+MMWatchdog reminds a person when a reboot or a held update waits longer
+than 15 days.
+"""
+import argparse
+import datetime
+import os
+import sys
+import time
+
+WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+MINUTES_IN_A_WEEK = 7 * 24 * 60
+WAITING_MARKER = '/var/lib/mmhotline/systems_repository.lock.waiting'
+ENDED_EARLY_BECAUSE = '/var/lib/weekly_maintenance/ended_early_because'
+
+
+def line_of_a_waiting_mmhotline(marker, seconds):
+    started = time.time()
+    time.sleep(seconds)
+    try:
+        if os.stat(marker).st_mtime <= started:
+            return None
+        with open(marker, encoding='utf-8', errors='replace') as waiting:
+            line = next((line.strip() for line in waiting if line.strip()), '')
+    except FileNotFoundError:
+        return None
+    return line or 'MMHotline (no waiting line)'
+
+
+def window_end(moment, weekday, starts_at, length_minutes):
+    """The end of the window that holds moment, or None when moment is outside every window."""
+    hour, minute = (int(part) for part in starts_at.split(':'))
+    start = WEEKDAYS.index(weekday) * 24 * 60 + hour * 60 + minute
+    minute_of_the_week = moment.weekday() * 24 * 60 + moment.hour * 60 + moment.minute
+    since_the_start = (minute_of_the_week - start) % MINUTES_IN_A_WEEK
+    if since_the_start >= length_minutes:
+        return None
+    return moment + datetime.timedelta(minutes=length_minutes - since_the_start)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    parser.add_argument('--weekday', required=True, choices=WEEKDAYS)
+    parser.add_argument('--starts-at', required=True)
+    parser.add_argument('--length-minutes', required=True, type=int)
+    parser.add_argument('--at', help='the time to decide for, such as 2026-11-18T03:30:00Z; now without it')
+    parser.add_argument('--waiting-marker', default=WAITING_MARKER, help=argparse.SUPPRESS)
+    parser.add_argument('--ended-early-because', default=ENDED_EARLY_BECAUSE, help=argparse.SUPPRESS)
+    parser.add_argument('--seconds-to-watch', default=2.0, type=float, help=argparse.SUPPRESS)
+    arguments = parser.parse_args()
+    try:
+        hour, minute = (int(part) for part in arguments.starts_at.split(':'))
+        if not (0 <= hour <= 23 and 0 <= minute <= 59 and len(arguments.starts_at) == 5):
+            raise ValueError
+    except ValueError:
+        parser.error(f'--starts-at is "{arguments.starts_at}": use a UTC time as HH:MM, such as 03:00')
+    if not 1 <= arguments.length_minutes <= MINUTES_IN_A_WEEK:
+        parser.error('--length-minutes must be from 1 to one week')
+    if arguments.at:
+        moment = datetime.datetime.fromisoformat(arguments.at.replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
+    else:
+        moment = datetime.datetime.now(datetime.timezone.utc)
+
+    reason = None
+    waiting = line_of_a_waiting_mmhotline(arguments.waiting_marker, arguments.seconds_to_watch)
+    if waiting:
+        reason = f'gives way to MMHotline, which waits for util01\'s lock: {waiting}'
+    else:
+        end = window_end(moment, arguments.weekday, arguments.starts_at, arguments.length_minutes)
+        if end is None:
+            reason = (f'the maintenance window ({arguments.weekday} {arguments.starts_at} UTC, '
+                      f'for {arguments.length_minutes} minutes) has ended')
+    if reason:
+        with open(arguments.ended_early_because, 'w', encoding='utf-8') as ended:
+            ended.write(reason + '\n')
+        print(f'the weekly maintenance ends here: {reason}; the servers it did not reach wait for next week')
+        return 1
+    print(f'the next server\'s turn may start: no MMHotline run waits, and the maintenance window ends '
+          f'{end.strftime("%A %Y-%m-%d %H:%M UTC").lower().replace(" utc", " UTC")}')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

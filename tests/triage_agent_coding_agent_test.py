@@ -108,7 +108,7 @@ class CodexOnlyWhenChosen(unittest.TestCase):
                               root_ssh_public_keys=['ssh-ed25519 BBBB stand-in desk'],
                               triage_agent_coding_agent=coding_agent,
                               what_the_triage_agent_may_do_without_a_person='routine_fixes',
-                              triage_agent_server_work={'minutes_between_the_warning_and_a_reboot': 10, 'sos_waits_for_a_server_replacement_minutes': 10, 'warn_waits_for_the_triage_agent_minutes': 3},
+                              triage_agent_server_work={'sos_waits_for_a_server_replacement_minutes': 10, 'warn_waits_for_the_triage_agent_minutes': 3},
                               util01_private_page_host_names={'mmhotline': 'ops.example.com'},
                               private_ip='10.20.0.1', cloudflare_account_id='0' * 32, status_page_host_name='status.example.com')
                 (root/'mmx_project_settings.yml').write_text(json.dumps(dict(project_name='render_test', default_inventory='servers', vars=values)))

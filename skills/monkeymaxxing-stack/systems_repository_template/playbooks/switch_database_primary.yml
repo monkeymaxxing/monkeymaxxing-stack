@@ -66,7 +66,7 @@ fleet_stages:
               shell:
                 script: |
                   pause_minutes=$((22 + $(jq -n --argjson apps "$APPS" '$apps | length')))
-                  /usr/local/bin/mmwatchdog maintenance on --every-check-group --for "${pause_minutes}m" --reason "switch_database_primary"
+                  /usr/local/bin/mmwatchdog maintenance on --every-check-group --for "${pause_minutes}m" --reason "switch_database_primary" --without-maintenance-on-and-off-alerts
                 env:
                   APPS: "{{ .vars.apps }}"
           on_failure:

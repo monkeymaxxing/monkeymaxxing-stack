@@ -1,7 +1,7 @@
 # Run the weekly database restore drill
 
 **When:** checking that production's backups restore, after changing backup
-settings, or during the weekly system review.
+settings, or during a system review.
 
 **What this page does:** the drill restores production's database from B2
 onto a temporary server, `restore01`, checks the restored data and one
@@ -18,7 +18,7 @@ recovery uses the server.
 
 | Situation | Follow |
 | --- | --- |
-| Read the latest drill's result, such as in the weekly system review | [Read the result](#read-the-result) |
+| Read the latest drill's result, such as in a system review | [Read the result](#read-the-result) |
 | Start a drill now, such as after changing backup settings, or stop one | [Start or stop a drill now](#start-or-stop-a-drill-now) |
 | A `restore01` is left over at the provider or in the inventory | [Remove a leftover restore server](#remove-a-leftover-restore-server) |
 | Run `restore_database` yourself, for a recovery | [Restoring the database](#restoring-the-database) |

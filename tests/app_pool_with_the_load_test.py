@@ -351,7 +351,7 @@ class TheAppServersCPUWarning(unittest.TestCase):
             (root/'inventories').mkdir()
             (root/'playbooks').mkdir()
             (root/'mmx_project_settings.yml').write_text(json.dumps(dict(project_name='render_test', default_inventory='servers', vars=dict(
-                reboot_check_settings=dict(what_the_triage_agent_may_do_without_a_person=answer)))))
+                what_the_triage_agent_may_do_without_a_person=answer))))
             (root/'inventories/servers.yml').write_text(json.dumps(dict(nodes={'util01': {'address': '127.0.0.1'}})))
             (root/'source.template').write_text(line)
             (root/'playbooks/render.yml').write_text(json.dumps(dict(fleet_stages=[dict(id='render', nodes='all', node_tasks=[

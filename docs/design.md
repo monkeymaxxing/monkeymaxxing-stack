@@ -589,29 +589,54 @@ the links, the effects of a failure, and the next step. An agent
 instruction or a design argument in the same text makes the person guess
 which sentences are for the person.
 
-**The weekly review covers what needs a person's judgment.**
-[`operating_procedures/do_the_weekly_system_review.md`](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/do_the_weekly_system_review.md)
-has four parts: the week's alerts, the waiting updates, the restore
-drill's result, and the checklist items that are due. For the growth and
-improvement items, the review checks only whether a trigger arrived. The
-coding agent gathers the four parts with exact commands, then shows the
-person one report with a ready proposal for each change. A trigger whose
-server fits the growth limits is no proposal: the coding agent adds the
-server at once and reports it in the review, as the growth limits say.
-The per-server update check leaves out the systems desks, which the coding
-agent cannot log in to as root; a desk's own MMWatchdog warning reaches
-the week's alerts instead. The secret scan is `gitleaks detect`, the form
-Debian's gitleaks 8.16 on the desk has (its `git` subcommand came in 8.19). Checks that
-already alert when they fail stay out of the review: the daily server
-settings comparison, the daily check for a leftover `restore01` or a server
-missing from the inventory, the capacity warnings, and the failed-unit
-warnings of scheduled jobs. SSH through WireGuard and closed public SSH stay
-in "Check my system's protections": broken WireGuard stops the MMX runs
-and the alerts, and the daily comparison warns about a changed firewall.
+**No routine duty; the review runs when a person asks.**
+[`operating_procedures/review_the_system.md`](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/review_the_system.md)
+runs when the person asks, such as "Review my system", or at the team's
+optional monthly check-in. It has four parts since the last review: the
+alerts, the restarts that wait for a person, the restore drill's result,
+and the checklist items and growth triggers that are due. The coding
+agent gathers them with exact commands, then shows the person one report
+with a ready proposal for each change. A trigger whose server fits the
+growth limits is no proposal: the coding agent adds the server at once
+and reports it, as the growth limits say. The last review is an empty
+commit whose message starts with `Review the system`, so the next review
+knows where to start (30 days back when there is none).
+Checks that already alert when they fail stay out of the review: the
+daily server settings comparison, the daily check for a leftover
+`restore01` or a server missing from the inventory, the capacity
+warnings, and the failed-unit warnings of scheduled jobs. SSH through
+WireGuard and closed public SSH stay in "Check my system's protections":
+broken WireGuard stops the MMX runs and the alerts, and the daily
+comparison warns about a changed firewall. The secret scan moved out of
+the review into the pushes themselves
+([No secret reaches the main copy](#no-secret-reaches-the-main-copy)).
 The README stays current because each operation updates the README.
-Reasons: a weekly duty that repeats a dozen checks takes an hour, and a
-person who finds nothing in it for weeks stops doing it. A check that
-alerts by itself needs no person to look for its failure each week.
+Reasons: the earlier weekly review repeated what the alerts already said,
+and a person who finds nothing in a weekly duty for weeks stops doing it,
+which teaches the team that the system's routines are optional. The
+automatic weekly maintenance does the work a weekly look used to find,
+and a check that alerts by itself needs no person to look for its failure.
+
+### No secret reaches the main copy
+
+`util01`'s main copy of the systems repository has a pre-receive hook,
+`roles/util_server/files/refuse_a_push_that_adds_a_secret`, that runs
+`gitleaks detect --log-opts="-m RANGE"` over the pushed commits and refuses the
+push when any of them adds what looks like a secret, even one a later
+commit of the same push removes. `-m` gives a merge commit's diff against
+each parent: without it, `git log -p` shows no diff for a merge, and a
+secret added while resolving a merge conflict would pass unseen. Before
+`util01` exists, the desk's checkout is the main copy, so
+`publish-branch-to-main` runs the same scan over `-m main..BRANCH` before
+it advances `main`; its rebase drops a branch's merge commits anyway. The scan is `gitleaks
+detect`, the form Debian's gitleaks 8.16 has (its `git` subcommand came in
+8.19). A missing gitleaks refuses the push: the hook fails closed.
+Reasons: a weekly scan finds a secret only after it reached every desk,
+the backup at the Git host, and `util01`'s copy, where removing it takes
+a history rewrite; a refused push leaves it only on the laptop. The hook
+checks only new commits, so commits already on `main` before the hook
+existed are not checked again. A line that is no secret, such as a
+documentation example, carries a `gitleaks:allow` comment.
 
 **Failure claims.** What the agent says about failures uses the current
 inventory and test results. One app server or one database server has no
@@ -808,19 +833,21 @@ The team gives one answer in chapter 8, part 3 (the triage agent's part of the s
 `rules_for_running_agent_playbooks.servers` from it: MMHotline's preset
 `permission_for_every_fix` for the first answer,
 `routine_fixes_without_permission` for the other two, and with the third
-the six playbooks of server work listed by name
+the five playbooks of server work listed by name
 (`replace_failed_servers`, `every_server`, `destroy_replaced_servers` as
-`act_then_report`; `reboot_servers_after_updates` as `warn_wait_then_act`
-with `triage_agent_server_work.minutes_between_the_warning_and_a_reboot`;
-`add_an_app_server_for_the_load` and `remove_server` as
+`act_then_report`; `add_an_app_server_for_the_load` and `remove_server` as
 `warn_wait_then_act` with
 `minutes_between_the_warning_and_adding_or_removing_an_app_server`).
-The reboot check `no_reboot_waits_that_may_run_now` and `util01`'s two
-load checks are rendered from the same answer ([Reboots](#reboots),
-[Adding and removing app servers with the load](#adding-and-removing-app-servers-with-the-load)).
+`util01`'s two load checks are rendered from the same answer
+([Adding and removing app servers with the load](#adding-and-removing-app-servers-with-the-load)).
+Reboots for updates are not the triage agent's work at any answer: the
+automatic weekly maintenance runs them, and a production pool's only
+server waits for a person ([Reboots](#reboots)). Reason: the earlier
+reboot rule woke a coding agent every week for a decision the maintenance
+rule already makes.
 
 - **One setting, not a hand-written block:** three places must agree with
-  the answer: MMHotline's rules, the reboot check that exists only with
+  the answer: MMHotline's rules, the load checks that exist only with
   the third answer (so that no coding agent starts when there is no work
   for it), and the rules text the triage agent reads. A hand-written block
   in `mmhotline_settings.yml` would hold the same fact twice. The triage
@@ -841,8 +868,9 @@ load checks are rendered from the same answer ([Reboots](#reboots),
   and `load_balancer_servers` may be listed in
   `pools_whose_failed_servers_the_triage_agent_replaces`,
   `tries_to_replace_a_failed_server` is at least 1, the hours are at least
-  0, `minutes_between_the_warning_and_a_reboot` is from 1 to 1440, the
-  range MMHotline accepts for `warning_wait_minutes`, and
+  0, `minutes_between_the_warning_and_adding_or_removing_an_app_server`
+  is from 1 to 1440, the range MMHotline accepts for
+  `warning_wait_minutes`, and
   `sos_waits_for_a_server_replacement_minutes` is from 0 to 60, the range
   MMHotline accepts, and `warn_waits_for_the_triage_agent_minutes` is from
   0 to 30, MMHotline's cap.
@@ -1053,9 +1081,11 @@ phone before the agent's "does not affect you". The parts:
   `set_aside_findings: []` when empty, because MMX refuses a missing source
   file and a rebuilt `util01` then needs nothing special. Exact match only
   and no end date: a changed package, fix or advisory alerts again, and a
-  mistake costs an extra alert, never a lost one; the weekly review lists
-  the entries and removes those no server matches any more
-  (`matches_no_node_now`, and no server unable to check). A verdict that
+  mistake costs an extra alert, never a lost one. An entry that no server
+  matches any more (`matches_no_node_now`, and no server unable to check)
+  quiets nothing, so it may stay; a system review removes it only when the
+  person asks. Reason: a weekly chore of pruning entries that cost nothing
+  was work without a gain. A verdict that
   rests on configuration is allowed only when a Stack role makes that
   configuration the same on every server, and a change to that role
   removes the entry first. Reason: a verdict about one server must never
@@ -1065,7 +1095,7 @@ phone before the agent's "does not affect you". The parts:
   only agent runs, never alerts.
   [Change the triage agent's run limit](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/change_the_triage_agent_run_limit.md)
   reads the usage first, because a runaway check is fixed, not paid for.
-  The weekly review reads `mmhotline triage-agent usage` over the systems
+  A system review reads `mmhotline triage-agent usage` over the systems
   desk's root connection to `util01`, since the scheduled software review
   is off by default.
 
@@ -1159,11 +1189,11 @@ commands, real Git, and real `mmx validate`.
   server only through the Cloudflare tunnel to Caddy on loopback, and none
   of the 63 waiting packages is on the request path. The kernel's fix
   waits for a reboot in either order. A needed reboot follows the existing
-  paths (`reboots_that_may_run_now`, the maintenance window, step 7 of
-  `add_a_server.md`); nothing changed there. Database servers, `util01`
+  paths (the automatic weekly maintenance, the maintenance window, step 7
+  of `add_a_server.md`); nothing changed there. Database servers, `util01`
   and `staging01` keep the old order: needrestart only lists the services
   of a database server, so a Postgres started before the update would keep
-  the old libraries until the weekly window, and no replacement of a
+  the old libraries until `update_database_servers`, and no replacement of a
   failed server waits for them. `--no-minimal-upgrade-steps` installs in
   one dpkg run instead of 32 (minimal steps let a shutdown interrupt the
   upgrade; a first run under MMX is not shut down), in both places. No
@@ -1479,7 +1509,8 @@ fleet hub and the provider's list, never from a file of its own on
   check exists on `util01` and the two playbooks are not listed: the
   app servers' CPU warning sounds once, and the triage agent's report with
   the commands follows at info, because an approval request is an SOS and
-  slowness wakes no one; the weekly review proposes a removal.
+  slowness wakes no one; a system review, when the person asks, proposes a
+  removal.
 - **The triggers wake no one and start one session per change:** warn,
   because info never starts a session; one check for the pool on `util01`,
   not one per app server; `alert_after_failing_for: 0s` and
@@ -1487,7 +1518,7 @@ fleet hub and the provider's list, never from a file of its own on
   over the whole window, and right after a change the window starts again,
   so the alert closes and the next change brings a new one. The removal's
   check runs hourly, the add's every minute. After Stop, the check stays
-  failing, so no new session starts; the weekly review shows the waiting
+  failing, so no new session starts; a system review shows the waiting
   change.
 - **One sound at the start of a change; the end is silent:** a scale-up or scale-down is routine work, not an
   outage, so the person hears MMHotline's warning with Stop and nothing
@@ -1556,9 +1587,23 @@ What protects the main copy without signatures:
 - **Who pushed is on record.** The main copy's reflog and `util01`'s sshd
   journal name the key and the time of each change to `main`
   ([Respond to a break-in](../skills/monkeymaxxing-stack/systems_repository_template/operating_procedures/respond_to_a_break_in.md#an-unknown-commit-in-the-systems-repository)).
-- **A lock-out trusts nothing.** During a lock-out MMHotline's settings have
-  no `systems_repository_commits` section, so MMHotline answers no commit, and the jobs
-  run nothing new.
+- **A lock-out trusts nothing.** The lock-out writes
+  `/etc/mmhotline/everyone-locked-out` on `util01` whether or not
+  MMHotline's triage socket answers, and only the lock-out button's undo
+  removes it (`run_by_the_lock_out_button` in the `everyone_locked_out`
+  role, so an ordinary `every_server` run never does). MMHotline itself
+  honors the marker and runs no agent, and
+  `find_the_trusted_commit_of_the_systems_repository` checks it first and
+  exits 3, so every job on `util01` runs nothing new. It checks the marker
+  again right before it falls back to the commit `util01`'s copy already
+  has, which it does only when MMHotline does not answer at all (its
+  command socket is missing or refuses the connection). An answer that
+  trusts nothing, or a refusal, runs nothing: a refusal is never
+  permission to run an older commit. Each job also checks the marker again
+  after it takes `util01`'s lock. Reason: the earlier
+  design rendered a lock-out variant of `mmhotline_settings.yml`, which made
+  every MMHotline settings change wait for each person's desk review, and
+  a marker file says the same thing without the settings.
 
 **The lock order.** MMHotline's copy lock is
 `/var/lib/mmhotline/systems_repository.lock`, the same file the jobs and the
@@ -2738,8 +2783,9 @@ Debian's Postgres packaging tools. The
     only once a switchover made it a replica: writes fail only for the
     seconds of the switch.
   - **With `db01` alone, `update_database_servers` passes
-    `on_a_replica_or_a_node_alone`:** `db01` restarts in place, in the
-    team's weekly window, with a few seconds of failed requests.
+    `on_a_replica_or_a_node_alone`:** `db01` restarts in place, in a
+    person's run in the maintenance window, with a few seconds of failed
+    requests; the automatic weekly maintenance never restarts it.
   - **The `pg_auto_failover_node` module** restarts a replica only through
     maintenance, once the formation has settled. The module never restarts
     the primary of a formation with a replica. The module refuses the
@@ -2799,9 +2845,12 @@ Debian's Postgres packaging tools. The
   the updates of Postgres, pg_auto_failover, and the kernel with
   `Unattended-Upgrade::Package-Blacklist`, written from
   `roles/every_server/files/unattended_upgrades.conf`.
-  `update_database_servers` installs the held-back updates in the team's
-  weekly window, together with any setting that waits for a restart of
-  Postgres.
+  `update_database_servers` installs the held-back updates, together with
+  any setting that waits for a restart of Postgres: in the automatic weekly
+  maintenance with two or more database servers, and in a person's run in
+  the maintenance window for `db01` alone. A person who changes a setting
+  that waits for a restart runs it at once, while watching, because a
+  value Postgres accepts but cannot start with shows only at the restart.
 
   `update_database_servers` updates each replica in maintenance, then
   switches the primary over, then updates the old primary. Until `db02`
@@ -3068,7 +3117,7 @@ runs.
     unit runs. A failed run of
     `refresh_pgbouncer_when_postgres_starts_or_changes_role.service`
     shows in every server's check for failed units.
-- **PgBouncer's updates wait for the team's weekly window** on the
+- **PgBouncer's updates wait for `update_database_servers`** on the
   database servers, as Postgres's do. An update restarts PgBouncer, which
   drops the apps' connections on the updated server. `staging01` updates
   PgBouncer every day.
@@ -3245,13 +3294,12 @@ practice, an extra check, or a recovery proof, such as the break-in drill
 or "Check my system's protections". Each item names its `trigger`, a
 measured warning or an event, and has `state: waits_for_its_trigger` until
 the trigger comes, which never counts as open. After the step, the item
-becomes `done` or `deviated` like any item. The weekly review checks only
+becomes `done` or `deviated` like any item. A system review checks only
 whether a trigger arrived. Reasons: the growth and improvement items are
 critical on the day their trigger comes, so the checklist keeps each item,
 its trigger, and its verification. But most of them wait for years or
 forever, and twenty open items that nobody can act on make a working system
-look unfinished and turn the weekly review into a reading of the whole
-file.
+look unfinished and turn a review into a reading of the whole file.
 
 `staging_server`, `second_app_server`, and each app's
 `<app>_seed_command_fills_test_data` are Later items for every team. A
@@ -3296,7 +3344,7 @@ items:
     part: later_when_it_happens     # setup, or later_when_it_happens
     protects_against: losing data to a mistake, an attacker on a database server, or an account takeover
     verification: the weekly restore drill restored the end of production's archive on restore01, and each app's check queries passed
-    verify_again_every: 7d          # optional: d for days, months for months
+    # verify_again_every: 12 months # optional, only a team's own rule adds it; no template item has it
     waits_for: the initial setup              # on open items: what must happen first
     # done items add verified_at (UTC) and last_result; deviated items add deviation
 growth_and_improvement_items:
@@ -3313,9 +3361,14 @@ what_this_system_does_not_survive: >
 - `verification` states what must pass, so `verification` stays the same
   before and after a check. `last_result` records what the latest check
   measured.
-- `done` is set only after the verification passed, with `verified_at`.
-  When `verified_at` is older than `verify_again_every`, the item counts as
-  open again.
+- `done` is set only after the verification passed, with `verified_at`,
+  and stays done: no template item expires. Reason: an item that turned
+  open again every week, such as the weekly review's, the restore drill's
+  or the reboot window's, asked a person to stamp a date for what an alert
+  already watches, and the open items it made hid the ones that needed
+  work. A team whose own rules require a check again after a time, such as
+  a yearly secret rotation for an audit, adds `verify_again_every` to that
+  item; when `verified_at` is older, the item counts as open again.
 - `deviated` carries `deviation`: what differs and why.
 - The items are in two parts, "Setup" and "Later, when it happens", and
   the growth and improvement items follow in their own list.
@@ -3408,7 +3461,7 @@ Debian only.
 | --- | --- | --- |
 | Postgres, pg_auto_failover, pgBackRest, Podman, WireGuard tools | Debian 13 | Security fixes come with the distribution |
 | jq, on every server | Debian 13 | The Stack's bash scripts read and write JSON with jq |
-| PgBouncer | Debian 13, 1.24.1 | Postgres comes from Debian too. Debian supplies security fixes within the distribution's package version. Debian's security tracker still lists flaws, including CVE-2026-19888 and CVE-2026-6668. The stack keeps the distribution's package because only servers running app containers reach PgBouncer, over WireGuard. App containers already hold database passwords and can load Postgres through their own logins. MMWatchdog's admin-console check alerts on a stall, MMWatchdog's `known_exploited_flaws` check warns about a PgBouncer flaw that attackers exploit, and the scheduled software review, when the team turns it on, reports PgBouncer's other flaws. `update_database_servers` installs PgBouncer fixes in the database servers' weekly window. unattended-upgrades holds PgBouncer back on database servers, but updates `staging01` daily. The Stack database servers keep Debian's package because another package source adds complexity and behavior changes. The temporary managed-source relay uses PGDG to preserve migration startup options. The restricted access limits the gain from replacing Debian's package |
+| PgBouncer | Debian 13, 1.24.1 | Postgres comes from Debian too. Debian supplies security fixes within the distribution's package version. Debian's security tracker still lists flaws, including CVE-2026-19888 and CVE-2026-6668. The stack keeps the distribution's package because only servers running app containers reach PgBouncer, over WireGuard. App containers already hold database passwords and can load Postgres through their own logins. MMWatchdog's admin-console check alerts on a stall, MMWatchdog's `known_exploited_flaws` check warns about a PgBouncer flaw that attackers exploit, and the scheduled software review, when the team turns it on, reports PgBouncer's other flaws. `update_database_servers` installs PgBouncer fixes on the database servers. unattended-upgrades holds PgBouncer back on database servers, but updates `staging01` daily. The Stack database servers keep Debian's package because another package source adds complexity and behavior changes. The temporary managed-source relay uses PGDG to preserve migration startup options. The restricted access limits the gain from replacing Debian's package |
 | Caddy | the Caddy project's apt repository | Debian 13 ships Caddy 2.6.2 from 2022 |
 | `cloudflared` | Cloudflare's apt repository | Not in Debian |
 | MMX, MMWatchdog, MMHotline, Litestream (MMHotline's backup), rclone (the uploads' copy), and the systems desk's `set-up-outside-services` | the programs' release downloads, pinned by version and SHA-256 in `stack_software` | Not in Debian 13; Debian 13's rclone is 1.60, which can't sign in with today's bucket-restricted B2 keys ([Uploaded files](#uploaded-files)) |
@@ -3651,15 +3704,18 @@ for each flaw (step 5 of
   warning.** While any page does not answer after 3 tries, 5 seconds
   apart, the module answers `unknown`: MMWatchdog keeps each open finding
   open, and the check's cannot-check warning, which names the cause, goes
-  out when GitHub stays silent for its `alert_after_failing_for`, 6 hours,
+  out when GitHub stays silent for its `alert_after_failing_for`, 11 hours,
   the same wait as for a flaw, because the team upgrades within days.
   Reason: an outage neither closes nor opens a finding, and the list
   request itself shows when the check is blind, so no separate check asks
   GitHub again.
-- **Once an hour.** GitHub allows 60 requests an hour from one address
-  without a sign-in. The check makes 1 request an hour for each 100 of the
-  Stack's releases, and 3 when every request fails and is tried 3 times.
-  A warning an hour late changes nothing.
+- **Every 6 hours, warning after 11.** GitHub allows 60 requests an hour
+  from one address without a sign-in. The check makes 1 request a run for
+  each 100 of the Stack's releases, and 3 when every request fails and is
+  tried 3 times. The team upgrades within days, so a warning half a day
+  later changes nothing, and the third failing run, about 12 hours on, is
+  the first that warns, so a GitHub outage or rate limit of a few hours
+  sends nothing.
 
 ## Reboots
 
@@ -3672,8 +3728,13 @@ marker.
 
 The `every_server` role installs needrestart explicitly and writes the
 existing restart policy. Services restart after library updates outside
-the database pool. On database servers, needrestart lists services until
-`update_database_servers` restarts the services in the weekly window.
+the database pool. On database servers, needrestart only lists services
+(`$nrconf{restart}='l'`), and `update_database_servers` restarts them in
+the database server's turn. MMWatchdog's `services_restarted_after_library_updates`
+check on each database server runs `needrestart -b -r l` as root and warns
+when a service still uses a replaced library: after 30 days with `db01`
+alone, after 15 days with two or more, the same delays as the reboot
+reminder.
 
 needrestart never restarts a web container's unit (`APP-web-PORT.service`,
 such as `shop-web-8001.service`), `caddy.service` or `cloudflared.service`
@@ -3691,32 +3752,35 @@ unattended upgrades on running servers skip these restarts too. That is
 right: with two or more app servers a restart is harmless, and the deploy and
 the reboot pick the libraries up anyway.
 
-No server reboots by itself: unattended-upgrades has
-`Automatic-Reboot "false"`, and a person reboots each server whose updates
-wait for a reboot (`/var/run/reboot-required`), one at a time, in the
-team's weekly window:
+unattended-upgrades has `Automatic-Reboot "false"`. A server whose updates
+wait for a reboot (`/var/run/reboot-required`) reboots in the automatic
+weekly maintenance, or, for a production pool's only server, by a person
+in the maintenance window
+([The automatic weekly maintenance](#the-automatic-weekly-maintenance)).
+The playbooks, run by the maintenance or by a person:
 
-1. `./server_management_scripts/run_mmx_on_util01 run update_database_servers`, which updates and reboots the
-   database servers in its own order ([Database servers](#database-servers));
-2. `./server_management_scripts/run_mmx_on_util01 run reboot_servers_after_updates`, on `util01` like every
-   run, for every server but `util01` and the database servers:
-   `staging01`, the app servers, the jobs servers, and the load-balancer
-   servers;
-3. `mmx run reboot_util01_after_updates`, from a
-   systems desk.
+1. `update_database_servers`, which updates and reboots the database
+   servers in its own order ([Database servers](#database-servers));
+2. `reboot_servers_after_updates`, on `util01` like every run, for every
+   server but `util01` and the database servers: `staging01`, the app
+   servers, the jobs servers, and the load-balancer servers;
+3. `util01`'s own reboot: in the maintenance, a root unit on `util01`
+   after the run; by a person, `mmx run reboot_util01_after_updates`, from
+   a systems desk.
 
 Each playbook first reads which of its servers wait for a reboot, and
 changes nothing on the others.
 
-- **Why no server reboots by itself:** a reboot at an hour nobody chose
-  surprises the team. Most fixes that wait for a reboot are the kernel's,
-  and the flaws that such fixes close rarely reach the stack's servers.
-  The internet reaches the stack's servers only through authenticated
-  WireGuard and the Cloudflare tunnel. Cloudflare terminates the public HTTPS, so even a flaw in a
-  server's TLS code, such as Heartbleed in OpenSSL, stops at Cloudflare.
+- **Why no reboot comes at an hour nobody chose:** a reboot at an
+  unplanned hour surprises the team. Most fixes that wait for a reboot are
+  the kernel's, and the flaws that such fixes close rarely reach the
+  stack's servers. The internet reaches the stack's servers only through
+  authenticated WireGuard and the Cloudflare tunnel. Cloudflare terminates
+  the public HTTPS, so even a flaw in a server's TLS code, such as
+  Heartbleed in OpenSSL, stops at Cloudflare.
 
-  A rare fix that cannot wait a week is the triage agent's to raise as an
-  SOS, with the reboot ready to approve. The triage agent raises the SOS
+  A rare fix that cannot wait for the next window is the triage agent's to
+  raise as an SOS, with the reboot ready to approve. The triage agent raises the SOS
   only when attackers exploit the flaw now and the flaw reaches the
   stack's servers. The flaw can reach the servers from the internet or
   from inside an app's container (the template's [triage_agent_rules.md](../skills/monkeymaxxing-stack/systems_repository_template/triage_agent_rules.md#a-fix-that-waits-for-a-reboot), "A fix that waits for a
@@ -3846,13 +3910,31 @@ changes nothing on the others.
     The database
     servers' reboot in `update_database_servers` keeps its own 10 minutes,
     inside that playbook's pause of a whole turn.
-  - **The public site checks on `util01` are never paused**, by an app
-    server's reboot, by `util01`'s own reboot, or by MMWatchdog's restart on
-    `util01`. An app server's pause is on the rebooting server only. When a
-    pool's only app server reboots for longer than the check's 30 seconds,
-    the SOS waits `sos_waits_for_the_agent_minutes` (3 by default) for the
-    triage agent and resolves without waking anyone when the site answers
-    again; only a real failure wakes a person. On `util01`, the program
+  - **The public site checks on `util01` pause only for a planned outage
+    of a production pool's only server,** such as `app001` alone or `db01`
+    alone, which only a person's run restarts, in the maintenance window.
+    Just before that server's reboot, `util01` pauses its `public_sites`
+    check group for 3 minutes, silently (`public-site-checks-pause` in
+    `roles/util_server/files/`), and ends the pause once
+    `check-that-this-server-does-its-work` passes on the rebooted server,
+    or once its 5 minutes have passed. Reason: the containers and the
+    tunnel start after the boot, so ending the pause as soon as the server
+    answers SSH raised an SOS for a site that was still starting. For
+    `db01` alone, `db01` first downloads its updates; then `util01` pauses
+    the checks for 10 minutes, `db01` installs the updates inside the pause
+    (a Postgres or PgBouncer package restarts its service as it installs),
+    restarts or reboots, and `util01` ends the pause once Postgres on `db01`
+    accepts connections and each app answers through its public host name,
+    whether they do or not. Reason for 10 minutes: the installs from the
+    downloaded packages, a Postgres restart, and a reboot take about 3 to 5
+    minutes on a cloud server. The pause is the hub's own, so a server that
+    does not come back cannot leave it open: it ends by itself after its 3
+    or 10 minutes, a cloud server's measured reboot of under a minute plus
+    margin, and then a site that still does not answer raises its SOS. Before go-live, with no public site checks, the program does
+    nothing. Reason: the person chose that outage, and an SOS for it would
+    wake whoever is on call for nothing. No other reboot pauses them: an
+    app server of a pool of two or more, `util01`'s own reboot, and
+    MMWatchdog's restart on `util01` all leave the site answering. On `util01`, the program
     `util01-alert-pause` (`roles/util_server/files/`) opens the pause on
     every check group the running MMWatchdog has, and on `node_reports`, by
     name, but never on `public_sites`. MMWatchdog offers a window on every
@@ -3862,9 +3944,11 @@ changes nothing on the others.
     alerts held as before. The names come from `mmwatchdog status --json`,
     because `maintenance on` refuses a name the running MMWatchdog does not
     know. The cost, accepted: only a whole-node window holds back a node's
-    reboot notice, so `util01`'s reboot sends its notice (warn), and the
-    triage agent reads it as planned when the window's reason names
-    `reboot_util01_after_updates`. The gain: a site that stops answering
+    reboot notice, so `util01`'s reboot sends its notice. That notice is
+    `info` (`alert_severity_when_this_node_has_rebooted` in `util01`'s
+    MMWatchdog node settings), so it starts no triage session and wakes
+    nobody: a real problem after the boot alerts through its own checks.
+    The gain: a site that stops answering
     during `util01`'s reboot, or while a run that died leaves `util01`'s
     pause open for up to 10 minutes, still raises its SOS.
   - **Releases do not pause alerts:** `deploy` opens no maintenance window.
@@ -3908,63 +3992,165 @@ changes nothing on the others.
   desk's run could do.
 - **When a reboot may run, one rule in one program:**
   `check-whether-a-reboot-may-run-now`, a Python 3 program that the
-  `every_server` role installs on every server, decides it, and both
-  `reboot_servers_after_updates` and MMWatchdog's check
-  `no_reboot_waits_that_may_run_now` run it, so the check that starts the
-  triage agent and the playbook that reboots cannot disagree. A reboot may
-  run now when another server of the pool carries the work (two servers or
-  more), on a jobs server (jobs wait in the queue about 20 seconds), on
+  `every_server` role installs on every server, decides it for
+  `reboot_servers_after_updates`. In a person's run, a reboot may run now
+  when another server of the pool carries the work (two servers or more),
+  on a jobs server (jobs wait in the queue about 20 seconds), on
   `staging01`, before go-live (`public_site_checks_run: false`), when a
   person passes `reboot_the_only_server_of_a_pool_outside_the_maintenance_window=true`
-  on the command line, or inside the weekly maintenance window. The
-  server's pool is the inventory group that holds it, so a pool the team
-  added follows the same rule. The window's arithmetic counts minutes since
+  on the command line, or inside the maintenance window. In the automatic
+  weekly maintenance (`--automatic-weekly-maintenance`), only a pool of two
+  or more servers and `staging01` may reboot: a production pool's only
+  server, a jobs server alone included, waits for a person. The count of
+  servers in the inventory does not say that the others work, so right
+  before each automatic reboot of a server of a pool of two or more, every
+  other server of the pool runs `check-that-this-server-does-its-work`, and
+  the reboot goes on only when at least one passes. Otherwise the server
+  is skipped, not failed, and waits for next week, with a line that says
+  why. Reason: with `app001` and `app002` in the inventory and `app002`'s
+  web container unhealthy, rebooting `app001` would take the site down. A
+  server of the pool that MMX cannot reach fails the run there, before any
+  reboot. The server's
+  pool is the inventory group that holds it, so a pool the team added
+  follows the same rule. The window's arithmetic counts minutes since
   monday 00:00 UTC, modulo one week, so a window across midnight or from
-  sunday into monday needs no special case; `tests/reboots_that_may_run_now_test.py`
+  sunday into monday needs no special case; `tests/weekly_maintenance_test.py`
   runs the program for those edges.
-  - **Enforced in the playbook, not the rules text:** the triage agent's
-    rules are advice, and MMHotline judges a playbook by its tasks. The run
-    also starts only after MMHotline's warning has waited, when the clock
-    may have left the window. A server that waits is skipped, not failed,
-    and a `show` task prints "app001 waits for the maintenance window:
-    tuesday 2026-11-17 21:00 UTC, for 60 minutes; ...", which the triage
-    agent copies into its report.
-  - **Decided once, when the run starts,** on each server's own clock.
-    Only a pool's only server needs the window, and the servers reboot one
-    at a time, each in under 15 minutes, so such a server starts at most
-    one reboot's time after the decision.
-  - **`maintenance_window.length_minutes` from 30 to 1440,** 60 by default,
-    checked by `every_server` before anything changes. 30 minutes hold the
-    check's 10 minutes, about a minute for the triage agent, MMHotline's
-    warning (10 minutes by default) and the reboot. One day is the most:
-    a longer window is no longer a quiet time the team chose.
-  - **The trigger exists only with `routine_fixes_and_server_work`:** the
-    check group `reboots_that_may_run_now` in `mmwatchdog_checks/every_server.yml`
-    is rendered only then, and only on the servers the playbook reboots:
-    never on a database server, `util01` or a systems desk. Without it no
-    alert, so no coding agent starts for a reboot only a person may run.
-    It alerts at warn, because MMHotline starts a triage session for warn
-    and SOS alerts and never for info; a warn wakes nobody. It runs every
-    minute, because a 60-minute window must be seen at once, and alerts
-    after 10 minutes, so unattended-upgrades finishes its batch first. Its
-    own check group: `security_updates` runs every hour. After a person's
-    Stop the check stays failing, so no new alert comes, and the weekly
-    review lists the reboot that waits.
-  - **`util01` is unchanged:** MMX never reboots the machine it runs on,
-    so `reboot_util01_after_updates` stays a person's run from a desk.
-- **The warning waits a week:** `no_reboot_waits` states its own
-  `alert_after_failing_for: 8d` on every server, so a reboot that waits for
-  the next window never warns, and one that a window missed does.
-  MMWatchdog counts the 8 days again when its daemon starts and when a
-  maintenance window starts or ends, so a missed window can warn later;
-  the weekly review still catches it, because the window's checklist item
-  is open again every 7 days. `known_exploited_flaws` reports a flaw that
-  attackers exploit in the running kernel without waiting for the
-  eight-day reboot warning. The check fails for the running kernel until
-  the server boots the fixed kernel. CISA, the US cybersecurity agency,
-  keeps a list of known exploited vulnerabilities. `known_exploited_flaws`
-  finds a new entry in CISA's list of known exploited vulnerabilities
-  within about 12 hours.
+  - **Enforced in the playbook, not in a rules text.** A server that waits
+    is skipped, not failed, and a `show` task prints "app001 waits for the
+    maintenance window: wednesday 2026-11-25 03:00 UTC, for 120 minutes".
+  - **`maintenance_window.length_minutes` from 30 to 1440,** 120 by
+    default, checked by `every_server` before anything changes. 30 minutes
+    hold one database server's turn of about 20 minutes. One day is the
+    most: a longer window is no longer a quiet time the team chose.
+  - **`util01` reboots from outside MMX:** MMX never reboots the machine
+    it runs on, so a person's reboot of `util01` stays
+    `reboot_util01_after_updates` from a desk, and the maintenance's reboot
+    is a root unit after the run.
+- **The reminders:** `no_reboot_waits` warns after 30 days on a production
+  pool's only server, which waits for a person, and after 15 days on every
+  other server, which the maintenance reboots: two weekly windows passed
+  without the reboot. The delays are in `mmwatchdog_checks/every_server.yml`,
+  computed from the inventory (`systems_desks`, `staging_server` and
+  `database_restore_servers` never count as a production pool's only
+  server). The database servers' held updates (`security_updates`) and
+  `services_restarted_after_library_updates` use the same delays. Reasons:
+  a warning a week after each kernel update asks a person to do what the
+  maintenance does anyway, and a person who sees a reminder every week
+  learns to ignore it; 30 days is the most a reachable flaw should wait,
+  and a flaw that attackers exploit warns at once. MMWatchdog counts the
+  delay again when its daemon starts and when a maintenance window starts
+  or ends, so a missed reboot can warn later. `known_exploited_flaws`
+  reports a flaw that attackers exploit in the running kernel without
+  waiting for the reboot reminder. The check fails for the running kernel
+  until the server boots the fixed kernel. CISA, the US cybersecurity
+  agency, keeps a list of known exploited vulnerabilities.
+  `known_exploited_flaws` finds a new entry in CISA's list of known
+  exploited vulnerabilities within about 12 hours.
+
+### The automatic weekly maintenance
+
+`automatic_weekly_maintenance: true` in `mmx_project_settings.yml` (the
+template's default) installs one scheduled job on `util01`,
+`weekly_maintenance`, at the start of `maintenance_window` (Wednesday
+03:00 UTC for 120 minutes by default), and one on each systems desk,
+`reboot_systems_desk_after_updates`, at the same hour. Neither catches up
+a missed hour (`Persistent=false`): a `util01` that was down at 03:00 does
+not start the maintenance in the morning, when users are back.
+
+The rule: **automatic work never takes the site down.** A server reboots
+or restarts by itself only when its users do not see it: a server of a
+pool of two or more, `staging01`, `util01` (the public site checks and the
+alerts keep their own paths), and the desks. A production pool's only
+server never reboots or restarts by itself; MMWatchdog reminds after 30
+days, and a person restarts it in the window, with the 3-minute pause of
+the public site checks.
+
+`weekly_maintenance` runs as `mmhotline`, like the daily settings
+comparison, and in the same order of steps:
+
+1. It runs nothing while `/etc/mmhotline/everyone-locked-out` exists.
+2. It finds the trusted commit (`find_the_trusted_commit_of_the_systems_repository`)
+   before it takes `util01`'s lock, so it never holds the lock while it
+   reads MMHotline, then takes the lock, checks the lock-out marker again
+   (a lock-out may have started while it waited), and checks that the
+   shared copy is clean and at the trusted commit. Every scheduled job on
+   `util01` that takes the lock checks the marker again the same way.
+3. With two or more database servers, it runs `update_database_servers
+   --var run_as_the_automatic_weekly_maintenance=true`. That run first
+   reads whether any database server waits for a reboot, a Debian security
+   update (`apt-get --simulate dist-upgrade`, as MMWatchdog's check and
+   MMX's full upgrade count, so a kernel update that needs a new package
+   counts too), a service restart after a library update, or a Postgres
+   setting (`pg_settings.pending_restart`), and a clean pair changes
+   nothing. An `apt-get` or `needrestart` that fails stops the run with its
+   reason, never as "nothing waits". A
+   run that goes on needs a healthy replica that can take over, and the
+   switchover must confirm the updated replica as the primary before the
+   old primary's turn. With `db01` alone it does not run.
+4. It runs `reboot_servers_after_updates --var run_as_the_automatic_weekly_maintenance=true`.
+5. On success, systemd starts `reboot_util01_after_the_weekly_maintenance`
+   (`OnSuccess=`), a root unit, which reboots `util01` only when its
+   updates wait for a reboot, no lock-out is on, the maintenance did not
+   end early (`ended_early_because` is empty), no run holds `util01`'s
+   lock, `weekly-maintenance-goes-on` says the window lasts and MMHotline
+   does not wait for the lock, and no SOS incident is open in MMHotline.
+   It pauses `util01`'s alerts for 5 minutes, silently, and asks systemd
+   to reboot without waiting (`systemctl --no-block reboot`), so the unit
+   ends cleanly. Root never opens a path in `/var/lib/mmhotline`, which
+   the `mmhotline` user owns and could replace with a link: a helper that
+   runs as `mmhotline` (`runuser`) takes the lock, writes the holder line,
+   and holds the lock while the root process lives, through the reboot
+   command.
+   After the boot, `end_the_alert_pause_after_the_weekly_util01_reboot`
+   ends the pause once MMWatchdog answers.
+
+**It gives way.** Before each server's turn, `weekly-maintenance-goes-on`
+checks two things: that the window has not ended, and that MMHotline is
+not waiting for `util01`'s lock. MMHotline rewrites
+`/var/lib/mmhotline/systems_repository.lock.waiting` every second while
+it waits, for a run that the triage agent or a person asked for. When
+either is true, the gate writes why to
+`/var/lib/weekly_maintenance/ended_early_because` and fails its stage; the
+job reads the file, logs "the weekly maintenance ended early in ...", and
+exits 0. The gate runs as root in the playbooks' `util_server` stages, so
+the directory belongs to root (`0755`) and the `mmhotline` user only reads
+it; systemd removes the last run's file as root before each start
+(`ExecStartPre=+`). Reason: MMX offers no way to end a run with success from inside a
+stage, and a failed `weekly_maintenance.service` would warn about a night
+that went as designed. A server it did not reach waits for the next week,
+and the 15-day reminder covers two missed weeks. The job's drop-in keeps a
+stop from killing a running MMX node task (`KillMode=process`), and a stop
+asks `mmx stop` to end the run. On Wednesday the maintenance and the
+daily jobs that take `util01`'s lock, such as the settings
+comparison, wait for each other like any two runs.
+
+**The desk** (`reboot-this-desk-after-updates`) reboots only when its
+updates wait for a reboot, no SSH login is open, no desk job of the coding
+agent and no `mmx` process runs, the desk keeps no lock-out, and it
+reports to MMWatchdog. A `loginctl`, `systemctl` or `pgrep` that fails
+counts as a desk in use: nobody can tell, so it waits. It pauses its own
+alerts for 5 minutes, silently, checks the lock-out and the desk's use
+again after the hub accepted the pause (which can take 25 seconds), ends
+the pause and waits when either changed, and only then asks systemd to
+reboot.
+
+**Pauses are silent.** Every planned pause, in the maintenance and in a
+person's run, passes `--without-maintenance-on-and-off-alerts`, so the
+phone stays quiet; the pause's length is still the longest time the run
+waits, so a failure alerts after it.
+
+**`automatic_weekly_maintenance: false`** removes the jobs. Every server
+then waits for a person, and the 15-day reminder still applies to the
+servers the maintenance would have rebooted: the team that turns the
+maintenance off takes on its work.
+
+Reasons: the earlier design rebooted nothing by itself and asked a person,
+or the triage agent after a warning, to reboot in the window every week.
+Those weekly warnings were the largest share of the alerts on a quiet
+system, and each one asked for a decision that the rule above already
+makes. A team that needs to hold every restart, such as for an audit,
+sets the switch to `false`.
 
 ## Memory for both releases
 
@@ -6219,8 +6405,9 @@ The desk review installs root-owned copies of every file the lock-out loads exce
 `ssh/`, and the files the roles install on the servers from outside themselves: the WireGuard peer
 template `roles/every_server/files/wireguard_wg0.conf`, the triage user's sudo rules
 `roles/every_server/files/sudoers_triage` and `roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings`,
-which the undo restores, and `mmhotline_settings.yml`, which the lock-out applies on `util01` without
-the triage agent. The lock-out button builds a root-only run directory from the person's pulled repository with
+which the undo restores. The lock-out leaves `mmhotline_settings.yml` as it is: it stops the triage agent
+with the marker file `/etc/mmhotline/everyone-locked-out`, so MMHotline's settings never pass through the
+lock-out, and a change to them needs no desk review. The lock-out button builds a root-only run directory from the person's pulled repository with
 each of those paths replaced by its reviewed copy, so only data comes from the pull: the inventory, which
 names the desk that keeps access, today's servers and `connections_between_server_pools`, so a server added since the last desk review is still locked out,
 `ssh/known_hosts`, the project settings and the vault. MMX runs no command from any of these. It refuses
@@ -6229,10 +6416,9 @@ that leaves the repository, because root would read or write through it in a dir
 can change. It opens the vault with the root-owned `/etc/systems-desk/vault-passphrase`, so it
 needs no token file. Reason: an intruder who can push to the main copy must not get root on the desk,
 or on every server, through the lock-out, and the lock-out must still work when a push is the way in.
-Server-side content counts too: a pushed WireGuard peer, a wider triage sudo rule or a changed MMHotline
-setting, such as `fleet_view_command`, which MMHotline runs as root, would otherwise reach the servers
-through the lock-out itself. The cost: the lock-out button applies the MMHotline settings of the last desk
-review, so the coding agent tells the person when a change touches a reviewed path, and the lock-out button
+Server-side content counts too: a pushed WireGuard peer or a wider triage sudo rule would otherwise
+reach the servers through the lock-out itself. The cost: the lock-out button applies the reviewed copies
+of the last desk review, so the coding agent tells the person when a change touches a reviewed path, and the lock-out button
 names each reviewed path whose pulled version differs, for the person to review after the incident.
 `tests/desk_repository_and_lock_out_button_test.py` lists every file `mmx explain lock_everyone_out --json`
 says the lock-out loads, in both states, and fails when one is neither reviewed nor data, so the list cannot drift.

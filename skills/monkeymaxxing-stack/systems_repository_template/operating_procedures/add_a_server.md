@@ -187,7 +187,7 @@ each term.
 7. **Reboot the new server to use the installed updates.** A new kernel
    needs a reboot even after the configuration run passes. Reboot the new
    server now, while adding the new server, rather than waiting for the
-   weekly window:
+   automatic weekly maintenance:
 
    - An app, jobs, or load-balancer server, or `staging01`:
      `./server_management_scripts/run_mmx_on_util01 run reboot_servers_after_updates`. The playbook reboots
@@ -196,7 +196,7 @@ each term.
      The remaining servers in each pool handle web requests or background
      jobs while a server reboots. A server that is the only one of its app
      or load-balancer pool, such as a replacement of `app001` alone, waits
-     for the weekly window, and the run says so; when the site is not
+     for the maintenance window, and the run says so; when the site is not
      serving users yet, or the person accepts the short outage now, add
      `--var reboot_the_only_server_of_a_pool_outside_the_maintenance_window=true`.
    - A database server: `./server_management_scripts/run_mmx_on_util01 run update_database_servers` ([Update and
@@ -248,9 +248,8 @@ each term.
   few minutes, or wait for its `check_every` in `mmwatchdog_checks/`, which
   is up to 6 hours. Do not run `check-now` on a server that serves
   requests unless its MMWatchdog maintenance is on
-  (`mmwatchdog maintenance on --every-check-group --for 15m
-  --reason "checking the new server"`, and `maintenance off --every-check-group`
-  after). Reason: a check such as `installed_packages` takes 100 to 160 seconds and
+  (`mmwatchdog maintenance on --every-check-group --for 15m --reason "checking the new server" --without-maintenance-on-and-off-alerts`,
+  and `maintenance off --every-check-group` after). Reason: a check such as `installed_packages` takes 100 to 160 seconds and
   pushes an app server's CPU to 75 to 100%, which the pool's check for adding a
   server counts as load, so one early `check-now` can add an app server that
   nobody needed. Then run `status` again.

@@ -216,9 +216,9 @@ node_tasks:
       group: root
       permissions_mode: "0755"
   # check-whether-a-reboot-may-run-now: the one rule for when a server may
-  # reboot for installed updates, which reboot_servers_after_updates and
-  # MMWatchdog's check no_reboot_waits_that_may_run_now both run. Python 3
-  # does its weekly-window arithmetic in UTC.
+  # reboot for installed updates, which reboot_servers_after_updates runs for
+  # a person's run and for the automatic weekly maintenance. Python 3 does
+  # its maintenance-window arithmetic in UTC.
   - id: install_check_whether_a_reboot_may_run_now
     file:
       path: /usr/local/bin/check-whether-a-reboot-may-run-now
@@ -568,7 +568,7 @@ node_tasks:
   # with the same marker file. Database servers, util01 and staging01 install
   # here, before their services start: needrestart only lists the services of
   # a database server (a running Postgres would keep the old libraries until
-  # the weekly window), and no replacement of a failed server waits for them.
+  # update_database_servers), and no replacement of a failed server waits for them.
   # --no-minimal-upgrade-steps installs in one dpkg run instead of one per
   # package group, which takes about half the time; minimal steps exist so
   # that a shutdown can interrupt the upgrade, and a first MMX run is not

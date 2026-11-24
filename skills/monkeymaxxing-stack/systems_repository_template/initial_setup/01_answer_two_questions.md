@@ -63,7 +63,10 @@ An agent you would not trust with your servers should never be used here.
 
 Run me in auto mode for this setup, so I don't stop to ask before each step.
 In Claude Code: press Shift+Tab until it shows "auto mode on".
-Reason: the Stack needs a coding agent you trust, and anything that changes your live servers still goes through your systems desk and a `yes` you type.
+Reason: auto mode only skips my questions on this laptop. I reach your servers
+only through your systems desk, which opens with a code from your phone. Changes
+to the systems desk itself, new keys, and a lock-out also need you to type in
+your own terminal: a `yes`, a key, or a command I give you.
 
 The setup takes about an hour and a half.  I need you for about 20 minutes of it, mostly at the start.
 
@@ -378,8 +381,11 @@ answers.
 
    - `project_name: example_systems` in `mmx_project_settings.yml`.
    - `nightly_work_starts_at` (UTC), a time when most users are away,
-     and `maintenance_window`, a weekday evening, both in the servers'
-     region's time. `weekly_work_day` keeps `sunday`.
+     and `maintenance_window`, a weekday night hour at least two hours
+     after `nightly_work_starts_at`, when the automatic weekly maintenance
+     runs, both in the servers' region's time and written in UTC.
+     `weekly_work_day` keeps `sunday`, so the window's weekday is another
+     day.
    - `password_manager` under `vars` in `mmx_project_settings.yml`, such
      as `1Password`, from the screen. The account screens of chapters 3
      and 4 name it.

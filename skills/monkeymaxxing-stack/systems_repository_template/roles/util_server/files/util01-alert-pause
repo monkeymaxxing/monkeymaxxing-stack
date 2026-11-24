@@ -17,10 +17,10 @@
 # check group but some, so the program names them.
 #
 # A named window differs from the whole-node window in one way, and it is
-# accepted: when util01 reboots, MMWatchdog sends util01's reboot notice
-# (warn), which only a whole-node window holds back. The window's reason
-# names the playbook, so the notice is known as planned
-# (triage_agent_rules.md).
+# accepted: when util01 reboots, MMWatchdog sends util01's reboot notice,
+# which only a whole-node window holds back. The notice is info
+# (roles/util_server/files/mmwatchdog_node_settings.yml), so it shows on the
+# dashboard and reaches nobody's phone.
 #
 # The check groups come from the running MMWatchdog (mmwatchdog status
 # --json, whose checks are named CHECK_GROUP/CHECK), because maintenance

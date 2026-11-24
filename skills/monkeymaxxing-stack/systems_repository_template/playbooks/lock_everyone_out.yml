@@ -118,27 +118,8 @@ fleet_stages:
           root_ssh_public_keys: "{{ .vars.root_ssh_public_keys }}"
           triage_ssh_public_key: "{{ .vars.triage_ssh_public_key }}"
           apply_peer_changes: true
+          run_by_the_lock_out_button: true
           wireguard_peer_names: "{{ .node_tasks.who_this_server_talks_to.outputs.wireguard_peer_names }}"
-  - id: apply_the_mmhotline_triage_lockout
-    nodes: util_server
-    node_tasks:
-      - id: write_the_mmhotline_settings
-        file:
-          path: /etc/mmhotline/mmhotline_settings.yml
-          template: mmhotline_settings.yml
-          owner: root
-          group: mmhotline
-          permissions_mode: "0640"
-          secret_readable_by_group: true
-          check_new_file:
-            shell:
-              script: mmhotline settings check --settings-file "$NEW_FILE"
-              dryrun: mmhotline settings check --settings-file "$NEW_FILE"
-              env: {NEW_FILE: "{{ .new_file.path }}"}
-              output_holds_no_secret: true
-      - id: apply_the_mmhotline_settings
-        shell:
-          script: exec /usr/local/bin/mmhotline settings apply
   - id: finish_on_the_desk_that_keeps_access
     nodes: "{{ .vars.desk_name }}"
     node_tasks:

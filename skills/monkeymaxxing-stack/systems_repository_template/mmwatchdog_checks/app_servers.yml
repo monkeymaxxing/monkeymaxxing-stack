@@ -42,12 +42,12 @@ check_groups:
       # readings and starts the triage agent, which adds the server after
       # MMHotline's warning; a warn here too would ring the phone once more
       # for each busy app server. One busy server in a pool that is not busy
-      # still shows on MMHotline's pages and in the weekly review.
+      # still shows on MMHotline's pages.
       cpu_is_below_the_app_pool_headroom_limit:
         node_resource: cpu
         fail_when_measurement_above:
           cpu_used_percent: {{ $cpu_limit }}
-        alert_severity: {{ if eq (.inputs.reboot_check_settings.what_the_triage_agent_may_do_without_a_person | default "") "routine_fixes_and_server_work" }}info{{ else }}warn{{ end }}
+        alert_severity: {{ if eq .inputs.what_the_triage_agent_may_do_without_a_person "routine_fixes_and_server_work" }}info{{ else }}warn{{ end }}
       # Operating procedure: add an app server, or bigger app servers.
       # Reason for 75%: leaves room for a deploy, which runs the new and the live release together
       # (see Memory for both releases). Reason for warn: slow or killed processes, not yet an outage.

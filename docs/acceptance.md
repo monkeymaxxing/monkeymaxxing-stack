@@ -67,13 +67,23 @@ The contracts below state the required outcomes for changes to the stack.
   also in the scheduled review. The
   agent's run limit stops only agent runs, never alerts. A Stack release
   that fixes a flaw attackers exploit now warns every older system.
-- **A short weekly review:** the weekly system review covers the week's
-  alerts with the triage agent's runs and cost, the waiting updates with
-  the findings set aside, the restore drill's result, and the
+- **No routine duty, and a quiet phone:** the team has no weekly chore.
+  The phone rings only when a person must act; planned work, such as a
+  reboot in the automatic weekly maintenance, sends nothing. The automatic
+  weekly maintenance installs updates and reboots every server whose
+  restart the users do not see, and never takes the site down: a
+  production pool's only server waits for a person, who is reminded after
+  30 days. No checklist item of the template expires, and secrets are
+  replaced when someone leaves or a secret may have leaked, not on a
+  calendar. `util01` refuses a push that adds a secret.
+- **A review on demand:** when the person asks, such as "Review my system"
+  at an optional monthly check-in, the system review covers the alerts
+  since the last review with the triage agent's runs and cost, the
+  restarts that wait for a person, the restore drill's result, and the
   checklist items that are due, with exact commands. The growth and
   improvement items keep their own section of the checklist with their
-  triggers, never count as open, and the weekly review only checks
-  whether a trigger arrived.
+  triggers, never count as open, and the review only checks whether a
+  trigger arrived.
 - **The agent drives changes:** a push starts no server change. The agent
   runs MMX at the pushed commit and verifies the result. Building an app
   image requires no CI. The helper

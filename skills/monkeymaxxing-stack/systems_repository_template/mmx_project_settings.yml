@@ -32,13 +32,11 @@ vars:
   nightly_work_starts_at: "01:00"
   # weekly_work_day: sunday by default. The day of the full database
   # backup, the restore drill, and the image cleanup. Reason for Sunday:
-  # most apps have their fewest users on Sunday, and the drill's result is
-  # ready for the weekly system review at the start of the week. A team
-  # whose quiet day differs sets another day, such as saturday: commit,
-  # push, and run every_server, which moves the timers on every server.
-  # A full backup every week is fixed: the weekly restore drill needs a
-  # recent full backup, and a kernel or Postgres security fix should not
-  # wait longer than a week.
+  # most apps have their fewest users on Sunday, and a failed drill warns
+  # before the working week starts. A team whose quiet day differs sets
+  # another day, such as saturday: commit, push, and run every_server,
+  # which moves the timers on every server. A full backup every week is
+  # fixed: the weekly restore drill needs a recent full backup.
   weekly_work_day: sunday
   # restore_drill_time_limit_hours: 6. The weekly restore drill stops after
   # this many hours, from 1 to 24, and destroys restore01. Restore time grows with
@@ -46,27 +44,53 @@ vars:
   # of 24 is because restore01 is paid by the hour and a drill must finish
   # well before the next week's drill.
   restore_drill_time_limit_hours: 6
-  # The weekly window for database updates and the reboots that wait for
-  # them (operating_procedures/update_and_restart_the_database_servers.md).
-  # starts_at is UTC. The agent runs updates and reboots only inside the
-  # window, one server at a time, and the weekly review reads the window from here.
-  # Reason for weekly: MMWatchdog's no_reboot_waits warns at 8 days.
-  # reboot_servers_after_updates reboots the only server of the app or
-  # load-balancer pool, whose reboot users see, only inside the window
+  # The weekly maintenance window, in UTC: the quiet night hours when the
+  # automatic weekly maintenance runs on util01 (automatic_weekly_maintenance
+  # below), and when a person runs a planned restart of a production pool's
+  # only server (operating_procedures/update_and_restart_the_database_servers.md,
+  # operating_procedures/reboot_servers_after_updates.md).
+  # Wednesday 03:00 for 120 minutes by default. Reason: it starts after the
+  # night's backups (nightly_work_starts_at, 01:00, and the uploads' copy an
+  # hour later) and on another day than the restore drill (weekly_work_day,
+  # sunday), so the maintenance never waits behind them, and most users are
+  # away at that hour. The coding agent picks the hour with you during the
+  # setup, from your users' quiet hours.
+  # The automatic weekly maintenance starts each server's turn only inside
+  # the window, so a run that takes long ends before the morning; a server
+  # it did not reach waits for the next week. reboot_servers_after_updates
+  # reboots a production pool's only server, whose users see the reboot,
+  # only inside the window, unless a person allows it for one run
   # (roles/every_server/files/check-whether-a-reboot-may-run-now).
-  # length_minutes: 60 by default, from 30 to 1440. Reason for at least 30:
-  # with routine_fixes_and_server_work, the reboot check alerts about 10
-  # minutes after the window opens, the triage agent asks within about a
-  # minute, MMHotline's warning waits
-  # triage_agent_server_work.minutes_between_the_warning_and_a_reboot (10 by
-  # default), and the reboot takes under a minute on a cloud server: about
-  # 25 minutes. A team that raises the warning's wait raises the window too.
-  # At most 1440, one day: a longer window is no longer a quiet time the team
-  # chose, and the users would see reboots on most days of the week.
+  # length_minutes: from 30 to 1440. Reason for at least 30: one database
+  # server's turn takes up to about 20 minutes. At most 1440, one day: a
+  # longer window is no longer a quiet time the team chose.
   maintenance_window:
-    weekday: tuesday
-    starts_at: "21:00"
-    length_minutes: 60
+    weekday: wednesday
+    starts_at: "03:00"
+    length_minutes: 120
+  # automatic_weekly_maintenance: true. With true, util01 runs one weekly
+  # maintenance at the start of maintenance_window, and each systems desk
+  # reboots itself at the same hour when its updates wait for a reboot. The
+  # maintenance never takes the site down:
+  #   - It updates and restarts the database servers only when there are
+  #     two or more (db01 and db02), and only when one of them waits for a
+  #     security update, a restart for a library or a setting, or a reboot:
+  #     a replica takes over first, so writes pause for 2 to 6 seconds and
+  #     nothing fails. db01 alone is never restarted automatically.
+  #   - It reboots the servers whose updates wait for a reboot in pools of
+  #     two or more servers, one at a time, and staging01. A production
+  #     pool's only server, such as app001 alone, is never rebooted
+  #     automatically.
+  #   - Then util01 reboots itself when its updates wait for a reboot and no
+  #     incident is open.
+  # It gives way to the triage agent and to the team: when MMHotline waits
+  # for util01's lock, it finishes the server it works on and ends.
+  # A production pool's only server waits for a person, who restarts it in
+  # the maintenance window (MMWatchdog reminds after 30 days). false turns
+  # the automatic maintenance off, and a person runs it all by hand.
+  # Reason for true: every reboot it runs costs the users nothing, and
+  # updates that wait for weeks are a risk.
+  automatic_weekly_maintenance: true
   # The come-back wait: the longest time reboot_servers_after_updates and
   # reboot_util01_after_updates wait for a rebooted server to come back
   # before the run fails, in whole minutes, such as 3m. 3m by default,
@@ -680,28 +704,27 @@ vars:
   #     and pulling an image again run at once, and the triage agent reports
   #     each one; anything else waits for a person
   #     (routine_fixes_without_permission).
-  #   routine_fixes_and_server_work: routine fixes, plus the six playbooks
+  #   routine_fixes_and_server_work: routine fixes, plus the five playbooks
   #     of server work, which run without a person: replace_failed_servers,
   #     every_server and destroy_replaced_servers replace a failed server of
-  #     the pools that triage_agent_server_work names, at once;
-  #     reboot_servers_after_updates reboots servers for installed updates,
-  #     and add_an_app_server_for_the_load and remove_server (run without
+  #     the pools that triage_agent_server_work names, at once; and
+  #     add_an_app_server_for_the_load and remove_server (run without
   #     server_name) add and remove app servers with the load, each after a
   #     warning that anyone on the team can stop. Database servers
   #     and util01 still need a person, and so does any other playbook.
-  #     With this choice alone, each server MMWatchdog watches for a waiting
-  #     reboot also gets the check no_reboot_waits_that_may_run_now, which
-  #     starts the triage agent when a reboot may run now, and util01 gets
-  #     the checks app_servers_to_add_for_the_load and
-  #     app_servers_to_remove_for_the_load, which start it when the load
-  #     calls for one more or one fewer app server.
+  #     With this choice alone, util01 gets the checks
+  #     app_servers_to_add_for_the_load and
+  #     app_servers_to_remove_for_the_load, which start the triage agent
+  #     when the load calls for one more or one fewer app server.
   # routine_fixes by default. Reason: a new team first sees what the triage
-  # agent does before it lets the agent create servers and reboot them.
+  # agent does before it lets the agent create servers. Reboots for updates
+  # are not the triage agent's work at all: automatic_weekly_maintenance
+  # runs them.
   # mmhotline_settings.yml reads this setting for
   # rules_for_running_agent_playbooks. To change it, the person tells the
   # coding agent, which edits this line, commits, and runs every_server.
   what_the_triage_agent_may_do_without_a_person: routine_fixes
-  # The limits of the triage agent's server work. MMHotline lets the six
+  # The limits of the triage agent's server work. MMHotline lets the five
   # playbooks run without a person only with
   # routine_fixes_and_server_work; with the other two choices each run
   # waits for a person's approval, and these limits still hold.
@@ -725,12 +748,6 @@ vars:
     # cause that a new server does not fix, so the playbook refuses and a
     # person is woken. At least 0; 0 never refuses for this reason.
     hours_after_a_replacement_in_which_another_failure_of_the_pool_needs_a_person: 24
-    # How long MMHotline's warning waits before reboot_servers_after_updates
-    # runs, so that someone can press Stop. 10 by default: someone who sees
-    # the warning on the phone during the day can press Stop, and the wait
-    # plus the reboots fit in a 60-minute maintenance window. From 1 to
-    # 1440, the range MMHotline accepts for a warning's wait.
-    minutes_between_the_warning_and_a_reboot: 10
     # While the triage agent replaces a failed server, an urgent alert (SOS)
     # that waits for the triage agent keeps waiting this many minutes from
     # the replacement's start, instead of waking the person on call after
@@ -779,8 +796,8 @@ vars:
     # at least one whole window before the next change, and never flaps.
     #
     # How long MMHotline's warning waits before add_an_app_server_for_the_load
-    # or remove_server runs, so that someone can press Stop. 10 by default,
-    # the reboot's wait: a person who sees the warning on the phone can stop
+    # or remove_server runs, so that someone can press Stop. 10 by default:
+    # a person who sees the warning on the phone can stop
     # a server that costs money, and users of a busy site wait only minutes
     # more. From 1 to 1440, the range MMHotline accepts for a warning's wait.
     minutes_between_the_warning_and_adding_or_removing_an_app_server: 10
@@ -843,22 +860,22 @@ vars:
         macos-amd64: "4569d405dfc8e4edfcd6b3457728b76717a6f64ab6f7e0c560d561513df522f7"
         macos-arm64: "f6aa2793ac27f4d05523a8dfe07f65be7b0fda387a08385947ea99e90b601110"
     mmwatchdog:
-      version: "0.2.0"
-      download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.2.0/mmwatchdog-0.2.0-linux-amd64.tar.gz
-      sha256: "477e945e3aa137f996535d5081fbe72da4e9b21a52cf4affdf499e0d431fb3c0"
+      version: "0.3.0"
+      download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.3.0/mmwatchdog-0.3.0-linux-amd64.tar.gz
+      sha256: "6e68a45335e40ca9a54842c9ae67f9114695dee484e3f30172bdd3fd0b5b2053"
     mmhotline:
-      version: "0.7.0"
-      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.7.0/mmhotline-0.7.0-linux-amd64.tar.gz
-      sha256: "479aed0c47f3c48155bdee9544e2b9d6710ff6701c8c9abcd6ca0cccc9934efb"
+      version: "0.8.0"
+      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.8.0/mmhotline-0.8.0-linux-amd64.tar.gz
+      sha256: "5f315d98cf50fa0a2a76a0b5b3ab54ac4de690c6c8f54da03d6d2e13f5e09590"
     # The Stack's command for the account and secret setup on the systems
     # desk (initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
     # Its release is the Stack version's, built reproducibly by the Stack
     # repository's set_up_outside_services/build_release_archive.sh, which
     # writes this pin.
     set_up_outside_services:
-      version: "0.6.0"
-      download_url: https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/download/v0.6.0/set-up-outside-services-0.6.0-linux-amd64.tar.gz
-      sha256: "718f386d8f8949ab2aae130f770683bf50335f57dba4eff28e991a277c350867"
+      version: "0.7.0"
+      download_url: https://github.com/monkeymaxxing/monkeymaxxing-stack/releases/download/v0.7.0/set-up-outside-services-0.7.0-linux-amd64.tar.gz
+      sha256: "61ae711f79c531b33de2beaa59895325efa65620cb5f3423d640c8e1c3afadf6"
     # MMHotline's backup: use the Litestream version named in the MMHotline
     # repository's docs/how-to/back-up-and-restore-the-database.md, "Set up".
     # Litestream calls its x86-64 archive linux-x86_64; the release's

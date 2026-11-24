@@ -1,0 +1,105 @@
+#!/bin/bash
+# Managed by MMX from roles/systems_desk. The desk reboots itself for its
+# installed updates in the quiet hour, the start of maintenance_window in
+# mmx_project_settings.yml, while automatic_weekly_maintenance is true. Root
+# runs it from reboot_systems_desk_after_updates.timer, which never catches
+# up a missed hour: a desk that was off at that hour waits for next week.
+#
+# It changes nothing and exits 0, so the reboot waits for next week, when:
+#   - no reboot waits (/var/run/reboot-required is missing);
+#   - the person pressed the lock-out button on this desk
+#     (/etc/systems-desk/everyone-locked-out): the desk that keeps access
+#     stays up for the incident;
+#   - the desk is in use: an SSH login is open (the person's, or the coding
+#     agent's shared login), a desk job of the coding agent runs (a unit
+#     that systemd-run started in the coding agent's own systemd), or an mmx
+#     process runs. The coding agent's systemd itself stays running for
+#     lingering, so only the units it runs count;
+#   - this desk does not report to MMWatchdog yet, as before util01 exists;
+#   - the desk's state cannot be read: loginctl, systemctl or pgrep fails.
+#     A desk whose state nobody can tell might be in use, so it waits.
+# Otherwise it pauses the desk's alerts for 5 minutes, which the fleet hub
+# on util01 must accept first. The hub may take up to 25 seconds, so the
+# script checks the lock-out and the desk's use again after that: a desk
+# that someone started to use meanwhile ends its alert pause and waits for
+# next week. Only then does it ask systemd to reboot without waiting.
+# After the boot, desk-ssh-agent.service loads the production key again by
+# itself. Reason for 5 minutes: a cloud server came back within 56 seconds
+# in every measured reboot; the pause ends by itself.
+set -euo pipefail
+say() { printf 'reboot-this-desk-after-updates: %s\n' "$*"; }
+
+# Prints why the desk must not reboot now and returns 0: the lock-out, a
+# use, or a state that could not be read. Returns 1 when the desk is idle.
+the_desk_must_not_reboot_now() {
+  local sessions session service state units unit transient status
+  if [ -e /etc/systems-desk/everyone-locked-out ]; then
+    echo "the lock-out button ran on this systems desk, so it stays up for the incident"
+    return 0
+  fi
+  if ! sessions=$(loginctl list-sessions --no-legend); then
+    echo "loginctl did not list the login sessions of this systems desk; the reboot waits for next week"
+    return 0
+  fi
+  while read -r session _; do
+    [ -n "$session" ] || continue
+    if ! service=$(loginctl show-session "$session" --property=Service --value) \
+        || ! state=$(loginctl show-session "$session" --property=State --value); then
+      echo "loginctl did not show login session $session of this systems desk; the reboot waits for next week"
+      return 0
+    fi
+    [ "$service" = sshd ] || continue
+    [ "$state" = closing ] && continue
+    echo "an SSH login is open on this systems desk; the reboot waits for next week"
+    return 0
+  done <<< "$sessions"
+  if ! units=$(systemctl --user --machine=coding-agent@ list-units --type=service --state=active,activating,deactivating --no-legend --plain); then
+    echo "the coding agent's own systemd did not list its units; the reboot waits for next week"
+    return 0
+  fi
+  while read -r unit _; do
+    [ -n "$unit" ] || continue
+    if ! transient=$(systemctl --user --machine=coding-agent@ show "$unit" --property=Transient --value); then
+      echo "the coding agent's own systemd did not show its unit $unit; the reboot waits for next week"
+      return 0
+    fi
+    if [ "$transient" = yes ]; then
+      echo "the coding agent's job $unit runs on this systems desk; the reboot waits for next week"
+      return 0
+    fi
+  done <<< "$units"
+  status=0
+  pgrep -x mmx > /dev/null || status=$?
+  case $status in
+    0) echo "an mmx run is going on this systems desk; the reboot waits for next week"; return 0 ;;
+    1) ;;
+    *) echo "pgrep did not say whether an mmx run is going (exit $status); the reboot waits for next week"; return 0 ;;
+  esac
+  return 1
+}
+
+if [ ! -e /var/run/reboot-required ]; then
+  say "no reboot waits on this systems desk; nothing to do"
+  exit 0
+fi
+if why=$(the_desk_must_not_reboot_now); then
+  say "$why"
+  exit 0
+fi
+if [ ! -x /usr/local/bin/mmwatchdog ] || [ ! -e /etc/mmwatchdog/secrets/fleet-hub-join-code ]; then
+  say "this systems desk does not report to MMWatchdog yet; the reboot waits until it does"
+  exit 0
+fi
+if ! /usr/local/bin/mmwatchdog maintenance on --every-check-group --for 5m --reason "weekly_maintenance" --without-maintenance-on-and-off-alerts; then
+  /usr/local/bin/mmwatchdog maintenance off --every-check-group || true
+  say "the fleet hub did not accept the alert pause of this systems desk, so it does not reboot"
+  exit 1
+fi
+# Again, right before the reboot: the hub's acceptance took time.
+if why=$(the_desk_must_not_reboot_now); then
+  /usr/local/bin/mmwatchdog maintenance off --every-check-group || true
+  say "$why; the alert pause of this systems desk ended again"
+  exit 0
+fi
+say "this systems desk reboots for its installed updates"
+exec systemctl --no-block reboot

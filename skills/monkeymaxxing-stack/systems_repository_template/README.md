@@ -3,7 +3,7 @@
 This repository holds the server settings for `shop.example.com`.
 Your coding agent uses the server settings in this repository to operate
 the system.
-The system follows Monkeymaxxing Stack version 0.6.0.
+The system follows Monkeymaxxing Stack version 0.7.0.
 
 **Setup status: incomplete.** The links below contain example values.
 At the end of the setup, your coding agent replaces the example values with
@@ -285,11 +285,14 @@ files in R2, and runs as a container image. If your app does not meet a
 condition yet, your coding agent changes your app with your approval, and
 the change can take days.
 
-After the setup, your team has one regular duty. Each week, one person and
-the coding agent do the weekly system review: the week's alerts, the
-waiting updates, the restore drill's result, and the checklist items that
-are due. The checklist is the file that records
-what is done, what is open, and when each growth step is due.
+After the setup, your team has no regular duty. Updates and reboots run by
+themselves each week in a quiet night hour, without taking your site down,
+and your phone rings only when a person must act. A server your users
+would see restart, such as your only app server, waits for you, and
+MMWatchdog reminds you after 30 days. Many teams like a short monthly
+check-in: ask your coding agent "Review my system". The checklist is the
+file that records what is done, what is open, and when each growth step is
+due.
 
 ## The accounts at outside companies
 
@@ -366,7 +369,7 @@ person's own Pushover contact method in MMHotline, which each person adds with t
 | Publish a service notice | "Post a status notice for this incident." | [Post to the status page](operating_procedures/post_to_the_status_page.md) |
 | Replace a failed server | "app001 stopped. Examine the effect on the site and prepare a replacement." | [Replace a server](operating_procedures/replace_a_server.md) |
 | Recover missing data | "A change removed database rows. Give the recovery procedure." | [Recover missing rows](operating_procedures/recover_rows_lost_to_a_bad_change.md) |
-| Review the system | "Do the weekly system review." | [Weekly review](operating_procedures/do_the_weekly_system_review.md) |
+| Review the system, whenever you like, such as once a month | "Review my system." | [Review the system](operating_procedures/review_the_system.md) |
 | Respond to a break-in | "Someone broke in. Find out how, and give me the response." Type `ssh -t desk01 sudo lock-everyone-out` (it logs in to your systems desk) on your laptop only when your coding agent shows that the case is one the page names. | [Respond to a break-in](operating_procedures/respond_to_a_break_in.md) |
 
 To release to production without the question for your approval, set
@@ -438,13 +441,12 @@ The [checklist](monkeymaxxing_stack_checklist.yml) holds the detailed evidence.
 | Action | Responsible person | Date or starting event |
 | --- | --- | --- |
 | Complete setup and record its results | Not assigned | Before setup handover |
-| Do the weekly system review: the week's alerts, the waiting updates, the restore drill's result, and the checklist items that are due | Not assigned | Weekly, at a time still to be agreed |
 
 The [checklist](monkeymaxxing_stack_checklist.yml) holds the later checks,
 and, in their own section, the growth and improvement items, such as a
-second database server, each with the trigger it waits for. The
-[weekly review](operating_procedures/do_the_weekly_system_review.md) checks
-whether a trigger arrived.
+second database server, each with the trigger it waits for. A
+[system review](operating_procedures/review_the_system.md), whenever you
+ask for one, checks whether a trigger arrived.
 
 ## Looking after your systems desk
 

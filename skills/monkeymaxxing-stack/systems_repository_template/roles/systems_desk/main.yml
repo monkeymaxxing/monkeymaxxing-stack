@@ -18,6 +18,11 @@ inputs:
   # the coding agent's shared SSH login.
   coding_agent_login_idle_minutes: {type: integer, required: true}
   coding_agent_login_longest_hours: {type: integer, required: true}
+  # From mmx_project_settings.yml: the desk reboots itself for its updates
+  # at the start of maintenance_window, while automatic_weekly_maintenance
+  # is true (files/reboot-this-desk-after-updates).
+  maintenance_window: {type: mapping, required: true}
+  automatic_weekly_maintenance: {type: boolean, required: true}
   provider_api_url: {type: string, default: "https://api.hetzner.cloud/v1/"}
   # This desk's own server ID at the provider, from the create receipt
   # (provider_server_id in the desk's entry of inventories/servers.yml). The
@@ -325,6 +330,12 @@ node_tasks:
   # in the review before it applies.
   - id: install_the_desk_review_command
     file: {path: /usr/local/bin/review-and-apply-the-systems-desk-settings, source: files/review-and-apply-the-systems-desk-settings, owner: root, group: root, permissions_mode: "0755"}
+  # Root-owned gitleaks configuration allowing public keys in inventories
+  # while keeping gitleaks' default secret rules in force.
+  - id: directory_for_the_gitleaks_configuration
+    directory: {path: /etc/gitleaks, owner: root, group: root, permissions_mode: "0755"}
+  - id: configure_gitleaks_for_the_systems_repository
+    file: {path: /etc/gitleaks/systems_repository.toml, source: files/gitleaks.toml, owner: root, group: root, permissions_mode: "0644"}
   # The coding agent's command that publishes the commits the laptop pushed
   # to a branch of its checkout on main in the main copy
   # (files/publish-branch-to-main says how). Reason: only this desk holds the
@@ -364,9 +375,9 @@ node_tasks:
   - id: copy_the_reviewed_first_lock_out_script
     file: {path: /usr/local/lib/systems-desk/lock-everyone-out/server_management_scripts/start_break_in_lockout.py, source: ../../server_management_scripts/start_break_in_lockout.py, owner: root, group: root, permissions_mode: "0600"}
   # What the lock-out installs on the servers from outside its own roles:
-  # the servers' WireGuard peers, the triage user's sudo rules, which the
-  # undo restores, and MMHotline's settings, which the lock-out applies on
-  # util01 without the triage agent.
+  # the servers' WireGuard peers, and the triage user's sudo rules, which the
+  # undo restores. The lock-out leaves MMHotline's settings as they are, so
+  # a change of mmhotline_settings.yml needs no desk review.
   # A value filled in from a loop cannot hold `..` in a path (MMX refuses it),
   # so each file is its own task with a written-out source.
   - id: copy_the_reviewed_wireguard_settings_template
@@ -375,8 +386,10 @@ node_tasks:
     file: {path: /usr/local/lib/systems-desk/lock-everyone-out/roles/every_server/files/sudoers_triage, source: ../every_server/files/sudoers_triage, owner: root, group: root, permissions_mode: "0600"}
   - id: copy_the_reviewed_triage_fleet_readings_sudo_rules
     file: {path: /usr/local/lib/systems-desk/lock-everyone-out/roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings, source: ../util_server/files/sudoers_triage_mmwatchdog_fleet_readings, owner: root, group: root, permissions_mode: "0600"}
-  - id: copy_the_reviewed_mmhotline_settings
-    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/mmhotline_settings.yml, source: ../../mmhotline_settings.yml, owner: root, group: root, permissions_mode: "0600"}
+  # A desk last reviewed under Stack 0.6.0 or earlier holds a copy of
+  # MMHotline's settings, which the lock-out no longer applies.
+  - id: remove_the_earlier_copy_of_the_mmhotline_settings
+    file: {path: /usr/local/lib/systems-desk/lock-everyone-out/mmhotline_settings.yml, state: absent}
   # The evidence copy reads this desk's own logs as root, so it too runs
   # only as this reviewed copy, with the reviewed SSH settings beside it.
   - id: copy_the_reviewed_evidence_script
@@ -1144,6 +1157,33 @@ node_tasks:
             printf 'Ended the coding agent'"'"'s login %s: it was open for more than %s hours.\n' "$session" "$LONGEST_HOURS"
           fi
         done
+
+  # The desk's own reboot for its installed updates, in the quiet hour at the
+  # start of maintenance_window, while automatic_weekly_maintenance is true.
+  # The program's comment lists when it waits: an open login, a desk job,
+  # an mmx run, or a lock-out on this desk. run_missed_job_after_downtime:
+  # false, so a desk that was off at that hour never reboots when it starts.
+  - id: install_the_reboot_of_this_desk_after_updates
+    file:
+      path: /usr/local/sbin/reboot-this-desk-after-updates
+      source: files/reboot-this-desk-after-updates
+      owner: root
+      group: root
+      permissions_mode: "0700"
+  - id: reboot_this_desk_after_updates_in_the_quiet_hour
+    when: "{{ .inputs.automatic_weekly_maintenance }}"
+    systemd_scheduled_job:
+      name: reboot_systems_desk_after_updates
+      run_as_user_account: root
+      systemd_calendar_schedule: "{{ .inputs.maintenance_window.weekday }} *-*-* {{ .inputs.maintenance_window.starts_at }}:00 UTC"
+      run_missed_job_after_downtime: false
+      script: exec /usr/local/sbin/reboot-this-desk-after-updates
+  - id: remove_the_reboot_of_this_desk_while_it_is_turned_off
+    when: {not: "{{ .inputs.automatic_weekly_maintenance }}"}
+    systemd_scheduled_job:
+      name: reboot_systems_desk_after_updates
+      state: absent
+      run_as_user_account: root
 
   # Root logs in over SSH only with the desk's own self-management key, from
   # loopback, once the desk is locked. Before the lock, the bootstrap's root

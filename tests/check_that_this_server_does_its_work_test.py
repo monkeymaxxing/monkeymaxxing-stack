@@ -212,7 +212,9 @@ class CheckThatThisServerDoesItsWork(unittest.TestCase):
 
     def test_the_reboot_playbook_waits_for_the_command_and_every_server_installs_it(self):
         playbook = (T/'playbooks/reboot_servers_after_updates.yml').read_text()
-        self.assertIn('command_succeeds: /usr/local/bin/check-that-this-server-does-its-work', playbook)
+        self.assertIn("timeout 5m bash -c 'until /usr/local/bin/check-that-this-server-does-its-work", playbook)
+        # The automatic maintenance also runs it on the other servers of the pool before a reboot.
+        self.assertIn('script: if /usr/local/bin/check-that-this-server-does-its-work >&2; then echo true; else echo false; fi', playbook)
         self.assertNotIn('curl', playbook)
         role = (T/'roles/every_server/main.yml').read_text()
         self.assertIn('path: /usr/local/bin/check-that-this-server-does-its-work', role)

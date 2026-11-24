@@ -211,8 +211,9 @@ The map gives the times. When the person asks for more, say:
 >
 > After the five parts and the phone alerts, your site is live, alerts
 > reach your phone, and your backups are proven to restore. After that,
-> your team has one regular duty. Each week, one person and I do the
-> weekly system review: the week's alerts, the waiting updates, the
-> weekly restore test's result, and what else is due.
+> your team has no regular duty: updates and reboots run by themselves
+> each week in a quiet night hour, without taking your site down, and your
+> phone rings only when a person must act. Whenever you like, such as once
+> a month, ask me "Review my system".
 
 Next: [Chapter 1: Answer two questions](01_answer_two_questions.md).

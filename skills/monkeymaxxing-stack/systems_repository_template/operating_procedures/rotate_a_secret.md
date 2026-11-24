@@ -1,6 +1,9 @@
 # Rotate a secret
 
-**When to use this page:** someone leaves, a secret leaks, or the rotation period is due. The period is `verify_again_every` of the checklist item `secret_rotation` (12 months in the template).
+**When to use this page:** someone who knew a secret leaves, a secret
+may have leaked, or a token that ends approaches its end date, such as a
+registry token with an end date. Secrets are not replaced on a calendar
+([Why rotation follows events](#why-rotation-follows-events)).
 
 **What this page does:** a new secret replaces the old one in the vault or
 at the company that issued it, the servers get the new secret, and the old
@@ -133,7 +136,7 @@ The team's password manager keeps the password as the item `Shared root console 
 Reason: the provider console remains available when WireGuard or SSH is
 broken. Groups of letters are practical to type at a console. Updating every
 server's hash revokes the old shared root console password without opening SSH passwords.
-Rotate the password when a person leaves, after a leak, and when `secret_rotation`'s `verify_again_every` period passes.
+Rotate the password when a person leaves and after a leak.
 
 ## App secrets
 
@@ -354,6 +357,14 @@ a tunnel's token while all of the tunnel's servers run.
    **Check:** the run passes.
 3. **Verify and revoke.**
    **Check:** the next deploy passes. Revoke the old token after the next deploy passes.
+
+A token that ends, which an organization may require, is replaced before
+its end date: the person who made it keeps one dated reminder in their
+own calendar, 30 days before the end, as chapter 4 set up
+([The GitHub token](../initial_setup/04_set_up_your_accounts_and_lock_your_desk.md)).
+When the new token ends too, ask that person to move the reminder to 30
+days before the new end date, and write the new date in the README's
+"Next actions".
 
 ## Backblaze B2 keys
 
@@ -715,3 +726,19 @@ checkout.
 **Check:** the publishing step names the commit, and
 `ssh desk01-agent sudo -n -u servers-mmx run-mmx-on-the-servers secrets list-keys`
 lists the key.
+
+## Why rotation follows events
+
+The template replaces a secret when someone who knew it leaves, or when it
+may have leaked, and not on a calendar. A secret that nobody outside the
+team knows is no weaker after a year, and a yearly chore that replaces
+every key costs a team of one or two people hours and risks an outage for
+no gain. The real risks are covered without a date: every secret lives in
+the encrypted vault, the main copy on `util01` refuses a push that adds a
+secret, and this page replaces each secret a departed person knew.
+
+A team whose own rules, such as a customer's compliance audit, require
+rotation at an interval adds `verify_again_every`, such as `12 months`, to the
+checklist item `secret_rotation` in `monkeymaxxing_stack_checklist.yml`.
+The item then counts as open again once its `verified_at` is older, and a
+system review lists it.

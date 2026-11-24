@@ -89,7 +89,7 @@ fleet_stages:
           changes:
             - id: hold_the_alerts_of_util01
               shell:
-                script: /usr/local/bin/util01-alert-pause start --for "$(( ${COME_BACK_WAIT%m} + 7 ))m" --reason "reboot_util01_after_updates"
+                script: /usr/local/bin/util01-alert-pause start --for "$(( ${COME_BACK_WAIT%m} + 7 ))m" --reason "reboot_util01_after_updates" --without-maintenance-on-and-off-alerts
                 env:
                   COME_BACK_WAIT: "{{ .vars.come_back_wait_after_a_reboot }}"
           on_failure:

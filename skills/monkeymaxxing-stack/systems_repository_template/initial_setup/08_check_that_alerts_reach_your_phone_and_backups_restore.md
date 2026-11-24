@@ -502,8 +502,8 @@ may do alone, makes one key, and types it on the desk.
 
       1. Nothing.  Every fix waits for you.
       2. Routine fixes:  restart a failed service, free disk space, pull an image again.  (I recommend this.)
-      3. Routine fixes, and replace a failed app server, reboot for updates,
-         and add or remove app servers with the load.
+      3. Routine fixes, and replace a failed app server, and add or remove
+         app servers with the load.
 
     Say 1, 2 or 3.
     ```
@@ -525,8 +525,13 @@ may do alone, makes one key, and types it on the desk.
     `# The triage agent: Claude Code or Codex` to the `{{ end }}` line
     after the section. Keep `credential_type: api_key` unless the person
     asks for another kind. With `triage_agent_coding_agent: codex`, set
-    `model` to one that `codex debug models` lists on `util01`. Check with
-    `mmx validate`, then publish the change.
+    `model` to one that `codex debug models` lists on `util01`.
+    In `software_outside_the_distribution.yml`, delete the entry of the
+    coding agent the triage agent does not use: `codex` with `claude_code`,
+    or `claude_code` with `codex`. Reason: MMHotline lets the triage agent
+    reach each entry's pages, and the scheduled software review checks each
+    entry, so an unused entry widens the agent's internet access for
+    nothing. Check with `mmx validate`, then publish the change.
 
     **Ask the person:**
 

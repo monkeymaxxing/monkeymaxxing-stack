@@ -1,16 +1,39 @@
 {{- /*
-  MMWatchdog's check groups for every server, util01 included. This file is
-  an MMX template: MMX renders it on each server into
+  MMWatchdog's check groups for every server, util01 and the systems desks
+  included. This file is an MMX template: MMX renders it on each server into
   /etc/mmwatchdog/check_groups/every_server.yml. It reads the role inputs
-  is_database_server and is_staging_server, and the server's own facts. On
-  the servers that playbooks/reboot_servers_after_updates.yml reboots, it
-  also reads reboot_check_settings and inventory_groups for the check group
-  reboots_that_may_run_now.
+  is_database_server, is_staging_server and inventory_groups, and the
+  server's own facts.
 */ -}}
 {{- /* Staging alerts go no higher than warn. */ -}}
 {{- $sos := "sos" -}}{{- if .inputs.is_staging_server -}}{{- $sos = "warn" -}}{{- end -}}
-{{- /* A database server installs PostgreSQL and kernel updates in the team's weekly window (maintenance_window in mmx_project_settings.yml). A weekly cadence is fixed: kernel and Postgres security fixes should not wait longer than a week, so 8 days is one week plus a day of slack. */ -}}
-{{- $updates_may_wait_for := "26h" -}}{{- if .inputs.is_database_server -}}{{- $updates_may_wait_for = "8d" -}}{{- end -}}
+{{- /*
+  The server's pool: the inventory group that holds it. Every server is in
+  exactly one pool. util01 passes no inventory_groups, so its pool stays "".
+  A production pool's only server, such as app001 alone or db01 alone, is
+  never restarted automatically, because its users would see the restart:
+  a person restarts it, rarely. Every other server is restarted by the
+  automatic weekly maintenance (automatic_weekly_maintenance in
+  mmx_project_settings.yml): util01, the systems desks, staging01, and the
+  servers of a pool of two or more.
+*/ -}}
+{{- $pool := "" -}}{{- $servers_in_the_pool := 0 -}}
+{{- range $group, $servers := .inputs.inventory_groups -}}{{- if has $.node.name $servers -}}{{- $pool = $group -}}{{- $servers_in_the_pool = len $servers -}}{{- end -}}{{- end -}}
+{{- $only_server_of_a_production_pool := and $pool (not (has $pool (list "staging_server" "systems_desks" "database_restore_servers"))) (lt $servers_in_the_pool 2) -}}
+{{- /*
+  How long a waiting reboot, or a database server's held update, may wait
+  before MMWatchdog reminds a person. 30 days on a production pool's only
+  server: its restart is rare on purpose, because the servers have no open
+  internet port, and known_exploited_flaws below warns within hours when an
+  exploited flaw reaches a running kernel or package. 15 days on every
+  other server: the automatic weekly maintenance restarts it every week, so
+  15 days means two weekly runs passed without the restart, a safety net
+  for a maintenance that keeps stopping. A failed maintenance run already
+  warns at once (no_systemd_unit_has_failed on util01).
+*/ -}}
+{{- $restart_may_wait_for := "15d" -}}{{- if $only_server_of_a_production_pool -}}{{- $restart_may_wait_for = "30d" -}}{{- end -}}
+{{- /* A database server holds its PostgreSQL and kernel updates for a restart (update_database_servers). Every other server installs its security updates within a day. */ -}}
+{{- $updates_may_wait_for := "26h" -}}{{- if .inputs.is_database_server -}}{{- $updates_may_wait_for = $restart_may_wait_for -}}{{- end -}}
 {{- $raid_arrays := list -}}
 {{- range .node.storage.block_devices -}}{{- if eq .kind "raid_array" -}}{{- $raid_arrays = append $raid_arrays . -}}{{- end -}}{{- end -}}
 # Managed by MMX from mmwatchdog_checks/every_server.yml in the systems repository.
@@ -80,8 +103,9 @@ check_groups:
     check_every: 1h
     time_limit_per_run: 1m
     # unattended-upgrades installs security updates within a day, except
-    # database-server updates held for the team's weekly maintenance period:
-    # PostgreSQL, pg_auto_failover, PgBouncer, and the kernel.
+    # the database servers' held updates: PostgreSQL, pg_auto_failover,
+    # PgBouncer, and the kernel, which wait for update_database_servers
+    # (30 days on db01 alone, 15 days with two or more, as set above).
     alert_after_failing_for: {{ $updates_may_wait_for }}
     recovered_after_healthy_for: 0s
     checks:
@@ -91,32 +115,30 @@ check_groups:
         apt_security_updates:
           fail_when: a_security_update_waits_to_be_installed
         alert_severity: warn
-      # No server reboots by itself. During the team's weekly maintenance
-      # period, a person reboots each server that needs a reboot to use
-      # installed updates. On Debian, unattended-upgrades' kernel hook
-      # writes /var/run/reboot-required for a new kernel. Library and service
-      # restarts are needrestart's job. A reboot can therefore wait a week.
+      # No server reboots at an hour nobody chose. On Debian,
+      # unattended-upgrades' kernel hook writes /var/run/reboot-required
+      # for a new kernel; library and service restarts are needrestart's
+      # job. The automatic weekly maintenance reboots every server that
+      # waits, except a production pool's only server, which a person
+      # reboots in the maintenance window
+      # (operating_procedures/reboot_servers_after_updates.md).
       #
-      # no_reboot_waits warns after 8 days of needing a reboot, allowing
-      # time for the weekly maintenance period to pass without the reboot.
-      # MMWatchdog restarts the 8-day count when the daemon starts and when
-      # an MMWatchdog maintenance window starts or ends, so a missed reboot
-      # can warn later.
-      # The weekly review checks whether the weekly updates and reboots ran,
-      # using weekly_window_updates_and_reboots in
-      # monkeymaxxing_stack_checklist.yml. The checklist item becomes open
-      # again every 7 days.
+      # no_reboot_waits warns after 30 days on a production pool's only
+      # server and after 15 days on every other server, as set above.
+      # MMWatchdog restarts the count when the daemon starts and when an
+      # MMWatchdog maintenance window starts or ends, so a missed reboot can
+      # warn later.
       #
       # CISA, the US cybersecurity agency, lists flaws that attackers are
       # known to exploit. known_exploited_flaws warns about an exploited
-      # running-kernel flaw without waiting for the 8-day reboot warning.
+      # running-kernel flaw without waiting for the reboot reminder.
       # The warning arrives within about 12 hours after the flaw enters
       # CISA's list of known exploited vulnerabilities.
       no_reboot_waits:
         reboot_after_updates:
           fail_when: the_node_must_reboot_to_use_installed_updates
         alert_severity: warn
-        alert_after_failing_for: 8d
+        alert_after_failing_for: {{ $restart_may_wait_for }}
       # The Stack supports a Debian release only while Debian's security
       # team gives the release regular security support, which ends about
       # one year after the next Debian release. The warning comes 180 days
@@ -170,56 +192,3 @@ check_groups:
     out_of_memory_kills:
       fail_when: the_kernel_kills_a_process_for_lack_of_memory
     alert_severity: warn
-{{- /*
-  The server's pool: the inventory group that holds it. Every server is in
-  exactly one pool. On util01, whose role passes no inventory_groups, it
-  stays "".
-*/ -}}
-{{- $pool := "" -}}{{- $servers_in_the_pool := 0 -}}
-{{- range $group, $servers := .inputs.inventory_groups -}}{{- if has $.node.name $servers -}}{{- $pool = $group -}}{{- $servers_in_the_pool = len $servers -}}{{- end -}}{{- end -}}
-{{- /*
-  reboot_check_settings is {} on util01 and on a desk, which never get the
-  check: the pool test comes first, and and stops at the first false value,
-  so the settings are read only on the servers whose callers pass them.
-*/ -}}
-{{- $reboot_check := .inputs.reboot_check_settings | default dict -}}
-{{- if and $pool (not (has $pool (list "util_server" "database_servers" "database_restore_servers" "systems_desks"))) (eq ($reboot_check.what_the_triage_agent_may_do_without_a_person | default "") "routine_fixes_and_server_work") }}
-
-  # Only with what_the_triage_agent_may_do_without_a_person:
-  # routine_fixes_and_server_work, and only on the servers that
-  # reboot_servers_after_updates reboots: never on a database server, util01
-  # or a systems desk. Without it no check exists, so no triage agent starts
-  # for a reboot that only a person may run.
-  # The check fails when a reboot waits (/var/run/reboot-required) and may
-  # run now, by the rule of check-whether-a-reboot-may-run-now, which the
-  # playbook runs too: another server of the pool carries the work, a jobs
-  # server, staging01, before go-live, or inside the weekly maintenance
-  # window. The triage agent then requests reboot_servers_after_updates, and
-  # MMHotline runs it after its warning unless someone presses Stop.
-  # Reason for warn: a warn alert starts a triage session, and an info alert
-  # never does; a warn wakes nobody.
-  # Reason for check_every 1m: the only app server may reboot only inside
-  # the weekly maintenance window, so the check must see the window open
-  # within a minute. Reason for alert_after_failing_for 10m:
-  # unattended-upgrades finishes its batch of updates first, so one reboot
-  # takes them all.
-  reboots_that_may_run_now:
-    check_every: 1m
-    time_limit_per_run: 10s
-    alert_after_failing_for: 10m
-    recovered_after_healthy_for: 1m
-    checks:
-      no_reboot_waits_that_may_run_now:
-        shell:
-          script: |
-            test -e /var/run/reboot-required || exit 0
-            status=0
-            why=$(/usr/local/bin/check-whether-a-reboot-may-run-now --pool {{ $pool }} --servers-in-the-pool {{ $servers_in_the_pool }} \
-              --public-site-checks-run {{ $reboot_check.public_site_checks_run }} --weekday {{ $reboot_check.maintenance_window.weekday }} \
-              --starts-at {{ $reboot_check.maintenance_window.starts_at }} --length-minutes {{ $reboot_check.maintenance_window.length_minutes }}) || status=$?
-            [ "$status" -eq 1 ] && exit 0
-            printf 'a reboot for installed updates waits: %s\n' "$why"
-            [ "$status" -eq 0 ] && exit 1
-            exit "$status"
-        alert_severity: warn
-{{- end }}

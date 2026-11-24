@@ -257,6 +257,20 @@ class TheDeskDoor(unittest.TestCase):
         self.assertEqual(lock[-1], 'restart_ssh_without_the_root_login')
 
 
+GITLEAKS_STAND_IN = r'''#!/usr/bin/env python3
+import subprocess, sys
+arguments = sys.argv[1:]
+assert arguments[0] == 'detect', arguments
+source = arguments[arguments.index('--source') + 1]
+range_ = next(a.split('=', 1)[1] for a in arguments if a.startswith('--log-opts='))
+log = subprocess.run(['git', '-C', source, 'log', '-p', *range_.split(' ')], capture_output=True, text=True, check=True).stdout
+found = [line for line in log.splitlines() if line.startswith('+') and 'SECRET-MARKER' in line]
+if found:
+    print('Finding: REDACTED')
+    sys.exit(1)
+'''
+
+
 class PublishBranchToMain(unittest.TestCase):
     """publish-branch-to-main with its desk paths pointed at temporary ones."""
 
@@ -265,7 +279,14 @@ class PublishBranchToMain(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         root = Path(self.directory.name).resolve()
         self.root = root
-        self.environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'HOME': str(root)}
+        # A stand-in gitleaks: it reads the commits of --log-opts with
+        # git log -p, as gitleaks detect does, and finds a "secret" in any
+        # added line that holds SECRET-MARKER.
+        (root/'bin').mkdir()
+        (root/'bin'/'gitleaks').write_text(GITLEAKS_STAND_IN)
+        (root/'bin'/'gitleaks').chmod(0o755)
+        self.environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'HOME': str(root),
+                            'PATH': '%s:%s' % (root/'bin', os.environ['PATH'])}
         self.environment.pop('GIT_CONFIG_SYSTEM', None)
         self.socket = root/'agent.sock'  # the command exports it for Git's SSH; no test Git command uses it
         (root/'gitconfig').write_text('')
@@ -376,6 +397,49 @@ class PublishBranchToMain(unittest.TestCase):
         self.assertEqual(self.git(self.desk, 'log', '--format=%s', 'main').splitlines(),
                          ['Add a server', 'Start the systems repository on desk01'])
         self.assertEqual(len(self.published()), 1, 'nothing reached the bare repository')
+
+    def test_before_util01_exists_a_branch_that_adds_a_secret_is_refused_even_when_a_later_commit_removes_it(self):
+        self.git(self.desk, 'remote', 'remove', 'origin')
+        self.laptop_commit('settings.yml', 'setting: SECRET-MARKER\n', 'Add a key by mistake')
+        self.laptop_commit('settings.yml', 'setting: one\n', 'Remove the key again')
+        before = {ref: self.git(self.desk, 'rev-parse', ref) for ref in ('main', 'work')}
+        result = self.publish_branch_to_main()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('gitleaks found what looks like a secret in a commit of work', result.stderr)
+        self.assertIn('Nothing changed: work and main are as they were', result.stderr)
+        self.assertEqual({ref: self.git(self.desk, 'rev-parse', ref) for ref in ('main', 'work')}, before)
+        self.assertEqual(self.git(self.desk, 'status', '--porcelain'), '')
+        self.assertEqual(self.git(self.desk, 'symbolic-ref', '--short', 'HEAD').strip(), 'main')
+
+    def test_before_util01_exists_a_secret_added_only_in_a_merge_commit_never_reaches_main(self):
+        # The rebase replays the branch's ordinary commits and drops its merge
+        # commits, so what only a merge added never reaches main. The scan's
+        # -m (its diff of a merge against each parent) is the second guard.
+        self.git(self.desk, 'remote', 'remove', 'origin')
+        self.git(self.laptop, 'switch', '--quiet', '-c', 'side')
+        (self.laptop/'notes.md').write_text('a note\n')
+        self.git(self.laptop, 'add', 'notes.md')
+        self.git(self.laptop, 'commit', '--quiet', '-m', 'A note on a side branch')
+        self.git(self.laptop, 'switch', '--quiet', 'main')
+        self.git(self.laptop, 'merge', '--quiet', '--no-ff', '--no-commit', 'side')
+        (self.laptop/'merge.yml').write_text('token: SECRET-MARKER\n')
+        self.git(self.laptop, 'add', 'merge.yml')
+        self.git(self.laptop, 'commit', '--quiet', '-m', 'Merge the side branch')
+        self.git(self.laptop, 'push', '--quiet', 'origin', 'HEAD:refs/heads/work')
+        result = self.publish_branch_to_main()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn('SECRET-MARKER', self.git(self.desk, 'log', '-p', '-m', 'main'))
+        self.assertNotIn('merge.yml', self.git(self.desk, 'ls-tree', '--name-only', 'main'))
+
+    def test_before_util01_exists_a_missing_gitleaks_refuses(self):
+        self.git(self.desk, 'remote', 'remove', 'origin')
+        (self.root/'bin'/'gitleaks').write_text('#!/bin/sh\nexit 127\n')
+        self.laptop_commit('inventory.yml', 'servers: two\n', 'Add a server')
+        result = self.publish_branch_to_main()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('or gitleaks did not run', result.stderr)
+        self.assertEqual(self.git(self.desk, 'log', '--format=%s', 'main').splitlines(),
+                         ['Start the systems repository on desk01'])
 
     def test_a_branch_that_was_not_pushed_or_main_is_refused(self):
         for branch, said in [('nothing-pushed', 'The desk has no branch nothing-pushed'), ('main', 'not main')]:

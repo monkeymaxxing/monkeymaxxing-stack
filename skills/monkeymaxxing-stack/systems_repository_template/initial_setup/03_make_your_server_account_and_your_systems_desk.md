@@ -200,7 +200,11 @@ account screen of step 1 is the opening.
    - For each app that keeps uploads, `production_uploads_r2_bucket` and
      `production_uploads_r2_key_variables`, and
      `backups.uploads_backup_runs_on: [util_server]`. With no app that
-     keeps uploads, `backups.uploads_backup_runs_on: []`.
+     keeps uploads, `backups.uploads_backup_runs_on: []`, and delete the
+     `rclone` entry from `software_outside_the_distribution.yml`, which
+     only the uploads' copy uses: its comment says why. Add it back when
+     an app starts keeping uploads
+     ([Turn on nightly backups of uploaded files](../operating_procedures/turn_on_nightly_backups_of_uploaded_files.md)).
 
    **Tell the person:** no message.
 

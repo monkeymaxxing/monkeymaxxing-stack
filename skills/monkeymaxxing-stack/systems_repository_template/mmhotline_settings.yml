@@ -164,9 +164,11 @@ rules_for_running_agent_playbooks:
     playbooks:
 {{- if eq .vars.what_the_triage_agent_may_do_without_a_person "routine_fixes_and_server_work" }}
     # All three run at once and are reported: a replacement ends an outage.
-    # reboot_servers_after_updates, add_an_app_server_for_the_load and
-    # remove_server run after MMHotline's warning, unless someone presses
-    # Stop: none of them ends an outage. The triage agent requests
+    # add_an_app_server_for_the_load and remove_server run after
+    # MMHotline's warning, unless someone presses Stop: neither ends an
+    # outage. Reboots for updates are not the triage agent's work: the
+    # automatic weekly maintenance runs them (automatic_weekly_maintenance
+    # in mmx_project_settings.yml). The triage agent requests
     # remove_server without server_name, which removes only the app server
     # the load no longer needs; MMHotline's requests take no variables. The
     # key its_approval_also_approves_in_the_same_session is left out here:
@@ -179,7 +181,6 @@ rules_for_running_agent_playbooks:
       replace_failed_servers: {rule: act_then_report, starts_a_server_replacement: true}
       every_server: {rule: act_then_report}
       destroy_replaced_servers: {rule: act_then_report}
-      reboot_servers_after_updates: {rule: warn_wait_then_act, warning_wait_minutes: {{ .vars.triage_agent_server_work.minutes_between_the_warning_and_a_reboot }}}
       add_an_app_server_for_the_load: {rule: warn_wait_then_act, warning_wait_minutes: {{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}}
       remove_server: {rule: warn_wait_then_act, warning_wait_minutes: {{ .vars.triage_agent_server_work.minutes_between_the_warning_and_adding_or_removing_an_app_server }}}
 {{- else }}
@@ -230,12 +231,12 @@ sending_services:
 # Reason for every_commit_on_origin: MMHotline's other value checks
 # signatures and reviews because its origin may be a Git host on the
 # internet, where anyone who gets into the host could push. Never point the
-# main copy at a Git host with this value. During a lock-out the
-# systems_repository_commits section is left out, and MMHotline then trusts no commit.
-{{ if not .vars.everyone_locked_out_except_desk }}
+# main copy at a Git host with this value. A lock-out leaves this file as
+# it is: the lock-out button stops triage runs and util01's scheduled jobs on
+# util01 itself (roles/everyone_locked_out), so a change of this file needs
+# no desk review.
 systems_repository_commits:
   trusted_commits: every_commit_on_origin
-{{ end }}
 
 # The triage agent: Claude Code or Codex, as triage_agent_coding_agent in
 # mmx_project_settings.yml says. roles/util_server installs Claude Code
@@ -273,7 +274,6 @@ systems_repository_commits:
 # copy, under /var/lib/mmhotline/systems_repository.lock, and commits no
 # run output.
 #
-{{ if not .vars.everyone_locked_out_except_desk }}
 triage_agent:
   coding_agent: {{ .vars.triage_agent_coding_agent }}
   credential_type: api_key
@@ -288,7 +288,8 @@ triage_agent:
   # hand showed what a review costs
   # (operating_procedures/turn_on_the_scheduled_software_review.md). While
   # it is off, the triage agent wakes only for alerts, and MMWatchdog's
-  # checks still warn about security updates and newer pinned releases.
+  # checks still warn about waiting security updates, known exploited
+  # flaws, and a Stack release that fixes an exploited flaw.
   # The review's task is scheduled_software_review_task.md.
   software_review_interval_hours: off
   # How long an urgent (SOS) alert waits for the triage agent before
@@ -341,7 +342,6 @@ triage_agent:
   # person's hand-over, and a playbook review are not counted
   # (operating_procedures/change_the_triage_agent_run_limit.md).
   most_runs_in_24_hours: 50
-{{ end }}
 
 # The MMHotline-down alarm is a small program running at Cloudflare, called a
 # Cloudflare Worker, in the team's own account. The MMHotline-down alarm wakes the
