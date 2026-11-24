@@ -101,7 +101,7 @@ node_tasks:
                   echo "A run would reload MMWatchdog: the fleet hub's entries in effect differ from /etc/mmwatchdog/set_aside_findings.yml. Installed: $installed. In effect: $in_effect."
                   exit 2
                 fi
-                /usr/local/bin/mmwatchdog reload
+                /usr/local/bin/mmwatchdog reload || exit 1
                 if compare; then
                   echo "Reloaded MMWatchdog."
                   in_effect_now
