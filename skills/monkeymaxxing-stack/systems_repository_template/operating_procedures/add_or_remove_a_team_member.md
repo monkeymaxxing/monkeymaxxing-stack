@@ -225,20 +225,27 @@ a new passphrase too.
    # When the bundle refuses it as typed, a run of spaces counts as one, so a copy saved with two spaces between words still opens the bundle.
    read -rs MMX_VAULT_PASSWORD && export MMX_VAULT_PASSWORD
    mmx secrets list-keys --vault recovery_bundle.age >/dev/null 2>&1 || export MMX_VAULT_PASSWORD=$(printf '%s' "$MMX_VAULT_PASSWORD" | tr -s ' ')
-   mmx secrets set --vault recovery_bundle.age --replace mmx_vault_passphrase < "$work/vault-passphrase"
-   # Type the new recovery passphrase, then press Enter. It does not show.
-   (umask 077 && read -rs new_passphrase && printf '%s\n' "$new_passphrase" | tr -s ' ' > "$work/new-recovery-passphrase")
-   mmx secrets passwd --vault recovery_bundle.age --new-vault-password-file "$work/new-recovery-passphrase"
+   # Each line runs only when the one before it worked, so nothing is installed
+   # unless the bundle took the new vault passphrase and the new recovery passphrase.
+   # The new recovery passphrase is typed at the second hidden prompt.
+   mmx secrets list-keys --vault recovery_bundle.age >/dev/null &&
+     mmx secrets set --vault recovery_bundle.age --replace mmx_vault_passphrase < "$work/vault-passphrase" &&
+     (umask 077 && read -rs new_passphrase && printf '%s\n' "$new_passphrase" | tr -s ' ' > "$work/new-recovery-passphrase") &&
+     mmx secrets passwd --vault recovery_bundle.age --new-vault-password-file "$work/new-recovery-passphrase" &&
+     sudo install -o coding-agent -g coding-agent -m 0644 secrets_vault.age recovery_bundle.age /home/coding-agent/systems_repository/ &&
+     sudo cp "$work/vault-passphrase" /etc/systems-desk/vault-passphrase &&
+     echo "Installed the new vault and recovery bundle."
+   # (cp onto the existing file keeps its owner, root:servers-mmx, and its mode, 0640.)
    unset MMX_VAULT_PASSWORD
-   sudo install -o coding-agent -g coding-agent -m 0644 secrets_vault.age recovery_bundle.age /home/coding-agent/systems_repository/
-   # cp onto the existing file keeps its owner, root:servers-mmx, and its mode, 0640.
-   sudo cp "$work/vault-passphrase" /etc/systems-desk/vault-passphrase
-   cd && rm -r "$work"
    ```
 
-   **Check:** [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
-   opens the bundle with the new recovery passphrase, after step 3's
-   publish.
+   **Check:** the block ends with "Installed the new vault and recovery
+   bundle." When it does not, nothing was installed and the desk still
+   uses the old vault: keep the folder (`$work`), fix what the error names
+   (most often the old recovery passphrase), and run this block again.
+   When it does, `cd && rm -r "$work"`, and after step 3's publish
+   [Read an item from the recovery bundle](rebuild_a_systems_desk.md#read-an-item-from-the-recovery-bundle)
+   opens the bundle with the new recovery passphrase.
 
    When nobody has the old recovery passphrase, run only the block's
    `sudo install`, `sudo cp` and `cd` lines, without `recovery_bundle.age`
