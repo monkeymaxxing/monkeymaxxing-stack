@@ -135,7 +135,9 @@ class SetAsideFindings(unittest.TestCase):
 
     ENTRY = {'check': 'installed_packages/known_exploited_flaws', 'finding': 'CVE-2026-123158 openssh',
              'exact_finding': 'Debian:13 CVE-2026-123158 openssh 1:10.0p1-7+deb13u4; fixed version: none',
-             'reason': 'Debian rates it unimportant.'}
+             'reason': 'Debian rates it unimportant.',
+             'investigation_note': 'docs/investigations/2026-11-23-openssh.md', 'set_aside_by': 'Matt',
+             'set_aside_on': '2026-11-23'}
 
     def listed(self, entry):
         return dict(entry, covered_node_count=3, covered_nodes=['app001', 'db01', 'util01'],
@@ -169,6 +171,13 @@ class SetAsideFindings(unittest.TestCase):
         result, calls = self.put_into_effect({'set_aside_findings': [changed]}, [self.listed(self.ENTRY)])
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn('reload', calls)
+        # So does each of the other fields of an entry: the hub lists them as evidence and attribution.
+        for field, value in (('investigation_note', 'docs/investigations/2026-11-24-openssh.md'),
+                             ('set_aside_by', 'Ana'), ('set_aside_on', '2026-11-24')):
+            changed = dict(self.ENTRY, **{field: value})
+            result, calls = self.put_into_effect({'set_aside_findings': [changed]}, [self.listed(self.ENTRY)])
+            self.assertEqual(result.returncode, 2, field + ': ' + result.stdout + result.stderr)
+            self.assertIn('reload', calls, field)
 
     def test_it_fails_when_a_reload_does_not_bring_the_entries_into_effect(self):
         changed = dict(self.ENTRY, exact_finding=self.ENTRY['exact_finding'].replace('u4', 'u5'))

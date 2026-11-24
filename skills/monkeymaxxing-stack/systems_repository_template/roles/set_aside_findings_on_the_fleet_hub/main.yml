@@ -77,7 +77,7 @@ node_tasks:
             env:
               PROGRAM: |
                 set -euo pipefail
-                entries='[(. // [])[] | [.check, .finding, .exact_finding, .reason]]'
+                entries='[(. // [])[] | [.check, .finding, .exact_finding, .reason, .investigation_note, .set_aside_by, .set_aside_on]]'
                 # Sets installed and in_effect; true when they are equal.
                 compare() {
                   installed=$(/usr/local/bin/mmwatchdog validate --json | jq --compact-output ".config.set_aside_findings | $entries") \
