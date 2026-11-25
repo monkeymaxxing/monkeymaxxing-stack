@@ -259,7 +259,7 @@ exception with its rule, and give its reason.
    server's test tool is fine. Use `run-mmx-on-the-servers` on the desk
    when `util01` cannot run (initial setup, rebuild, new vault passphrase,
    `util01`'s reboot); the person manages the desk itself via
-   `ssh desk01-review`.
+   `ssh desk01-update`.
 4. **If you can do a step, you do it.** Configure outside accounts once
    through the desk's API proxy or signed-in laptop tools such as `gh`
    (never require `gh`: show a pre-filled link without it). The person does

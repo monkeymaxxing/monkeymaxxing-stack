@@ -194,7 +194,7 @@ inventory's real addresses, and the next unused desk name.
 11. **Write the laptop's way in,** as chapter 3's step 3 says, with
     `desk02` in place of `desk01` in every name: `desk02.conf`, the SSH
     entries `desk02`, `desk02-agent`, `desk02-lock`,
-    `desk02-secrets` and `desk02-review`, and
+    `desk02-secrets` and `desk02-update`, and
     `~/.ssh/desk02_known_hosts`. Use the lost desk's
     `wireguard_public_key` and the new public address. Delete the
     `desk01` entries and `~/.ssh/desk01_known_hosts`. Then enroll the new
@@ -323,7 +323,7 @@ inventory's real addresses, and the next unused desk name.
     `sudo -n -u servers-mmx run-mmx-on-the-servers run every_server --connection ssh_only`.
     **Check:** the run ends without failed work.
 20. **Join monitoring.** Once `util01` runs, the person types
-    `ssh desk02-review` and a phone code. The desk review shows no change
+    `ssh desk02-update` and a phone code. The update prints a one-line summary
     and applies the desk playbook, which adds the desk to MMWatchdog.
     **Check:** the desk appears in the MMWatchdog fleet.
 
@@ -340,15 +340,15 @@ inventory's real addresses, and the next unused desk name.
 
 ## Update every other desk
 
-21. **Each teammate runs a desk review:** `ssh desk03-review` on their
+21. **Each teammate runs a desk update:** `ssh desk03-update` on their
     laptop, with their own desk name, and a phone code.
     Reason: each desk's lock-out button uses the SSH settings files of
-    that desk's last desk review. Until then, that button refuses with
+    that desk's last desk update. Until then, that button refuses with
     "nodes.desk02.ssh_config in the inventory is ssh/desk02, which is not
     one of the SSH settings files of your last desk review … Nothing
     changed.".
-    **Check:** each teammate's coding agent names the change the review
-    shows: the new desk's SSH settings file, `ssh/desk02`, and its comment
+    **Check:** each teammate's coding agent names the change the update
+    applies: the new desk's SSH settings file, `ssh/desk02`, and its comment
     in `root_ssh_public_keys`.
 
 ## Clean up and record

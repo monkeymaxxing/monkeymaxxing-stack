@@ -28,8 +28,9 @@
 # laptop key and a phone code.
 #
 # Every later run, on this desk, with review-and-apply-the-systems-desk-settings
-# in the person's terminal. It shows what changed since the person's last
-# desk review and asks first, then runs: mmx run systems_desk --var
+# (ssh desk01-update from the laptop) in the person's terminal. By default it
+# prints a one-line summary and applies pushed main immediately (pass --review
+# to inspect the diff and confirm with yes first), then runs: mmx run systems_desk --var
 # desk_name=<this desk> --connection ssh_only, with the person's private SSH
 # agent socket. Root uses that socket for util01; ssh/desk01 disables the
 # agent and uses only the root-owned loopback key. ssh/desk01 pins the
@@ -238,7 +239,7 @@ fleet_stages:
           # This playbook owns the desk's list of check files; the
           # systems_desks group in inventories/servers.yml lists none. A
           # change here, like any change to this playbook, reaches the desk
-          # only through the desk review (ssh desk01-review).
+          # only through the desk update (ssh desk01-update).
           mmwatchdog_check_files: [every_server.yml, systems_desks.yml]
           custom: "{{ .vars.custom }}"
           person_unix_username: "{{ .vars.person_unix_username }}"

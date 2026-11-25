@@ -167,20 +167,23 @@ The person logs in to the desk only for a few short laptop commands plus a
 phone code: `ssh desk01-lock` once during the setup, `ssh desk01-secrets`
 for new secrets,
 `ssh -t desk01 sudo lock-everyone-out` for a break-in lock-out, and
-`ssh desk01-review` to manage the desk itself:
+`ssh desk01-update` to manage the desk itself:
 
 ```sh
-ssh desk01-review
+ssh desk01-update
 ```
 
-`ssh desk01-review` runs `review-and-apply-the-systems-desk-settings` on
-the desk, applying `playbooks/systems_desk.yml` as root. Unchanged since
-the person's last desk review, it runs at once; changed, it shows each
-change and waits for the person to type `yes` (you cannot answer it, and
-must give a short plain summary of what changes and why beforehand). The
+`ssh desk01-update` runs `review-and-apply-the-systems-desk-settings` on
+the desk, applying `playbooks/systems_desk.yml` as root from pushed `main`.
+Only the person can run it (never `coding-agent`). By default it prints a
+one-line summary of what changed, updates the root-only record for
+`lock-everyone-out`, and applies immediately (still give a short plain
+summary of what changes and why beforehand). Teams that want to inspect the
+full diff and confirm with `yes` first run
+`ssh -t desk01 review-and-apply-the-systems-desk-settings --review`. The
 desk's root-owned loopback key must never enter the coding agent's socket.
 Because the lock-out button (`sudo lock-everyone-out`) runs only the copies
-installed by the last desk review, tell the person whenever your pushed
+installed by the last desk update, tell the person whenever your pushed
 change touches `playbooks/systems_desk.yml`,
 `playbooks/lock_everyone_out.yml`, the `everyone_locked_out`,
 `systems_desk_lockout`, or `work_out_who_this_server_talks_to` roles,
@@ -189,8 +192,8 @@ change touches `playbooks/systems_desk.yml`,
 `roles/every_server/files/sudoers_triage`, or
 `roles/util_server/files/sudoers_triage_mmwatchdog_fleet_readings`, and
 explain that it reaches the desk or lock-out button only after the next
-`ssh desk01-review`. A change of `mmhotline_settings.yml` needs no desk
-review: the lock-out leaves MMHotline's settings as they are.
+`ssh desk01-update`. A change of `mmhotline_settings.yml` needs no desk
+update: the lock-out leaves MMHotline's settings as they are.
 
 ## The rules
 
@@ -722,7 +725,7 @@ servers get (`every_server.yml` first, then the pool's file, then any
 those. The one exception is the systems desk: `playbooks/systems_desk.yml`
 owns the desk's list (`every_server.yml`, `systems_desks.yml`), the
 `systems_desks` group lists none, and a change to the list goes through
-`ssh desk01-review`.
+`ssh desk01-update`.
 
 ## The checklist
 
@@ -786,7 +789,7 @@ A recipe adds to the Stack and never swaps one of its core parts.
    secret in Git, a locked backup for any data that matters, only Debian
    packages or programs pinned by SHA-256, and no weaker firewall, AppArmor,
    or monitoring. Stop and tell the person when it touches vault keys,
-   `sudoers`, `ssh/`, or a file that `ssh desk01-review` watches. Then
+   `sudoers`, `ssh/`, or a file that `ssh desk01-update` watches. Then
    tell the person in Plain English what it adds, what it costs, how its
    data is backed up, and the recipe's `vetted_on` and `vetted_against`
    notice, and wait for approval.

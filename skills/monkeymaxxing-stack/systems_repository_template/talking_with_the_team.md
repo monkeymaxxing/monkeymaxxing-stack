@@ -359,7 +359,7 @@ say what it reaches ("`ssh desk01-lock` logs in to your systems desk").
 | Recovery passphrase | The six words in the team's password manager that open `recovery_bundle.age`, the encrypted bundle holding everything a lost systems desk needs. |
 | Phone code | The 6-digit single-use code from the person's authenticator app that opens the systems desk for the person or the coding agent. |
 | `set-up-outside-services` | The desk command for outside-company accounts, secrets, and missing vault keys. The coding agent runs its account commands through `ssh desk01-agent`, with each key piped from the person's clipboard or a laptop file; the person runs it from the laptop with `ssh desk01-lock` or `ssh desk01-secrets`. |
-| Desk review | The person's run of `ssh desk01-review`, which applies `playbooks/systems_desk.yml` as root after showing any changes since the last review and waiting for `yes`. |
+| Desk update | The person's run of `ssh desk01-update`, which applies `playbooks/systems_desk.yml` as root from pushed `main` with a one-line summary (pass `--review` to `review-and-apply-the-systems-desk-settings` to inspect the diff and confirm with `yes` first). |
 | Coding agent account | The `coding-agent` Unix account on the desk that the laptop's coding agent reaches through `ssh desk01-agent`. |
 | Button | A desk command or local service that uses a protected credential for the coding agent without exposing the credential. |
 | API proxy | The desk service that injects or signs API credentials for the coding agent on `127.0.0.1:8081` (server provider) and `127.0.0.1:8082` (Cloudflare) ([Your login on the desk](AGENTS.md#your-login-on-the-desk)). |

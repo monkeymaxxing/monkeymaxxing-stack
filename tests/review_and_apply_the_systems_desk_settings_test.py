@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Check what the person's systems desk review compares and when it asks.
+"""Check what the person's systems desk update compares, summarizes, and asks with --review.
 
-review-and-apply-the-systems-desk-settings runs the systems desk playbook as root only after the
-person reviews what changed since the last systems desk review. These tests
-build its view of the systems desk playbook from MMX's real explain output on a copy of
-the template, change the copy the way a pushed commit would, and check
-which changes the person is shown.
+review-and-apply-the-systems-desk-settings applies the systems desk playbook as root
+immediately by default with a one-line summary (while still updating the root-only
+record for lock-everyone-out), and shows the full diff and waits for yes when
+passed --review. These tests build its view of the systems desk playbook from MMX's
+real explain output on a copy of the template, change the copy the way a pushed
+commit would, and check both the default one-shot apply and --review modes.
 """
 import contextlib
 import importlib.machinery
@@ -358,14 +359,154 @@ class FirstDeskReview(unittest.TestCase):
         self.assertFalse((Path(self.directory.name)/'record').exists())
 
 
+class MainFlow(unittest.TestCase):
+    """End-to-end main() behavior for default one-shot apply, --review,
+    --only-fleet-stages combinations, unknown args, and account checks."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name).resolve()
+        self.record = root/'record'
+        self.desk_copy = root/'desk-copy'
+        self.desk_copy.mkdir()
+        self.old_view = ['Task a on desk01: shell, ready', '  shell.script: "true"']
+        self.new_view = ['Task a on desk01: shell, ready', '  shell.script: "echo updated"']
+        self.keys_view = ['Keys in mmx_project_settings.yml that the lock-out button lets in',
+                          '  root_ssh_public_keys: ssh-ed25519 AAAAone alex on desk01']
+        self.ran_commands = []
+        self.questions = []
+
+    def run_main(self, arguments, view, commit='def5678', sudo_user='alex', answer='yes', util01=True):
+        def ask(question):
+            self.questions.append(question)
+            return answer
+
+        def fake_run(command, repository):
+            self.ran_commands.append((command, repository))
+            return 0
+
+        output = io.StringIO()
+        with patch.object(DESK_REVIEW, 'RECORD_DIRECTORY', self.record), \
+                patch.object(DESK_REVIEW, 'DESK_COPY', self.desk_copy), \
+                patch.object(DESK_REVIEW, 'pull_main_into_the_desks_copy',
+                             return_value=(True, 'Pulled main from the main copy on util01: the systems desk\'s copy is at %s.' % commit)), \
+                patch.object(DESK_REVIEW, 'what_the_desk_playbook_does', return_value=(view, self.keys_view)), \
+                patch.object(DESK_REVIEW, 'current_commit', return_value=commit), \
+                patch.object(DESK_REVIEW, 'util01_exists', return_value=util01), \
+                patch.object(DESK_REVIEW, 'ask_the_person', side_effect=ask), \
+                patch.object(DESK_REVIEW, 'run_and_explain_a_failure', side_effect=fake_run), \
+                patch.object(DESK_REVIEW.socket, 'gethostname', return_value='desk01'), \
+                patch.object(os, 'geteuid', return_value=0), \
+                patch.object(os, 'chown'), \
+                patch.dict(os.environ, {'SUDO_USER': sudo_user}), \
+                contextlib.redirect_stdout(output):
+            code = DESK_REVIEW.main(arguments)
+        return code, output.getvalue()
+
+    def seed_record(self, view=None, commit='abc1234'):
+        with patch.object(DESK_REVIEW, 'RECORD_DIRECTORY', self.record), patch.object(os, 'chown'):
+            DESK_REVIEW.write_record(self.old_view if view is None else view, commit, [])
+
+    def test_default_applies_changed_playbook_without_prompt_prints_summary_and_updates_record(self):
+        self.seed_record(self.old_view, 'abc1234')
+        code, output = self.run_main([], self.new_view, commit='def5678')
+        self.assertEqual(code, 0)
+        self.assertEqual(self.questions, [])
+        self.assertIn('Applying systems desk settings at def5678 (1 lines removed, 1 added since abc1234', output)
+        self.assertIn('--review', output)
+        self.assertNotIn('+   shell.script:', output)
+        self.assertEqual((self.record/'desk_run_view').read_text().split('\n'), self.new_view)
+        self.assertEqual((self.record/'lock_out_button_keys_view').read_text().split('\n'), self.keys_view)
+        self.assertEqual(len(self.ran_commands), 1)
+        self.assertEqual(self.ran_commands[0][0],
+                         [DESK_REVIEW.MMX, 'run', 'systems_desk', '--var', 'desk_name=desk01', '--connection', 'ssh_only'])
+
+    def test_default_applies_unchanged_playbook_with_no_changes_summary(self):
+        self.seed_record(self.old_view, 'abc1234')
+        code, output = self.run_main([], self.old_view, commit='def5678')
+        self.assertEqual(code, 0)
+        self.assertEqual(self.questions, [])
+        self.assertIn('No changes to the systems desk playbook since abc1234', output)
+        self.assertIn('applying at def5678.', output)
+        self.assertEqual(len(self.ran_commands), 1)
+
+    def test_default_applies_with_no_prior_record_and_creates_record(self):
+        code, output = self.run_main([], self.new_view, commit='def5678')
+        self.assertEqual(code, 0)
+        self.assertEqual(self.questions, [])
+        self.assertIn('No previous systems desk record yet; applying and recording the systems desk settings at def5678', output)
+        self.assertEqual((self.record/'desk_run_view').read_text().split('\n'), self.new_view)
+        self.assertEqual(len(self.ran_commands), 1)
+
+    def test_review_flag_shows_diff_stops_without_yes_and_applies_on_yes(self):
+        self.seed_record(self.old_view, 'abc1234')
+        for answer in ('', 'no', 'y'):
+            self.questions.clear()
+            self.ran_commands.clear()
+            with self.subTest(answer=answer):
+                with self.assertRaisesRegex(DESK_REVIEW.Stop, 'Stopped. Nothing ran, and nothing was recorded.'):
+                    self.run_main(['--review'], self.new_view, commit='def5678', answer=answer)
+                self.assertEqual(len(self.questions), 1)
+                self.assertEqual(self.ran_commands, [])
+                self.assertEqual((self.record/'desk_run_view').read_text().split('\n'), self.old_view)
+        self.questions.clear()
+        code, output = self.run_main(['--review'], self.new_view, commit='def5678', answer='yes')
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self.questions), 1)
+        self.assertIn('+   shell.script: "echo updated"', output)
+        self.assertEqual((self.record/'desk_run_view').read_text().split('\n'), self.new_view)
+        self.assertEqual(len(self.ran_commands), 1)
+
+    def test_review_combines_with_only_fleet_stages_in_either_order(self):
+        for arguments in (['--review', '--only-fleet-stages', 'systems_desk'],
+                          ['--only-fleet-stages', 'systems_desk', '--review']):
+            with self.subTest(arguments=arguments):
+                self.seed_record(self.old_view, 'abc1234')
+                self.questions.clear()
+                self.ran_commands.clear()
+                code, output = self.run_main(arguments, self.new_view, commit='def5678', answer='yes')
+                self.assertEqual(code, 0)
+                self.assertEqual(len(self.questions), 1)
+                self.assertIn('+   shell.script: "echo updated"', output)
+                self.assertEqual(self.ran_commands[0][0],
+                                 [DESK_REVIEW.MMX, 'run', 'systems_desk', '--var', 'desk_name=desk01',
+                                  '--only-fleet-stages', 'systems_desk', '--connection', 'ssh_only'])
+
+    def test_unknown_or_duplicate_arguments_are_refused(self):
+        bad = [
+            ['--unknown'],
+            ['--review', '--review'],
+            ['--only-fleet-stages'],
+            ['--only-fleet-stages', 'bad-stage'],
+            ['--only-fleet-stages', 'systems_desk', '--only-fleet-stages', 'lock'],
+            ['--record-the-first-desk-review', '--review'],
+        ]
+        for arguments in bad:
+            with self.subTest(arguments=arguments):
+                with self.assertRaisesRegex(DESK_REVIEW.Stop, 'Usage: review-and-apply-the-systems-desk-settings'):
+                    self.run_main(arguments, self.new_view)
+                self.assertEqual(self.ran_commands, [])
+
+    def test_non_person_accounts_are_refused_in_default_and_review_modes(self):
+        for arguments in ([], ['--review']):
+            for account in ('', 'root', 'coding-agent', 'servers-mmx'):
+                with self.subTest(arguments=arguments, account=account):
+                    self.ran_commands.clear()
+                    with self.assertRaisesRegex(DESK_REVIEW.Stop, 'as yourself, without sudo'):
+                        self.run_main(arguments, self.new_view, sudo_user=account)
+                    self.assertEqual(self.ran_commands, [])
+                    self.assertFalse(self.record.exists())
+
+
 class StagesAndFailure(unittest.TestCase):
-    def test_before_util01_exists_the_review_runs_the_desks_own_stages_and_says_so(self):
+    def test_before_util01_exists_the_update_runs_the_desks_own_stages_and_says_so(self):
         only, line = DESK_REVIEW.stages_to_run([], util01_exists=False)
         self.assertEqual(only, ['--only-fleet-stages', 'systems_desk,lock'])
-        self.assertEqual(line, 'util01 does not exist yet, so this review skips joining the systems desk to monitoring. '
-                               'The first review after util01 exists does it.')
+        self.assertEqual(line, 'util01 does not exist yet, so this update skips joining the systems desk to monitoring. '
+                               'The first update after util01 exists does it.')
 
-    def test_once_util01_exists_the_review_runs_every_stage(self):
+    def test_once_util01_exists_the_update_runs_every_stage(self):
         self.assertEqual(DESK_REVIEW.stages_to_run([], util01_exists=True), ([], None))
 
     def test_a_stage_the_person_named_stays_as_given(self):
@@ -379,7 +520,7 @@ class StagesAndFailure(unittest.TestCase):
         self.assertEqual(code, 3)
         text = output.getvalue()
         self.assertIn(DESK_REVIEW.FAILED_REVIEW_SENTENCE, text)
-        for answer in ('failed', 'not affected', 'run the review again'):
+        for answer in ('failed', 'not affected', 'run the update again'):
             self.assertIn(answer, DESK_REVIEW.FAILED_REVIEW_SENTENCE)
 
     def test_a_run_that_works_adds_nothing(self):

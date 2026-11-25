@@ -1,13 +1,16 @@
 #!/usr/bin/python3
-"""Review and apply this systems desk's settings: run playbooks/systems_desk.yml as root, after
-the person reviews what changed in the desk playbook since their last review.
+"""Apply (and optionally review) this systems desk's settings: run
+playbooks/systems_desk.yml as root from pushed main.
 
 The coding agent pushes to main, and the desk playbook applies main as root on
-the desk that holds the person's production key, phone-code secret and
-tokens. So this command compares what the desk playbook would do now with what
-the person last reviewed, and asks the person, in the person's own
-terminal, only when something changed. The record of the last reviewed
-desk playbook is root-only on this desk, outside the coding agent's reach.
+the desk that holds the person's production key, phone-code secret and tokens.
+By default this command pulls pushed main, prints a concise one-line summary of
+what changed since the last recorded run, updates the root-only record for
+lock-everyone-out, and runs playbooks/systems_desk.yml immediately. With
+--review, it prints the full diff and waits for the person to type yes in their
+own terminal before recording and applying. The record is root-only on this
+desk, outside the coding agent's reach, and only the person may run this
+command (never coding-agent, root, or servers-mmx).
 
 What the desk playbook reads, and so what is compared, comes from MMX itself:
 `mmx explain systems_desk --json` lists every node task of the run with its
@@ -17,23 +20,23 @@ similar), the inventory's connection settings of the nodes the run
 connects to, and the SSH settings and known-hosts files those name, because
 OpenSSH runs commands from SSH settings. Line numbers and where each value
 came from are left out, so moving a line or editing an unrelated setting
-asks nothing.
+shows no change.
 
-The review also shows and records the keys in the project settings that
+The view also includes and records the keys in the project settings that
 the lock-out button's undo lets in on every server, because the lock-out
 button compares the pulled settings with that record.
 
 It works in the desk's own copy of the systems repository,
 /var/lib/systems-desk/systems_repository, root-only, which it makes pushed
-main first, so it reviews and runs only what is pushed: main of the team's
+main first, so it reads and runs only what is pushed: main of the team's
 main copy on util01, or, before util01 exists, main of the coding agent's
 checkout, which is the main copy until then. The
 bootstrap makes that copy and records the first desk review with
 --record-the-first-desk-review: the person has nothing to compare it with.
 
-Run it as yourself, in your own terminal on the desk (ssh desk01-review
+Run it as yourself, in your own terminal on the desk (ssh desk01-update
 from the laptop):
-    review-and-apply-the-systems-desk-settings [--only-fleet-stages systems_desk]
+    review-and-apply-the-systems-desk-settings [--review] [--only-fleet-stages systems_desk]
 """
 import datetime
 import difflib
@@ -481,14 +484,49 @@ def record_the_first_desk_review():
     return 2
 
 
+def summarize(view, commit):
+    """Prints a concise one-line summary of what changed since the last
+    recorded run, without prompting."""
+    old, old_commit = read_record()
+    if old == view:
+        print('No changes to the systems desk playbook since %s; applying at %s.' % (old_commit, commit), flush=True)
+        return
+    if old is None:
+        print('No previous systems desk record yet; applying and recording the systems desk settings at %s '
+              '(run with --review to inspect changes before applying).' % commit, flush=True)
+        return
+    diff = changes(old, view)
+    removed = sum(1 for line in diff if line.startswith('- '))
+    added = sum(1 for line in diff if line.startswith('+ '))
+    print('Applying systems desk settings at %s (%d lines removed, %d added since %s; '
+          'run with --review to inspect the diff first).' % (commit, removed, added, old_commit), flush=True)
+
+
+USAGE = 'Usage: review-and-apply-the-systems-desk-settings [--review] [--only-fleet-stages systems_desk]. Nothing ran.'
+
+
+def parse_arguments(arguments):
+    review_first = False
+    only = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == '--review' and not review_first:
+            review_first = True
+            index += 1
+        elif (argument == '--only-fleet-stages' and not only and index + 1 < len(arguments)
+              and re.fullmatch(r'[a-z0-9_]+(,[a-z0-9_]+)*', arguments[index + 1])):
+            only = [argument, arguments[index + 1]]
+            index += 2
+        else:
+            raise Stop(USAGE)
+    return review_first, only
+
+
 def main(arguments):
     if arguments == ['--record-the-first-desk-review']:
         return record_the_first_desk_review()
-    only = []
-    if arguments[:1] == ['--only-fleet-stages'] and len(arguments) == 2 and re.fullmatch(r'[a-z0-9_]+(,[a-z0-9_]+)*', arguments[1]):
-        only = arguments
-    elif arguments:
-        raise Stop('Usage: review-and-apply-the-systems-desk-settings [--only-fleet-stages systems_desk]. Nothing ran.')
+    review_first, only = parse_arguments(arguments)
     if os.geteuid() != 0:
         os.execv('/usr/bin/sudo', ['sudo', '--', INSTALLED_PATH, *arguments])
     person = os.environ.get('SUDO_USER', '')
@@ -498,14 +536,17 @@ def main(arguments):
     pulled, reason = pull_main_into_the_desks_copy(repository)
     print(reason, flush=True)
     if not pulled:
-        # Nothing about a desk review is urgent, so it reviews only what is
+        # Nothing about updating a desk is urgent, so it applies only what is
         # pushed; the lock-out button goes on instead.
-        raise Stop('Stopped before the review. Ask your coding agent why the pull did not work, '
+        raise Stop('Stopped before applying systems desk settings. Ask your coding agent why the pull did not work, '
                    'then run review-and-apply-the-systems-desk-settings again. Nothing ran.')
     view, keys_view = what_the_desk_playbook_does(repository)
     commit = current_commit(repository)
-    if not review(view, commit):
-        raise Stop('Stopped. Nothing ran, and nothing was recorded.')
+    if review_first:
+        if not review(view, commit):
+            raise Stop('Stopped. Nothing ran, and nothing was recorded.')
+    else:
+        summarize(view, commit)
     write_record(view, commit, keys_view)
     only, skipped = stages_to_run(only, util01_exists())
     if skipped:
@@ -522,14 +563,14 @@ def stages_to_run(only, util01_exists):
     Joining the desk to MMWatchdog's fleet hub reads util01's join code, so
     it cannot run before util01 exists. The checkout has an origin once
     util01 exists (util01_exists); until then the
-    review runs the desk's own stages only, as the bootstrap does, and the
-    first review after util01 exists joins the desk to monitoring. A person's
+    update runs the desk's own stages only, as the bootstrap does, and the
+    first update after util01 exists joins the desk to monitoring. A person's
     own --only-fleet-stages stays as given."""
     if util01_exists or only:
         return only, None
     return ['--only-fleet-stages', 'systems_desk,lock'], (
-        'util01 does not exist yet, so this review skips joining the systems desk to monitoring. '
-        'The first review after util01 exists does it.')
+        'util01 does not exist yet, so this update skips joining the systems desk to monitoring. '
+        'The first update after util01 exists does it.')
 
 
 def run_and_explain_a_failure(command, repository):
@@ -551,9 +592,9 @@ def run_and_explain_a_failure(command, repository):
 
 
 FAILED_REVIEW_SENTENCE = (
-    'The systems desk review failed: one step of the systems desk playbook did not work, and nothing else was touched. '
+    'The systems desk update failed: one step of the systems desk playbook did not work, and nothing else was touched. '
     'Your site and servers are not affected, and the systems desk keeps working with the settings it had. '
-    'Tell your coding agent: it reads the technical lines above, fixes the cause, and you run the review again.')
+    'Tell your coding agent: it reads the technical lines above, fixes the cause, and you run the update again.')
 
 
 if __name__ == '__main__':

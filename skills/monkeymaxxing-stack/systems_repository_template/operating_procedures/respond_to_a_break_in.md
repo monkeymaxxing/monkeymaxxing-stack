@@ -17,7 +17,7 @@ Every desk, `util01` and the triage agent keep working, except in the few cases 
   that keeps access.
 - **The person** decides each step and does the work at each company's website. The person types, on the laptop,
   with a phone code: the lock-out button `ssh -t desk01 sudo lock-everyone-out`, each Cloudflare key replacement,
-  and `ssh desk01-review` after the incident. The evidence copy of step 2 runs in the person's own desk login,
+  and `ssh desk01-update` after the incident. The evidence copy of step 2 runs in the person's own desk login,
   `ssh desk01`.
 - **Only a person starts or undoes a lock-out,** from a desk that shows no signs of the break-in. The triage agent
   never does. The coding agent recommends a lock-out only when the facts match one of the cases in
@@ -515,7 +515,7 @@ A failed Cloudflare revocation is reported after local containment. Complete tha
    the WireGuard peer template, the triage user's sudo rules and `mmhotline_settings.yml`.
    It takes only data from the pulled repository: the inventory, the servers' host keys, the settings and the vault.
    When the pulled repository changes one of those reviewed files, the lock-out button names the file and uses the
-   reviewed copy. After the incident, run `ssh desk01-review` and read the change before you approve it.
+   reviewed copy. After the incident, run `ssh -t desk01 review-and-apply-the-systems-desk-settings --review` to read the change before you approve it (or `ssh desk01-update` once you have checked the commits).
    Reason: an intruder who can push to the main copy on `util01` must not get root on your desk, or on every server,
    through the lock-out; a pushed change to a lock-out program reaches root only through your desk review.
    The lock-out button stops before changing anything when a node's `ssh_config` in the inventory is not one of the
@@ -762,8 +762,8 @@ SSH connection after some servers changed, with the servers still locked out and
 3. **You run `ssh -t desk01 sudo lock-everyone-out` again,** on the laptop, with a phone code.
    The lock-out button shows the servers and asks you to type `yes`.
    When the inventory names an SSH settings file, such as `ssh/desk03`, that your last desk review did not install,
-   the button stops with nothing changed: run `ssh desk01-review` first. That desk review
-   shows the key changes too, and records them.
+   the button stops with nothing changed: run `ssh desk01-update` first (or pass `--review` to `review-and-apply-the-systems-desk-settings` to inspect the diff first). That desk update
+   records the key changes too.
    **Check:** when a key was added or removed since your last desk review, the lock-out button shows each one and
    asks you a second time. When your desk review just showed them, the button says instead that the keys are the
    same as at your last desk review. If a key is not one you know, or a key you need is gone, press Enter: nothing changes.
@@ -833,10 +833,10 @@ The old desk is deleted at the end, in both orders.
    publishes the commit, but does not run `every_server` for the new key.
    Reason: during the lock-out, the servers admit only the desk that keeps access. The undo lets the new key in.
    **Check:** the diff adds the new key and removes only the old desk's key.
-7. **The teammate runs a desk review, `ssh desk02-review`, continues with step 4, then undoes the
+7. **The teammate runs a desk update, `ssh desk02-update` (or with `--review` to read the diff first), continues with step 4, then undoes the
    lock-out,** as [Undo a lock-out](#undo-a-lock-out) says. Reason: the undo connects only with SSH settings files
-   that a desk review installed, and the new desk's `ssh/` file is new.
-   **Check:** the desk review shows the new desk's key added and the old desk's key removed, and the undo then says
+   that a desk update installed, and the new desk's `ssh/` file is new.
+   **Check:** the desk update applies and records the new desk's key and the removed old desk's key, and the undo then says
    the keys are the same as at the last desk review.
 8. **Finish the new desk,** as "Joining" steps 9 to 13 of Add or remove a team member say.
    Reason for after the undo: the new desk fetches `main` from the main copy on `util01`, and during the lock-out
@@ -880,11 +880,11 @@ that desk, so only that desk can run the undo.
    undo has finished.
    **Check:** the diff adds the new desk's entry, `ssh/` file and known-host lines and its key in
    `root_ssh_public_keys`, and removes nothing.
-7. **On the old desk, undo the lock-out:** in the same login, run `review-and-apply-the-systems-desk-settings`,
+7. **On the old desk, undo the lock-out:** in the same login, run `review-and-apply-the-systems-desk-settings --review`,
    then `sudo lock-everyone-out`, as [Undo a lock-out](#undo-a-lock-out) says. For the undo's step 1, read the key
    list yourself; remove the lock-out line by hand, as for adding it.
    Then power off the old desk again.
-   **Check:** the desk review shows the new desk's key added; the undo's last line names no failed server; the
+   **Check:** `--review` shows the new desk's key added; the undo's last line names no failed server; the
    provider shows the old desk powered off. Write down the undo commit's ID.
 8. **Finish the new desk,** as "Joining" steps 9 to 12 of Add or remove a team member say. Then the new laptop's
    coding agent removes the old desk's key from `root_ssh_public_keys`, publishes, and runs `every_server`, as

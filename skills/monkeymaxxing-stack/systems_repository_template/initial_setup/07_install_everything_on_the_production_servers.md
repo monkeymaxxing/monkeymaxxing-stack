@@ -496,7 +496,7 @@ chapter.
 
 9. **Join the systems desk to monitoring, in the alerts part of the setup.** The
    full desk playbook joins the desk to MMWatchdog. It runs as root on the
-   desk, so the person runs it, with `ssh desk01-review` and a phone code.
+   desk, so the person runs it, with `ssh desk01-update` and a phone code.
    Ask for it in the alerts part of the setup, together with the other alert steps,
    not in the first part of the setup. After it ran, verify that `desk01` appears in
    the fleet (`sudo mmwatchdog fleet` on `util01`). The test of the desk's

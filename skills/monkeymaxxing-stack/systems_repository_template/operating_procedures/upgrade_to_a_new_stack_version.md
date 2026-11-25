@@ -211,7 +211,7 @@ laptop's clone, `~/code/example_systems`:
      the stack version's commit.
    - The laptop needs the new MMX before `mmx validate`, and the desk
      needs it before the dryrun of the version's files. The desk gets it
-     from a desk review: the person types `ssh desk01-review` and a phone
+     from a desk update: the person types `ssh desk01-update` and a phone
      code, after `util01`'s run of the pin passed.
 
    Then the stack version's commit:
@@ -296,7 +296,7 @@ words or close to them:
 - **`util01` refuses a push that adds a secret,** with gitleaks. Commits
   already on `main` are not checked again.
 
-After the runs, ask the person to run `ssh desk01-review` once on each
+After the runs, ask the person to run `ssh desk01-update` once on each
 desk: the version changes the lock-out button, which no longer applies
 MMHotline's settings, adds the desk's quiet-hour reboot, and adds the
 secret check to `publish-branch-to-main`. The review also removes the
@@ -336,6 +336,6 @@ The upgrade is two runs instead of one, `util01` first. Reason: MMWatchdog
 2. Run `./server_management_scripts/run_mmx_on_util01 run every_server --limit util_server`.
 3. Then run `every_server` as usual for every other server.
 
-After the runs, ask the person to run `ssh desk01-review`: the version
+After the runs, ask the person to run `ssh desk01-update`: the version
 changes `mmhotline_settings.yml` and the triage user's sudo lines on
 `util01`, which reach the lock-out button only after the desk review.

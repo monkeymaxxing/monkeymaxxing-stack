@@ -138,16 +138,17 @@ the laptop at `10.20.10.2`. An existing member, `alex`, works on `desk01`.
     desk's checkout, as chapter 4's step 1 says.
     **Check:** `ssh root@desk02 true` is refused, and
     `ssh desk02-agent true` works.
-12. **Blair joins monitoring:** `ssh desk02-review` and a phone code.
+12. **Blair joins monitoring:** `ssh desk02-update` and a phone code.
     **Verify:** a fresh phone-code login; production SSH through
     `ssh desk02-agent`; the provider list script through the API proxy;
     `desk02` in the MMWatchdog fleet; and every production server has the
     desk's peer and no laptop peer.
-13. **Every other member runs a desk review:** `ssh desk01-review` on
+13. **Every other member runs a desk update:** `ssh desk01-update` on
     their laptop, with their own desk name, and a phone code.
-    **Check:** their coding agent names the change it shows: the new
+    **Check:** their coding agent names the change it applies: the new
     desk's SSH settings file, `ssh/desk02`, and its key in
-    `root_ssh_public_keys`.
+    `root_ssh_public_keys` (they can pass `--review` to
+    `review-and-apply-the-systems-desk-settings` to inspect the diff first).
     Reason: each desk's lock-out button uses the SSH settings files of
     that desk's last desk review. Until then it refuses with
     "nodes.desk02.ssh_config in the inventory is ssh/desk02, which is not
@@ -179,7 +180,7 @@ the laptop at `10.20.10.2`. An existing member, `alex`, works on `desk01`.
    Remove the departing desk from `nodes` and `groups.systems_desks.nodes` and remove the departing desk's `ssh/deskNN` and known-host entry.
    A remaining member's coding agent publishes the change, as [Making a change](../AGENTS.md#making-a-change) says,
    and runs `every_server` on every production and staging server.
-   Then each remaining member types `ssh desk01-review`, with their own desk name, and a phone code, so their
+   Then each remaining member types `ssh desk01-update`, with their own desk name, and a phone code, so their
    lock-out button no longer knows the departing desk.
    Reason: `root_ssh_public_keys` also decides who can push to the team's main copy on `util01`, so the run on
    `util01` takes the departing desk's push rights too. A copy of the desk's production key can outlive the desk.

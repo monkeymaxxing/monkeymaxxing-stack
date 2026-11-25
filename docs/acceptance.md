@@ -115,9 +115,11 @@ The contracts below state the required outcomes for changes to the stack.
 - **Private administration:** each person's laptop reaches only the person's systems desk through doubleshell and a phone-code SSH login.
   The desk runs outside production's location, uses kernel `wg0`, and peers directly with production and staging servers.
   The desk is a locked key box: it holds the production key, the vault passphrase and the person's tokens, and no coding agent runs there.
-  The person manages the desk through a separate root-owned loopback key, with `review-and-apply-the-systems-desk-settings`:
-  an unchanged desk playbook runs at once; a changed one shows each change since the person's last
-  desk review and runs only after the person types yes in the person's own terminal, which the coding agent cannot answer.
+  The person manages the desk through a separate root-owned loopback key, with `review-and-apply-the-systems-desk-settings` (`ssh desk01-update`):
+  only the person can run it (never `coding-agent`, `root`, or `servers-mmx`); by default it pulls pushed `main`,
+  prints a concise one-line summary of what changed, updates the root-only record for `lock-everyone-out`, and applies
+  the desk playbook immediately; with `--review`, it shows each change since the last recorded run and runs only
+  after the person types yes in the person's own terminal, which the coding agent cannot answer.
   The coding agent's relay to the person's SSH agent cannot load a library into it.
   Public TCP 22 stays closed on IPv4 and IPv6 from first boot.
   The laptop clears temporary bootstrap files and retains app work and desk-only login configuration.
@@ -148,7 +150,7 @@ The contracts below state the required outcomes for changes to the stack.
   the laptop sleeps; the agent reads its log and exit file later. Nothing on the desk needs resuming, and nothing
   is signed in there. The coding agent passes each key the person copies, or keeps in a laptop file the person
   names, straight to the desk's account command, which prints no key and reads none back. The person logs in to
-  the desk only for the lock, a hidden prompt or a desk review, each one short command plus one phone code.
+  the desk only for the lock, a hidden prompt or a desk update, each one short command plus one phone code.
 - **The team's main copy is on `util01`:** a root-owned bare repository that refuses force pushes and branch
   deletions. Only keys in `root_ssh_public_keys` can push to it. MMHotline and `util01` trust every commit on it
   (`systems_repository_commits.trusted_commits: every_commit_on_origin`); nothing is signed. MMHotline pushes the triage agent's

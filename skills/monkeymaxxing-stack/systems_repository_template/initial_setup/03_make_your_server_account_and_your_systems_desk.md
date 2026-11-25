@@ -537,7 +537,7 @@ repository's name, including paths inside quoted SSH commands.
    is one short name the person or you type:
 
    ```sshconfig
-   Host desk01 desk01-agent desk01-lock desk01-secrets desk01-review
+   Host desk01 desk01-agent desk01-lock desk01-secrets desk01-update
      HostName 10.20.9.1
      IdentityFile ~/.ssh/desk01
      IdentitiesOnly yes
@@ -546,7 +546,7 @@ repository's name, including paths inside quoted SSH commands.
      StrictHostKeyChecking yes
      ProxyCommand /Users/alex/.local/bin/doubleshell --wireguard-config ~/.config/doubleshell/desk01.conf proxy-ssh %h %p
 
-   Host desk01 desk01-lock desk01-secrets desk01-review
+   Host desk01 desk01-lock desk01-secrets desk01-update
      User alex
 
    Host desk01-agent
@@ -564,7 +564,7 @@ repository's name, including paths inside quoted SSH commands.
      RequestTTY yes
      RemoteCommand set-up-outside-services secrets
 
-   Host desk01-review
+   Host desk01-update
      RequestTTY yes
      RemoteCommand review-and-apply-the-systems-desk-settings
    ```
@@ -577,8 +577,9 @@ repository's name, including paths inside quoted SSH commands.
    `coding-agent`: one shared connection that later commands reuse. The
    other three each start one command for the person: `desk01-lock` for
    the lock in chapter 4, `desk01-secrets` for a key the vault still lacks, such as
-   Pushover's in the alerts part of the setup, and `desk01-review` for a desk
-   review.
+   Pushover's in the alerts part of the setup, and `desk01-update` to update
+   the desk from pushed `main` (run `review-and-apply-the-systems-desk-settings --review`
+   on `desk01` to inspect the diff and confirm with `yes` first).
    Enroll the first SSH host key through the authenticated WireGuard
    route:
 

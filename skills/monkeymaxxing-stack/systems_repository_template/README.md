@@ -450,10 +450,11 @@ ask for one, checks whether a trigger arrived.
 
 ## Looking after your systems desk
 
-You manage your systems desk with `ssh desk01-review` on your laptop, plus a
-phone code. When the systems desk's settings changed since your last review, the
-command shows each change and runs only after you type `yes`. Your coding
-agent explains each change first.
+You manage your systems desk with `ssh desk01-update` on your laptop, plus a
+phone code. It prints a one-line summary of what changed and applies pushed
+`main` to your systems desk right away. To inspect the full diff and confirm
+with `yes` first, run `ssh -t desk01 review-and-apply-the-systems-desk-settings --review`.
+Your coding agent explains each change first.
 
 Keep the recovery passphrase that the setup showed you in "Your keys locked
 away" in the team's password manager. It opens the recovery bundle,

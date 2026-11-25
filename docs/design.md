@@ -1771,7 +1771,7 @@ file in the candidate directory and in `/etc/mmwatchdog/check_groups`.
 and `playbooks/systems_desk.yml` owns the desk's list
 (`[every_server.yml, systems_desks.yml]`): the `systems_desks` group lists
 none, so the list has one source. A change to it reaches the desk only
-through the desk review (`ssh desk01-review`).
+through the person's desk update (`ssh desk01-update`).
 
 The list holds every file, `every_server.yml` included, rather than the
 Stack's files plus a second list of the team's. MMX's playbook values take
@@ -6314,7 +6314,7 @@ The separate root-owned key never enters the production SSH socket.
 The person runs, on the laptop, with a phone code:
 
 ```sh
-ssh desk01-review
+ssh desk01-update
 ```
 
 The entry runs `review-and-apply-the-systems-desk-settings` on the desk, as the person.
@@ -6324,7 +6324,7 @@ with the person-owned private agent socket, which reaches `util01` to read the m
 First bootstrap runs only `--only-fleet-stages systems_desk`, because `util01` does not exist yet;
 the laptop's bootstrap run uses `mmx` directly, and every later run uses the command.
 The command first fetches `origin` into the coding agent's checkout, as the coding agent, reads pushed `main`
-from it as data, and stops with nothing run when the fetch fails, so the person reviews what is pushed. Reason: nothing about a desk review is urgent;
+from it as data, and stops with nothing run when the fetch fails, so the person applies only what is pushed. Reason: nothing about a desk update is urgent;
 the lock-out button shares the pull but goes on without it.
 
 ### The desk bootstrap: the agent does the whole desk setup before the lock
@@ -6359,15 +6359,18 @@ desk playbook from that copy as root.
 After inventory changes, the coding agent's `sudo -n update-this-desks-wireguard-peers` refreshes the desk's
 server peers in `wg0`.
 
-### The person reviews each change to the desk playbook
+### Applying and optionally reviewing changes to the desk playbook
 
 The coding agent pushes `main`, and the desk playbook applies `main` as root on the desk that holds the
-person's production key, phone-code secret and tokens. A pushed role change could copy any of them.
-So `review-and-apply-the-systems-desk-settings` compares what the desk playbook would do with what the person last reviewed.
-Unchanged, it runs at once. Changed, it shows a diff and runs only after the person types `yes`.
-Reason: the design accepts that the agent misuses production authority, never that it takes the person's
-own key, phone secret or tokens. A review only on change keeps the friction to the rare desk-role change
-and the server changes that need a desk review anyway.
+person's production key, phone-code secret and tokens. Only the person can run
+`review-and-apply-the-systems-desk-settings` (never `coding-agent`, `root`, or `servers-mmx`).
+By default, `ssh desk01-update` pulls pushed `main`, prints a concise one-line summary of what changed since
+the last recorded run, updates the root-only record used by `lock-everyone-out`, and runs the desk playbook
+immediately. Teams that want to inspect the full diff and confirm with `yes` before applying pass `--review`
+(`ssh -t desk01 review-and-apply-the-systems-desk-settings --review`).
+Reason: the team's coding agent is trusted and fewer human steps win, so routine updates apply in one step
+without a mandatory diff prompt; keeping `--review` opt-in preserves the diff view for teams that want it
+and after an incident, while still keeping the root-only record that `lock-everyone-out` relies on.
 
 What is compared comes from MMX: `mmx explain systems_desk --json` lists each node task of the run with
 its resolved arguments and each template's rendered text. The command adds the content of files that

@@ -465,7 +465,7 @@ You do the rest. It takes about 15 minutes.
     to MMWatchdog, as
     [chapter 7, part 5](07_install_everything_on_the_production_servers.md#part-5-join-the-systems-desk-to-monitoring)
     says. It runs as root on the desk, so the person runs it. Give the
-    person a short plain summary of what the desk review changes first, as
+    person a short plain summary of what the desk update changes first, as
     [Your login on the desk](../AGENTS.md#your-login-on-the-desk) says.
 
     **Ask the person:**
@@ -473,9 +473,9 @@ You do the rest. It takes about 15 minutes.
     > Last step: your systems desk joins the monitoring, so you hear when it has trouble too.
     > Please type this in your terminal, plus a code from your phone:
     >
-    > `ssh desk01-review`
+    > `ssh desk01-update`
     >
-    > It shows what changes on your systems desk: [the short summary]. Type yes.
+    > It applies the update to your systems desk right away: [the short summary].
 
     **Tell the person after,** which ends the alerts part of the setup:
 

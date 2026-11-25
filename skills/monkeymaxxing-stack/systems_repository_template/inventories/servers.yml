@@ -117,7 +117,7 @@ vars:
   # The roles install exactly the listed files and delete any other file
   # from the server's check groups. The systems_desks group lists no files:
   # playbooks/systems_desk.yml owns the desk's list, and a change to it goes
-  # through the desk review (ssh desk01-review).
+  # through the desk update (ssh desk01-update).
   is_systems_desk: false
   is_app_server: false
   is_database_server: false

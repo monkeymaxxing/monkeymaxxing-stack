@@ -163,7 +163,7 @@ and when.
    on the laptop and saying what they want: you ask for one phone code in
    the chat when your desk login is closed. Show the few commands the
    person types, each plus one phone code: `ssh desk01-secrets` for a new
-   secret, `ssh desk01-review` for a change to the desk itself, and the
+   secret, `ssh desk01-update` for a change to the desk itself, and the
    lock-out button. Name the desk's own recovery procedures, and the
    recovery passphrase in the password manager.
    Use one relevant request from the README as an example.
