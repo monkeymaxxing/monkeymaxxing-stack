@@ -1,5 +1,20 @@
 # Working on the Monkeymaxxing Stack
 
+## Product goal
+
+A developer or startup founder's coding agent takes their web app to a live,
+quiet, high-availability production system (alerts, locked backups, automatic
+database failover, triage agent) in a few hours, in their own accounts.
+
+- **Ease is the security goal:** Setup feels like steady progress, not an exam.
+  The agent and APIs do the heavy lifting while the person decides and watches.
+- **Quiet and hands-off:** Alert only when a person must act; upgrade only for
+  a real reason; reject operational theater.
+- **The coding agent is trusted:** Never build fences against the team's coding
+  agent. Keep secrets off laptops, out of agent logs, and away from outsiders.
+- **Text rules beat code:** Teach a coding agent a nuance with a clear rule in
+  the guide; never add code or checks where a text rule works.
+
 This repository is the stack itself: the skill and the systems repository
 template it copies. Read [`docs/design.md`](docs/design.md) before changing
 any file. `docs/design.md` records the conventions that every file
