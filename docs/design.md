@@ -5141,7 +5141,7 @@ input.
 | `set-up-outside-services lock-the-desk` | The lock window, above: the console password, the recovery passphrase, the phone code, and the recovery bundle's check, upload and push. A rerun continues at its first step that is not done |
 | `set-up-outside-services make-a-new-recovery-bundle` | After a lost recovery passphrase, on a desk whose lock is done: a new recovery bundle with a new passphrase, below |
 | `set-up-outside-services backblaze`, with `--replace-key VAULT_KEY` for a rotation and `--delete-the-old-keys-at-once` after a break-in, as for `cloudflare` | Takes the B2 account's master key at two hidden prompts. Creates every bucket the system uses, sets each bucket's Object Lock and lifecycle rule, checks each lock with a test file, makes each server's key with exactly the capabilities below, and saves each key into the vault |
-| `set-up-outside-services cloudflare` | Takes the link token, the one token the person makes by hand from a prepared link, at a hidden prompt. With it, makes the person's desk token and writes it into the API proxy and the token file; with the desk token, creates the tunnels, the apps' R2 buckets (with `staging01`, each app's staging bucket too), and, through `mmhotline status-page set-up`, the status page's bucket, host name, and rule; with the link token, makes the servers' account-owned tokens and R2 keys below and saves them into the vault, and makes the person's own posting key for the status page and writes it into the token file; with a short-lived token it deletes at once, adds the One-time PIN login method when missing and, with `staging01`, makes staging's Access service token, whose two values go into the token file. Before it makes anything, it sets the link token to end by itself after 24 hours, and it deletes the link token when it ends, after a failure too. While the status page's domain is not Active at Cloudflare, it skips the status page and its two keys, says so, and finishes the rest; a rerun adds them |
+| `set-up-outside-services cloudflare` | Takes the link token, the one token the person makes by hand from a prepared link, at a hidden prompt. With it, makes the person's desk token and writes it into the API proxy and the token file; with the desk token, creates the tunnels, the apps' R2 buckets (with `staging01`, each app's staging bucket too), and, through `mmhotline status-page set-up`, the status page's bucket, host name, and rule; with the link token, makes the servers' account-owned tokens and R2 keys below and saves them into the vault, and makes the person's own posting key for the status page and writes it into the token file; with a short-lived token it deletes at once, adds Access's Passkeys (with automatic login-page prompt) and One-time PIN login methods when missing and, with `staging01`, makes staging's Access service token, whose two values go into the token file. Before it makes anything, it sets the link token to end by itself after 24 hours, and it deletes the link token when it ends, after a failure too. While the status page's domain is not Active at Cloudflare, it skips the status page and its two keys, says so, and finishes the rest; a rerun adds them |
 | `set-up-outside-services cloudflare --replace-key NAME` (repeatable) or `--replace-every-key`, with `--delete-the-old-keys-at-once` after a break-in | Makes a new key for each named one and saves it where the old one was (the vault, the API proxy, or the token file). A key the servers use keeps its old key until the servers' run passed and the person presses Enter; the at-once flag deletes it without waiting. A tunnel gets a new secret; staging's service token gets a new secret with the same ID |
 | `set-up-outside-services cloudflare --delete-tokens-of-person NAME` | Deletes, by their names, the desk token, the posting key, and any link token of a person who leaves, NAME being their `vars.person_unix_username`; it refuses the person's own name |
 | `set-up-outside-services secrets`, with `--replace KEY` to enter one again | Saves every vault key the playbooks read (`mmx secrets usage`) that the vault lacks and no other command makes: the keys only a website gives, each with its page, at hidden prompts; each app's `secrets_from_vault`, making each one `generated_by_the_setup` and asking for each one from `an_outside_service`; the servers' shared root console password, shown once for the password manager and typed back, saved only as its hash `shared_root_console_password_hash`; and the random keys, made inside MMX or, for the fleet hub's signing secret, as 64 hexadecimal characters handed to `mmx secrets set` on standard input. It skips saved keys, refuses a repository with uncommitted changes other than the vault or with commits not pushed yet, pulls `main`, and ends by committing the vault and pushing it |
@@ -5516,14 +5516,20 @@ person from the account alone. Cloudflare's `/user/tokens/verify` answers
 401 for an account-owned token, so every check of it uses
 `/accounts/ID/tokens/verify`.
 
-**A short-lived token for Access.** When the account lacks the One-time
-PIN login method, or `staging01` needs its Access service token made or
-renewed, the command makes `PROJECT: set-up-outside-services sets up Access,
+**A short-lived token for Access.** When the account lacks Passkeys or
+One-time PIN as Access login methods, or `staging01` needs its Access
+service token made or renewed, the command makes `PROJECT: set-up-outside-services sets up Access,
 deleted after the run`, with Access: Organizations, Identity Providers,
 and Groups Write and Access: Service Tokens Write, uses it, and deletes it
-at once. Adding One-time PIN answers 409 "already exists" on an account
-that has it (a test account answered so, although its list
-of login methods showed none), so the command takes 409 as success.
+at once. Passkeys (`type: "passkeys"`, `config.login_page_auto_prompt: true`)
+let returning users sign in with Touch ID, Face ID, or a security key
+without hunting for emailed codes, while One-time PIN stays available as a
+fallback for teammates who do not have a Cloudflare account or passkey yet;
+founders who already signed in at Cloudflare also have Cloudflare's built-in
+login button. Adding an existing login method answers 409 "already exists"
+on an account that has it (a test account answered so for One-time PIN,
+although its list of login methods showed none), so the command takes 409
+as success for each login method.
 Renewing staging's service token uses its rotate call, which keeps the
 token's ID, so the staging pages' Service Auth policies stay as they are.
 

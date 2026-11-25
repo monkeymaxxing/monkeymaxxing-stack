@@ -320,7 +320,7 @@ Then read the results file, and carry on as after way A.
    `example_systems-util01` with their tokens in the vault, makes the
    servers' Cloudflare keys (the table in
    [chapter 5](05_put_your_site_behind_cloudflare_and_lock_your_private_pages.md#steps)),
-   adds One-time PIN, Access's login method that emails a code, and makes
+   adds Passkeys and One-time PIN as Access login methods, and makes
    the app's uploads bucket and its key when an app keeps uploads. Then it
    deletes the link token. The status page waits for its own part of the
    setup.

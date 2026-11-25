@@ -145,7 +145,8 @@ explains each term.
    - a proxied CNAME record for the host name, to the staging tunnel's
      `TUNNEL_ID.cfargotunnel.com`
      (`GET http://127.0.0.1:8082/accounts/ACCOUNT_ID/cfd_tunnel?name=example_systems-staging_apps&is_deleted=false`, `result[0].id`);
-   - an Access application for the host name, with the Allow policy that
+   - an Access application for the host name, with
+     `"session_duration": "720h"` (30 days) and the Allow policy that
      admits only the company's people, as MMHotline's dashboard has, and a
      Service Auth policy, `"decision": "non_identity"`, whose include rule
      names the service token:

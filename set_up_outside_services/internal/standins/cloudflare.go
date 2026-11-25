@@ -104,9 +104,10 @@ func permissionGroupByID(id string) (PermissionGroup, bool) {
 
 // IdentityProvider is an Access login method.
 type IdentityProvider struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID     string         `json:"id"`
+	Name   string         `json:"name"`
+	Type   string         `json:"type"`
+	Config map[string]any `json:"config,omitempty"`
 }
 
 type CloudflareToken struct {
@@ -159,9 +160,9 @@ type Cloudflare struct {
 	Tokens           []*CloudflareToken
 	ServiceTokens    []*AccessServiceToken
 	// IdentityProviders are Access's login methods. The stand-in answers
-	// 409 to a second One-time PIN. OneTimePINConflictsUnlisted makes it
-	// answer 409 although the list shows none, as a real Cloudflare account
-	// did in a test.
+	// 409 to a duplicate login method of the same type.
+	// OneTimePINConflictsUnlisted makes it answer 409 for One-time PIN
+	// although the list shows none, as a real Cloudflare account did in a test.
 	IdentityProviders           []*IdentityProvider
 	OneTimePINConflictsUnlisted bool
 	Tunnels                     []*CloudflareTunnel
@@ -456,17 +457,17 @@ func (c *Cloudflare) route(token *CloudflareToken, r *http.Request) (any, *cfRef
 			Type   string         `json:"type"`
 			Config map[string]any `json:"config"`
 		}
-		if !decodeCloudflare(r, &body) || body.Name == "" || body.Type != "onetimepin" || body.Config == nil {
+		if !decodeCloudflare(r, &body) || body.Name == "" || (body.Type != "onetimepin" && body.Type != "passkeys") || body.Config == nil {
 			return nil, malformed
 		}
-		exists := c.OneTimePINConflictsUnlisted
+		exists := body.Type == "onetimepin" && c.OneTimePINConflictsUnlisted
 		for _, provider := range c.IdentityProviders {
-			exists = exists || provider.Type == "onetimepin"
+			exists = exists || provider.Type == body.Type
 		}
 		if exists {
 			return nil, &cfRefusal{409, 12130, "access.api.error.conflict: identity provider already exists"}
 		}
-		created := &IdentityProvider{ID: c.id(), Name: body.Name, Type: body.Type}
+		created := &IdentityProvider{ID: c.id(), Name: body.Name, Type: body.Type, Config: body.Config}
 		c.IdentityProviders = append(c.IdentityProviders, created)
 		return created, nil
 	}

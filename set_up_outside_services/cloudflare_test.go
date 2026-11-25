@@ -125,10 +125,20 @@ func TestCloudflareMakesEveryTokenFromOneLinkToken(t *testing.T) {
 		t.Fatalf("the posting key must reach the status page's bucket only: %s", policy)
 	}
 
-	// Access: One-time PIN and staging's service token, made with a
-	// short-lived token that is deleted.
-	if len(h.cloudflare.IdentityProviders) != 1 || h.cloudflare.IdentityProviders[0].Type != "onetimepin" {
+	// Access: One-time PIN, Passkeys (with auto-prompt), and staging's
+	// service token, made with a short-lived token that is deleted.
+	if len(h.cloudflare.IdentityProviders) != 2 {
+		t.Fatalf("the command must add One-time PIN and Passkeys; got %d providers", len(h.cloudflare.IdentityProviders))
+	}
+	providersByType := map[string]*standins.IdentityProvider{}
+	for _, provider := range h.cloudflare.IdentityProviders {
+		providersByType[provider.Type] = provider
+	}
+	if providersByType["onetimepin"] == nil {
 		t.Fatal("the command must add the One-time PIN login method")
+	}
+	if passkeys := providersByType["passkeys"]; passkeys == nil || passkeys.Config["login_page_auto_prompt"] != true {
+		t.Fatalf("the command must add the Passkeys login method with login_page_auto_prompt=true; got %+v", passkeys)
 	}
 	if len(h.cloudflare.ServiceTokens) != 1 || tokenFileValue(h.tokenFile(), stagingAccessClientSecretVariable) != h.cloudflare.ServiceTokens[0].ClientSecret {
 		t.Fatal("staging's service token must be made and written into the token file")
@@ -434,28 +444,47 @@ func TestCloudflareRefusesATokenThatIsNoLinkToken(t *testing.T) {
 }
 
 // A real Cloudflare account answered 409 to the One-time PIN although its
-// list showed none: the command takes that as the login method being there.
+// list showed none: the command takes that as the login method being there
+// and still adds Passkeys.
 func TestOneTimePINThatExistsAlreadyIsSuccess(t *testing.T) {
 	h := newHarness(t, false, false)
 	h.cloudflare.OneTimePINConflictsUnlisted = true
 	if err := h.runCloudflare(); err != nil {
 		t.Fatalf("cloudflare: %v\n%s", err, h.out)
 	}
-	if !strings.Contains(h.out.String(), "One-time PIN is a login method already") || len(h.cloudflare.LiveTokensNamed(shortLivedAccessTokenName)) != 0 {
-		t.Fatal("a 409 means the login method is there, and the short-lived token is deleted")
+	if !strings.Contains(h.out.String(), "One-time PIN is a login method already") || !strings.Contains(h.out.String(), "Added Passkeys as a login method") || len(h.cloudflare.LiveTokensNamed(shortLivedAccessTokenName)) != 0 {
+		t.Fatal("a 409 means One-time PIN is there, Passkeys is still added, and the short-lived token is deleted")
 	}
 }
 
-// Without the One-time PIN missing and without staging01, no short-lived
-// Access token is made at all.
+// Without any Access login method missing and without staging01, no
+// short-lived Access token is made at all.
 func TestNoShortLivedTokenWhenAccessHasEverything(t *testing.T) {
 	h := newHarness(t, false, false)
-	h.cloudflare.IdentityProviders = append(h.cloudflare.IdentityProviders, &standins.IdentityProvider{ID: "pin", Name: "One-time PIN", Type: "onetimepin"})
+	h.cloudflare.IdentityProviders = append(h.cloudflare.IdentityProviders,
+		&standins.IdentityProvider{ID: "pin", Name: "One-time PIN", Type: "onetimepin"},
+		&standins.IdentityProvider{ID: "passkeys", Name: "Passkeys", Type: "passkeys", Config: map[string]any{"login_page_auto_prompt": true}},
+	)
 	if err := h.runCloudflare(); err != nil {
 		t.Fatalf("cloudflare: %v\n%s", err, h.out)
 	}
 	if strings.Contains(h.out.String(), "sets up Access") {
 		t.Fatal("no short-lived Access token is needed")
+	}
+}
+
+// An account that already has One-time PIN still gets Passkeys added on a rerun.
+func TestRerunAddsMissingPasskeysLoginMethod(t *testing.T) {
+	h := newHarness(t, false, false)
+	h.cloudflare.IdentityProviders = append(h.cloudflare.IdentityProviders, &standins.IdentityProvider{ID: "pin", Name: "One-time PIN", Type: "onetimepin"})
+	if err := h.runCloudflare(); err != nil {
+		t.Fatalf("cloudflare: %v\n%s", err, h.out)
+	}
+	if !strings.Contains(h.out.String(), "One-time PIN is a login method already") || !strings.Contains(h.out.String(), "Added Passkeys as a login method") {
+		t.Fatalf("expected One-time PIN unchanged and Passkeys added:\n%s", h.out)
+	}
+	if len(h.cloudflare.IdentityProviders) != 2 || len(h.cloudflare.LiveTokensNamed(shortLivedAccessTokenName)) != 0 {
+		t.Fatalf("expected both login methods and short-lived token deleted; got %d providers", len(h.cloudflare.IdentityProviders))
 	}
 }
 

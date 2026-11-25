@@ -298,8 +298,10 @@ You do the rest. It takes about 15 minutes.
      MMHotline needs your own Pushover user key to wake your phone.
 
    Do this now:
-     1. Open  https://ops.example.com/contact-methods.  Sign in with your
-        company email address and the code it emails you.
+     1. Open  https://ops.example.com/contact-methods.  Click Cloudflare to
+        sign in with your Cloudflare account (or use an emailed code if your
+        Cloudflare account uses another address).  You can also save a
+        passkey there for Touch ID or Face ID on your laptop and phone.
      2. Open  https://pushover.net  in another tab.  Copy "Your User Key"
         from the top of the page.  Not the group's key.
      3. Under  Add Pushover notification,  paste it into  Pushover user key.
@@ -394,7 +396,7 @@ You do the rest. It takes about 15 minutes.
     **Ask the person after,** with `test_sos.incident_page_url`:
 
     > The test SOS reached you: [who] acknowledged it [how], at [the time].
-    > Please open [the incident's link]. Sign in with your company email address and the code it emails you. You see the test, claimed by you and closed by MMHotline.
+    > Please open [the incident's link]. Sign in with the Cloudflare button (or a passkey, or an emailed code if your Cloudflare account uses another address). You see the test, claimed by you and closed by MMHotline.
 
     Then read MMHotline's Access policy through the desk's Cloudflare API
     proxy. Access's page says a code was emailed for any address, so the

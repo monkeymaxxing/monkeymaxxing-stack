@@ -141,7 +141,8 @@ first sign-in at the private pages comes in the alerts part of the setup, in
 4. **Access:** a self-hosted Access application is a Cloudflare setting
    that protects a page served by the company's servers.
    Create an Access application for each private host name
-   (`POST .../accounts/ACCOUNT_ID/access/apps`):
+   (`POST .../accounts/ACCOUNT_ID/access/apps`), with
+   `"session_duration": "720h"` (30 days):
    MMHotline's dashboard; [Add staging01](../operating_procedures/add_staging01.md)
    adds the staging host names' applications the same way.
    Use the host name set under `mmhotline` in
@@ -152,32 +153,33 @@ first sign-in at the private pages comes in the alerts part of the setup, in
    people. The policy names emails ending in `@example.com` or the
    company's GitHub organization, never everyone who signs in.
 
-   A policy that names email addresses needs a login method that proves
-   each person's address. Use One-time PIN, Cloudflare's own: Access
-   emails a code to the address. A new Zero Trust organization has only
-   the Cloudflare identity provider, which signs in people who have a
-   Cloudflare account, and One-time PIN isn't added automatically, so
-   the desk's `cloudflare` account command added it in chapter 4 (set up your accounts and lock your systems desk).
-   Read each `type` in
-   `GET .../accounts/ACCOUNT_ID/access/identity_providers` to check that
-   the login method exists.
+   A new Zero Trust organization starts with the built-in Cloudflare
+   identity provider, which signs in people who have a Cloudflare account
+   (using their Cloudflare login and two-step sign-in). In chapter 4 (set up
+   your accounts and lock your systems desk), the desk's `cloudflare`
+   account command also added **Passkeys** (Touch ID, Face ID, or a security
+   key, with automatic browser prompt) and **One-time PIN** (an emailed code
+   for teammates without a Cloudflare account or passkey yet). Read each
+   `type` in `GET .../accounts/ACCOUNT_ID/access/identity_providers` to
+   check that `passkeys` and `onetimepin` exist.
 
    **Tell the person first:**
 
    > Next, I lock your alert dashboard, `ops.example.com`, behind Cloudflare Access.
    > Only people with an email address that ends in `@example.com` can open the alert dashboard.
-   > To sign in, a person types a company email address.
-   > Access then emails a one-time code to the address, and the person types the code.
+   > Sign in with the Cloudflare button (which uses your Cloudflare login and two-step sign-in), or save a passkey for Touch ID or Face ID.
+   > Teammates without a Cloudflare account can sign in with a one-time code emailed to their company address.
+   > Each sign-in lasts 30 days.
 
    **Tell the person after:**
 
    > Your alert dashboard admits only addresses that end in `@example.com`: [the sign-in for your private pages](https://one.dash.cloudflare.com/?to=/:account/access/apps).
 
-   **Check:** every Allow rule names the domain, read through the API
-   proxy. `company_email` stays `open` until the person's first sign-in in
-   the alerts part of the setup, because the item's `verification` includes that
-   sign-in. A team without email at its domain adds it in the alerts
-   part of the setup too.
+   **Check:** every Allow rule names the domain and the application's
+   `session_duration` is `720h`, read through the API proxy. `company_email`
+   stays `open` until the person's first sign-in in the alerts part of the
+   setup, because the item's `verification` includes that sign-in. A team
+   without email at its domain adds it in the alerts part of the setup too.
 
 5. **MMHotline's Access settings,** in `mmhotline_settings.yml`, which came
    with the template ([chapter 7 (install everything on the production servers)](07_install_everything_on_the_production_servers.md#chapter-7-install-everything-on-the-production-servers) fills in the rest):
@@ -285,7 +287,14 @@ the team's Cloudflare account and on Cloudflare's tunnel service.
 only read login methods. A login method
 decides whose address Access believes, so a token in the API token
 proxy that could add one would let a mistake admit anyone. The command
-adds One-time PIN with a short-lived token that it deletes at once.
+adds Passkeys and One-time PIN with a short-lived token that it deletes at once.
+
+**30-day Access sessions.** Cloudflare Access defaults to 24 hours, which
+asks people to sign in again every day, including on a phone during an
+alert. `720h` (30 days) is a setting the team can shorten at Cloudflare at
+any time. Removing a person from `people` in `mmhotline_settings.yml` ends
+their MMHotline access at once, and the lock-out button revokes active
+Cloudflare Access sessions immediately.
 
 **MMHotline checks the sign-in too.** MMHotline uses
 `cloudflare_access.team_domain` and `cloudflare_access.audience_tag` to

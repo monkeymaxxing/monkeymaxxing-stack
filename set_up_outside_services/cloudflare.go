@@ -598,7 +598,7 @@ func runCloudflare(e *environment, arguments []string) error {
 			}
 		} else {
 			e.say("Cloudflare: this command adds your domain, makes your systems desk's Cloudflare token, your tunnels, R2 buckets, and the keys")
-			e.say("your servers use, the status page, and Access's One-time PIN login method. It saves every secret straight into the vault or your token file.")
+			e.say("your servers use, the status page, and Access's Passkeys and One-time PIN login methods. It saves every secret straight into the vault or your token file.")
 		}
 		accountID := read.accountID
 		if accountID == "" {
@@ -1293,25 +1293,47 @@ type accessServiceToken struct {
 	Name string `json:"name"`
 }
 
-// ensureAccess adds Access's One-time PIN login method and staging's Access
-// service token when either is missing, and renews the service token's
-// secret on --replace-key STAGING_ACCESS_CLIENT_SECRET. The desk's token
-// can only read both, on purpose: a login method decides whose address
-// Access believes, so a token in the API proxy that could add one
-// could admit anyone. So a short-lived token with the two Write permissions
-// does the change and is deleted at once.
+type accessLoginMethod struct {
+	name   string
+	idType string
+	config map[string]any
+}
+
+// defaultAccessLoginMethods are the login methods ensureAccess adds to
+// Cloudflare Access. Passkeys let returning users sign in with Touch ID,
+// Face ID, or a security key (auto-prompted on the login page), while
+// One-time PIN lets teammates without a Cloudflare account or passkey sign in
+// with an emailed code.
+var defaultAccessLoginMethods = []accessLoginMethod{
+	{name: "One-time PIN", idType: "onetimepin", config: map[string]any{}},
+	{name: "Passkeys", idType: "passkeys", config: map[string]any{"login_page_auto_prompt": true}},
+}
+
+// ensureAccess adds Access's Passkeys and One-time PIN login methods and
+// staging's Access service token when any is missing, and renews the service
+// token's secret on --replace-key STAGING_ACCESS_CLIENT_SECRET. The desk's
+// token can only read both, on purpose: a login method decides whose address
+// Access believes, so a token in the API proxy that could add one could admit
+// anyone. So a short-lived token with the two Write permissions does the
+// change and is deleted at once.
 func (e *environment) ensureAccess(link, desk *cloudflareClient, settings systemSettings, accountID string, ids map[permissionGroup]string) error {
 	e.say("")
-	e.say("Access's One-time PIN login method: Access emails a code to the address of each person your private pages admit.")
+	e.say("Access's login methods: Passkeys (Touch ID, Face ID, or a security key) and One-time PIN (an emailed code for teammates without a Cloudflare account or passkey).")
 	var providers []struct {
 		Type string `json:"type"`
 	}
 	if err := desk.call(http.MethodGet, desk.account("/access/identity_providers"), nil, &providers); err != nil {
 		return err
 	}
-	hasOneTimePIN := false
+	existingTypes := map[string]bool{}
 	for _, provider := range providers {
-		hasOneTimePIN = hasOneTimePIN || provider.Type == "onetimepin"
+		existingTypes[provider.Type] = true
+	}
+	var missingMethods []accessLoginMethod
+	for _, method := range defaultAccessLoginMethods {
+		if !existingTypes[method.idType] {
+			missingMethods = append(missingMethods, method)
+		}
 	}
 	var stagingToken *accessServiceToken
 	stagingName := settings.ProjectName + ": staging tests"
@@ -1328,13 +1350,15 @@ func (e *environment) ensureAccess(link, desk *cloudflareClient, settings system
 		}
 		stagingNeedsWrite = stagingToken == nil || e.replaceKeys[stagingAccessClientSecretVariable]
 	}
-	if hasOneTimePIN && !stagingNeedsWrite {
-		e.say("  One-time PIN is a login method already. Unchanged.")
+	if len(missingMethods) == 0 && !stagingNeedsWrite {
+		for _, method := range defaultAccessLoginMethods {
+			e.say("  %s is a login method already. Unchanged.", method.name)
+		}
 		return e.sayStagingServiceTokenState(settings, stagingToken != nil, stagingName)
 	}
 
 	return e.withShortLivedToken(link, accessSetUpTokenPlan(settings, accountID), ids, "the short-lived Access token", func(access *cloudflareClient) error {
-		return e.addAccessLoginMethodAndStagingToken(access, settings, hasOneTimePIN, stagingNeedsWrite, stagingToken, stagingName)
+		return e.addAccessLoginMethodsAndStagingToken(access, settings, existingTypes, stagingNeedsWrite, stagingToken, stagingName)
 	})
 }
 
@@ -1367,25 +1391,27 @@ func (e *environment) withShortLivedToken(link *cloudflareClient, plan cloudflar
 	return job(&cloudflareClient{baseURL: e.cloudflareAPIURL, token: short.Value, accountID: link.accountID, who: who})
 }
 
-// addAccessLoginMethodAndStagingToken is ensureAccess's work with the
+// addAccessLoginMethodsAndStagingToken is ensureAccess's work with the
 // short-lived Access token.
-func (e *environment) addAccessLoginMethodAndStagingToken(access *cloudflareClient, settings systemSettings, hasOneTimePIN, stagingNeedsWrite bool,
+func (e *environment) addAccessLoginMethodsAndStagingToken(access *cloudflareClient, settings systemSettings, existingTypes map[string]bool, stagingNeedsWrite bool,
 	stagingToken *accessServiceToken, stagingName string) error {
 	path := e.tokenFilePath(settings)
-	if !hasOneTimePIN {
+	for _, method := range defaultAccessLoginMethods {
+		if existingTypes[method.idType] {
+			e.say("  %s is a login method already. Unchanged.", method.name)
+			continue
+		}
 		// https://developers.cloudflare.com/api/resources/zero_trust/subresources/identity_providers/methods/create/
-		err := access.call(http.MethodPost, access.account("/access/identity_providers"), map[string]any{"name": "One-time PIN", "type": "onetimepin", "config": map[string]any{}}, nil)
+		err := access.call(http.MethodPost, access.account("/access/identity_providers"), map[string]any{"name": method.name, "type": method.idType, "config": method.config}, nil)
 		switch {
 		case err == nil:
-			e.say("  Added One-time PIN as a login method.")
+			e.say("  Added %s as a login method.", method.name)
 		case refusedWith(err, http.StatusConflict):
-			// Cloudflare answers 409 when the account has One-time PIN already.
-			e.say("  One-time PIN is a login method already. Unchanged.")
+			// Cloudflare answers 409 when the account has the login method already.
+			e.say("  %s is a login method already. Unchanged.", method.name)
 		default:
 			return err
 		}
-	} else {
-		e.say("  One-time PIN is a login method already. Unchanged.")
 	}
 	if !stagingNeedsWrite {
 		return e.sayStagingServiceTokenState(settings, stagingToken != nil, stagingName)

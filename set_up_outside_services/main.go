@@ -62,8 +62,8 @@ Commands:
                                 systems desk's Cloudflare token (in the API proxy and your token
                                 file), the tunnels, the R2 buckets and keys, the
                                 MMHotline-down alarm's token, the status page and your own
-                                key for posting to it, and the One-time PIN login method;
-                                save the servers' keys in the vault. With staging01, also
+                                key for posting to it, and Access's Passkeys and One-time PIN
+                                login methods; save the servers' keys in the vault. With staging01, also
                                 make staging's Access service token, saved in your token
                                 file. The status page waits until your domain is Active, and
                                 the R2 buckets until R2 is on. The link token is deleted when

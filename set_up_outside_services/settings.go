@@ -450,8 +450,8 @@ var (
 		{"Workers Routes Write", scopeZone},
 		{"Analytics Read", scopeZone},
 	}
-	// The short-lived Access token: it adds the One-time PIN login method
-	// and makes or renews staging's Access service token, then is deleted.
+	// The short-lived Access token: it adds Access's Passkeys and One-time PIN
+	// login methods and makes or renews staging's Access service token, then is deleted.
 	accessSetUpPermissions = []permissionGroup{
 		{"Access: Organizations, Identity Providers, and Groups Write", scopeAccount},
 		{"Access: Service Tokens Write", scopeAccount},
