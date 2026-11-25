@@ -149,11 +149,12 @@ class MMHotlineRulesFollowTheTeamsAnswer(unittest.TestCase):
         the triage agent's home before each run, so a newer coding agent's settings files never carry over (since 0.6.1);
         and holds every warning for the triage agent's report, with a daily run limit that never stops alerts (since 0.7.0);
         and defaults personal contact methods to SOS and Warning only, honors /etc/mmhotline/everyone-locked-out directly,
-        and requires --about-alert-id for info reports to take over held warnings (since 0.8.0).
+        and requires --about-alert-id for info reports to take over held warnings (since 0.8.0); and leads alerts and
+        resolved notifications with plain-English triage summaries and severity-honest server cards (since 0.8.1).
         The pin names the release that does all of this."""
         settings = (T/'mmx_project_settings.yml').read_text()
         version = re.search(r'(?m)^    mmhotline:\n      version: "(.*?)"', settings)[1]
-        self.assertEqual(version, '0.8.0')
+        self.assertEqual(version, '0.8.1')
 
     def test_the_held_warn_wait_comes_from_the_stack_setting_for_every_answer(self):
         settings = (T/'mmx_project_settings.yml').read_text()

@@ -860,13 +860,13 @@ vars:
         macos-amd64: "4569d405dfc8e4edfcd6b3457728b76717a6f64ab6f7e0c560d561513df522f7"
         macos-arm64: "f6aa2793ac27f4d05523a8dfe07f65be7b0fda387a08385947ea99e90b601110"
     mmwatchdog:
-      version: "0.3.0"
-      download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.3.0/mmwatchdog-0.3.0-linux-amd64.tar.gz
-      sha256: "6e68a45335e40ca9a54842c9ae67f9114695dee484e3f30172bdd3fd0b5b2053"
+      version: "0.4.0"
+      download_url: https://github.com/monkeymaxxing/mmwatchdog/releases/download/v0.4.0/mmwatchdog-0.4.0-linux-amd64.tar.gz
+      sha256: "44d27911297c02c0667592aa8fabf351f79f7ad33dc243a1d0691d404f759a90"
     mmhotline:
-      version: "0.8.0"
-      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.8.0/mmhotline-0.8.0-linux-amd64.tar.gz
-      sha256: "5f315d98cf50fa0a2a76a0b5b3ab54ac4de690c6c8f54da03d6d2e13f5e09590"
+      version: "0.8.1"
+      download_url: https://github.com/monkeymaxxing/mmhotline/releases/download/v0.8.1/mmhotline-0.8.1-linux-amd64.tar.gz
+      sha256: "5cfc0df49f86824f3ca12f4f7ff33a3c74bcca8fdaf47e2f2c0100943aafefd1"
     # The Stack's command for the account and secret setup on the systems
     # desk (initial_setup/04_set_up_your_accounts_and_lock_your_desk.md).
     # Its release is the Stack version's, built reproducibly by the Stack

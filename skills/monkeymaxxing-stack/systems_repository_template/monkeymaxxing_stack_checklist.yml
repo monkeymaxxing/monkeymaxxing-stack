@@ -44,7 +44,7 @@
 # operating_procedures/add_staging01.md finishes both when the team adds
 # staging01, during the setup for a team that chose the fuller system.
 
-stack_version: 0.7.0
+stack_version: 0.7.1
 # stack_commit records the commit of the stack's repository from which the
 # coding agent copied the system's files. The coding agent records the
 # commit during the initial setup and with each new version. During an
@@ -451,9 +451,9 @@ items:
       every Cloudflare Access Allow policy that admits people names the
       company's domain, such as "email ends in @example.com", or the
       company's GitHub organization, rather than admitting any signed-in
-      user; the account's login methods include One-time PIN, or GitHub
-      for a policy that names the GitHub organization; and each person on
-      the team signs in that way.
+      user; the account's login methods include Passkeys and One-time PIN, or
+      GitHub for a policy that names the GitHub organization; and each person
+      on the team signs in that way.
     waits_for: the initial setup
 
   - id: secrets_in_the_vault_scoped_by_role
