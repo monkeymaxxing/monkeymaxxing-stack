@@ -70,4 +70,5 @@ node_tasks:
         INVENTORY_NODES: "{{ .inputs.inventory_nodes }}"
         APPS: "{{ .inputs.apps }}"
         APPS_CONNECT_THROUGH_PGBOUNCER: "{{ .inputs.apps_connect_through_pgbouncer }}"
+      run_script_in_dryrun: true
       changed_when: false

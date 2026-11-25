@@ -1932,6 +1932,7 @@ fleet_stages:
                 installed_at=""
                 [ ! -e "$marker" ] || installed_at=$(date -u -r "$marker" +%Y-%m-%dT%H:%M:%SZ)
                 jq -nc --arg installed_at "$installed_at" '{installed_at: $installed_at}'
+              run_script_in_dryrun: true
               changed_when: false
         outputs:
           installed_at: "{{ .node_tasks.read_the_marker_file_time.stdout_json.installed_at }}"
@@ -1941,15 +1942,30 @@ fleet_stages:
           - id: write_the_time_each_app_server_installed_its_waiting_security_updates
             shell:
               script: |
+                set -eu
                 directory=/var/lib/app_pool_for_the_load/security_updates_installed
-                install -d -m 0755 "$directory"
+                if [ ! -d "$directory" ]; then
+                  install -d -m 0755 "$directory"
+                  printf 'created %s\n' "$directory"
+                fi
                 if [ -n "$INSTALLED_AT" ] && [ ! -e "$directory/$APP_SERVER" ]; then
                   printf '%s\n' "$INSTALLED_AT" > "$directory/$APP_SERVER"
+                  printf 'recorded when %s installed its waiting security updates\n' "$APP_SERVER"
                 fi
               env:
                 APP_SERVER: "{{ .app_server }}"
                 INSTALLED_AT: "{{ .outputs.read_the_time_of_the_security_updates_marker[.app_server].installed_at }}"
-              dryrun: printf 'would record when %s installed its waiting security updates\n' "$APP_SERVER"
+              dryrun: |
+                set -eu
+                directory=/var/lib/app_pool_for_the_load/security_updates_installed
+                if [ ! -d "$directory" ]; then
+                  printf 'would create %s\n' "$directory"
+                fi
+                if [ -n "$INSTALLED_AT" ] && [ ! -e "$directory/$APP_SERVER" ]; then
+                  printf 'would record when %s installed its waiting security updates\n' "$APP_SERVER"
+                fi
+              changed_when:
+                not: {equals: ["{{ .this_node_task.stdout }}", ""]}
 
   # The weekly restore drill (roles/util_server) starts after every_server
   # until a restore drill has passed on util01. On a new system, the first

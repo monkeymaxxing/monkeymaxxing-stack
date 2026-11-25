@@ -374,7 +374,7 @@ node_tasks:
               ExecReload=-/usr/sbin/conntrack -D -p udp --orig-port-dst 443
       activate:
         - id: reload_the_systemd_units_for_the_wireguard_drop_in
-          shell: {script: systemctl daemon-reload, dryrun: 'true'}
+          shell: {script: systemctl daemon-reload, only_when_tracked_inputs_changed: true}
         - id: run_the_udp_443_redirect
           systemd_service:
             name: wireguard-udp-443-redirect.service

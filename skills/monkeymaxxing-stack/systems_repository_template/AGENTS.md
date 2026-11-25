@@ -118,7 +118,13 @@ capitals before the last line. Then open the connection:
 
 Run it by its full path so it never needs a second approval. It hands the
 6-digit code to SSH without writing a file, uses no code if already open,
-and prints `The desk login desk01-agent is open.` or a failure. Five wrong
+and prints `The desk login desk01-agent is open.` or a failure. If your
+command runner stops background processes when a command finishes (so
+`--check` reports closed right after opening), run
+`~/code/example_systems/ssh/open-the-desk-login --stay-open CODE` as a
+background/daemon command instead; that keeps the shared connection open
+in the foreground for later commands until the desk's idle or maximum
+time limit ends it (or you stop the daemon). Five wrong
 codes within ten minutes lock the laptop out for five minutes
 (`phone_code_lockout` in `mmx_project_settings.yml`).
 

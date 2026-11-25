@@ -180,7 +180,7 @@ node_tasks:
             permissions_mode: "0644"
       activate:
         - id: load_the_triage_run_conditions
-          shell: {script: systemctl daemon-reload, dryrun: systemctl daemon-reload, changed_when: false}
+          shell: {script: systemctl daemon-reload, only_when_tracked_inputs_changed: true}
   # The lock-out's marker on util01, whether the triage agent is set up or
   # not: triage runs, util01's scheduled jobs
   # (files/find_the_trusted_commit_of_the_systems_repository in

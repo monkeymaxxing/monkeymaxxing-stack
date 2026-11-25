@@ -83,12 +83,37 @@ class OpenTheDeskLogin(unittest.TestCase):
 
     def test_anything_but_exactly_six_digits_is_refused_and_nothing_reaches_the_desk(self):
         for arguments in (['12345'], ['1234567'], ['12a456'], [''], [' 482913'], ['482913 '], ['482913\n'],
-                          ['48 2913'], ['-482913'], ['482913', 'extra'], [], ['--check', '482913'], ['--open']):
+                          ['48 2913'], ['-482913'], ['482913', 'extra'], [], ['--check', '482913'], ['--open'],
+                          ['--stay-open'], ['--stay-open', '--check'], ['--stay-open', '12345'],
+                          ['--stay-open', '482913', 'extra'], ['482913', '--stay-open']):
             with self.subTest(arguments=arguments):
                 result = self.invoke(*arguments)
                 self.assertEqual(result.returncode, 64, result.stdout + result.stderr)
                 self.assertEqual(self.calls(), [])
                 self.assertEqual(list(self.temporary_files.iterdir()), [])
+
+    def test_stay_open_runs_ssh_control_master_in_foreground_and_skips_when_already_open(self):
+        result = self.invoke('--stay-open', '482913')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        login = self.calls()[-1]
+        self.assertEqual(login['argv'], ['-M', '-N', '-o', 'ControlPersist=no', '-o', 'NumberOfPasswordPrompts=1', 'desk01-agent'])
+        self.assertEqual(login['askpass_answer'], '482913')
+        self.assertEqual(login['askpass_require'], 'force')
+        self.assertNotIn('482913', ' '.join(arg for call in self.calls() for arg in call['argv']))
+        self.assertEqual(list(self.temporary_files.iterdir()), [])
+
+        # Once open, --stay-open uses no code.
+        before = len(self.calls())
+        result = self.invoke('--stay-open', '222222')
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('desk01-agent is open', result.stdout)
+        self.assertEqual([call['argv'][:2] for call in self.calls()[before:]], [['-O', 'check']])
+
+    def test_stay_open_refused_code_says_so_plainly(self):
+        result = self.invoke('--stay-open', '111111')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('ask the person for a new code', result.stdout)
+        self.assertEqual(list(self.temporary_files.iterdir()), [])
 
     def test_a_right_code_opens_the_agents_login_with_one_question_and_leaves_no_file(self):
         result = self.invoke('482913')

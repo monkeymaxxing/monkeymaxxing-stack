@@ -1,14 +1,16 @@
 # Managed by MMX. Extends gitleaks' default rules for the systems repository:
-# public keys in YAML inventories (such as WireGuard and age public keys) are
-# high-entropy strings next to "key:" that Debian's gitleaks 8.16 generic-api-key
-# rule otherwise flags as secrets.
+# public keys in YAML inventories (such as WireGuard and age public keys) and
+# 40-character lowercase Git commit image tags under deployed_image_tags (when
+# an app's name contains a word like "key" or "api") are high-entropy strings
+# that Debian's gitleaks 8.16 generic-api-key rule otherwise flags as secrets.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Public keys in the systems repository"
+description = "Public keys and deployed Git commit image tags in the systems repository"
 regexTarget = "line"
 regexes = [
   '''^\s*(?:wireguard_public_key|age_public_key|ssh_host_ed25519_public_key|ssh_public_key|root_ssh_public_keys?)\s*:''',
   '''^\s*-\s*"?age1[0-9a-z]{58}"?\s*$''',
+  '''^ {6}[a-z][a-z0-9_]*:\s*"[0-9a-f]{40}(?:-rebuilt-[0-9]+)?"\s*$''',
 ]

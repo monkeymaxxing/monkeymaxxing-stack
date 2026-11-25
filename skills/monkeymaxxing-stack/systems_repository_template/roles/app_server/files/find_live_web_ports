@@ -17,7 +17,9 @@
 # find_the_live_and_new_web_ports and publish its answer, so every role call
 # and every Caddy list in a run works from the same ports.
 #
-# A tag is the full Git commit of the app, 40 lowercase hexadecimal characters.
+# A tag is the full Git commit of the app, 40 lowercase hexadecimal characters,
+# optionally followed by -rebuilt-<digits> for a scheduled rebuild of the same
+# commit.
 # Reason: a short or movable tag could be pushed again for another image, and
 # servers that pull it at different times would run different images. The
 # program refuses any other tag.
@@ -56,7 +58,7 @@ while IFS= read -r app; do
         'if $tags | has($app.key) then $app.value.image + ":" + $tags[$app.key]
          else error("no deployed image tag for " + $app.key) end') || exit 1
     deployed_tag=$(jq -r --arg app "$app_name" '.[$app]' <<< "$deployed_image_tags")
-    if [[ ! $deployed_tag =~ ^[0-9a-f]{40}$ ]]; then
+    if [[ ! $deployed_tag =~ ^[0-9a-f]{40}(-rebuilt-[0-9]+)?$ ]]; then
         printf 'the deployed image tag of %s is "%s". Use the full Git commit of the app, 40 lowercase hexadecimal characters, so that one tag always names one image. Nothing changed.\n' \
             "$app_name" "$deployed_tag" >&2
         exit 1
